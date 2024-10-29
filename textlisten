@@ -1,0 +1,20 @@
+SEC("fentry/inet_listen")
+int BPF_PROG(inet_listen, struct socket *sock, int backlog)
+{
+    struct event *listen_info;
+
+    listen_info = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
+    if (!listen_info)
+    {
+        return 0;
+    }
+
+    // Получаем имя процесса и PID
+    bpf_get_current_comm(&listen_info->comm, TASK_COMM_LEN);
+    listen_info->pid = bpf_get_current_pid_tgid() >> 32; // Получаем PID процесса
+    listen_info->backlog = backlog; // Сохраняем размер очереди
+
+    bpf_ringbuf_submit(listen_info, 0);
+
+    return 0;
+}
