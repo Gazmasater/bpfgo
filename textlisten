@@ -1,5 +1,5 @@
 SEC("fentry/inet_listen")
-int BPF_PROG(inet_listen, struct socket *sock, int backlog)
+int BPF_PROG(inet_listen, struct socket *sock)
 {
     struct event *listen_info;
 
@@ -12,7 +12,16 @@ int BPF_PROG(inet_listen, struct socket *sock, int backlog)
     // Получаем имя процесса и PID
     bpf_get_current_comm(&listen_info->comm, TASK_COMM_LEN);
     listen_info->pid = bpf_get_current_pid_tgid() >> 32; // Получаем PID процесса
-    listen_info->backlog = backlog; // Сохраняем размер очереди
+
+    // Получаем указатель на структуру sock
+    struct sock *sk = sock->sk; // Получаем указатель на структуру sock
+    if (sk)
+    {
+        listen_info->saddr = sk->__sk_common.skc_rcv_saddr; // Получаем адрес
+        listen_info->daddr = sk->__sk_common.skc_daddr;     // Получаем адрес назначения
+        listen_info->dport = sk->__sk_common.skc_dport;     // Получаем порт назначения
+        listen_info->sport = bpf_htons(sk->__sk_common.skc_num); // Получаем исходный порт
+    }
 
     bpf_ringbuf_submit(listen_info, 0);
 
