@@ -62,8 +62,8 @@ struct event
 };
 struct event *unused __attribute__((unused));
 
-SEC("fentry/tcp_connect")
-int BPF_PROG(tcp_connect, struct sock *sk)
+SEC("fentry/__x64_sys_accept4")
+int BPF_PROG(accept_hook, struct sock *sk)
 {
 	struct event *tcp_info;
 
