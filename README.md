@@ -97,4 +97,6 @@ int BPF_PROG(sys_accept, struct sock *sk)
 }
 
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go build && sudo ./ebpf-test
-2024/10/30 19:22:53 loading objects: field SysAccept: cannot load program sys_accept: program type is unspecified
+[sudo] password for gaz358: 
+2024/10/30 19:35:23 loading objects: field SysAccept: program sys_accept: load program: permission denied: 8: (61) r1 = *(u32 *)(r7 +4): R7 invalid mem access 'scalar' (13 line(s) omitted)
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ^C
