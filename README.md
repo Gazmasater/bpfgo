@@ -20,13 +20,14 @@ char _license[] SEC("license") = "GPL";
 
 
 
+bpftool btf dump file /sys/kernel/btf/vmlinux | grep sys_accept
 
 #include <linux/bpf.h>
 #include <linux/socket.h>
 #include <linux/inet.h>
 #include <linux/bpf_helpers.h>
 
-SEC("fentry/__x64_sys_accept4")
+SEC("fentry/__x64_sys_accept4") 
 int BPF_PROG(accept_hook, int sockfd, struct sockaddr __user *addr, int __user *addrlen, int flags) {
     struct sockaddr_in *addr_in = (struct sockaddr_in *)addr;
 
