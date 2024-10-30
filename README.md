@@ -1,69 +1,8 @@
-//go:build ignore
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go build && sudo ./ebpf-test
+[sudo] password for gaz358: 
+2024/10/30 11:20:44 loading objects: field SockCreate: program sock_create: load program: permission denied: 0: (79) r7 = *(u64 *)(r1 +0): invalid bpf_context access off=0 size=8 (3 line(s) omitted)
 
-
-#include "common.h"
-#include "bpf/bpf_endian.h"
-#include "bpf/bpf_tracing.h"
-
-#define AF_INET 2
-#define AF_INET6 10 // Для поддержки IPv6
-
-#define TASK_COMM_LEN 16
-
-char __license[] SEC("license") = "Dual MIT/GPL";
-
-// Структура sock_common, дополненная для поддержки IPv6
-struct sock_common
-{
-	union
-	{
-		struct
-		{
-			__be32 skc_daddr;
-			__be32 skc_rcv_saddr;
-		};
-	};
-	union
-	{
-		// Padding out union skc_hash.
-		__u32 _;
-	};
-	union
-	{
-		struct
-		{
-			__be16 skc_dport;
-			__u16 skc_num;
-		};
-	};
-	short unsigned int skc_family;
-};
-
-// Структура sock отражает начало структуры sock из ядра
-struct sock
-{
-	struct sock_common __sk_common;
-};
-
-struct
-{
-	__uint(type, BPF_MAP_TYPE_RINGBUF);
-	__uint(max_entries, 1 << 24);
-} events SEC(".maps");
-
-// Структура события, дополненная для хранения PID
-struct event
-{
-	u8 comm[16];
-	__u16 sport;
-	__be16 dport;
-	__be32 saddr;
-	__be32 daddr;
-	__u32 pid; // Добавлено поле для PID
-};
-struct event *unused __attribute__((unused));
-
-SEC("tracepoint/sock/sock_create")
+SEC("kprobe/sock_create")
 int BPF_PROG(sock_create, struct sock *sk)
 {
 	struct event *tcp_info;
