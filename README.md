@@ -62,8 +62,8 @@ struct event
 };
 struct event *unused __attribute__((unused));
 
-SEC("KProbe/sys_accept")
-int BPF_PROG(sys_accept, struct sock *sk)
+SEC("kprobe/sys_accept")
+int bpf_prog(sys_accept, struct sock *sk)
 {
 	struct event *tcp_info;
 	
@@ -95,8 +95,15 @@ int BPF_PROG(sys_accept, struct sock *sk)
 
 	return 0;
 }
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go build && sudo ./ebpf-test
-[sudo] password for gaz358: 
-2024/10/30 19:35:23 loading objects: field SysAccept: program sys_accept: load program: permission denied: 8: (61) r1 = *(u32 *)(r7 +4): R7 invalid mem access 'scalar' (13 line(s) omitted)
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ^C
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/fentry.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "40",
+	"severity": 8,
+	"message": "expected an identifier",
+	"source": "C/C++",
+	"startLineNumber": 66,
+	"startColumn": 26,
+	"endLineNumber": 66,
+	"endColumn": 32
+}]
