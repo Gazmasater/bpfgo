@@ -95,12 +95,13 @@ func main() {
 			continue
 		}
 
-		log.Printf("%-16s %-15s %-6d -> %-15s %-6d",
+		log.Printf("%-16s %-15s %-6d -> %-15s %-6d %-6d",
 			event.Comm,
 			intToIP(event.Saddr),
 			event.Sport,
 			intToIP(event.Daddr),
 			event.Dport,
+			event.Pid,
 		)
 	}
 }

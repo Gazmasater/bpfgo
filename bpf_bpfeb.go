@@ -18,6 +18,7 @@ type bpfEvent struct {
 	Dport uint16
 	Saddr uint32
 	Daddr uint32
+	Pid   uint32
 }
 
 // loadBpf returns the embedded CollectionSpec for bpf.
