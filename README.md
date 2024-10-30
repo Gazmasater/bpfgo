@@ -1,36 +1,22 @@
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go build && sudo ./ebpf-test
-[sudo] password for gaz358: 
-2024/10/30 11:20:44 loading objects: field SockCreate: program sock_create: load program: permission denied: 0: (79) r7 = *(u64 *)(r1 +0): invalid bpf_context access off=0 size=8 (3 line(s) omitted)
+SEC("tracepoint/sock/sock_create")
+int BPF_PROG(sock_create, struct sock *sk) {
+    struct event *tcp_info;
 
-SEC("kprobe/sock_create")
-int BPF_PROG(sock_create, struct sock *sk)
-{
-	struct event *tcp_info;
+    tcp_info = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
+    if (!tcp_info) {
+        return 0;
+    }
 
-	//if (sk->__sk_common.skc_family == AF_INET)
-	//{
-		tcp_info = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
-		if (!tcp_info)
-		{
-			return 0;
-		}
+    tcp_info->saddr = BPF_CORE_READ(sk, __sk_common.skc_rcv_saddr);
+    tcp_info->daddr = BPF_CORE_READ(sk, __sk_common.skc_daddr);
+    tcp_info->dport = BPF_CORE_READ(sk, __sk_common.skc_dport);
+    tcp_info->sport = bpf_htons(BPF_CORE_READ(sk, __sk_common.skc_num));
 
-		tcp_info->saddr = sk->__sk_common.skc_rcv_saddr;
-		tcp_info->daddr = sk->__sk_common.skc_daddr;
-		tcp_info->dport = sk->__sk_common.skc_dport;
-		tcp_info->sport = bpf_htons(sk->__sk_common.skc_num);
-	//}
-	// else if (sk->__sk_common.skc_family == AF_INET6)
-	// {
-	// 	// Обработка IPv6, если необходимо
-	// 	// Здесь добавьте аналогичную логику для IPv6
-	// 	return 0; // Здесь вы можете также вернуть данные для IPv6
-	// }
+    bpf_get_current_comm(&tcp_info->comm, TASK_COMM_LEN);
+    tcp_info->pid = bpf_get_current_pid_tgid() >> 32;
 
-	bpf_get_current_comm(&tcp_info->comm, TASK_COMM_LEN);
-	tcp_info->pid = bpf_get_current_pid_tgid() >> 32; // Получаем PID
+    bpf_ringbuf_submit(tcp_info, 0);
 
-	bpf_ringbuf_submit(tcp_info, 0);
-
-	return 0;
+    return 0;
 }
+
