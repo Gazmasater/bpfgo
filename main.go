@@ -95,6 +95,8 @@ func main() {
 			continue
 		}
 
+		event.Pid = binary.LittleEndian.Uint32(record.RawSample[28:32])
+
 		log.Printf("%-16s %-15s %-6d -> %-15s %-6d %-6d",
 			event.Comm,
 			intToIP(event.Saddr),
