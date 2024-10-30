@@ -1,50 +1,4 @@
-#include <linux/bpf.h>
-#include <linux/socket.h>
-#include <linux/inet.h>
-#include <linux/bpf_helpers.h>
-#include <linux/ip.h>
-#include <linux/ptrace.h>
-
-SEC("fentry/__x64_sys_recvfrom")
-int BPF_PROG(recvfrom_hook, int sockfd, void __user *buf, size_t len, unsigned int flags, struct sockaddr __user *src_addr, int __user *addrlen) {
-    struct sockaddr_in *addr_in = (struct sockaddr_in *)src_addr;
-
-    if (addr_in) {
-        bpf_printk("UDP packet received from %pI4:%u\n", &addr_in->sin_addr, ntohs(addr_in->sin_port));
-    }
-
-    return 0; // возвращаем 0 для продолжения выполнения функции
-}
-
-char _license[] SEC("license") = "GPL";
-
-
-
-bpftool btf dump file /sys/kernel/btf/vmlinux | grep sys_accept
-
-#include <linux/bpf.h>
-#include <linux/socket.h>
-#include <linux/inet.h>
-#include <linux/bpf_helpers.h>
-
-SEC("fentry/__x64_sys_accept4") 
-int BPF_PROG(accept_hook, int sockfd, struct sockaddr __user *addr, int __user *addrlen, int flags) {
-    struct sockaddr_in *addr_in = (struct sockaddr_in *)addr;
-
-    // Проверяем, что указатель адреса валиден
-    if (addr_in) {
-        bpf_printk("New TCP connection accepted from %pI4:%u\n", &addr_in->sin_addr, ntohs(addr_in->sin_port));
-    }
-
-    return 0; // возвращаем 0 для продолжения выполнения функции
-}
-
-char _license[] SEC("license") = "GPL";
-
-
-
 //go:build ignore
-
 
 #include "common.h"
 #include "bpf/bpf_endian.h"
@@ -108,30 +62,39 @@ struct event
 };
 struct event *unused __attribute__((unused));
 
-SEC("kprobe/sys_accept") 
-int syscall__probe_entry_accept(struct pt_regs *ctx, int sockfd, struct sockaddr *addr)
-{ struct event *tcp_info;
- struct sock *sk; 
+SEC("KProbe/sys_accept")
+int BPF_PROG(sys_accept, struct sock *sk)
+{
+	struct event *tcp_info;
+	
 
-tcp_info = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
-if (!tcp_info) {
-    return 0;
-}
+	//if (sk->__sk_common.skc_family == AF_INET)
+	//{
+		tcp_info = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
+		if (!tcp_info)
+		{
+			return 0;
+		}
 
-tcp_info->saddr = sk->__sk_common.skc_rcv_saddr;
+		tcp_info->saddr = sk->__sk_common.skc_rcv_saddr;
 		tcp_info->daddr = sk->__sk_common.skc_daddr;
 		tcp_info->dport = sk->__sk_common.skc_dport;
 		tcp_info->sport = bpf_htons(sk->__sk_common.skc_num);
-bpf_get_current_comm(&tcp_info->comm, TASK_COMM_LEN);
-tcp_info->pid = bpf_get_current_pid_tgid() >> 32;
+	//}
+	// else if (sk->__sk_common.skc_family == AF_INET6)
+	// {
+	// 	// Обработка IPv6, если необходимо
+	// 	// Здесь добавьте аналогичную логику для IPv6
+	// 	return 0; // Здесь вы можете также вернуть данные для IPv6
+	// }
 
-bpf_ringbuf_submit(tcp_info, 0);
+	bpf_get_current_comm(&tcp_info->comm, TASK_COMM_LEN);
+	tcp_info->pid = bpf_get_current_pid_tgid() >> 32; // Получаем PID
 
-return 0;
+	bpf_ringbuf_submit(tcp_info, 0);
 
+	return 0;
 }
 
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go build && sudo ./ebpf-test
-# ebpf-test
-./main.go:50:29: objs.bpfPrograms.SysAccept undefined (type bpfPrograms has no field or method SysAccept)
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+2024/10/30 19:22:53 loading objects: field SysAccept: cannot load program sys_accept: program type is unspecified
