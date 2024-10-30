@@ -53,14 +53,13 @@ type fentrySpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type fentryProgramSpecs struct {
-	AcceptHook *ebpf.ProgramSpec `ebpf:"accept_hook"`
+	SysAccept *ebpf.ProgramSpec `ebpf:"sys_accept"`
 }
 
 // fentryMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type fentryMapSpecs struct {
-	Events *ebpf.MapSpec `ebpf:"events"`
 }
 
 // fentryObjects contains all objects after they have been loaded into the kernel.
@@ -82,25 +81,22 @@ func (o *fentryObjects) Close() error {
 //
 // It can be passed to loadFentryObjects or ebpf.CollectionSpec.LoadAndAssign.
 type fentryMaps struct {
-	Events *ebpf.Map `ebpf:"events"`
 }
 
 func (m *fentryMaps) Close() error {
-	return _FentryClose(
-		m.Events,
-	)
+	return _FentryClose()
 }
 
 // fentryPrograms contains all programs after they have been loaded into the kernel.
 //
 // It can be passed to loadFentryObjects or ebpf.CollectionSpec.LoadAndAssign.
 type fentryPrograms struct {
-	AcceptHook *ebpf.Program `ebpf:"accept_hook"`
+	SysAccept *ebpf.Program `ebpf:"sys_accept"`
 }
 
 func (p *fentryPrograms) Close() error {
 	return _FentryClose(
-		p.AcceptHook,
+		p.SysAccept,
 	)
 }
 

@@ -62,7 +62,7 @@ type bpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfProgramSpecs struct {
-	AcceptHook *ebpf.ProgramSpec `ebpf:"accept_hook"`
+	SysAccept *ebpf.ProgramSpec `ebpf:"sys_accept"`
 }
 
 // bpfMapSpecs contains maps before they are loaded into the kernel.
@@ -104,12 +104,12 @@ func (m *bpfMaps) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfPrograms struct {
-	AcceptHook *ebpf.Program `ebpf:"accept_hook"`
+	SysAccept *ebpf.Program `ebpf:"sys_accept"`
 }
 
 func (p *bpfPrograms) Close() error {
 	return _BpfClose(
-		p.AcceptHook,
+		p.SysAccept,
 	)
 }
 

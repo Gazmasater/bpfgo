@@ -47,7 +47,7 @@ func main() {
 	defer objs.Close()
 
 	link, err := link.AttachTracing(link.TracingOptions{
-		Program: objs.bpfPrograms.AcceptHook,
+		Program: objs.bpfPrograms.SysAccept,
 	})
 	if err != nil {
 		log.Fatal(err)
