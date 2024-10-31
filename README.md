@@ -1,16 +1,29 @@
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/fentry.c",
-	"owner": "C/C++: IntelliSense",
-	"code": "70",
-	"severity": 8,
-	"message": "incomplete type \"struct accept_args_t\" is not allowed",
-	"source": "C/C++",
-	"startLineNumber": 125,
-	"startColumn": 26,
-	"endLineNumber": 125,
-	"endColumn": 37
-}]
-
-// https://linux.die.net/man/3/accept
-// int accept(int socket, struct sockaddr *restrict address, socklen_t *restrict address_len);
-
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go generate
+/home/gaz358/myprog/bpfgo/fentry.c:117:10: error: call to undeclared function 'should_intercept'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  117 |     if (!should_intercept()) {
+      |          ^
+/home/gaz358/myprog/bpfgo/fentry.c:122:46: error: The eBPF is using target specific macros, please provide -target that is not bpf, bpfel or bpfeb
+  122 |     struct pt_regs *ctx2 = (struct pt_regs *)PT_REGS_PARM1(ctx);
+      |                                              ^
+/usr/include/bpf/bpf_tracing.h:563:29: note: expanded from macro 'PT_REGS_PARM1'
+  563 | #define PT_REGS_PARM1(x) ({ _Pragma(__BPF_TARGET_MISSING); 0l; })
+      |                             ^
+<scratch space>:44:6: note: expanded from here
+   44 |  GCC error "The eBPF is using target specific macros, please provide -target that is not bpf, bpfel or bpfeb"
+      |      ^
+/home/gaz358/myprog/bpfgo/fentry.c:125:44: error: The eBPF is using target specific macros, please provide -target that is not bpf, bpfel or bpfeb
+  125 |     bpf_probe_read(&saddr, sizeof(saddr), &PT_REGS_PARM2(ctx2));
+      |                                            ^
+/usr/include/bpf/bpf_tracing.h:564:29: note: expanded from macro 'PT_REGS_PARM2'
+  564 | #define PT_REGS_PARM2(x) ({ _Pragma(__BPF_TARGET_MISSING); 0l; })
+      |                             ^
+<scratch space>:46:6: note: expanded from here
+   46 |  GCC error "The eBPF is using target specific macros, please provide -target that is not bpf, bpfel or bpfeb"
+      |      ^
+/home/gaz358/myprog/bpfgo/fentry.c:125:43: error: cannot take the address of an rvalue of type 'long'
+  125 |     bpf_probe_read(&saddr, sizeof(saddr), &PT_REGS_PARM2(ctx2));
+      |                                           ^~~~~~~~~~~~~~~~~~~~
+4 errors generated.
+Error: compile: exit status 1
+exit status 1
+gen.go:3: running "go": exit status 1
