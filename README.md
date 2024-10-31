@@ -1,12 +1,12 @@
 [{
-	"resource": "/home/gaz358/myprog/bpfgo/test.c",
+	"resource": "/home/gaz358/myprog/bpfgo/common.h",
 	"owner": "C/C++: IntelliSense",
-	"code": "833",
+	"code": "20",
 	"severity": 8,
-	"message": "pointer or reference to incomplete type \"struct pt_regs\" is not allowed",
+	"message": "identifier \"memory_cgrp_id\" is undefined",
 	"source": "C/C++",
-	"startLineNumber": 521,
-	"startColumn": 48,
-	"endLineNumber": 521,
-	"endColumn": 61
+	"startLineNumber": 280,
+	"startColumn": 19,
+	"endLineNumber": 280,
+	"endColumn": 33
 }]
