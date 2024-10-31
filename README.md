@@ -10,3 +10,8 @@
 	"endLineNumber": 280,
 	"endColumn": 33
 }]
+
+
+'memory_cgrp_id' val=4
+/home/gaz358/myprog/trayce_agent/bundle/6.2.0-26-generic.btf
+  11424,3: 	'memory_cgrp_id' val=4
