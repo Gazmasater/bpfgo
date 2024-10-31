@@ -1,4 +1,38 @@
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go generate
+truct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, u64);
+  __type(value, struct accept_args_t);
+  __uint(max_entries, 1024*128);
+} active_accept4_args_map SEC(".maps");
+
+struct accept_args_t {
+    struct sockaddr_in* addr;
+    int fd;
+};
+
+SEC("kprobe/accept4")
+int probe_accept4(struct pt_regs *ctx) {
+    u64 current_pid_tgid = bpf_get_current_pid_tgid();
+    u32 pid = current_pid_tgid >> 32;
+
+    if (!should_intercept()) {
+        return 0;
+    }
+
+    bpf_printk("kprobe/accept entry: PID: %d\n", pid);
+    struct pt_regs *ctx2 = (struct pt_regs *)PT_REGS_PARM1(ctx);
+
+    struct sockaddr *saddr;
+    bpf_probe_read(&saddr, sizeof(saddr), &PT_REGS_PARM2(ctx2));
+
+    // Build the connect_event and save it to the map
+    struct accept_args_t accept_args = {};
+    accept_args.addr = (struct sockaddr_in *)saddr;
+    bpf_map_update_elem(&active_accept4_args_map, &current_pid_tgid, &accept_args, BPF_ANY);
+
+    return 0;
+}
+
 /home/gaz358/myprog/bpfgo/fentry.c:117:10: error: call to undeclared function 'should_intercept'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
   117 |     if (!should_intercept()) {
       |          ^
