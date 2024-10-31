@@ -23,5 +23,10 @@ bash
 Копировать код
 RUST_BACKTRACE=1 ./ecc ebpf_test.c
 
+gaz358@gaz358-BOD-WXX9:/$ ls /home/gaz358/.local/share/eunomia
+gaz358@gaz358-BOD-WXX9:/$ cd /home/gaz358/.local/share/eunomia
+gaz358@gaz358-BOD-WXX9:~/.local/share/eunomia$ ls
+gaz358@gaz358-BOD-WXX9:~/.local/share/eunomia$ 
+
 
 
