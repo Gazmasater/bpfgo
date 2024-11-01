@@ -5,6 +5,9 @@ INCLUDES := -D__TARGET_ARCH_$(ARCH) -I$(OUTPUT) -I../third_party/libbpf-bootstra
 
 
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#ifndef CUSTOM_PT_REGS  // Проверьте, определена ли уже структура
+#define CUSTOM_PT_REGS
+
 #if defined(__TARGET_ARCH_x86)
 struct pt_regs {
 	/*
@@ -41,3 +44,5 @@ struct pt_regs {
 	/* top of stack page */
 };
 #endif /* __TARGET_ARCH_x86 */
+
+#endif /* CUSTOM_PT_REGS */
