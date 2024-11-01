@@ -9,8 +9,6 @@
 
 char __license[] SEC("license") = "GPL";
 
-
-
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
   __type(key, u64);
@@ -18,54 +16,6 @@ struct {
   __uint(max_entries, 1024*128);
 } active_accept4_args_map SEC(".maps");
 
-struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, u64);
-  __type(value, struct accept_args_t);
-  __uint(max_entries, 1024*128);
-} active_getsockname_args_map SEC(".maps");
-
-struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, u64);
-  __type(value, struct accept_args_t);
-  __uint(max_entries, 1024*128);
-} active_connect_args_map SEC(".maps");
-
-struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, u64);
-  __type(value, struct close_event_t);
-  __uint(max_entries, 1024*128);
-} active_close_args_map SEC(".maps");
-
-struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, u64);
-  __type(value, struct active_buf);
-  __uint(max_entries, 1024*128);
-} active_read_args_map SEC(".maps");
-
-struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, u64);
-  __type(value, struct active_buf);
-  __uint(max_entries, 1024*128);
-} active_write_args_map SEC(".maps");
-
-struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, u64);
-  __type(value, struct active_buf);
-  __uint(max_entries, 1024*128);
-} active_sendto_args_map SEC(".maps");
-
-struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, u64);
-  __type(value, struct active_buf);
-  __uint(max_entries, 1024*128);
-} active_recvfrom_args_map SEC(".maps");
 
 // https://linux.die.net/man/3/accept
 // int accept(int socket, struct sockaddr *restrict address, socklen_t *restrict address_len);
