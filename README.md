@@ -5,11 +5,8 @@ INCLUDES := -D__TARGET_ARCH_$(ARCH) -I$(OUTPUT) -I../third_party/libbpf-bootstra
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang fentry fentry.c -- -target x86_64 -g -O2 -D __TARGET_ARCH_x86
 
-zcat /proc/config.gz | grep KPROBES
+grep KPROBES /boot/config-$(uname -r)
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ zcat /proc/config.gz | grep KPROBES
-
-gzip: /proc/config.gz: No such file or directory
 
 
 CONFIG_KPROBES=y
