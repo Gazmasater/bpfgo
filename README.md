@@ -358,5 +358,10 @@ Stack backtrace:
 	"endColumn": 37
 }]
 
+#########################################################################################
+
+    const char *name = BPF_CORE_READ(cur_tsk, cgroups, subsys[cgrp_id], cgroup, kn, name);
+
+
 
 
