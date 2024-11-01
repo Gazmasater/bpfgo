@@ -5,41 +5,37 @@ INCLUDES := -D__TARGET_ARCH_$(ARCH) -I$(OUTPUT) -I../third_party/libbpf-bootstra
 
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-#include "vmlinux.h"
-#include "bpf/bpf_core_read.h"
-#include "bpf/bpf_endian.h"
-#include "bpf/bpf_helpers.h"
-#include "bpf/bpf_tracing.h"
-#include "common.h"
-#include "stdbool.h"
+package main
 
-char __license[] SEC("license") = "GPL";
+import (
+	"fmt"
+	"net"
+)
 
-int should_intercept(void) {
-    // Your logic here
-    return 1;  // For testing, always return true
+func main() {
+	// Привязываем сервер к адресу и порту
+	listener, err := net.Listen("tcp", ":9090")
+	if err != nil {
+		fmt.Println("Error starting server:", err)
+		return
+	}
+	defer listener.Close()
+
+	fmt.Println("Server listening on port 9090...")
+
+	for {
+		// Принимаем входящее соединение
+		conn, err := listener.Accept()
+		if err != nil {
+			fmt.Println("Error accepting connection:", err)
+			continue
+		}
+
+		// Выводим информацию о принятом соединении
+		fmt.Printf("Connection accepted from %s\n", conn.RemoteAddr().String())
+
+		// Закрываем соединение
+		conn.Close()
+	}
 }
-
-SEC("kprobe/__x64_sys_accept")
-int probe_accept4(struct pt_regs *ctx) {
-    u64 current_pid_tgid = bpf_get_current_pid_tgid();
-    u32 pid = current_pid_tgid >> 32;
-
-    if (!should_intercept()) {
-        return 0;
-    }
-
-    // Логируем PID процесса, вызывающего accept
-    bpf_printk("kprobe/accept entry: PID: %d\n", pid);
-
-    // Считываем аргументы
-    struct pt_regs *ctx2 = (struct pt_regs *)PT_REGS_PARM1(ctx);
-    struct sockaddr *saddr;
-    bpf_probe_read(&saddr, sizeof(saddr), &PT_REGS_PARM2(ctx2));
-
-    // Здесь можно добавить любую логику обработки, если это необходимо,
-    // но мы не сохраняем данные в карту
-
-    return 0;
-}
-
+nc 127.0.0.1 9090
