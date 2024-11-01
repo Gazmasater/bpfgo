@@ -5,6 +5,33 @@ INCLUDES := -D__TARGET_ARCH_$(ARCH) -I$(OUTPUT) -I../third_party/libbpf-bootstra
 
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
+#include "vmlinux.h"
+#include "bpf/bpf_core_read.h"
+#include "bpf/bpf_endian.h"
+#include "bpf/bpf_helpers.h"
+#include "bpf/bpf_tracing.h"
+#include "common.h"
+#include "stdbool.h"
+
+char __license[] SEC("license") = "GPL";
+
+struct {
+    __uint(type, BPF_MAP_TYPE_RINGBUF);
+    __uint(max_entries, 1024 * 1024 * 128); // Important that its big enough otherwise events will be dropped and cause weird behaviour
+} data_events SEC(".maps");
+
+struct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, u64);
+  __type(value, struct accept_args_t);
+  __uint(max_entries, 1024*128);
+} active_accept4_args_map SEC(".maps");
+
+int should_intercept(void) {
+// Your logic here
+return 1;  // For testing, always return true
+}
+
 SEC("kprobe/__x64_sys_accept")
 int probe_accept4(struct pt_regs *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
@@ -25,24 +52,4 @@ int probe_accept4(struct pt_regs *ctx) {
     bpf_map_update_elem(&active_accept4_args_map, &current_pid_tgid, &accept_args, BPF_ANY);
 
     return 0;
-} 
-
-az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ./ecc fentry.c
-INFO [ecc_rs::bpf_compiler] Compiling bpf object...
-INFO [ecc_rs::bpf_compiler] $ "clang" CommandArgs { inner: ["-g", "-O2", "-target", "bpf", "-Wno-unknown-attributes", "-D__TARGET_ARCH_x86", "-idirafter", "/usr/lib/llvm-18/lib/clang/18/include", "-idirafter", "/usr/local/include", "-idirafter", "/usr/include/x86_64-linux-gnu", "-idirafter", "/usr/include", "-I/tmp/.tmpRyGSVr/include", "-I/tmp/.tmpRyGSVr/include/vmlinux/x86", "-I/home/gaz358/myprog/bpfgo", "-c", "fentry.c", "-o", "fentry.bpf.o"] }
-INFO [ecc_rs::bpf_compiler] 
-ERROR [ecc_rs::bpf_compiler] fentry.c:27:10: error: call to undeclared function 'should_intercept'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
-   27 |     if (!should_intercept()) {
-      |          ^
-1 error generated.
-
-Error: Failed to compile
-
-Caused by:
-    Failed to run clang(exit code = Some(1))
-
-
-    int should_intercept(void) {
-    // Your logic here
-    return 1;  // For testing, always return true
 }
