@@ -3,25 +3,97 @@ bpftool btf dump file /sys/kernel/btf/vmlinux format c > vmlinux.h
 
 INCLUDES := -D__TARGET_ARCH_$(ARCH) -I$(OUTPUT) -I../third_party/libbpf-bootstrap/libbpf/include/uapi -I$(dir $(VMLINUX)) -I$(LIBBLAZESYM_INC) -I/usr/include/bpf
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang fentry fentry.c -- -target x86_64 -g -O2 -D __TARGET_ARCH_x86
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-grep KPROBES /boot/config-$(uname -r)
+//go:build ignore
+
+#include "common.h"
+#include "bpf/bpf_endian.h"
+#include "bpf/bpf_tracing.h"
+#include "linux/ptrace.h"
+
+#define AF_INET 2
+#define AF_INET6 10
+#define TASK_COMM_LEN 16
+
+char __license[] SEC("license") = "Dual MIT/GPL";
+
+// Структура sock_common для IPv4/IPv6
+struct sock_common {
+	union {
+		struct {
+			__be32 skc_daddr;
+			__be32 skc_rcv_saddr;
+		};
+	};
+	union {
+		__u32 _;
+	};
+	union {
+		struct {
+			__be16 skc_dport;
+			__u16 skc_num;
+		};
+	};
+	short unsigned int skc_family;
+};
+
+// Структура sock
+struct sock {
+	struct sock_common __sk_common;
+};
+
+// Определение карты для отправки событий через perf
+struct {
+	__uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+} events SEC(".maps");
+
+// Структура события с PID
+struct event {
+	u8 comm[16];
+	__u16 sport;
+	__be16 dport;
+	__be32 saddr;
+	__be32 daddr;
+	__u32 pid;
+};
+
+// Основной обработчик, использующий kprobe для совместимости со старыми ядрами
+SEC("kprobe/__x64_sys_accept")
+int bpf_prob(struct sock *sk) {
+	  struct event tcp_info = {};
+
+	// // Проверка, что IPv4 используется
+	 if (sk->__sk_common.skc_family == AF_INET) {
+	 	tcp_info.saddr = sk->__sk_common.skc_rcv_saddr;
+		tcp_info.daddr = sk->__sk_common.skc_daddr;
+	 	tcp_info.dport = sk->__sk_common.skc_dport;
+	 	tcp_info.sport = bpf_htons(sk->__sk_common.skc_num);
+	 } else {
+	// // IPv6 можно обработать аналогично
+	  	return 0;
+	}
+
+	// Получение имени процесса и PID
+	 bpf_get_current_comm(&tcp_info.comm, TASK_COMM_LEN);
+	 tcp_info.pid = bpf_get_current_pid_tgid() >> 32;
+
+	// Отправка события в пространство пользователя
+	bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, &tcp_info, sizeof(tcp_info));
+
+	return 0;
+}
 
 
-
-CONFIG_KPROBES=y
-
-
-
-
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ./ecli run package.json
-INFO [faerie::elf] strtab: 0x56b symtab 0x5a8 relocs 0x5f0 sh_offset 0x5f0
-libbpf: Failed to bump RLIMIT_MEMLOCK (err = -1), you might need to do it explicitly!
-libbpf: Error in bpf_object__probe_loading():Operation not permitted(1). Couldn't load trivial BPF program. Make sure your kernel supports BPF (CONFIG_BPF_SYSCALL=y) and/or that RLIMIT_MEMLOCK is set to big enough value.
-libbpf: failed to load object 'fentry_bpf�97p'
-Error: Failed to run native eBPF program
-
-Caused by:
-    Bpf error: Failed to start polling: Bpf("Failed to load and attach: Failed to load bpf object\n\nCaused by:\n    System error, errno: 1"), RecvError
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/fentry.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "20",
+	"severity": 8,
+	"message": "identifier \"ctx\" is undefined",
+	"source": "C/C++",
+	"startLineNumber": 75,
+	"startColumn": 24,
+	"endLineNumber": 75,
+	"endColumn": 27
+}]
