@@ -7,7 +7,22 @@ INCLUDES := -D__TARGET_ARCH_$(ARCH) -I$(OUTPUT) -I../third_party/libbpf-bootstra
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang fentry fentry.c -- -target bpfel -g -O2 -D __TARGET_ARCH_x86
 
-
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ uname -s
+Linux
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ uname -n
+gaz358-BOD-WXX9
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ uname -r
+6.8.0-47-generic
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ uname -v
+#47-Ubuntu SMP PREEMPT_DYNAMIC Fri Sep 27 21:40:26 UTC 2024
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ uname -m
+x86_64
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ uname -p
+x86_64
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ uname -i
+x86_64
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ uname -o
+GNU/Linux
 
 
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
