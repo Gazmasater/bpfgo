@@ -123,4 +123,8 @@ int probe_ret_accept4(struct pt_regs *ctx) {
 	"startColumn": 44,
 	"endLineNumber": 31,
 	"endColumn": 57
+
+
+ bpf_probe_read(&accept_args.addr, sizeof(accept_args.addr), (void *)PT_REGS_PARM2(ctx2));
+
 }]
