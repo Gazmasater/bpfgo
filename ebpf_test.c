@@ -1,10 +1,15 @@
-#include "vmlinux.h"
-#include "stdbool.h"
+//#include "vmlinux.h"
+
+#include "bpf/bpf.h"
 #include "bpf/bpf_core_read.h"
-#include "bpf/bpf_endian.h"
+//#include "bpf/bpf_endian.h"
 #include "bpf/bpf_helpers.h"
-#include "common.h"
 #include "bpf/bpf_tracing.h"
+
+#include "common_new.h"
+#include "linux/ptrace.h"
+
+
 
 
 char __license[] SEC("license") = "GPL";
