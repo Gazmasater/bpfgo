@@ -93,4 +93,23 @@ stack backtrace:
 note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
+_______________________________________________________________________________________________________________
+
+Создайте директорию для Eunomia, если у вас её ещё нет. Например, вы можете создать её в вашей домашней папке:
+
+bash
+Копировать код
+mkdir -p ~/eunomia_data
+Установите переменную окружения EUNOMIA_HOME на путь к этой директории. Это можно сделать в командной строке:
+
+bash
+Копировать код
+export EUNOMIA_HOME=~/eunomia_data
+Запустите вашу программу снова:
+
+bash
+Копировать код
+RUST_BACKTRACE=1 ./ecc ebpf_test.c
+Если вы хотите, чтобы эта переменная окружения была установлена каждый раз при запуске терминала, вы можете добавить строку export EUNOMIA_HOME=~/eunomia_data в файл ~/.bashrc или ~/.bash_profile, а затем выполнить команду source ~/.bashrc, чтобы применить изменения.
+
 
