@@ -6,18 +6,50 @@ INCLUDES := -D__TARGET_ARCH_$(ARCH) -I$(OUTPUT) -I../third_party/libbpf-bootstra
 
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-Ошибка, которую вы видите, связана с конфликтами определений функций и с несовместимыми параметрами в файле ebpf_test.c. Проблемы возникают из-за нескольких определений функций eBPF в файле /tmp/.tmp8Htfer/include/bpf/bpf_helper_defs.h, таких как bpf_map_lookup_elem и bpf_map_update_elem. Кроме того, некоторые функции, такие как should_intercept и parse_address, вызываются без предварительного объявления.
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ./ecc ebpf_test.c
+INFO [ecc_rs::bpf_compiler] Compiling bpf object...
+INFO [ecc_rs::bpf_compiler] $ "clang" CommandArgs { inner: ["-g", "-O2", "-target", "bpf", "-Wno-unknown-attributes", "-D__TARGET_ARCH_x86", "-idirafter", "/usr/lib/llvm-18/lib/clang/18/include", "-idirafter", "/usr/local/include", "-idirafter", "/usr/include/x86_64-linux-gnu", "-idirafter", "/usr/include", "-I/tmp/.tmpbHLzR3/include", "-I/tmp/.tmpbHLzR3/include/vmlinux/x86", "-I/home/gaz358/myprog/bpfgo", "-c", "ebpf_test.c", "-o", "ebpf_test.bpf.o"] }
+INFO [ecc_rs::bpf_compiler] 
+ERROR [ecc_rs::bpf_compiler] In file included from ebpf_test.c:4:
+In file included from /tmp/.tmpbHLzR3/include/bpf/bpf_core_read.h:5:
+In file included from /tmp/.tmpbHLzR3/include/bpf/bpf_helpers.h:11:
+/tmp/.tmpbHLzR3/include/bpf/bpf_helper_defs.h:56:23: error: redefinition of 'bpf_map_lookup_elem' as different kind of symbol
+   56 | static void *(* const bpf_map_lookup_elem)(void *map, const void *key) = (void *) 1;
+      |                       ^
+/tmp/.tmpbHLzR3/include/bpf/bpf.h:151:16: note: previous definition is here
+  151 | LIBBPF_API int bpf_map_lookup_elem(int fd, const void *key, void *value);
+      |                ^
+In file included from ebpf_test.c:4:
+In file included from /tmp/.tmpbHLzR3/include/bpf/bpf_core_read.h:5:
+In file included from /tmp/.tmpbHLzR3/include/bpf/bpf_helpers.h:11:
+/tmp/.tmpbHLzR3/include/bpf/bpf_helper_defs.h:78:22: error: redefinition of 'bpf_map_update_elem' as different kind of symbol
+   78 | static long (* const bpf_map_update_elem)(void *map, const void *key, const void *value, __u64 flags) = (void *) 2;
+      |                      ^
+/tmp/.tmpbHLzR3/include/bpf/bpf.h:148:16: note: previous definition is here
+  148 | LIBBPF_API int bpf_map_update_elem(int fd, const void *key, const void *value,
+      |                ^
+In file included from ebpf_test.c:4:
+In file included from /tmp/.tmpbHLzR3/include/bpf/bpf_core_read.h:5:
+In file included from /tmp/.tmpbHLzR3/include/bpf/bpf_helpers.h:11:
+/tmp/.tmpbHLzR3/include/bpf/bpf_helper_defs.h:88:22: error: redefinition of 'bpf_map_delete_elem' as different kind of symbol
+   88 | static long (* const bpf_map_delete_elem)(void *map, const void *key) = (void *) 3;
+      |                      ^
+/tmp/.tmpbHLzR3/include/bpf/bpf.h:158:16: note: previous definition is here
+  158 | LIBBPF_API int bpf_map_delete_elem(int fd, const void *key);
+      |                ^
+ebpf_test.c:32:10: error: call to undeclared function 'should_intercept'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+   32 |     if (!should_intercept()) {
+      |          ^
+ebpf_test.c:45:25: error: incompatible pointer to integer conversion passing 'struct (unnamed struct at ebpf_test.c:15:1) *' to parameter of type 'int' [-Wint-conversion]
+   45 |     bpf_map_update_elem(&active_accept4_args_map, &current_pid_tgid, &accept_args, BPF_ANY);
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmpbHLzR3/include/bpf/bpf.h:148:40: note: passing argument to parameter 'fd' here
+  148 | LIBBPF_API int bpf_map_update_elem(int fd, const void *key, const void *value,
+      |                                        ^
+5 errors generated.
 
-Попробуйте следующие шаги, чтобы устранить ошибки:
+Error: Failed to compile
 
-Удалите повторные определения: Конфликт между bpf_helper_defs.h и bpf.h может быть связан с тем, что один и тот же символ определен в нескольких местах. Попробуйте исключить bpf_helper_defs.h из инклудов или использовать другой заголовочный файл для поддержки функций eBPF, например, непосредственно bpf.h.
-
-Объявите функции перед их использованием: Убедитесь, что should_intercept и parse_address определены или объявлены перед использованием. Например, добавьте следующие объявления в начале ebpf_test.c:
-
-c
-Копировать код
-int should_intercept(void);
-void parse_address(void *src_addr, struct accept_args_t args);
-Проверьте аргументы функций eBPF: Ошибка в строке bpf_map_update_elem и bpf_map_lookup_elem связана с несовместимыми типами аргументов. Убедитесь, что аргументы типа int fd передаются корректно, и проверьте документацию, чтобы убедиться, что количество и типы аргументов верны.
-
-Используйте правильную версию task_struct: Ошибка incomplete definition of type 'struct task_struct' указывает на то, что task_struct определен не полностью. Это может быть вызвано отсутствием нужных заголовочных файлов. Попробуйте включить необходимые заголовочные файлы или пересмотрите использование BPF_CORE_READ.
+Caused by:
+    Failed to run clang(exit code = Some(1))
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
