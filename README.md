@@ -111,5 +111,33 @@ bash
 Копировать код
 RUST_BACKTRACE=1 ./ecc ebpf_test.c
 Если вы хотите, чтобы эта переменная окружения была установлена каждый раз при запуске терминала, вы можете добавить строку export EUNOMIA_HOME=~/eunomia_data в файл ~/.bashrc или ~/.bash_profile, а затем выполнить команду source ~/.bashrc, чтобы применить изменения.
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ RUST_BACKTRACE=1 ./ecc ebpf_test.c
+INFO [ecc_rs::bpf_compiler] Compiling bpf object...
+INFO [ecc_rs::bpf_compiler] $ "clang" CommandArgs { inner: ["-g", "-O2", "-target", "bpf", "-Wno-unknown-attributes", "-D__TARGET_ARCH_x86", "-idirafter", "/usr/lib/llvm-18/lib/clang/18/include", "-idirafter", "/usr/local/include", "-idirafter", "/usr/include/x86_64-linux-gnu", "-idirafter", "/usr/include", "-I/tmp/.tmp8wBEIv/include", "-I/tmp/.tmp8wBEIv/include/vmlinux/x86", "-I/home/gaz358/myprog/bpfgo", "-c", "ebpf_test.c", "-o", "ebpf_test.bpf.o"] }
+INFO [ecc_rs::bpf_compiler] 
+ERROR [ecc_rs::bpf_compiler] ebpf_test.c:40:84: error: use of undeclared identifier 'BPF_ANY'
+   40 |     bpf_map_update_elem(&active_accept4_args_map, &current_pid_tgid, &accept_args, BPF_ANY);
+      |                                                                                    ^
+1 error generated.
+
+Error: Failed to compile
+
+Caused by:
+    Failed to run clang(exit code = Some(1))
+
+Stack backtrace:
+   0: ecc_rs::bpf_compiler::do_compile
+   1: ecc_rs::bpf_compiler::compile_bpf
+   2: ecc_rs::main
+   3: std::sys_common::backtrace::__rust_begin_short_backtrace
+   4: std::rt::lang_start::{{closure}}
+   5: std::rt::lang_start_internal
+   6: main
+   7: <unknown>
+   8: __libc_start_main
+   9: _start
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
