@@ -345,5 +345,18 @@ Stack backtrace:
 
    [160] STRUCT 'task_struct' size=9728 vlen=253
 
+   [{
+	"resource": "/home/gaz358/myprog/bpfgo/ebpf_test.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "833",
+	"severity": 8,
+	"message": "pointer or reference to incomplete type \"struct task_struct\" is not allowed",
+	"source": "C/C++",
+	"startLineNumber": 78,
+	"startColumn": 24,
+	"endLineNumber": 78,
+	"endColumn": 37
+}]
+
 
 
