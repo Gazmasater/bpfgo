@@ -182,3 +182,18 @@ int BPF_KPROBE(tcp_connect, struct sock *sk) {
 	return 0;
 }
 
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/fentry.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "833",
+	"severity": 8,
+	"message": "pointer or reference to incomplete type \"struct pt_regs\" is not allowed",
+	"source": "C/C++",
+	"startLineNumber": 55,
+	"startColumn": 5,
+	"endLineNumber": 55,
+	"endColumn": 15
+}]
+
