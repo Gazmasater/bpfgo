@@ -12,6 +12,7 @@ int probe_ret_accept4(struct pt_regs *ctx) {
 
     struct accept_args_t* accept_args = bpf_map_lookup_elem(&active_accept4_args_map, &current_pid_tgid);
     if (accept_args == NULL) {
+        bpf_printk("kprobe/accept return: no args found for PID: %d\n", pid);
         return 0;
     }
 
@@ -19,7 +20,7 @@ int probe_ret_accept4(struct pt_regs *ctx) {
     int fd = (int)PT_REGS_RC(ctx);
     if (fd < 0) {
         bpf_printk("kprobe/accept return: failed: PID: %d, FD: %d\n", pid, fd);
-        return 0;
+        return 0; // Убираем вывод в юзерспейс
     }
 
     // Get the source IP & port
@@ -30,7 +31,7 @@ int probe_ret_accept4(struct pt_regs *ctx) {
     struct task_struct *cur_tsk = (struct task_struct *)bpf_get_current_task();
     if (cur_tsk == NULL) {
         bpf_printk("kprobe/accept return: failed to get cur task PID: %d, FD: %d\n", pid, fd);
-        return -1;
+        return -1; // Убираем вывод в юзерспейс
     }
     int cgrp_id = memory_cgrp_id;
     const char *name = BPF_CORE_READ(cur_tsk, cgroups, subsys[cgrp_id], cgroup, kn, name);
@@ -50,9 +51,14 @@ int probe_ret_accept4(struct pt_regs *ctx) {
     conn_event.dest_port = 0;
     bpf_probe_read_str(&conn_event.cgroup, sizeof(conn_event.cgroup), name);
 
+    // Сохраняем событие в карту
+    bpf_map_update_elem(&connect_events_map, &current_pid_tgid, &conn_event, BPF_ANY);
+
     bpf_map_delete_elem(&active_accept4_args_map, &current_pid_tgid);
-    bpf_printk("kprobe/accept return: PID: %d, FD: %d", pid, fd);
-    bpf_ringbuf_output(&data_events, &conn_event, sizeof(struct connect_event_t), 0);
+
+    // Отладочный вывод с информацией о соединении
+    bpf_printk("kprobe/accept return: PID: %d, FD: %d, SRC IP: %u, SRC PORT: %u, CGROUP: %s\n",
+               pid, fd, src_addr.ip, src_addr.port, name);
 
     return 0;
 }
