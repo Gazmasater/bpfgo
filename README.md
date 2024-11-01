@@ -34,9 +34,11 @@ exit status 1
 gen.go:3: running "go": exit status 1
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ uname -m
-x86_64
+С
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang fentry fentry.c -- -target bpfel -g -O2
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang fentry fentry.c -- -target x86_64 -g -O2 -D __TARGET_ARCH_x86
+
 
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go generate
