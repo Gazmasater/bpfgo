@@ -5,43 +5,99 @@ INCLUDES := -D__TARGET_ARCH_$(ARCH) -I$(OUTPUT) -I../third_party/libbpf-bootstra
 
 
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//go:build ignore
 
-#include "bpf/bpf_tracing.h" // bpf_helpers.h included within
-#include "bpf/bpf.h"
-#include "common_new.h"
-#include "linux/ptrace.h"
+#include "common.h"
+#include "bpf/bpf_endian.h"
+#include "bpf/bpf_tracing.h"
 
-char __license[] SEC("license") = "GPL";
+#define AF_INET 2
+#define AF_INET6 10 // Для поддержки IPv6
 
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __type(key, u64);
-    __type(value, struct accept_args_t);
-    __uint(max_entries, 1024*128);
-} active_accept4_args_map SEC(".maps");
+#define TASK_COMM_LEN 16
 
-// https://linux.die.net/man/3/accept
-// int accept(int socket, struct sockaddr *restrict address, socklen_t *restrict address_len);
-SEC("kprobe/accept4")
-int probe_accept4(struct pt_regs *ctx) {
-    u64 current_pid_tgid = bpf_get_current_pid_tgid();
-    u32 pid = current_pid_tgid >> 32;
+char __license[] SEC("license") = "Dual MIT/GPL";
 
-    if (!should_intercept()) {
-        return 0;
-    }
+// Структура sock_common, дополненная для поддержки IPv6
+struct sock_common
+{
+	union
+	{
+		struct
+		{
+			__be32 skc_daddr;
+			__be32 skc_rcv_saddr;
+		};
+	};
+	union
+	{
+		// Padding out union skc_hash.
+		__u32 _;
+	};
+	union
+	{
+		struct
+		{
+			__be16 skc_dport;
+			__u16 skc_num;
+		};
+	};
+	short unsigned int skc_family;
+};
 
-    bpf_printk("kprobe/accept entry: PID: %d\n", pid);
-    struct pt_regs *ctx2 = (struct pt_regs *)PT_REGS_PARM1(ctx);
+// Структура sock отражает начало структуры sock из ядра
+struct sock
+{
+	struct sock_common __sk_common;
+};
 
-    struct sockaddr *saddr;
-    bpf_probe_read(&saddr, sizeof(saddr), &PT_REGS_PARM2(ctx2));
+struct
+{
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, 1 << 24);
+} events SEC(".maps");
 
-    // Save to the map
-    struct accept_args_t accept_args = {};
-    accept_args.addr = (struct sockaddr_in *)saddr;
-    int map_fd = bpf_map_fd_by_name("active_accept4_args_map"); // Получить дескриптор карты
-    bpf_map_update_elem(map_fd, &current_pid_tgid, &accept_args, BPF_ANY);
+// Структура события, дополненная для хранения PID
+struct event
+{
+	u8 comm[16];
+	__u16 sport;
+	__be16 dport;
+	__be32 saddr;
+	__be32 daddr;
+	__u32 pid; // Добавлено поле для PID
+};
+struct event *unused __attribute__((unused));
 
-    return 0;
+SEC("fentry/tcp_connect")
+int BPF_PROG(tcp_connect, struct sock *sk)
+{
+	struct event *tcp_info;
+
+	if (sk->__sk_common.skc_family == AF_INET)
+	{
+		tcp_info = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
+		if (!tcp_info)
+		{
+			return 0;
+		}
+
+		tcp_info->saddr = sk->__sk_common.skc_rcv_saddr;
+		tcp_info->daddr = sk->__sk_common.skc_daddr;
+		tcp_info->dport = sk->__sk_common.skc_dport;
+		tcp_info->sport = bpf_htons(sk->__sk_common.skc_num);
+	}
+	else if (sk->__sk_common.skc_family == AF_INET6)
+	{
+		// Обработка IPv6, если необходимо
+		// Здесь добавьте аналогичную логику для IPv6
+		return 0; // Здесь вы можете также вернуть данные для IPv6
+	}
+
+	bpf_get_current_comm(&tcp_info->comm, TASK_COMM_LEN);
+	tcp_info->pid = bpf_get_current_pid_tgid() >> 32; // Получаем PID
+
+	bpf_ringbuf_submit(tcp_info, 0);
+
+	return 0;
 }
