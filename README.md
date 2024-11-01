@@ -57,10 +57,9 @@ struct event {
 	__be32 daddr;
 	__u32 pid;
 };
-
 // Основной обработчик, использующий kprobe для совместимости со старыми ядрами
 SEC("kprobe/__x64_sys_accept")
-int bpf_prob(struct sock *sk) {
+int bpf_prob(struct pt_regs *ctx,struct sock *sk) {
 	  struct event tcp_info = {};
 
 	// // Проверка, что IPv4 используется
@@ -84,20 +83,15 @@ int bpf_prob(struct sock *sk) {
 	return 0;
 }
 
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/fentry.c",
-	"owner": "C/C++: IntelliSense",
-	"code": "20",
-	"severity": 8,
-	"message": "identifier \"ctx\" is undefined",
-	"source": "C/C++",
-	"startLineNumber": 75,
-	"startColumn": 24,
-	"endLineNumber": 75,
-	"endColumn": 27
-}]
-
-
-int bpf_prob(struct pt_regs *ctx, struct sock *sk) {
-
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go generate
+Compiled /home/gaz358/myprog/bpfgo/fentry_bpfel.o
+Stripped /home/gaz358/myprog/bpfgo/fentry_bpfel.o
+Wrote /home/gaz358/myprog/bpfgo/fentry_bpfel.go
+Compiled /home/gaz358/myprog/bpfgo/fentry_bpfeb.o
+Stripped /home/gaz358/myprog/bpfgo/fentry_bpfeb.o
+Wrote /home/gaz358/myprog/bpfgo/fentry_bpfeb.go
+Compiled /home/gaz358/myprog/bpfgo/bpf_bpfeb.o
+Stripped /home/gaz358/myprog/bpfgo/bpf_bpfeb.o
+Error: collect C types: type name event: not found
+exit status 1
+main.go:31: running "go": exit status 1
