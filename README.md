@@ -140,4 +140,205 @@ Stack backtrace:
    9: _start
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ RUST_BACKTRACE=1 ./ecc ebpf_test.c
+INFO [ecc_rs::bpf_compiler] Compiling bpf object...
+INFO [ecc_rs::bpf_compiler] $ "clang" CommandArgs { inner: ["-g", "-O2", "-target", "bpf", "-Wno-unknown-attributes", "-D__TARGET_ARCH_x86", "-idirafter", "/usr/lib/llvm-18/lib/clang/18/include", "-idirafter", "/usr/local/include", "-idirafter", "/usr/include/x86_64-linux-gnu", "-idirafter", "/usr/include", "-I/tmp/.tmpOAYCW3/include", "-I/tmp/.tmpOAYCW3/include/vmlinux/x86", "-I/home/gaz358/myprog/bpfgo", "-c", "ebpf_test.c", "-o", "ebpf_test.bpf.o"] }
+INFO [ecc_rs::bpf_compiler] 
+ERROR [ecc_rs::bpf_compiler] In file included from ebpf_test.c:3:
+In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
+In file included from /usr/include/linux/bpf.h:11:
+In file included from /usr/include/linux/types.h:9:
+/usr/include/linux/posix_types.h:27:3: error: typedef redefinition with different types ('struct __kernel_fd_set' vs 'struct __kernel_fd_set')
+   27 | } __kernel_fd_set;
+      |   ^
+./vmlinux.h:29688:3: note: previous definition is here
+ 29688 | } __kernel_fd_set;
+       |   ^
+In file included from ebpf_test.c:3:
+In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
+In file included from /usr/include/linux/bpf.h:11:
+In file included from /usr/include/linux/types.h:9:
+In file included from /usr/include/linux/posix_types.h:36:
+In file included from /usr/include/asm/posix_types.h:7:
+In file included from /usr/include/asm/posix_types_64.h:18:
+/usr/include/asm-generic/posix_types.h:68:22: error: typedef redefinition with different types ('unsigned int' vs '__kernel_ulong_t' (aka 'unsigned long'))
+   68 | typedef unsigned int    __kernel_size_t;
+      |                         ^
+./vmlinux.h:28703:26: note: previous definition is here
+ 28703 | typedef __kernel_ulong_t __kernel_size_t;
+       |                          ^
+In file included from ebpf_test.c:3:
+In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
+In file included from /usr/include/linux/bpf.h:11:
+In file included from /usr/include/linux/types.h:9:
+In file included from /usr/include/linux/posix_types.h:36:
+In file included from /usr/include/asm/posix_types.h:7:
+In file included from /usr/include/asm/posix_types_64.h:18:
+/usr/include/asm-generic/posix_types.h:69:14: error: typedef redefinition with different types ('int' vs '__kernel_long_t' (aka 'long'))
+   69 | typedef int             __kernel_ssize_t;
+      |                         ^
+./vmlinux.h:28575:25: note: previous definition is here
+ 28575 | typedef __kernel_long_t __kernel_ssize_t;
+       |                         ^
+In file included from ebpf_test.c:3:
+In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
+In file included from /usr/include/linux/bpf.h:11:
+In file included from /usr/include/linux/types.h:9:
+In file included from /usr/include/linux/posix_types.h:36:
+In file included from /usr/include/asm/posix_types.h:7:
+In file included from /usr/include/asm/posix_types_64.h:18:
+/usr/include/asm-generic/posix_types.h:70:14: error: typedef redefinition with different types ('int' vs '__kernel_long_t' (aka 'long'))
+   70 | typedef int             __kernel_ptrdiff_t;
+      |                         ^
+./vmlinux.h:28573:25: note: previous definition is here
+ 28573 | typedef __kernel_long_t __kernel_ptrdiff_t;
+       |                         ^
+In file included from ebpf_test.c:3:
+In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
+In file included from /usr/include/linux/bpf.h:11:
+In file included from /usr/include/linux/types.h:9:
+In file included from /usr/include/linux/posix_types.h:36:
+In file included from /usr/include/asm/posix_types.h:7:
+In file included from /usr/include/asm/posix_types_64.h:18:
+/usr/include/asm-generic/posix_types.h:81:3: error: typedef redefinition with different types ('struct __kernel_fsid_t' vs 'struct __kernel_fsid_t')
+   81 | } __kernel_fsid_t;
+      |   ^
+./vmlinux.h:29692:3: note: previous definition is here
+ 29692 | } __kernel_fsid_t;
+       |   ^
+In file included from ebpf_test.c:3:
+In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
+/usr/include/linux/bpf.h:60:2: error: redefinition of enumerator 'BPF_REG_0'
+   60 |         BPF_REG_0 = 0,
+      |         ^
+./vmlinux.h:996:2: note: previous definition is here
+  996 |         BPF_REG_0 = 0,
+      |         ^
+In file included from ebpf_test.c:3:
+In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
+/usr/include/linux/bpf.h:61:2: error: redefinition of enumerator 'BPF_REG_1'
+   61 |         BPF_REG_1,
+      |         ^
+./vmlinux.h:997:2: note: previous definition is here
+  997 |         BPF_REG_1 = 1,
+      |         ^
+In file included from ebpf_test.c:3:
+In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
+/usr/include/linux/bpf.h:62:2: error: redefinition of enumerator 'BPF_REG_2'
+   62 |         BPF_REG_2,
+      |         ^
+./vmlinux.h:998:2: note: previous definition is here
+  998 |         BPF_REG_2 = 2,
+      |         ^
+In file included from ebpf_test.c:3:
+In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
+/usr/include/linux/bpf.h:63:2: error: redefinition of enumerator 'BPF_REG_3'
+   63 |         BPF_REG_3,
+      |         ^
+./vmlinux.h:999:2: note: previous definition is here
+  999 |         BPF_REG_3 = 3,
+      |         ^
+In file included from ebpf_test.c:3:
+In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
+/usr/include/linux/bpf.h:64:2: error: redefinition of enumerator 'BPF_REG_4'
+   64 |         BPF_REG_4,
+      |         ^
+./vmlinux.h:1000:2: note: previous definition is here
+ 1000 |         BPF_REG_4 = 4,
+      |         ^
+In file included from ebpf_test.c:3:
+In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
+/usr/include/linux/bpf.h:65:2: error: redefinition of enumerator 'BPF_REG_5'
+   65 |         BPF_REG_5,
+      |         ^
+./vmlinux.h:1001:2: note: previous definition is here
+ 1001 |         BPF_REG_5 = 5,
+      |         ^
+In file included from ebpf_test.c:3:
+In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
+/usr/include/linux/bpf.h:66:2: error: redefinition of enumerator 'BPF_REG_6'
+   66 |         BPF_REG_6,
+      |         ^
+./vmlinux.h:1002:2: note: previous definition is here
+ 1002 |         BPF_REG_6 = 6,
+      |         ^
+In file included from ebpf_test.c:3:
+In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
+/usr/include/linux/bpf.h:67:2: error: redefinition of enumerator 'BPF_REG_7'
+   67 |         BPF_REG_7,
+      |         ^
+./vmlinux.h:1003:2: note: previous definition is here
+ 1003 |         BPF_REG_7 = 7,
+      |         ^
+In file included from ebpf_test.c:3:
+In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
+/usr/include/linux/bpf.h:68:2: error: redefinition of enumerator 'BPF_REG_8'
+   68 |         BPF_REG_8,
+      |         ^
+./vmlinux.h:1004:2: note: previous definition is here
+ 1004 |         BPF_REG_8 = 8,
+      |         ^
+In file included from ebpf_test.c:3:
+In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
+/usr/include/linux/bpf.h:69:2: error: redefinition of enumerator 'BPF_REG_9'
+   69 |         BPF_REG_9,
+      |         ^
+./vmlinux.h:1005:2: note: previous definition is here
+ 1005 |         BPF_REG_9 = 9,
+      |         ^
+In file included from ebpf_test.c:3:
+In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
+/usr/include/linux/bpf.h:70:2: error: redefinition of enumerator 'BPF_REG_10'
+   70 |         BPF_REG_10,
+      |         ^
+./vmlinux.h:1006:2: note: previous definition is here
+ 1006 |         BPF_REG_10 = 10,
+      |         ^
+In file included from ebpf_test.c:3:
+In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
+/usr/include/linux/bpf.h:71:2: error: redefinition of enumerator '__MAX_BPF_REG'
+   71 |         __MAX_BPF_REG,
+      |         ^
+./vmlinux.h:1007:2: note: previous definition is here
+ 1007 |         __MAX_BPF_REG = 11,
+      |         ^
+In file included from ebpf_test.c:3:
+In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
+/usr/include/linux/bpf.h:77:8: error: redefinition of 'bpf_insn'
+   77 | struct bpf_insn {
+      |        ^
+./vmlinux.h:45043:8: note: previous definition is here
+ 45043 | struct bpf_insn {
+       |        ^
+In file included from ebpf_test.c:3:
+In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
+/usr/include/linux/bpf.h:89:8: error: redefinition of 'bpf_lpm_trie_key'
+   89 | struct bpf_lpm_trie_key {
+      |        ^
+./vmlinux.h:45942:8: note: previous definition is here
+ 45942 | struct bpf_lpm_trie_key {
+       |        ^
+fatal error: too many errors emitted, stopping now [-ferror-limit=]
+20 errors generated.
+
+Error: Failed to compile
+
+Caused by:
+    Failed to run clang(exit code = Some(1))
+
+Stack backtrace:
+   0: ecc_rs::bpf_compiler::do_compile
+   1: ecc_rs::bpf_compiler::compile_bpf
+   2: ecc_rs::main
+   3: std::sys_common::backtrace::__rust_begin_short_backtrace
+   4: std::rt::lang_start::{{closure}}
+   5: std::rt::lang_start_internal
+   6: main
+   7: <unknown>
+   8: __libc_start_main
+   9: _start
+
 
