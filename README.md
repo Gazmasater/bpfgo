@@ -4,363 +4,240 @@ bpftool btf dump file /sys/kernel/btf/vmlinux format c > vmlinux.h
 INCLUDES := -D__TARGET_ARCH_$(ARCH) -I$(OUTPUT) -I../third_party/libbpf-bootstrap/libbpf/include/uapi -I$(dir $(VMLINUX)) -I$(LIBBLAZESYM_INC) -I/usr/include/bpf
 
 
-Сообщение об ошибке указывает, что EUNOMIA_HOME не установлен, и программа не может найти путь к "eunomia data home". Попробуйте выполнить следующие шаги для решения проблемы:
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-Установите переменную окружения EUNOMIA_HOME:
-Определите, где находится eunomia data, и укажите этот путь в переменной EUNOMIA_HOME. Например, в командной строке выполните:
-
-bash
-Копировать код
-export EUNOMIA_HOME=/path/to/eunomia/data
-Замените /path/to/eunomia/data на реальный путь.
-
-Проверьте файл конфигурации Eunomia:
-Возможно, путь к eunomia data задан в конфигурации или может быть уточнен в документации Eunomia.
-
-Запустите с трассировкой ошибок: Если ошибка остается, включите трассировку для получения дополнительной информации:
-
-bash
-Копировать код
-RUST_BACKTRACE=1 ./ecc ebpf_test.c
-
-____________________________________________________________________________________________--
-
-Используйте rustup: Наиболее распространенный способ установки Rust (включая Cargo) — это использование утилиты rustup. Для этого выполните команду в терминале:
-
-bash
-Копировать код
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-Эта команда загрузит и запустит скрипт установки rustup.
-
-Следуйте инструкциям на экране: Во время установки вам будет предложено выбрать способ установки (обычно просто нажмите 1, чтобы продолжить с установкой по умолчанию).
-
-Настройте окружение: После завершения установки добавьте cargo и rustc в ваш PATH, если это не было сделано автоматически. Вам может понадобиться выполнить следующую команду:
-
-bash
-Копировать код
-source $HOME/.cargo/env
-Или добавьте следующую строку в ваш файл ~/.bashrc или ~/.bash_profile (для других оболочек используйте соответствующие файлы конфигурации):
-
-bash
-Копировать код
-export PATH="$HOME/.cargo/bin:$PATH"
-Затем примените изменения:
-
-bash
-Копировать код
-source ~/.bashrc
-Проверьте установку: Убедитесь, что cargo и rustc установлены правильно, выполнив команды:
-
-bash
-Копировать код
-cargo --version
-rustc --version
-Если вы видите версии cargo и rustc, установка прошла успешно, и вы можете использовать Cargo для управления вашими проектами на Rust!
-
-____________________________________________________________________________________________________________
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$  RUST_BACKTRACE=1 ./ecc ebpf_test.c
-thread 'main' panicked at src/config/mod.rs:100:87:
-called `Result::unwrap()` on an `Err` value: eunomia data home not found, try setting `EUNOMIA_HOME`
-
-Stack backtrace:
-   0: ecc_rs::helper::get_eunomia_data_dir
-   1: core::ops::function::FnOnce::call_once
-   2: once_cell::imp::OnceCell<T>::initialize::{{closure}}
-   3: once_cell::imp::initialize_or_wait
-   4: once_cell::imp::OnceCell<T>::initialize
-   5: <ecc_rs::config::CompileArgs as clap_builder::derive::Args>::augment_args
-   6: clap_builder::derive::Parser::parse
-   7: ecc_rs::main
-   8: std::sys_common::backtrace::__rust_begin_short_backtrace
-   9: std::rt::lang_start::{{closure}}
-  10: std::rt::lang_start_internal
-  11: main
-  12: <unknown>
-  13: __libc_start_main
-  14: _start
-stack backtrace:
-   0: rust_begin_unwind
-   1: core::panicking::panic_fmt
-   2: core::result::unwrap_failed
-   3: core::ops::function::FnOnce::call_once
-   4: once_cell::imp::OnceCell<T>::initialize::{{closure}}
-   5: once_cell::imp::initialize_or_wait
-   6: once_cell::imp::OnceCell<T>::initialize
-   7: <ecc_rs::config::CompileArgs as clap_builder::derive::Args>::augment_args
-   8: clap_builder::derive::Parser::parse
-   9: ecc_rs::main
-note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
-
-_______________________________________________________________________________________________________________
-
-Создайте директорию для Eunomia, если у вас её ещё нет. Например, вы можете создать её в вашей домашней папке:
-
-bash
-Копировать код
-mkdir -p ~/eunomia_data
-Установите переменную окружения EUNOMIA_HOME на путь к этой директории. Это можно сделать в командной строке:
-
-bash
-Копировать код
-export EUNOMIA_HOME=~/eunomia_data
-Запустите вашу программу снова:
-
-bash
-Копировать код
-RUST_BACKTRACE=1 ./ecc ebpf_test.c
-Если вы хотите, чтобы эта переменная окружения была установлена каждый раз при запуске терминала, вы можете добавить строку export EUNOMIA_HOME=~/eunomia_data в файл ~/.bashrc или ~/.bash_profile, а затем выполнить команду source ~/.bashrc, чтобы применить изменения.
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ RUST_BACKTRACE=1 ./ecc ebpf_test.c
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ./ecc ebpf_test.c
 INFO [ecc_rs::bpf_compiler] Compiling bpf object...
-INFO [ecc_rs::bpf_compiler] $ "clang" CommandArgs { inner: ["-g", "-O2", "-target", "bpf", "-Wno-unknown-attributes", "-D__TARGET_ARCH_x86", "-idirafter", "/usr/lib/llvm-18/lib/clang/18/include", "-idirafter", "/usr/local/include", "-idirafter", "/usr/include/x86_64-linux-gnu", "-idirafter", "/usr/include", "-I/tmp/.tmp8wBEIv/include", "-I/tmp/.tmp8wBEIv/include/vmlinux/x86", "-I/home/gaz358/myprog/bpfgo", "-c", "ebpf_test.c", "-o", "ebpf_test.bpf.o"] }
+INFO [ecc_rs::bpf_compiler] $ "clang" CommandArgs { inner: ["-g", "-O2", "-target", "bpf", "-Wno-unknown-attributes", "-D__TARGET_ARCH_x86", "-idirafter", "/usr/lib/llvm-18/lib/clang/18/include", "-idirafter", "/usr/local/include", "-idirafter", "/usr/include/x86_64-linux-gnu", "-idirafter", "/usr/include", "-I/tmp/.tmp8Htfer/include", "-I/tmp/.tmp8Htfer/include/vmlinux/x86", "-I/home/gaz358/myprog/bpfgo", "-c", "ebpf_test.c", "-o", "ebpf_test.bpf.o"] }
 INFO [ecc_rs::bpf_compiler] 
-ERROR [ecc_rs::bpf_compiler] ebpf_test.c:40:84: error: use of undeclared identifier 'BPF_ANY'
-   40 |     bpf_map_update_elem(&active_accept4_args_map, &current_pid_tgid, &accept_args, BPF_ANY);
-      |                                                                                    ^
-1 error generated.
+ERROR [ecc_rs::bpf_compiler] In file included from ebpf_test.c:4:
+In file included from /tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:5:
+In file included from /tmp/.tmp8Htfer/include/bpf/bpf_helpers.h:11:
+/tmp/.tmp8Htfer/include/bpf/bpf_helper_defs.h:56:23: error: redefinition of 'bpf_map_lookup_elem' as different kind of symbol
+   56 | static void *(* const bpf_map_lookup_elem)(void *map, const void *key) = (void *) 1;
+      |                       ^
+/tmp/.tmp8Htfer/include/bpf/bpf.h:151:16: note: previous definition is here
+  151 | LIBBPF_API int bpf_map_lookup_elem(int fd, const void *key, void *value);
+      |                ^
+In file included from ebpf_test.c:4:
+In file included from /tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:5:
+In file included from /tmp/.tmp8Htfer/include/bpf/bpf_helpers.h:11:
+/tmp/.tmp8Htfer/include/bpf/bpf_helper_defs.h:78:22: error: redefinition of 'bpf_map_update_elem' as different kind of symbol
+   78 | static long (* const bpf_map_update_elem)(void *map, const void *key, const void *value, __u64 flags) = (void *) 2;
+      |                      ^
+/tmp/.tmp8Htfer/include/bpf/bpf.h:148:16: note: previous definition is here
+  148 | LIBBPF_API int bpf_map_update_elem(int fd, const void *key, const void *value,
+      |                ^
+In file included from ebpf_test.c:4:
+In file included from /tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:5:
+In file included from /tmp/.tmp8Htfer/include/bpf/bpf_helpers.h:11:
+/tmp/.tmp8Htfer/include/bpf/bpf_helper_defs.h:88:22: error: redefinition of 'bpf_map_delete_elem' as different kind of symbol
+   88 | static long (* const bpf_map_delete_elem)(void *map, const void *key) = (void *) 3;
+      |                      ^
+/tmp/.tmp8Htfer/include/bpf/bpf.h:158:16: note: previous definition is here
+  158 | LIBBPF_API int bpf_map_delete_elem(int fd, const void *key);
+      |                ^
+ebpf_test.c:32:10: error: call to undeclared function 'should_intercept'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+   32 |     if (!should_intercept()) {
+      |          ^
+ebpf_test.c:45:25: error: incompatible pointer to integer conversion passing 'struct (unnamed struct at ebpf_test.c:15:1) *' to parameter of type 'int' [-Wint-conversion]
+   45 |     bpf_map_update_elem(&active_accept4_args_map, &current_pid_tgid, &accept_args, BPF_ANY);
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf.h:148:40: note: passing argument to parameter 'fd' here
+  148 | LIBBPF_API int bpf_map_update_elem(int fd, const void *key, const void *value,
+      |                                        ^
+ebpf_test.c:55:104: error: too few arguments to function call, expected 3, have 2
+   55 |     struct accept_args_t* accept_args = bpf_map_lookup_elem(&active_accept4_args_map, &current_pid_tgid);
+      |                                         ~~~~~~~~~~~~~~~~~~~                                            ^
+/tmp/.tmp8Htfer/include/bpf/bpf.h:151:16: note: 'bpf_map_lookup_elem' declared here
+  151 | LIBBPF_API int bpf_map_lookup_elem(int fd, const void *key, void *value);
+      |                ^                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ebpf_test.c:69:5: error: call to undeclared function 'parse_address'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+   69 |     parse_address(&src_addr, accept_args);
+      |     ^
+ebpf_test.c:78:24: error: incomplete definition of type 'struct task_struct'
+   78 |     const char *name = BPF_CORE_READ(cur_tsk, cgroups, subsys[cgrp_id], cgroup, kn, name);
+      |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:520:2: note: expanded from macro 'BPF_CORE_READ'
+  520 |         ___type((src), a, ##__VA_ARGS__) __r;                               \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:391:29: note: expanded from macro '___type'
+  391 | #define ___type(...) typeof(___arrow(__VA_ARGS__))
+      |                             ^~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:389:23: note: expanded from macro '___arrow'
+  389 | #define ___arrow(...) ___apply(___arrow, ___narg(__VA_ARGS__))(__VA_ARGS__)
+      |                       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+note: (skipping 1 expansions in backtrace; use -fmacro-backtrace-limit=0 to see all)
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:340:25: note: expanded from macro '___concat'
+  340 | #define ___concat(a, b) a ## b
+      |                         ^
+<scratch space>:144:1: note: expanded from here
+  144 | ___arrow6
+      | ^
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:384:38: note: expanded from macro '___arrow6'
+  384 | #define ___arrow6(a, b, c, d, e, f) a->b->c->d->e->f
+      |                                     ~^
+/tmp/.tmp8Htfer/include/bpf/bpf_helper_defs.h:31:8: note: forward declaration of 'struct task_struct'
+   31 | struct task_struct;
+      |        ^
+ebpf_test.c:78:24: error: incomplete definition of type 'struct task_struct'
+   78 |     const char *name = BPF_CORE_READ(cur_tsk, cgroups, subsys[cgrp_id], cgroup, kn, name);
+      |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:521:2: note: expanded from macro 'BPF_CORE_READ'
+  521 |         BPF_CORE_READ_INTO(&__r, (src), a, ##__VA_ARGS__);                  \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:428:2: note: expanded from macro 'BPF_CORE_READ_INTO'
+  428 |         ___core_read(bpf_core_read, bpf_core_read,                          \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  429 |                      dst, (src), a, ##__VA_ARGS__)                          \
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:419:2: note: expanded from macro '___core_read'
+  419 |         ___apply(___core_read, ___empty(__VA_ARGS__))(fn, fn_ptr, dst,      \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  420 |                                                       src, a, ##__VA_ARGS__)
+      |                                                       ~~~~~~~~~~~~~~~~~~~~~~
+note: (skipping 12 expansions in backtrace; use -fmacro-backtrace-limit=0 to see all)
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:397:33: note: expanded from macro '___rd_first'
+  397 | #define ___rd_first(fn, src, a) ___read(fn, &__t, ___type(src), src, a);
+      |                                 ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:394:59: note: expanded from macro '___read'
+  394 |         read_fn((void *)(dst), sizeof(*(dst)), &((src_type)(src))->accessor)
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:312:79: note: expanded from macro 'bpf_core_read'
+  312 |         bpf_probe_read_kernel(dst, sz, (const void *)__builtin_preserve_access_index(src))
+      |                                                                                      ^~~
+/tmp/.tmp8Htfer/include/bpf/bpf_helper_defs.h:31:8: note: forward declaration of 'struct task_struct'
+   31 | struct task_struct;
+      |        ^
+ebpf_test.c:78:24: error: incomplete definition of type 'struct task_struct'
+   78 |     const char *name = BPF_CORE_READ(cur_tsk, cgroups, subsys[cgrp_id], cgroup, kn, name);
+      |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:521:2: note: expanded from macro 'BPF_CORE_READ'
+  521 |         BPF_CORE_READ_INTO(&__r, (src), a, ##__VA_ARGS__);                  \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:428:2: note: expanded from macro 'BPF_CORE_READ_INTO'
+  428 |         ___core_read(bpf_core_read, bpf_core_read,                          \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  429 |                      dst, (src), a, ##__VA_ARGS__)                          \
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:419:2: note: expanded from macro '___core_read'
+  419 |         ___apply(___core_read, ___empty(__VA_ARGS__))(fn, fn_ptr, dst,      \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  420 |                                                       src, a, ##__VA_ARGS__)
+      |                                                       ~~~~~~~~~~~~~~~~~~~~~~
+note: (skipping 17 expansions in backtrace; use -fmacro-backtrace-limit=0 to see all)
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:380:26: note: expanded from macro '___arrow2'
+  380 | #define ___arrow2(a, b) a->b
+      |                          ^
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:394:44: note: expanded from macro '___read'
+  394 |         read_fn((void *)(dst), sizeof(*(dst)), &((src_type)(src))->accessor)
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:312:79: note: expanded from macro 'bpf_core_read'
+  312 |         bpf_probe_read_kernel(dst, sz, (const void *)__builtin_preserve_access_index(src))
+      |                                                                                      ^~~
+/tmp/.tmp8Htfer/include/bpf/bpf_helper_defs.h:31:8: note: forward declaration of 'struct task_struct'
+   31 | struct task_struct;
+      |        ^
+ebpf_test.c:78:24: error: incomplete definition of type 'struct task_struct'
+   78 |     const char *name = BPF_CORE_READ(cur_tsk, cgroups, subsys[cgrp_id], cgroup, kn, name);
+      |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:521:2: note: expanded from macro 'BPF_CORE_READ'
+  521 |         BPF_CORE_READ_INTO(&__r, (src), a, ##__VA_ARGS__);                  \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:428:2: note: expanded from macro 'BPF_CORE_READ_INTO'
+  428 |         ___core_read(bpf_core_read, bpf_core_read,                          \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  429 |                      dst, (src), a, ##__VA_ARGS__)                          \
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:419:2: note: expanded from macro '___core_read'
+  419 |         ___apply(___core_read, ___empty(__VA_ARGS__))(fn, fn_ptr, dst,      \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  420 |                                                       src, a, ##__VA_ARGS__)
+      |                                                       ~~~~~~~~~~~~~~~~~~~~~~
+note: (skipping 16 expansions in backtrace; use -fmacro-backtrace-limit=0 to see all)
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:381:29: note: expanded from macro '___arrow3'
+  381 | #define ___arrow3(a, b, c) a->b->c
+      |                             ^
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:394:44: note: expanded from macro '___read'
+  394 |         read_fn((void *)(dst), sizeof(*(dst)), &((src_type)(src))->accessor)
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:312:79: note: expanded from macro 'bpf_core_read'
+  312 |         bpf_probe_read_kernel(dst, sz, (const void *)__builtin_preserve_access_index(src))
+      |                                                                                      ^~~
+/tmp/.tmp8Htfer/include/bpf/bpf_helper_defs.h:31:8: note: forward declaration of 'struct task_struct'
+   31 | struct task_struct;
+      |        ^
+ebpf_test.c:78:24: error: incomplete definition of type 'struct task_struct'
+   78 |     const char *name = BPF_CORE_READ(cur_tsk, cgroups, subsys[cgrp_id], cgroup, kn, name);
+      |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:521:2: note: expanded from macro 'BPF_CORE_READ'
+  521 |         BPF_CORE_READ_INTO(&__r, (src), a, ##__VA_ARGS__);                  \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:428:2: note: expanded from macro 'BPF_CORE_READ_INTO'
+  428 |         ___core_read(bpf_core_read, bpf_core_read,                          \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  429 |                      dst, (src), a, ##__VA_ARGS__)                          \
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:419:2: note: expanded from macro '___core_read'
+  419 |         ___apply(___core_read, ___empty(__VA_ARGS__))(fn, fn_ptr, dst,      \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  420 |                                                       src, a, ##__VA_ARGS__)
+      |                                                       ~~~~~~~~~~~~~~~~~~~~~~
+note: (skipping 15 expansions in backtrace; use -fmacro-backtrace-limit=0 to see all)
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:382:32: note: expanded from macro '___arrow4'
+  382 | #define ___arrow4(a, b, c, d) a->b->c->d
+      |                                ^
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:394:44: note: expanded from macro '___read'
+  394 |         read_fn((void *)(dst), sizeof(*(dst)), &((src_type)(src))->accessor)
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:312:79: note: expanded from macro 'bpf_core_read'
+  312 |         bpf_probe_read_kernel(dst, sz, (const void *)__builtin_preserve_access_index(src))
+      |                                                                                      ^~~
+/tmp/.tmp8Htfer/include/bpf/bpf_helper_defs.h:31:8: note: forward declaration of 'struct task_struct'
+   31 | struct task_struct;
+      |        ^
+ebpf_test.c:78:24: error: incomplete definition of type 'struct task_struct'
+   78 |     const char *name = BPF_CORE_READ(cur_tsk, cgroups, subsys[cgrp_id], cgroup, kn, name);
+      |                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:521:2: note: expanded from macro 'BPF_CORE_READ'
+  521 |         BPF_CORE_READ_INTO(&__r, (src), a, ##__VA_ARGS__);                  \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:428:2: note: expanded from macro 'BPF_CORE_READ_INTO'
+  428 |         ___core_read(bpf_core_read, bpf_core_read,                          \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  429 |                      dst, (src), a, ##__VA_ARGS__)                          \
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:419:2: note: expanded from macro '___core_read'
+  419 |         ___apply(___core_read, ___empty(__VA_ARGS__))(fn, fn_ptr, dst,      \
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  420 |                                                       src, a, ##__VA_ARGS__)
+      |                                                       ~~~~~~~~~~~~~~~~~~~~~~
+note: (skipping 9 expansions in backtrace; use -fmacro-backtrace-limit=0 to see all)
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:383:35: note: expanded from macro '___arrow5'
+  383 | #define ___arrow5(a, b, c, d, e) a->b->c->d->e
+      |                                   ^
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:394:44: note: expanded from macro '___read'
+  394 |         read_fn((void *)(dst), sizeof(*(dst)), &((src_type)(src))->accessor)
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf_core_read.h:312:79: note: expanded from macro 'bpf_core_read'
+  312 |         bpf_probe_read_kernel(dst, sz, (const void *)__builtin_preserve_access_index(src))
+      |                                                                                      ^~~
+/tmp/.tmp8Htfer/include/bpf/bpf_helper_defs.h:31:8: note: forward declaration of 'struct task_struct'
+   31 | struct task_struct;
+      |        ^
+ebpf_test.c:95:25: error: incompatible pointer to integer conversion passing 'struct (unnamed struct at ebpf_test.c:15:1) *' to parameter of type 'int' [-Wint-conversion]
+   95 |     bpf_map_delete_elem(&active_accept4_args_map, &current_pid_tgid);
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/.tmp8Htfer/include/bpf/bpf.h:158:40: note: passing argument to parameter 'fd' here
+  158 | LIBBPF_API int bpf_map_delete_elem(int fd, const void *key);
+      |                                        ^
+14 errors generated.
 
 Error: Failed to compile
 
 Caused by:
     Failed to run clang(exit code = Some(1))
-
-Stack backtrace:
-   0: ecc_rs::bpf_compiler::do_compile
-   1: ecc_rs::bpf_compiler::compile_bpf
-   2: ecc_rs::main
-   3: std::sys_common::backtrace::__rust_begin_short_backtrace
-   4: std::rt::lang_start::{{closure}}
-   5: std::rt::lang_start_internal
-   6: main
-   7: <unknown>
-   8: __libc_start_main
-   9: _start
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
-
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ RUST_BACKTRACE=1 ./ecc ebpf_test.c
-INFO [ecc_rs::bpf_compiler] Compiling bpf object...
-INFO [ecc_rs::bpf_compiler] $ "clang" CommandArgs { inner: ["-g", "-O2", "-target", "bpf", "-Wno-unknown-attributes", "-D__TARGET_ARCH_x86", "-idirafter", "/usr/lib/llvm-18/lib/clang/18/include", "-idirafter", "/usr/local/include", "-idirafter", "/usr/include/x86_64-linux-gnu", "-idirafter", "/usr/include", "-I/tmp/.tmpOAYCW3/include", "-I/tmp/.tmpOAYCW3/include/vmlinux/x86", "-I/home/gaz358/myprog/bpfgo", "-c", "ebpf_test.c", "-o", "ebpf_test.bpf.o"] }
-INFO [ecc_rs::bpf_compiler] 
-ERROR [ecc_rs::bpf_compiler] In file included from ebpf_test.c:3:
-In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
-In file included from /usr/include/linux/bpf.h:11:
-In file included from /usr/include/linux/types.h:9:
-/usr/include/linux/posix_types.h:27:3: error: typedef redefinition with different types ('struct __kernel_fd_set' vs 'struct __kernel_fd_set')
-   27 | } __kernel_fd_set;
-      |   ^
-./vmlinux.h:29688:3: note: previous definition is here
- 29688 | } __kernel_fd_set;
-       |   ^
-In file included from ebpf_test.c:3:
-In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
-In file included from /usr/include/linux/bpf.h:11:
-In file included from /usr/include/linux/types.h:9:
-In file included from /usr/include/linux/posix_types.h:36:
-In file included from /usr/include/asm/posix_types.h:7:
-In file included from /usr/include/asm/posix_types_64.h:18:
-/usr/include/asm-generic/posix_types.h:68:22: error: typedef redefinition with different types ('unsigned int' vs '__kernel_ulong_t' (aka 'unsigned long'))
-   68 | typedef unsigned int    __kernel_size_t;
-      |                         ^
-./vmlinux.h:28703:26: note: previous definition is here
- 28703 | typedef __kernel_ulong_t __kernel_size_t;
-       |                          ^
-In file included from ebpf_test.c:3:
-In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
-In file included from /usr/include/linux/bpf.h:11:
-In file included from /usr/include/linux/types.h:9:
-In file included from /usr/include/linux/posix_types.h:36:
-In file included from /usr/include/asm/posix_types.h:7:
-In file included from /usr/include/asm/posix_types_64.h:18:
-/usr/include/asm-generic/posix_types.h:69:14: error: typedef redefinition with different types ('int' vs '__kernel_long_t' (aka 'long'))
-   69 | typedef int             __kernel_ssize_t;
-      |                         ^
-./vmlinux.h:28575:25: note: previous definition is here
- 28575 | typedef __kernel_long_t __kernel_ssize_t;
-       |                         ^
-In file included from ebpf_test.c:3:
-In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
-In file included from /usr/include/linux/bpf.h:11:
-In file included from /usr/include/linux/types.h:9:
-In file included from /usr/include/linux/posix_types.h:36:
-In file included from /usr/include/asm/posix_types.h:7:
-In file included from /usr/include/asm/posix_types_64.h:18:
-/usr/include/asm-generic/posix_types.h:70:14: error: typedef redefinition with different types ('int' vs '__kernel_long_t' (aka 'long'))
-   70 | typedef int             __kernel_ptrdiff_t;
-      |                         ^
-./vmlinux.h:28573:25: note: previous definition is here
- 28573 | typedef __kernel_long_t __kernel_ptrdiff_t;
-       |                         ^
-In file included from ebpf_test.c:3:
-In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
-In file included from /usr/include/linux/bpf.h:11:
-In file included from /usr/include/linux/types.h:9:
-In file included from /usr/include/linux/posix_types.h:36:
-In file included from /usr/include/asm/posix_types.h:7:
-In file included from /usr/include/asm/posix_types_64.h:18:
-/usr/include/asm-generic/posix_types.h:81:3: error: typedef redefinition with different types ('struct __kernel_fsid_t' vs 'struct __kernel_fsid_t')
-   81 | } __kernel_fsid_t;
-      |   ^
-./vmlinux.h:29692:3: note: previous definition is here
- 29692 | } __kernel_fsid_t;
-       |   ^
-In file included from ebpf_test.c:3:
-In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
-/usr/include/linux/bpf.h:60:2: error: redefinition of enumerator 'BPF_REG_0'
-   60 |         BPF_REG_0 = 0,
-      |         ^
-./vmlinux.h:996:2: note: previous definition is here
-  996 |         BPF_REG_0 = 0,
-      |         ^
-In file included from ebpf_test.c:3:
-In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
-/usr/include/linux/bpf.h:61:2: error: redefinition of enumerator 'BPF_REG_1'
-   61 |         BPF_REG_1,
-      |         ^
-./vmlinux.h:997:2: note: previous definition is here
-  997 |         BPF_REG_1 = 1,
-      |         ^
-In file included from ebpf_test.c:3:
-In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
-/usr/include/linux/bpf.h:62:2: error: redefinition of enumerator 'BPF_REG_2'
-   62 |         BPF_REG_2,
-      |         ^
-./vmlinux.h:998:2: note: previous definition is here
-  998 |         BPF_REG_2 = 2,
-      |         ^
-In file included from ebpf_test.c:3:
-In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
-/usr/include/linux/bpf.h:63:2: error: redefinition of enumerator 'BPF_REG_3'
-   63 |         BPF_REG_3,
-      |         ^
-./vmlinux.h:999:2: note: previous definition is here
-  999 |         BPF_REG_3 = 3,
-      |         ^
-In file included from ebpf_test.c:3:
-In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
-/usr/include/linux/bpf.h:64:2: error: redefinition of enumerator 'BPF_REG_4'
-   64 |         BPF_REG_4,
-      |         ^
-./vmlinux.h:1000:2: note: previous definition is here
- 1000 |         BPF_REG_4 = 4,
-      |         ^
-In file included from ebpf_test.c:3:
-In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
-/usr/include/linux/bpf.h:65:2: error: redefinition of enumerator 'BPF_REG_5'
-   65 |         BPF_REG_5,
-      |         ^
-./vmlinux.h:1001:2: note: previous definition is here
- 1001 |         BPF_REG_5 = 5,
-      |         ^
-In file included from ebpf_test.c:3:
-In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
-/usr/include/linux/bpf.h:66:2: error: redefinition of enumerator 'BPF_REG_6'
-   66 |         BPF_REG_6,
-      |         ^
-./vmlinux.h:1002:2: note: previous definition is here
- 1002 |         BPF_REG_6 = 6,
-      |         ^
-In file included from ebpf_test.c:3:
-In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
-/usr/include/linux/bpf.h:67:2: error: redefinition of enumerator 'BPF_REG_7'
-   67 |         BPF_REG_7,
-      |         ^
-./vmlinux.h:1003:2: note: previous definition is here
- 1003 |         BPF_REG_7 = 7,
-      |         ^
-In file included from ebpf_test.c:3:
-In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
-/usr/include/linux/bpf.h:68:2: error: redefinition of enumerator 'BPF_REG_8'
-   68 |         BPF_REG_8,
-      |         ^
-./vmlinux.h:1004:2: note: previous definition is here
- 1004 |         BPF_REG_8 = 8,
-      |         ^
-In file included from ebpf_test.c:3:
-In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
-/usr/include/linux/bpf.h:69:2: error: redefinition of enumerator 'BPF_REG_9'
-   69 |         BPF_REG_9,
-      |         ^
-./vmlinux.h:1005:2: note: previous definition is here
- 1005 |         BPF_REG_9 = 9,
-      |         ^
-In file included from ebpf_test.c:3:
-In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
-/usr/include/linux/bpf.h:70:2: error: redefinition of enumerator 'BPF_REG_10'
-   70 |         BPF_REG_10,
-      |         ^
-./vmlinux.h:1006:2: note: previous definition is here
- 1006 |         BPF_REG_10 = 10,
-      |         ^
-In file included from ebpf_test.c:3:
-In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
-/usr/include/linux/bpf.h:71:2: error: redefinition of enumerator '__MAX_BPF_REG'
-   71 |         __MAX_BPF_REG,
-      |         ^
-./vmlinux.h:1007:2: note: previous definition is here
- 1007 |         __MAX_BPF_REG = 11,
-      |         ^
-In file included from ebpf_test.c:3:
-In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
-/usr/include/linux/bpf.h:77:8: error: redefinition of 'bpf_insn'
-   77 | struct bpf_insn {
-      |        ^
-./vmlinux.h:45043:8: note: previous definition is here
- 45043 | struct bpf_insn {
-       |        ^
-In file included from ebpf_test.c:3:
-In file included from /tmp/.tmpOAYCW3/include/bpf/bpf.h:26:
-/usr/include/linux/bpf.h:89:8: error: redefinition of 'bpf_lpm_trie_key'
-   89 | struct bpf_lpm_trie_key {
-      |        ^
-./vmlinux.h:45942:8: note: previous definition is here
- 45942 | struct bpf_lpm_trie_key {
-       |        ^
-fatal error: too many errors emitted, stopping now [-ferror-limit=]
-20 errors generated.
-
-Error: Failed to compile
-
-Caused by:
-    Failed to run clang(exit code = Some(1))
-
-Stack backtrace:
-   0: ecc_rs::bpf_compiler::do_compile
-   1: ecc_rs::bpf_compiler::compile_bpf
-   2: ecc_rs::main
-   3: std::sys_common::backtrace::__rust_begin_short_backtrace
-   4: std::rt::lang_start::{{closure}}
-   5: std::rt::lang_start_internal
-   6: main
-   7: <unknown>
-   8: __libc_start_main
-   9: _start
-
-   &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
-
-   [160] STRUCT 'task_struct' size=9728 vlen=253
-
-   [{
-	"resource": "/home/gaz358/myprog/bpfgo/ebpf_test.c",
-	"owner": "C/C++: IntelliSense",
-	"code": "833",
-	"severity": 8,
-	"message": "pointer or reference to incomplete type \"struct task_struct\" is not allowed",
-	"source": "C/C++",
-	"startLineNumber": 78,
-	"startColumn": 24,
-	"endLineNumber": 78,
-	"endColumn": 37
-}]
-
-#########################################################################################
-
-    const char *name = BPF_CORE_READ(cur_tsk, cgroups, subsys[cgrp_id], cgroup, kn, name);
 
 
 
