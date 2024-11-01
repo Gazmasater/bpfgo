@@ -274,3 +274,20 @@ struct pt_regs {
 
 #endif /* CUSTOM_PT_REGS */
 
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go generate
+In file included from /home/gaz358/myprog/bpfgo/fentry.c:6:
+In file included from /usr/include/linux/ptrace.h:183:
+/usr/include/asm/ptrace.h:41:8: error: redefinition of 'pt_regs'
+   41 | struct pt_regs {
+      |        ^
+/home/gaz358/myprog/bpfgo/common.h:130:8: note: previous definition is here
+  130 | struct pt_regs {
+      |        ^
+1 error generated.
+Error: compile: exit status 1
+exit status 1
+gen.go:3: running "go": exit status 1
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
