@@ -5,44 +5,36 @@ INCLUDES := -D__TARGET_ARCH_$(ARCH) -I$(OUTPUT) -I../third_party/libbpf-bootstra
 
 
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-#ifndef CUSTOM_PT_REGS  // Проверьте, определена ли уже структура
-#define CUSTOM_PT_REGS
-
-#if defined(__TARGET_ARCH_x86)
-struct pt_regs {
-	/*
-	 * C ABI says these regs are callee-preserved. They aren't saved on kernel entry
-	 * unless syscall needs a complete, fully filled "struct pt_regs".
-	 */
-	unsigned long r15;
-	unsigned long r14;
-	unsigned long r13;
-	unsigned long r12;
-	unsigned long rbp;
-	unsigned long rbx;
-	/* These regs are callee-clobbered. Always saved on kernel entry. */
-	unsigned long r11;
-	unsigned long r10;
-	unsigned long r9;
-	unsigned long r8;
-	unsigned long rax;
-	unsigned long rcx;
-	unsigned long rdx;
-	unsigned long rsi;
-	unsigned long rdi;
-	/*
-	 * On syscall entry, this is syscall#. On CPU exception, this is error code.
-	 * On hw interrupt, it's IRQ number:
-	 */
-	unsigned long orig_rax;
-	/* Return frame for iretq */
-	unsigned long rip;
-	unsigned long cs;
-	unsigned long eflags;
-	unsigned long rsp;
-	unsigned long ss;
-	/* top of stack page */
-};
-#endif /* __TARGET_ARCH_x86 */
-
-#endif /* CUSTOM_PT_REGS */
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go generate
+Compiled /home/gaz358/myprog/bpfgo/fentry_bpfel.o
+Stripped /home/gaz358/myprog/bpfgo/fentry_bpfel.o
+Wrote /home/gaz358/myprog/bpfgo/fentry_bpfel.go
+Compiled /home/gaz358/myprog/bpfgo/fentry_bpfeb.o
+Stripped /home/gaz358/myprog/bpfgo/fentry_bpfeb.o
+Wrote /home/gaz358/myprog/bpfgo/fentry_bpfeb.go
+/home/gaz358/myprog/bpfgo/fentry.c:56:5: error: The eBPF is using target specific macros, please provide -target that is not bpf, bpfel or bpfeb
+   56 | int BPF_KPROBE(tcp_connect, struct sock *sk) {
+      |     ^
+/usr/include/bpf/bpf_tracing.h:817:20: note: expanded from macro 'BPF_KPROBE'
+  817 |         return ____##name(___bpf_kprobe_args(args));                        \
+      |                           ^
+/usr/include/bpf/bpf_tracing.h:797:41: note: expanded from macro '___bpf_kprobe_args'
+  797 | #define ___bpf_kprobe_args(args...)     ___bpf_apply(___bpf_kprobe_args, ___bpf_narg(args))(args)
+      |                                         ^
+/usr/include/bpf/bpf_helpers.h:195:29: note: expanded from macro '___bpf_apply'
+  195 | #define ___bpf_apply(fn, n) ___bpf_concat(fn, n)
+      |                             ^
+note: (skipping 2 expansions in backtrace; use -fmacro-backtrace-limit=0 to see all)
+/usr/include/bpf/bpf_tracing.h:789:72: note: expanded from macro '___bpf_kprobe_args1'
+  789 | #define ___bpf_kprobe_args1(x)          ___bpf_kprobe_args0(), (void *)PT_REGS_PARM1(ctx)
+      |                                                                        ^
+/usr/include/bpf/bpf_tracing.h:563:29: note: expanded from macro 'PT_REGS_PARM1'
+  563 | #define PT_REGS_PARM1(x) ({ _Pragma(__BPF_TARGET_MISSING); 0l; })
+      |                             ^
+<scratch space>:27:6: note: expanded from here
+   27 |  GCC error "The eBPF is using target specific macros, please provide -target that is not bpf, bpfel or bpfeb"
+      |      ^
+1 error generated.
+Error: compile: exit status 1
+exit status 1
+main.go:31: running "go": exit status 1
