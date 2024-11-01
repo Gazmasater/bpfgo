@@ -32,3 +32,6 @@ note: (skipping 2 expansions in backtrace; use -fmacro-backtrace-limit=0 to see 
 Error: compile: exit status 1
 exit status 1
 gen.go:3: running "go": exit status 1
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ uname -m
+x86_64
