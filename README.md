@@ -72,7 +72,7 @@ struct {
 
 // Структура события с PID
 struct event {
-	u8 comm[16];
+	u8 comm[TASK_COMM_LEN];
 	__u16 sport;
 	__be16 dport;
 	__be32 saddr;
@@ -83,25 +83,25 @@ struct event {
 // Основной обработчик, использующий kprobe для совместимости со старыми ядрами
 SEC("kprobe/tcp_connect")
 int BPF_KPROBE(tcp_connect, struct sock *sk) {
-	 struct event tcp_info = {};
+	struct event tcp_info = {};
 
 	// Проверка, что IPv4 используется
-	 if (sk->__sk_common.skc_family == AF_INET) {
-	 	tcp_info.saddr = sk->__sk_common.skc_rcv_saddr;
+	if (sk->__sk_common.skc_family == AF_INET) {
+		tcp_info.saddr = sk->__sk_common.skc_rcv_saddr;
 		tcp_info.daddr = sk->__sk_common.skc_daddr;
-	 	tcp_info.dport = sk->__sk_common.skc_dport;
-	 	tcp_info.sport = bpf_htons(sk->__sk_common.skc_num);
-	 } else {
-	// IPv6 можно обработать аналогично
-	 	return 0;
+		tcp_info.dport = sk->__sk_common.skc_dport;
+		tcp_info.sport = bpf_htons(sk->__sk_common.skc_num);
+	} else {
+		// IPv6 можно обработать аналогично (пока не реализовано)
+		return 0;
 	}
 
 	// Получение имени процесса и PID
-	 bpf_get_current_comm(&tcp_info.comm, TASK_COMM_LEN);
-	 tcp_info.pid = bpf_get_current_pid_tgid() >> 32;
+	bpf_get_current_comm(&tcp_info.comm, TASK_COMM_LEN);
+	tcp_info.pid = bpf_get_current_pid_tgid() >> 32;
 
 	// Отправка события в пространство пользователя
-	 bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, &tcp_info, sizeof(tcp_info));
+	bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, &tcp_info, sizeof(tcp_info));
 
 	return 0;
 }
@@ -247,7 +247,7 @@ struct pt_regs {
 	unsigned long r12;
 	unsigned long rbp;
 	unsigned long rbx;
-	/* These regs are callee-clobbered. Always saved on kernel entry. */
+	/* Эти регистры сбрасываются вызывающим. Всегда сохраняются при входе в ядро. */
 	unsigned long r11;
 	unsigned long r10;
 	unsigned long r9;
@@ -258,36 +258,18 @@ struct pt_regs {
 	unsigned long rsi;
 	unsigned long rdi;
 	/*
-	 * On syscall entry, this is syscall#. On CPU exception, this is error code.
-	 * On hw interrupt, it's IRQ number:
+	 * При входе в системный вызов это номер системного вызова. При исключении ЦП это код ошибки.
+	 * При аппаратном прерывании это номер IRQ:
 	 */
 	unsigned long orig_rax;
-	/* Return frame for iretq */
+	/* Возвратный фрейм для iretq */
 	unsigned long rip;
 	unsigned long cs;
 	unsigned long eflags;
 	unsigned long rsp;
 	unsigned long ss;
-	/* top of stack page */
+	/* верхняя страница стека */
 };
 #endif /* __TARGET_ARCH_x86 */
 
 #endif /* CUSTOM_PT_REGS */
-
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go generate
-In file included from /home/gaz358/myprog/bpfgo/fentry.c:6:
-In file included from /usr/include/linux/ptrace.h:183:
-/usr/include/asm/ptrace.h:41:8: error: redefinition of 'pt_regs'
-   41 | struct pt_regs {
-      |        ^
-/home/gaz358/myprog/bpfgo/common.h:130:8: note: previous definition is here
-  130 | struct pt_regs {
-      |        ^
-1 error generated.
-Error: compile: exit status 1
-exit status 1
-gen.go:3: running "go": exit status 1
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
-
