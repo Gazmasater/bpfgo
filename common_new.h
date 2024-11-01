@@ -56,6 +56,9 @@ struct {
     __uint(max_entries, 1024 * 1024 * 128); // Important that its big enough otherwise events will be dropped and cause weird behaviour
 } data_events SEC(".maps");
 
+struct task_struct;
+struct task_struct *ehandler;
+
 
 
 

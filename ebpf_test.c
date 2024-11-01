@@ -8,9 +8,7 @@
 
 #include "common_new.h"
 #include "linux/ptrace.h"
-
-
-
+#include "linux/sched.h"
 
 char __license[] SEC("license") = "GPL";
 
@@ -20,6 +18,8 @@ struct {
   __type(value, struct accept_args_t);
   __uint(max_entries, 1024*128);
 } active_accept4_args_map SEC(".maps");
+
+struct task_struct;
 
 
 // https://linux.die.net/man/3/accept
