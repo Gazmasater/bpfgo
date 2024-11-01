@@ -5,195 +5,30 @@ INCLUDES := -D__TARGET_ARCH_$(ARCH) -I$(OUTPUT) -I../third_party/libbpf-bootstra
 
 
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//go:build ignore
-
-#include "common.h"
-#include "bpf/bpf_endian.h"
-#include "bpf/bpf_tracing.h"
-
-#define AF_INET 2
-#define AF_INET6 10 // Для поддержки IPv6
-
-#define TASK_COMM_LEN 16
-
-char __license[] SEC("license") = "Dual MIT/GPL";
-
-// Структура sock_common, дополненная для поддержки IPv6
-struct sock_common
-{
-	union
-	{
-		struct
-		{
-			__be32 skc_daddr;
-			__be32 skc_rcv_saddr;
-		};
-	};
-	union
-	{
-		// Padding out union skc_hash.
-		__u32 _;
-	};
-	union
-	{
-		struct
-		{
-			__be16 skc_dport;
-			__u16 skc_num;
-		};
-	};
-	short unsigned int skc_family;
-};
-
-// Структура sock отражает начало структуры sock из ядра
-struct sock
-{
-	struct sock_common __sk_common;
-};
-
-struct
-{
-	__uint(type, BPF_MAP_TYPE_RINGBUF);
-	__uint(max_entries, 1 << 24);
-} events SEC(".maps");
-
-// Структура события, дополненная для хранения PID
-struct event
-{
-	u8 comm[16];
-	__u16 sport;
-	__be16 dport;
-	__be32 saddr;
-	__be32 daddr;
-	__u32 pid; // Добавлено поле для PID
-};
-struct event *unused __attribute__((unused));
-
-SEC("fentry/tcp_connect")
-int BPF_PROG(tcp_connect, struct sock *sk)
-{
-	struct event *tcp_info;
-
-	if (sk->__sk_common.skc_family == AF_INET)
-	{
-		tcp_info = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
-		if (!tcp_info)
-		{
-			return 0;
-		}
-
-		tcp_info->saddr = sk->__sk_common.skc_rcv_saddr;
-		tcp_info->daddr = sk->__sk_common.skc_daddr;
-		tcp_info->dport = sk->__sk_common.skc_dport;
-		tcp_info->sport = bpf_htons(sk->__sk_common.skc_num);
-	}
-	else if (sk->__sk_common.skc_family == AF_INET6)
-	{
-		// Обработка IPv6, если необходимо
-		// Здесь добавьте аналогичную логику для IPv6
-		return 0; // Здесь вы можете также вернуть данные для IPv6
-	}
-
-	bpf_get_current_comm(&tcp_info->comm, TASK_COMM_LEN);
-	tcp_info->pid = bpf_get_current_pid_tgid() >> 32; // Получаем PID
-
-	bpf_ringbuf_submit(tcp_info, 0);
-
-	return 0;
-}
-
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-//go:build ignore
-
-#include "common.h"
-#include "bpf/bpf_endian.h"
-#include "bpf/bpf_tracing.h"
-
-#define AF_INET 2
-#define AF_INET6 10
-#define TASK_COMM_LEN 16
-
-char __license[] SEC("license") = "Dual MIT/GPL";
-
-// Структура sock_common для IPv4/IPv6
-struct sock_common {
-	union {
-		struct {
-			__be32 skc_daddr;
-			__be32 skc_rcv_saddr;
-		};
-	};
-	union {
-		__u32 _;
-	};
-	union {
-		struct {
-			__be16 skc_dport;
-			__u16 skc_num;
-		};
-	};
-	short unsigned int skc_family;
-};
-
-// Структура sock
-struct sock {
-	struct sock_common __sk_common;
-};
-
-// Определение карты для отправки событий через perf
-struct {
-	__uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-} events SEC(".maps");
-
-// Структура события с PID
-struct event {
-	u8 comm[16];
-	__u16 sport;
-	__be16 dport;
-	__be32 saddr;
-	__be32 daddr;
-	__u32 pid;
-};
-
-// Основной обработчик, использующий kprobe для совместимости со старыми ядрами
-SEC("kprobe/tcp_connect")
-int BPF_KPROBE(tcp_connect, struct sock *sk) {
-	struct event tcp_info = {};
-
-	// Проверка, что IPv4 используется
-	if (sk->__sk_common.skc_family == AF_INET) {
-		tcp_info.saddr = sk->__sk_common.skc_rcv_saddr;
-		tcp_info.daddr = sk->__sk_common.skc_daddr;
-		tcp_info.dport = sk->__sk_common.skc_dport;
-		tcp_info.sport = bpf_htons(sk->__sk_common.skc_num);
-	} else {
-		// IPv6 можно обработать аналогично
-		return 0;
-	}
-
-	// Получение имени процесса и PID
-	bpf_get_current_comm(&tcp_info.comm, TASK_COMM_LEN);
-	tcp_info.pid = bpf_get_current_pid_tgid() >> 32;
-
-	// Отправка события в пространство пользователя
-	bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, &tcp_info, sizeof(tcp_info));
-
-	return 0;
-}
-
-@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/fentry.c",
-	"owner": "C/C++: IntelliSense",
-	"code": "833",
-	"severity": 8,
-	"message": "pointer or reference to incomplete type \"struct pt_regs\" is not allowed",
-	"source": "C/C++",
-	"startLineNumber": 55,
-	"startColumn": 5,
-	"endLineNumber": 55,
-	"endColumn": 15
-}]
-
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go generate
+/home/gaz358/myprog/bpfgo/fentry.c:56:5: error: The eBPF is using target specific macros, please provide -target that is not bpf, bpfel or bpfeb
+   56 | int BPF_KPROBE(tcp_connect, struct sock *sk) {
+      |     ^
+/usr/include/bpf/bpf_tracing.h:817:20: note: expanded from macro 'BPF_KPROBE'
+  817 |         return ____##name(___bpf_kprobe_args(args));                        \
+      |                           ^
+/usr/include/bpf/bpf_tracing.h:797:41: note: expanded from macro '___bpf_kprobe_args'
+  797 | #define ___bpf_kprobe_args(args...)     ___bpf_apply(___bpf_kprobe_args, ___bpf_narg(args))(args)
+      |                                         ^
+/usr/include/bpf/bpf_helpers.h:195:29: note: expanded from macro '___bpf_apply'
+  195 | #define ___bpf_apply(fn, n) ___bpf_concat(fn, n)
+      |                             ^
+note: (skipping 2 expansions in backtrace; use -fmacro-backtrace-limit=0 to see all)
+/usr/include/bpf/bpf_tracing.h:789:72: note: expanded from macro '___bpf_kprobe_args1'
+  789 | #define ___bpf_kprobe_args1(x)          ___bpf_kprobe_args0(), (void *)PT_REGS_PARM1(ctx)
+      |                                                                        ^
+/usr/include/bpf/bpf_tracing.h:563:29: note: expanded from macro 'PT_REGS_PARM1'
+  563 | #define PT_REGS_PARM1(x) ({ _Pragma(__BPF_TARGET_MISSING); 0l; })
+      |                             ^
+<scratch space>:27:6: note: expanded from here
+   27 |  GCC error "The eBPF is using target specific macros, please provide -target that is not bpf, bpfel or bpfeb"
+      |      ^
+1 error generated.
+Error: compile: exit status 1
+exit status 1
+gen.go:3: running "go": exit status 1
