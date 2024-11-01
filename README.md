@@ -57,4 +57,40 @@ cargo --version
 rustc --version
 Если вы видите версии cargo и rustc, установка прошла успешно, и вы можете использовать Cargo для управления вашими проектами на Rust!
 
+____________________________________________________________________________________________________________
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$  RUST_BACKTRACE=1 ./ecc ebpf_test.c
+thread 'main' panicked at src/config/mod.rs:100:87:
+called `Result::unwrap()` on an `Err` value: eunomia data home not found, try setting `EUNOMIA_HOME`
+
+Stack backtrace:
+   0: ecc_rs::helper::get_eunomia_data_dir
+   1: core::ops::function::FnOnce::call_once
+   2: once_cell::imp::OnceCell<T>::initialize::{{closure}}
+   3: once_cell::imp::initialize_or_wait
+   4: once_cell::imp::OnceCell<T>::initialize
+   5: <ecc_rs::config::CompileArgs as clap_builder::derive::Args>::augment_args
+   6: clap_builder::derive::Parser::parse
+   7: ecc_rs::main
+   8: std::sys_common::backtrace::__rust_begin_short_backtrace
+   9: std::rt::lang_start::{{closure}}
+  10: std::rt::lang_start_internal
+  11: main
+  12: <unknown>
+  13: __libc_start_main
+  14: _start
+stack backtrace:
+   0: rust_begin_unwind
+   1: core::panicking::panic_fmt
+   2: core::result::unwrap_failed
+   3: core::ops::function::FnOnce::call_once
+   4: once_cell::imp::OnceCell<T>::initialize::{{closure}}
+   5: once_cell::imp::initialize_or_wait
+   6: once_cell::imp::OnceCell<T>::initialize
+   7: <ecc_rs::config::CompileArgs as clap_builder::derive::Args>::augment_args
+   8: clap_builder::derive::Parser::parse
+   9: ecc_rs::main
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
 
