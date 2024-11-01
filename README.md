@@ -40,3 +40,9 @@ Error: Failed to compile
 
 Caused by:
     Failed to run clang(exit code = Some(1))
+
+
+    int should_intercept(void) {
+    // Your logic here
+    return 1;  // For testing, always return true
+}
