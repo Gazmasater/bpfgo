@@ -178,3 +178,92 @@ int BPF_PROG(inet_accept, struct sock *sk){
 
 	return 0;
 }
+
+????????????????????????????????????????????????????????????????????????????????????????????????????????
+
+//go:build ignore
+
+#include "common.h"
+#include "bpf/bpf_endian.h"
+#include "bpf/bpf_tracing.h"
+
+#define AF_INET 2
+#define AF_INET6 10 // Для поддержки IPv6
+
+#define TASK_COMM_LEN 16
+
+char __license[] SEC("license") = "Dual MIT/GPL";
+
+// Структура sock_common, дополненная для поддержки IPv6
+struct sock_common
+{
+	union
+	{
+		struct
+		{
+			__be32 skc_daddr;
+			__be32 skc_rcv_saddr;
+		};
+	};
+	union
+	{
+		// Padding out union skc_hash.
+		__u32 _;
+	};
+	union
+	{
+		struct
+		{
+			__be16 skc_dport;
+			__u16 skc_num;
+		};
+	};
+	short unsigned int skc_family;
+};
+
+// Структура sock отражает начало структуры sock из ядра
+struct sock
+{
+	struct sock_common __sk_common;
+};
+
+// Структура события, дополненная для хранения PID
+struct event
+{
+	u8 comm[TASK_COMM_LEN];
+	__u16 sport;
+	__be16 dport;
+	__be32 saddr;
+	__be32 daddr;
+	__u32 pid; // Добавлено поле для PID
+};
+
+struct
+{
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__type(key, u32); // Ключ типа PID
+	__type(value, struct event); // Значение - структура события
+	__uint(max_entries, 1024); // Максимальное количество записей в карте
+} events SEC(".maps");
+
+SEC("fentry/inet_accept")
+int BPF_PROG(inet_accept, struct sock *sk)
+{
+	struct event tcp_info;
+	u32 pid = bpf_get_current_pid_tgid() >> 32; // Получаем PID
+
+	if (sk->__sk_common.skc_family == AF_INET)
+	{
+		tcp_info.daddr = sk->__sk_common.skc_daddr;
+		tcp_info.dport = sk->__sk_common.skc_dport;
+		tcp_info.sport = bpf_htons(sk->__sk_common.skc_num);
+		bpf_get_current_comm(&tcp_info.comm, TASK_COMM_LEN);
+		tcp_info.pid = pid;
+
+		// Сохраняем событие в карте
+		bpf_map_update_elem(&events, &pid, &tcp_info, BPF_ANY);
+	}
+
+	return 0;
+}
+
