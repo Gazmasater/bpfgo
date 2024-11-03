@@ -12,6 +12,9 @@ nc 127.0.0.1 12345
 SEC("kprobe/inet_accept")
 int trace_accept(struct pt_regs *ctx)
 
+    bpf_printk("Family: %d\n", sk->skc_family);
+
+
 
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 #include "vmlinux.h"
