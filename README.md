@@ -3,40 +3,40 @@ bpftool btf dump file /sys/kernel/btf/vmlinux format c > vmlinux.h
 
 INCLUDES := -D__TARGET_ARCH_$(ARCH) -I$(OUTPUT) -I../third_party/libbpf-bootstrap/libbpf/include/uapi -I$(dir $(VMLINUX)) -I$(LIBBLAZESYM_INC) -I/usr/include/bpf
 
+BPF_PROG_TYPE_FLOW_DISSECTOR — анализирует содержимое пакета, чтобы извлечь такие данные, как IP-адрес или порт, что помогает в маршрутизации и фильтрации.
+
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-#include "vmlinux.h"
-//#include "bpf/bpf_core_read.h"
-#include "bpf/bpf_tracing.h"
-//#include "bpf/bpf.h"
-//#include "netinet/in.h"
+#include <uapi/linux/ptrace.h>
+#include <net/sock.h>
+#include <bcc/proto.h>
 
-#define TASK_COMM_LEN  16
+struct conn_info_t {
+    u32 pid;
+    u32 ip;
+    u16 port;
+};
 
+// Создаем BPF-карту для хранения информации о соединениях
+BPF_HASH(conn_map, u32, struct conn_info_t);
 
-SEC("kprobe/__x64_sys_accept")
-int bpf_prog(struct pt_regs *ctx) {
-    struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+// Привязываем функцию к kprobe для inet_accept
+SEC("kprobe/inet_accept")
+int trace_accept(struct pt_regs *ctx) {
+    struct sock *sk = (struct sock *)PT_REGS_PARM1(ctx);
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+
+    struct conn_info_t info = {};
+    info.pid = pid;
     
-    // Получаем информацию о задаче
-    char comm[TASK_COMM_LEN];
-    bpf_get_current_comm(&comm, sizeof(comm));
+    // Получаем IP-адрес и порт из структуры sock
+    u16 dport = sk->__sk_common.skc_dport;
+    u32 dip = sk->__sk_common.skc_daddr;
+    
+    info.ip = dip;
+    info.port = ntohs(dport);
 
-    // Здесь вы можете логировать информацию или делать что-то другое
-    bpf_trace_printk("Process accepted a connection on  sockfd: %s\n", comm);
+    // Сохраняем информацию о соединении в BPF-карте
+    conn_map.update(&pid, &info);
 
     return 0;
 }
-
-char _license[] SEC("license") = "GPL";
-
-
-az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ./ecc fentry.c
-INFO [ecc_rs::bpf_compiler] Compiling bpf object...
-INFO [ecc_rs::bpf_compiler] $ "clang" CommandArgs { inner: ["-g", "-O2", "-target", "bpf", "-Wno-unknown-attributes", "-D__TARGET_ARCH_x86", "-idirafter", "/usr/lib/llvm-18/lib/clang/18/include", "-idirafter", "/usr/local/include", "-idirafter", "/usr/include/x86_64-linux-gnu", "-idirafter", "/usr/include", "-I/tmp/.tmp7Zw0YR/include", "-I/tmp/.tmp7Zw0YR/include/vmlinux/x86", "-I/home/gaz358/myprog/bpfgo", "-c", "fentry.c", "-o", "fentry.bpf.o"] }
-INFO [ecc_rs::bpf_compiler] 
-ERROR [ecc_rs::bpf_compiler] fentry.c:19:72: error: incompatible pointer to integer conversion passing 'char[16]' to parameter of type '__u32' (aka 'unsigned int') [-Wint-conversion]
-   19 |     bpf_trace_printk("Process accepted a connection on  sockfd: %d\n", comm);
-      |                                                                        ^~~~
-1 error generated.
-
-Error: Failed to compile
