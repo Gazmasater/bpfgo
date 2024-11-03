@@ -14,6 +14,9 @@ int trace_accept(struct pt_regs *ctx)
 
     bpf_printk("Family: %d\n", sk->skc_family);
 
+    	struct event tcp_info = {};
+
+
 
 
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
