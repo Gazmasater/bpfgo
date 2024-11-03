@@ -40,3 +40,15 @@ int trace_accept(struct pt_regs *ctx) {
 
     return 0;
 }
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ./ecc fentry.c
+INFO [ecc_rs::bpf_compiler] Compiling bpf object...
+INFO [ecc_rs::bpf_compiler] $ "clang" CommandArgs { inner: ["-g", "-O2", "-target", "bpf", "-Wno-unknown-attributes", "-D__TARGET_ARCH_x86", "-idirafter", "/usr/lib/llvm-18/lib/clang/18/include", "-idirafter", "/usr/local/include", "-idirafter", "/usr/include/x86_64-linux-gnu", "-idirafter", "/usr/include", "-I/tmp/.tmpg3fdO1/include", "-I/tmp/.tmpg3fdO1/include/vmlinux/x86", "-I/home/gaz358/myprog/bpfgo", "-c", "fentry.c", "-o", "fentry.bpf.o"] }
+INFO [ecc_rs::bpf_compiler] 
+ERROR [ecc_rs::bpf_compiler] fentry.c:30:17: error: call to undeclared function 'ntohs'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+   30 |     info.port = ntohs(dport);
+      |                 ^
+1 error generated.
+
+Error: Failed to compile
