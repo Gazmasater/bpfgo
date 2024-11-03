@@ -9,6 +9,10 @@ nc -l -p 12345
 nc 127.0.0.1 12345
 
 
+SEC("kprobe/inet_accept")
+int trace_accept(struct pt_regs *ctx)
+
+
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 #include "vmlinux.h"
 
