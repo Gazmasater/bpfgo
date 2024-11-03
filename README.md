@@ -143,9 +143,10 @@ struct event
 };
 struct event *unused __attribute__((unused));
 
-SEC("fentry/tcp_connect")
-int BPF_PROG(tcp_connect, struct sock *sk)
-{
+SEC("fentry/inet_accept")
+int BPF_PROG(inet_accept, struct sock *sk){
+
+
 	struct event *tcp_info;
 
 	if (sk->__sk_common.skc_family == AF_INET)
@@ -156,17 +157,16 @@ int BPF_PROG(tcp_connect, struct sock *sk)
 			return 0;
 		}
 
-		tcp_info->saddr = sk->__sk_common.skc_rcv_saddr;
-		tcp_info->daddr = sk->__sk_common.skc_daddr;
-		tcp_info->dport = sk->__sk_common.skc_dport;
-		tcp_info->sport = bpf_htons(sk->__sk_common.skc_num);
+		//tcp_info->saddr = sk->__sk_common.skc_rcv_saddr;
+		 tcp_info->daddr = sk->__sk_common.skc_daddr;
+		  tcp_info->dport = sk->__sk_common.skc_dport;
+		  tcp_info->sport = bpf_htons(sk->__sk_common.skc_num);
 	}
-	else if (sk->__sk_common.skc_family == AF_INET6)
-	{
-		// Обработка IPv6, если необходимо
-		// Здесь добавьте аналогичную логику для IPv6
-		return 0; // Здесь вы можете также вернуть данные для IPv6
-	}
+	//  else if (sk->__sk_common.skc_family == AF_INET6)
+	//   {
+	
+	//   	return 0; 
+	//    }
 
 	bpf_get_current_comm(&tcp_info->comm, TASK_COMM_LEN);
 	tcp_info->pid = bpf_get_current_pid_tgid() >> 32; // Получаем PID
@@ -175,4 +175,3 @@ int BPF_PROG(tcp_connect, struct sock *sk)
 
 	return 0;
 }
-
