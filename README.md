@@ -37,6 +37,7 @@ int trace_accept(struct pt_regs *ctx) {
     
     info.ip = dip;
     info.port = __bpf_ntohs(dport);
+    bpf_printk("Connection accepted: PID=%d, IP=%x, PORT=%d\n", info.pid, info.ip, info.port);
 
     // Сохраняем информацию о соединении в BPF-карте
     //conn_map.update(&pid, &info);
