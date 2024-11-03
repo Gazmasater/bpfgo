@@ -5,12 +5,13 @@ INCLUDES := -D__TARGET_ARCH_$(ARCH) -I$(OUTPUT) -I../third_party/libbpf-bootstra
 
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-#include <linux/bpf.h>
-#include <linux/ptrace.h>
-#include <linux/socket.h>
-#include <linux/sched.h>
-#include <bpf/bpf_helpers.h>
-#include <bpf/bpf_core_read.h>
+#include "bpf/bpf_helpers.h"
+#include "bpf/bpf_core_read.h"
+#include "bpf/bpf_tracing.h"
+#include "bpf/bpf.h"
+#include "netinet/in.h"
+#define TASK_COMM_LEN  16
+
 
 SEC("kprobe/do_accept")
 int bpf_prog(struct pt_regs *ctx, int sockfd, struct sockaddr __user *addr, int __user *addrlen) {
@@ -27,3 +28,16 @@ int bpf_prog(struct pt_regs *ctx, int sockfd, struct sockaddr __user *addr, int 
 }
 
 char _license[] SEC("license") = "GPL";
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/fentry.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "18",
+	"severity": 8,
+	"message": "expected a ')'",
+	"source": "C/C++",
+	"startLineNumber": 10,
+	"startColumn": 70,
+	"endLineNumber": 10,
+	"endColumn": 71
+}]
