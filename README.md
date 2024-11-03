@@ -49,28 +49,27 @@ int trace_accept(struct pt_regs *ctx) {
     return 0;
 }
 
-
-
-az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./ecli run package.json
-INFO [faerie::elf] strtab: 0x373 symtab 0x3b0 relocs 0x3f8 sh_offset 0x3f8
-libbpf: prog 'trace_accept': BPF program load failed: Invalid argument
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./ecli run package.json
+INFO [faerie::elf] strtab: 0x8491 symtab 0x84d0 relocs 0x8518 sh_offset 0x8518
+libbpf: prog 'trace_accept': BPF program load failed: Permission denied
 libbpf: prog 'trace_accept': -- BEGIN PROG LOAD LOG --
 0: R1=ctx() R10=fp0
+; struct sock *sk = (struct sock *)PT_REGS_PARM1(ctx);
+0: (79) r6 = *(u64 *)(r1 +112)        ; R1=ctx() R6_w=scalar()
 ; u32 pid = bpf_get_current_pid_tgid() >> 32;
-0: (85) call bpf_get_current_pid_tgid#14      ; R0_w=scalar()
-; u32 pid = bpf_get_current_pid_tgid() >> 32;
-1: (77) r0 >>= 32                     ; R0_w=scalar(smin=0,smax=umax=0xffffffff,var_off=(0x0; 0xffffffff))
-; bpf_printk("Connection accepted: PID=%d\n", pid);
-2: (18) r1 = 0xffff9713cca36910       ; R1_w=map_value(map=fentry_b.rodata,ks=4,vs=29)
-4: (b7) r2 = 29                       ; R2_w=29
-5: (bf) r3 = r0                       ; R0_w=scalar(id=1,smin=0,smax=umax=0xffffffff,var_off=(0x0; 0xffffffff)) R3_w=scalar(id=1,smin=0,smax=umax=0xffffffff,var_off=(0x0; 0xffffffff))
-6: (85) call bpf_trace_printk#6
-cannot call GPL-restricted function from non-GPL compatible program
-processed 6 insns (limit 1000000) max_states_per_insn 0 total_states 0 peak_states 0 mark_read 0
+1: (85) call bpf_get_current_pid_tgid#14      ; R0_w=scalar()
+; bpf_printk("Connection accepted: PID=%d, IP=%x\n", info.pid, info.ip);
+2: (61) r4 = *(u32 *)(r6 +0)
+R6 invalid mem access 'scalar'
+processed 3 insns (limit 1000000) max_states_per_insn 0 total_states 0 peak_states 0 mark_read 0
 -- END PROG LOAD LOG --
-libbpf: prog 'trace_accept': failed to load: -22
-libbpf: failed to load object 'fentry_bpf���s'
+libbpf: prog 'trace_accept': failed to load: -13
+libbpf: failed to load object 'fentry_bpf�b�s'
 Error: Failed to run native eBPF program
 
 Caused by:
-    Bpf error: Failed to start polling: Bpf("Failed to load and attach: Failed to load bpf object\n\nCaused by:\n    System error, errno: 22"), RecvError
+    Bpf error: Failed to start polling: Bpf("Failed to load and attach: Failed to load bpf object\n\nCaused by:\n    System error, errno: 13"), RecvError
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
+
+
