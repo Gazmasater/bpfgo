@@ -44,17 +44,17 @@ struct sock
 	struct sock_common __sk_common;
 };
 
-struct
-{
-	__uint(type, BPF_MAP_TYPE_RINGBUF);
-	__uint(max_entries, 1 << 24);
-} events SEC(".maps");
-
 // struct
 // {
-// 	__uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-// 	__uint(max_entries, 8);
+// 	__uint(type, BPF_MAP_TYPE_RINGBUF);
+// 	__uint(max_entries, 1 << 24);
 // } events SEC(".maps");
+
+struct
+{
+	__uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+	__uint(max_entries, 8);
+} events SEC(".maps");
 
 struct event
 {
@@ -71,32 +71,29 @@ struct event *unused __attribute__((unused));
 SEC("fentry/inet_accept")
 int BPF_PROG(inet_accept, struct sock *sk)
 {
+
 	struct event *tcp_info;
+	
 
-	if (sk->__sk_common.skc_family == AF_INET)
+	 if (sk->__sk_common.skc_family == AF_INET)
 	{
-		tcp_info = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
-		if (!tcp_info)
-		{
-			return 0;
-		}
-
-	//	tcp_info->saddr = sk->__sk_common.skc_rcv_saddr;
-		tcp_info->daddr = sk->__sk_common.skc_daddr;
-		tcp_info->dport = sk->__sk_common.skc_dport;
-		tcp_info->sport = bpf_htons(sk->__sk_common.skc_num);
-	}
-	else if (sk->__sk_common.skc_family == AF_INET6)
+	tcp_info = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
+	if (!tcp_info)
 	{
-		// Обработка IPv6, если необходимо
-		// Здесь добавьте аналогичную логику для IPv6
-		return 0; // Здесь вы можете также вернуть данные для IPv6
+		return 0;
 	}
+	// tcp_info->saddr = sk->__sk_common.skc_rcv_saddr;
+	tcp_info->daddr = sk->__sk_common.skc_daddr;
+	tcp_info->dport = sk->__sk_common.skc_dport;
+	tcp_info->sport = bpf_htons(sk->__sk_common.skc_num);
+	}
+	
 
 	bpf_get_current_comm(&tcp_info->comm, TASK_COMM_LEN);
 	tcp_info->pid = bpf_get_current_pid_tgid() >> 32; // Получаем PID
 
-	bpf_ringbuf_submit(tcp_info, 0);
+	// bpf_ringbuf_submit(tcp_info, 0);
+	bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, &tcp_info, sizeof(tcp_info));
 
 	return 0;
 }
