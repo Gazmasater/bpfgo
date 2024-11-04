@@ -16,6 +16,9 @@ int trace_accept(struct pt_regs *ctx)
 
     	struct event tcp_info = {};
      		event.Pid = binary.LittleEndian.Uint32(record.RawSample[28:32])
+       event.Sport = binary.LittleEndian.Uint16(record.RawSample[32:34]) // Извлечение значения sport
+event.Dport = binary.LittleEndian.Uint16(record.RawSample[34:36]) // Извлечение значения dport
+
 
 
 
