@@ -33,6 +33,8 @@ int trace_accept(struct pt_regs *ctx) {
 }
 
 
+#define __TARGET_ARCH_x86_64 // Для x86_64
+
 clang -O2 -target bpf -c ваш_файл.c -o ваш_файл.o
 sudo bpftool prog load ваш_файл.o /sys/fs/bpf/trace_accept
 sudo bpftool prog attach /sys/fs/bpf/trace_accept /sys/kernel/debug/tracing/kprobes/inet_accept
@@ -59,6 +61,9 @@ chmod +x BebraAppimage
 
 sudo apt update
 sudo apt install fuse
+
+./Bebra.AppImage --appimage-extract
+
 
 
 az358@gaz358-BOD-WXX9:~/Downloads$ ./Bebra.AppImage 
