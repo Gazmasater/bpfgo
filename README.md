@@ -15,6 +15,8 @@ int trace_accept(struct pt_regs *ctx)
     bpf_printk("Family: %d\n", sk->skc_family);
 
     	struct event tcp_info = {};
+     		event.Pid = binary.LittleEndian.Uint32(record.RawSample[28:32])
+
 
 
 
