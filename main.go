@@ -47,7 +47,7 @@ func main() {
 	defer objs.Close()
 
 	link, err := link.AttachTracing(link.TracingOptions{
-		Program: objs.bpfPrograms.TcpConnect,
+		Program: objs.bpfPrograms.InetAccept,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -95,9 +95,13 @@ func main() {
 			continue
 		}
 
-		event.Pid = binary.LittleEndian.Uint32(record.RawSample[28:32])
-
+		event.Pid = binary.LittleEndian.Uint32(record.RawSample[28:32]) // Извлечение Pid
+		//event.Dport = binary.LittleEndian.Uint16(record.RawSample[34:36]) // Извлечение dport
+		//event.Sport = binary.LittleEndian.Uint16(record.RawSample[32:34]) // Извлечение sport
+		// event.Sport = binary.BigEndian.Uint16(record.RawSample[32:34])
+		// event.Dport = binary.BigEndian.Uint16(record.RawSample[34:36])
 		log.Printf("%-16s %-15s %-6d -> %-15s %-6d %-6d",
+
 			event.Comm,
 			intToIP(event.Saddr),
 			event.Sport,

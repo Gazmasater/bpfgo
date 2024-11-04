@@ -53,7 +53,7 @@ type fentrySpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type fentryProgramSpecs struct {
-	TcpConnect *ebpf.ProgramSpec `ebpf:"tcp_connect"`
+	InetAccept *ebpf.ProgramSpec `ebpf:"inet_accept"`
 }
 
 // fentryMapSpecs contains maps before they are loaded into the kernel.
@@ -95,12 +95,12 @@ func (m *fentryMaps) Close() error {
 //
 // It can be passed to loadFentryObjects or ebpf.CollectionSpec.LoadAndAssign.
 type fentryPrograms struct {
-	TcpConnect *ebpf.Program `ebpf:"tcp_connect"`
+	InetAccept *ebpf.Program `ebpf:"inet_accept"`
 }
 
 func (p *fentryPrograms) Close() error {
 	return _FentryClose(
-		p.TcpConnect,
+		p.InetAccept,
 	)
 }
 
