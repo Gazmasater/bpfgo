@@ -57,6 +57,10 @@ chmod +x BebraAppimage
 
 ./BebraAppimage
 
+sudo apt update
+sudo apt install fuse
+
+
 az358@gaz358-BOD-WXX9:~/Downloads$ ./Bebra.AppImage 
 dlopen(): error loading libfuse.so.2
 
