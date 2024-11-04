@@ -1,5 +1,5 @@
 // This is a compact version of `vmlinux.h` to be used in the examples using C code.
-
+//go:build ignore
 #pragma once
 
 typedef unsigned char __u8;
