@@ -22,7 +22,15 @@ event.Pid = binary.LittleEndian.Uint32(record.RawSample[28:32]) // Извлеч�
 		event.Dport = binary.BigEndian.Uint16(record.RawSample[34:36])s
 
 
+record := Record{
+		RawSample: []byte{0x00, 0x50, 0x01, 0xBB}, // Пример данных для sport и dport
+	}
 
+	var event Event
+	event.Sport = binary.BigEndian.Uint16(record.RawSample[0:2]) // Извлечение source port
+	event.Dport = binary.BigEndian.Uint16(record.RawSample[2:4]) // Извлечение destination port
+
+	fmt.Printf("Source Port: %d, Destination Port: %d\n", event.Sport, event.Dport)
 
 
 
