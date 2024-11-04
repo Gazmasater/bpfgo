@@ -16,10 +16,10 @@ int trace_accept(struct pt_regs *ctx)
 
     	struct event tcp_info = {};
 event.Pid = binary.LittleEndian.Uint32(record.RawSample[28:32]) // Извлечение Pid
-event.Sport = binary.LittleEndian.Uint16(record.RawSample[32:34]) // Извлечение sport
-event.Dport = binary.LittleEndian.Uint16(record.RawSample[34:36]) // Извлечение dport
-event.SrcIP = net.IP(record.RawSample[36:40]) // Извлечение src_ip
-event.DstIP = net.IP(record.RawSample[40:44]) // Извлечение dst_ip
+		//event.Dport = binary.LittleEndian.Uint16(record.RawSample[34:36]) // Извлечение dport
+		//event.Sport = binary.LittleEndian.Uint16(record.RawSample[32:34]) // Извлечение sport
+		event.Sport = binary.BigEndian.Uint16(record.RawSample[32:34])
+		event.Dport = binary.BigEndian.Uint16(record.RawSample[34:36])s
 
 
 
