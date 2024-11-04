@@ -42,3 +42,7 @@ Error: Failed to run native eBPF program
 
 Caused by:
     Bpf error: Failed to start polling: Bpf("Failed to load and attach: Failed to load bpf object\n\nCaused by:\n    System error, errno: 1"), RecvError
+
+
+
+    BebraAppimage
