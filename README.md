@@ -33,6 +33,12 @@ int trace_accept(struct pt_regs *ctx) {
 }
 
 
+clang -O2 -target bpf -c ваш_файл.c -o ваш_файл.o
+sudo bpftool prog load ваш_файл.o /sys/fs/bpf/trace_accept
+sudo bpftool prog attach /sys/fs/bpf/trace_accept /sys/kernel/debug/tracing/kprobes/inet_accept
+
+
+
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ./ecli run package.json
 INFO [faerie::elf] strtab: 0x3c3 symtab 0x400 relocs 0x448 sh_offset 0x448
 libbpf: Failed to bump RLIMIT_MEMLOCK (err = -1), you might need to do it explicitly!
@@ -41,6 +47,14 @@ libbpf: failed to load object 'fentry_bpf�p'
 Error: Failed to run native eBPF program
 
 Caused by:
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+BEBRA
+chmod +x BebraAppimage
+
+./BebraAppimage
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     Bpf error: Failed to start polling: Bpf("Failed to load and attach: Failed to load bpf object\n\nCaused by:\n    System error, errno: 1"), RecvError
 
 
