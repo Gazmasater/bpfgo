@@ -146,6 +146,8 @@ struct event
 	__be32 saddr;
 	__be32 daddr;
 	__u32 pid; // Добавлено поле для PID
+ 	 __u16 family; 
+ 
 };
 struct event *unused __attribute__((unused));
 
@@ -165,7 +167,9 @@ int BPF_PROG(inet_accept, struct sock *sk){
 			return 0;
 		}
 
-		tcp_info->saddr = sk->__sk_common.skc_rcv_saddr;
+		
+  		tcp_info->family = sk->__sk_common.skc_family;  // Сохраняем семейство протоколов
+    		tcp_info->saddr = sk->__sk_common.skc_rcv_saddr;
 		tcp_info->daddr = sk->__sk_common.skc_daddr;
 		tcp_info->dport = sk->__sk_common.skc_dport;
 		tcp_info->sport = bpf_htons(sk->__sk_common.skc_num);
