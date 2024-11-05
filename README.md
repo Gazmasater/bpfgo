@@ -1,6 +1,8 @@
 #include "vmlinux.h"
 #include "bpf/bpf_tracing.h"
 #include  "bpf/bpf_endian.h"
+#define __TARGET_ARCH_x86_64  // Указываем целевую архитектуру
+
 
 struct conn_info_t {
     u32 pid;
