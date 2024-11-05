@@ -38,6 +38,10 @@ int trace_accept(struct pt_regs *ctx) {
 #define __TARGET_ARCH_x86_64 // Для x86_64
 
 clang -O2 -target bpf -c ваш_файл.c -o ваш_файл.o
+clang -O2 -target bpf -D__TARGET_ARCH_x86_64 -c fentry.c -o bpf_fentry.o
+
+
+
 sudo bpftool prog load ваш_файл.o /sys/fs/bpf/trace_accept
 sudo bpftool prog attach /sys/fs/bpf/trace_accept /sys/kernel/debug/tracing/kprobes/inet_accept
 
