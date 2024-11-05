@@ -78,8 +78,12 @@ See https://github.com/AppImage/AppImageKit/wiki/FUSE
 for more information
 
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    Bpf error: Failed to start polling: Bpf("Failed to load and attach: Failed to load bpf object\n\nCaused by:\n    System error, errno: 1"), RecvError
+  gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ./ecc fentry.c
+fuse: failed to exec fusermount3: No such file or directory
 
-
-
-    BebraAppimage
+Cannot mount AppImage, please check your FUSE setup.
+You might still be able to extract the contents of this AppImage 
+if you run it with the --appimage-extract option. 
+See https://github.com/AppImage/AppImageKit/wiki/FUSE 
+for more information
+open dir error: No such file or directory
