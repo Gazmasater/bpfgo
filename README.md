@@ -66,6 +66,16 @@ sudo apt install fuse
 
 ./Bebra.AppImage --appimage-extract
 
+sudo apt update
+sudo apt upgrade -y
+sudo apt full-upgrade -y
+
+sudo apt autoremove -y
+sudo apt autoclean
+
+sudo reboot
+
+
 
 
 az358@gaz358-BOD-WXX9:~/Downloads$ ./Bebra.AppImage 
