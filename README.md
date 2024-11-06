@@ -114,3 +114,31 @@ int trace_accept_ret(struct pt_regs *ctx) {
 
     return 0;
 }
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo cat /sys/kernel/debug/tracing/trace_pipe
+[sudo] password for gaz358: 
+              nc-4519    [001] ...21   134.197394: bpf_trace_printk: trace_accept: PID=4519
+
+              nc-4519    [001] ...21   134.197398: bpf_trace_printk: Comm set: PID=4519, Comm=nc
+
+              nc-4519    [001] ...21   134.197400: bpf_trace_printk: Failed to read file->private_data
+
+              nc-4519    [002] ...21   142.226312: bpf_trace_printk: No connection info found for PID=4519 after accept
+
+         systemd-1       [000] ...21   155.034716: bpf_trace_printk: trace_accept: PID=1
+
+         systemd-1       [000] ...21   155.034720: bpf_trace_printk: Comm set: PID=1, Comm=systemd
+
+         systemd-1       [000] ...21   155.034722: bpf_trace_printk: Failed to read file->private_data
+
+         systemd-1       [000] ...21   155.034750: bpf_trace_printk: No connection info found for PID=1 after accept
+
+           <...>-1882    [007] ...21   190.346862: bpf_trace_printk: trace_accept: PID=1882
+
+           <...>-1882    [007] ...21   190.346873: bpf_trace_printk: Comm set: PID=1882, Comm=dbus-daemon
+
+           <...>-1882    [007] ...21   190.346874: bpf_trace_printk: Failed to read file->private_data
+
+           <...>-1882    [007] ...21   190.346897: bpf_trace_printk: No connection info found for PID=1882 after accept
