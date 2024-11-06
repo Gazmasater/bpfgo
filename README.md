@@ -20,14 +20,22 @@ struct {
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
-SEC("kprobe/inet_csk_accept")
+SEC("kprobe/__sys_accept4")
 int trace_accept(struct pt_regs *ctx) {
-    struct sock *sk = (struct sock *)PT_REGS_PARM1(ctx);
+    struct file *file = (struct file *)PT_REGS_PARM1(ctx);
+    struct socket *sock;
+    struct sock *sk;
     u32 pid = bpf_get_current_pid_tgid() >> 32;
 
     struct conn_info_t info = {};
     info.pid = pid;
     bpf_get_current_comm(info.comm, sizeof(info.comm));
+
+    // Чтение информации о сокете
+    if (bpf_core_read(&sock, sizeof(sock), &file->private_data) != 0 ||
+        bpf_core_read(&sk, sizeof(sk), &sock->sk) != 0) {
+        return 0;
+    }
 
     // Чтение IP и портов
     u32 dip;
@@ -48,7 +56,7 @@ int trace_accept(struct pt_regs *ctx) {
     return 0;
 }
 
-SEC("kretprobe/inet_csk_accept")
+SEC("kretprobe/__sys_accept4")
 int trace_accept_ret(struct pt_regs *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = PT_REGS_RC(ctx);
@@ -71,62 +79,3 @@ int trace_accept_ret(struct pt_regs *ctx) {
 
     return 0;
 }
-
-+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-#include "vmlinux.h"
-#include <bpf/bpf_tracing.h>
-#include <bpf/bpf_core_read.h>
-
-struct conn_info_t {
-    u32 pid;
-    u32 ip;
-    u16 sport;
-    u16 dport;
-    char comm[16];
-};
-
-BPF_HASH(conn_info_map, u32, struct conn_info_t);  // Хэш-таблица для хранения информации
-
-char LICENSE[] SEC("license") = "Dual BSD/GPL";
-
-// kprobe на sys_accept для сохранения информации при начале соединения
-SEC("kprobe/sys_accept")
-int trace_sys_accept(struct pt_regs *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    
-    struct conn_info_t info = {};
-    info.pid = pid;
-    bpf_get_current_comm(&info.comm, sizeof(info.comm));
-
-    // Сохраняем базовую информацию в карту
-    conn_info_map.update(&pid, &info);
-    bpf_printk("sys_accept called: PID=%d, Comm=%s", info.pid, info.comm);
-    
-    return 0;
-}
-
-// kretprobe на sys_accept для получения результата соединения
-SEC("kretprobe/sys_accept")
-int trace_sys_accept_ret(struct pt_regs *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = PT_REGS_RC(ctx);
-
-    // Проверка, успешен ли вызов sys_accept
-    if (ret < 0) {
-        bpf_printk("Accept failed for PID=%d", pid);
-        conn_info_map.delete(&pid);  // Удаляем из карты, если соединение не установлено
-        return 0;
-    }
-
-    struct conn_info_t *info = conn_info_map.lookup(&pid);
-    if (!info) {
-        return 0; // Если информации нет, выходим
-    }
-
-    info->dport = ret;  // Пример использования результата (добавьте необходимые поля)
-    bpf_printk("Connection accepted: PID=%d, Comm=%s, Dport=%u", info->pid, info->comm, info->dport);
-
-    return 0;
-}
-
