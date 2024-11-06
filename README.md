@@ -120,58 +120,25 @@ int trace_accept_ret(struct pt_regs *ctx) {
 SEC("kprobe/__sys_accept4")
 int trace_accept(struct pt_regs *ctx) {
     struct file *file = (struct file *)PT_REGS_PARM1(ctx);
-    struct socket *sock;
-    struct sock *sk;
+    if (!file) {
+        bpf_printk("Failed: file is NULL\n");
+        return 0;
+    }
+
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-
-    bpf_printk("trace_accept: PID=%d\n", pid);
-
     struct conn_info_t info = {};
     info.pid = pid;
     bpf_get_current_comm(info.comm, sizeof(info.comm));
-    bpf_printk("Comm set: PID=%d, Comm=%s\n", info.pid, info.comm);
 
-    // Проверка указателя file->private_data
-    if (file->private_data == NULL) {
-        bpf_printk("file->private_data is NULL\n");
-        return 0;
-    }
-
-    // Чтение информации о сокете
-    if (bpf_probe_read_kernel(&sock, sizeof(sock), &file->private_data) != 0) {
-        bpf_printk("Failed to read file->private_data using bpf_probe_read_kernel\n");
-        return 0;
-    }
-
-    if (sock == NULL) {
-        bpf_printk("sock is NULL after reading file->private_data\n");
-        return 0;
-    }
-
-    if (bpf_probe_read_kernel(&sk, sizeof(sk), &sock->sk) != 0) {
-        bpf_printk("Failed to read sock->sk\n");
-        return 0;
-    }
-
-    bpf_printk("Successfully read socket info\n");
-
-    // Чтение IP и портов
-    u32 dip;
-    u32 portpair;
-    if (bpf_core_read(&dip, sizeof(dip), &sk->__sk_common.skc_rcv_saddr) != 0 ||
-        bpf_core_read(&portpair, sizeof(portpair), &sk->__sk_common.skc_portpair) != 0) {
-        bpf_printk("Failed to read IP or ports\n");
-        return 0;
-    }
-
-    info.ip = dip;
-    info.sport = portpair >> 16;        // Старшие 16 бит — локальный порт
-    info.dport = portpair & 0xFFFF;     // Младшие 16 бит — удаленный порт
+    bpf_printk("trace_accept: PID=%d, Comm=%s\n", pid, info.comm);
 
     // Сохраняем информацию в карту
-    bpf_map_update_elem(&conn_info_map, &pid, &info, BPF_ANY);
-    bpf_printk("Connection started: PID=%d, Comm=%s\n", info.pid, info.comm);
+    int res = bpf_map_update_elem(&conn_info_map, &pid, &info, BPF_ANY);
+    if (res == 0) {
+        bpf_printk("Connection started: PID=%d, Comm=%s\n", info.pid, info.comm);
+    } else {
+        bpf_printk("Failed to update conn_info_map for PID=%d\n", pid);
+    }
 
     return 0;
 }
-
