@@ -1,1 +1,1 @@
-{"bpf_skel":{"data_sections":[],"maps":[{"ident":"rodata","name":"fentry_b.rodata"}],"obj_name":"fentry_bpf","progs":[{"attach":"kprobe/inet_accept","link":true,"name":"trace_accept"}]},"eunomia_version":"0.3.4"}
+{"bpf_skel":{"data_sections":[],"maps":[{"ident":"rodata","name":"fentry_b.rodata"}],"obj_name":"fentry_bpf","progs":[{"attach":"kprobe/inet_csk_accept","link":true,"name":"trace_accept"}]},"eunomia_version":"0.3.4"}
