@@ -117,28 +117,61 @@ int trace_accept_ret(struct pt_regs *ctx) {
 
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo cat /sys/kernel/debug/tracing/trace_pipe
-[sudo] password for gaz358: 
-              nc-4519    [001] ...21   134.197394: bpf_trace_printk: trace_accept: PID=4519
+SEC("kprobe/__sys_accept4")
+int trace_accept(struct pt_regs *ctx) {
+    struct file *file = (struct file *)PT_REGS_PARM1(ctx);
+    struct socket *sock;
+    struct sock *sk;
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
 
-              nc-4519    [001] ...21   134.197398: bpf_trace_printk: Comm set: PID=4519, Comm=nc
+    bpf_printk("trace_accept: PID=%d\n", pid);
 
-              nc-4519    [001] ...21   134.197400: bpf_trace_printk: Failed to read file->private_data
+    struct conn_info_t info = {};
+    info.pid = pid;
+    bpf_get_current_comm(info.comm, sizeof(info.comm));
+    bpf_printk("Comm set: PID=%d, Comm=%s\n", info.pid, info.comm);
 
-              nc-4519    [002] ...21   142.226312: bpf_trace_printk: No connection info found for PID=4519 after accept
+    // Проверка указателя file->private_data
+    if (file->private_data == NULL) {
+        bpf_printk("file->private_data is NULL\n");
+        return 0;
+    }
 
-         systemd-1       [000] ...21   155.034716: bpf_trace_printk: trace_accept: PID=1
+    // Чтение информации о сокете
+    if (bpf_probe_read_kernel(&sock, sizeof(sock), &file->private_data) != 0) {
+        bpf_printk("Failed to read file->private_data using bpf_probe_read_kernel\n");
+        return 0;
+    }
 
-         systemd-1       [000] ...21   155.034720: bpf_trace_printk: Comm set: PID=1, Comm=systemd
+    if (sock == NULL) {
+        bpf_printk("sock is NULL after reading file->private_data\n");
+        return 0;
+    }
 
-         systemd-1       [000] ...21   155.034722: bpf_trace_printk: Failed to read file->private_data
+    if (bpf_probe_read_kernel(&sk, sizeof(sk), &sock->sk) != 0) {
+        bpf_printk("Failed to read sock->sk\n");
+        return 0;
+    }
 
-         systemd-1       [000] ...21   155.034750: bpf_trace_printk: No connection info found for PID=1 after accept
+    bpf_printk("Successfully read socket info\n");
 
-           <...>-1882    [007] ...21   190.346862: bpf_trace_printk: trace_accept: PID=1882
+    // Чтение IP и портов
+    u32 dip;
+    u32 portpair;
+    if (bpf_core_read(&dip, sizeof(dip), &sk->__sk_common.skc_rcv_saddr) != 0 ||
+        bpf_core_read(&portpair, sizeof(portpair), &sk->__sk_common.skc_portpair) != 0) {
+        bpf_printk("Failed to read IP or ports\n");
+        return 0;
+    }
 
-           <...>-1882    [007] ...21   190.346873: bpf_trace_printk: Comm set: PID=1882, Comm=dbus-daemon
+    info.ip = dip;
+    info.sport = portpair >> 16;        // Старшие 16 бит — локальный порт
+    info.dport = portpair & 0xFFFF;     // Младшие 16 бит — удаленный порт
 
-           <...>-1882    [007] ...21   190.346874: bpf_trace_printk: Failed to read file->private_data
+    // Сохраняем информацию в карту
+    bpf_map_update_elem(&conn_info_map, &pid, &info, BPF_ANY);
+    bpf_printk("Connection started: PID=%d, Comm=%s\n", info.pid, info.comm);
 
-           <...>-1882    [007] ...21   190.346897: bpf_trace_printk: No connection info found for PID=1882 after accept
+    return 0;
+}
+
