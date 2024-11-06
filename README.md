@@ -26,16 +26,22 @@ int trace_accept(struct pt_regs *ctx) {
     struct socket *sock;
     struct sock *sk;
     u32 pid = bpf_get_current_pid_tgid() >> 32;
+        bpf_printk("!!!!!!!!!!!!!!!!1: PID=%d\n", pid);
+
 
     struct conn_info_t info = {};
     info.pid = pid;
     bpf_get_current_comm(info.comm, sizeof(info.comm));
+        bpf_printk("INFO: PID=%d\n",info.pid);
 
     // Чтение информации о сокете
     if (bpf_core_read(&sock, sizeof(sock), &file->private_data) != 0 ||
         bpf_core_read(&sk, sizeof(sk), &sock->sk) != 0) {
         return 0;
     }
+
+            bpf_printk("READ SOCKET\n");
+
 
     // Чтение IP и портов
     u32 dip;
