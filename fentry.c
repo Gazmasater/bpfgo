@@ -8,6 +8,8 @@ struct conn_info_t {
     u32 ip;
     u16 sport;
     u16 dport;
+  //  char comm[16];  // Для хранения имени процесса
+
 };
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
@@ -19,6 +21,8 @@ int trace_accept(struct pt_regs *ctx) {
 
     struct conn_info_t info = {};
     info.pid = pid;
+     // Получаем имя процесса
+   // bpf_get_current_comm(info.comm, sizeof(info.comm));
     
     // Чтение IP-адреса и порта с помощью bpf_core_read
     u16 dport;
@@ -54,6 +58,8 @@ int trace_accept(struct pt_regs *ctx) {
     info.dport=remote_port;
 
     bpf_printk("Connection accepted: PID=%d", info.pid);
+    //bpf_printk("Connection accepted: PID=%d, Comm=%s", info.pid, info.comm);
+
     bpf_printk("IP=%u.%u.%u.%u", 
                (info.ip >> 0) & 0xFF, 
                (info.ip >> 8) & 0xFF, 
