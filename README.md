@@ -65,33 +65,34 @@ int trace_accept_ret(struct pt_regs *ctx) {
         // Соединение успешно установлено, извлекаем данные о сокете
         struct conn_info_t *info = bpf_map_lookup_elem(&conn_info_map, &pid);
         if (info) {
+            // Получаем сокет
             struct file *file = (struct file *)PT_REGS_PARM1(ctx);
             if (!file) {
-                bpf_printk("Failed: file is NULL\n");
+                bpf_printk("Failed: file is NULL in kretprobe\n");
                 return 0;
             }
 
             struct socket *sock;
             if (bpf_core_read(&sock, sizeof(sock), &file->private_data) != 0 || !sock) {
-                bpf_printk("Failed to read file->private_data\n");
+                bpf_printk("Failed to read file->private_data in kretprobe\n");
                 return 0;
             }
 
             struct sock *sk;
             if (bpf_core_read(&sk, sizeof(sk), &sock->sk) != 0 || !sk) {
-                bpf_printk("Failed to read sock->sk\n");
+                bpf_printk("Failed to read sock->sk in kretprobe\n");
                 return 0;
             }
 
             u32 dip;
             u32 portpair;
             if (bpf_core_read(&dip, sizeof(dip), &sk->__sk_common.skc_rcv_saddr) != 0) {
-                bpf_printk("Failed to read sk->__sk_common.skc_rcv_saddr\n");
+                bpf_printk("Failed to read sk->__sk_common.skc_rcv_saddr in kretprobe\n");
                 return 0;
             }
 
             if (bpf_core_read(&portpair, sizeof(portpair), &sk->__sk_common.skc_portpair) != 0) {
-                bpf_printk("Failed to read sk->__sk_common.skc_portpair\n");
+                bpf_printk("Failed to read sk->__sk_common.skc_portpair in kretprobe\n");
                 return 0;
             }
 
