@@ -175,3 +175,20 @@ int trace_accept_ret(struct pt_regs *ctx) {
 
     return 0;
 }
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ./ecc fentry.c
+INFO [ecc_rs::bpf_compiler] Compiling bpf object...
+INFO [ecc_rs::bpf_compiler] $ "clang" CommandArgs { inner: ["-g", "-O2", "-target", "bpf", "-Wno-unknown-attributes", "-D__TARGET_ARCH_x86", "-idirafter", "/usr/lib/llvm-18/lib/clang/18/include", "-idirafter", "/usr/local/include", "-idirafter", "/usr/include/x86_64-linux-gnu", "-idirafter", "/usr/include", "-I/tmp/.tmpYF2p6M/include", "-I/tmp/.tmpYF2p6M/include/vmlinux/x86", "-I/home/gaz358/myprog/bpfgo", "-c", "fentry.c", "-o", "fentry.bpf.o"] }
+INFO [ecc_rs::bpf_compiler] 
+ERROR [ecc_rs::bpf_compiler] fentry.c:115:5: error: redefinition of 'trace_accept_ret'
+  115 | int trace_accept_ret(struct pt_regs *ctx) {
+      |     ^
+fentry.c:52:5: note: previous definition is here
+   52 | int trace_accept_ret(struct pt_regs *ctx) {
+      |     ^
+1 error generated.
+
+Error: Failed to compile
+
+Caused by:
