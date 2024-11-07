@@ -97,3 +97,70 @@ int trace_accept_ret(struct pt_regs *ctx) {
 
     return 0;
 }
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+#include <linux/bpf.h>
+#include <linux/ptrace.h>
+#include <linux/in.h>
+#include <linux/in6.h>
+#include <linux/sched.h>
+#include <linux/socket.h>
+#include <linux/net.h>
+#include <linux/sock.h>
+#include <linux/tcp.h>
+#include <net/sock.h>
+#include <bpf/bpf_helpers.h>
+
+struct conn_info_t {
+    u32 pid;
+    u16 sport;  // Исходный порт
+    u16 dport;  // Целевой порт
+    char comm[TASK_COMM_LEN];
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, u32);
+    __type(value, struct conn_info_t);
+} conn_info_map SEC(".maps");
+
+SEC("kprobe/__sys_accept4")
+int trace_accept(struct pt_regs *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct conn_info_t info = {};
+    struct sock *sk;
+
+    info.pid = pid;
+    bpf_get_current_comm(&info.comm, sizeof(info.comm));
+
+    // Получаем указатель на структуру sock (например, в PT_REGS_PARM1)
+    sk = (struct sock *)PT_REGS_PARM1(ctx);
+
+    if (sk) {
+        // Чтение skc_portpair
+        u32 portpair = 0;
+        bpf_probe_read_kernel(&portpair, sizeof(portpair), &sk->__sk_common.skc_portpair);
+
+        // Извлекаем целевой (локальный) и исходный (удалённый) порты
+        info.dport = (portpair >> 16);  // Старшие 16 бит — целевой порт
+        info.sport = (portpair & 0xFFFF);  // Младшие 16 бит — исходный порт
+
+        // Сохраняем информацию в карте
+        int res = bpf_map_update_elem(&conn_info_map, &pid, &info, BPF_ANY);
+        if (res == 0) {
+            bpf_printk("Connection initiated: PID=%d, Comm=%s, sport=%d, dport=%d\n",
+                       pid, info.comm, ntohs(info.sport), ntohs(info.dport));
+        } else {
+            bpf_printk("Failed to update conn_info_map for PID=%d\n", pid);
+        }
+    } else {
+        bpf_printk("sock is NULL\n");
+    }
+
+    return 0;
+}
+
+char _license[] SEC("license") = "GPL";
+
