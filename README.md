@@ -253,3 +253,22 @@ int trace_accept_ret(struct pt_regs *ctx) {
 
     return 0;
 }
+
+
+
+az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ./ecc fentry.c
+INFO [ecc_rs::bpf_compiler] Compiling bpf object...
+INFO [ecc_rs::bpf_compiler] $ "clang" CommandArgs { inner: ["-g", "-O2", "-target", "bpf", "-Wno-unknown-attributes", "-D__TARGET_ARCH_x86", "-idirafter", "/usr/lib/llvm-18/lib/clang/18/include", "-idirafter", "/usr/local/include", "-idirafter", "/usr/include/x86_64-linux-gnu", "-idirafter", "/usr/include", "-I/tmp/.tmp0PpUdj/include", "-I/tmp/.tmp0PpUdj/include/vmlinux/x86", "-I/home/gaz358/myprog/bpfgo", "-c", "fentry.c", "-o", "fentry.bpf.o"] }
+INFO [ecc_rs::bpf_compiler] 
+ERROR [ecc_rs::bpf_compiler] fentry.c:62:31: error: call to undeclared function 'bpf_sock_from_fd'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+   62 |             struct sock *sk = bpf_sock_from_fd(sockfd);
+      |                               ^
+fentry.c:62:26: error: incompatible integer to pointer conversion initializing 'struct sock *' with an expression of type 'int' [-Wint-conversion]
+   62 |             struct sock *sk = bpf_sock_from_fd(sockfd);
+      |                          ^    ~~~~~~~~~~~~~~~~~~~~~~~~
+2 errors generated.
+
+Error: Failed to compile
+
+Caused by:
+    Failed to run clang(exit code = Some(1))
