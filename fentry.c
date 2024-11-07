@@ -65,35 +65,30 @@ int trace_accept_ret(struct pt_regs *ctx) {
         
         // Получаем сохраненную информацию о процессе
         struct conn_info_t *info = bpf_map_lookup_elem(&conn_info_map, &pid);
-
         if (info) {
-        bpf_printk("!!!!!!!!!!!!!!!!!!1 (info)=%d\n",info);
+            // Теперь получаем информацию о сокете через sockfd
+            struct sock *sk = (struct sock *)bpf_map_lookup_elem(&sockfd_map, &pid);
+            if (sk) {
+                // Извлекаем локальный и удаленный порты через skc_portpair
+                u16 local_port = 0;
+                u16 remote_port = 0;
 
-        struct sock *sk = bpf_sock_from_fd(sockfd);
-       //     if (sk) {
-       //         u32 dip;
-       //         u32 portpair;
-       //         // Чтение IP и портов
-       //         if (bpf_core_read(&dip, sizeof(dip), &sk->__sk_common.skc_rcv_saddr) == 0 &&
-       //             bpf_core_read(&portpair, sizeof(portpair), &sk->__sk_common.skc_portpair) == 0) {
-       //             
-       //             info->ip = dip;
-       //             info->sport = bpf_ntohs(portpair >> 16);
-       //             info->dport = bpf_ntohs(portpair & 0xFFFF);
-//
-       //             bpf_printk("Connection accepted: PID=%d, Comm=%s, IP=%u.%u.%u.%u, Sport=%u, Dport=%u\n",
-       //                        info->pid, info->comm,
-       //                        (info->ip >> 0) & 0xFF, (info->ip >> 8) & 0xFF,
-       //                        (info->ip >> 16) & 0xFF, (info->ip >> 24) & 0xFF,
-       //                        info->sport, info->dport);
-       //         }
-       //     }
+                // Получаем порты из skc_portpair
+                struct sk_buff *skb = (struct sk_buff *)sk;
+                if (skb) {
+                    struct skc_portpair *port_pair = &skb->skc_portpair;
+
+                    // Локальный порт
+                    local_port = bpf_ntohs(port_pair->local);
+                    // Удаленный порт
+                    remote_port = bpf_ntohs(port_pair->remote);
+
+                    bpf_printk("Accepted connection: PID=%d, Comm=%s, Local Port=%d, Remote Port=%d\n",
+                               pid, info->comm, local_port, remote_port);
+                }
+            }
         }
-
-        // Удаляем запись из sockfd_map после использования
-        bpf_map_delete_elem(&sockfd_map, &pid);
     }
 
     return 0;
 }
-
