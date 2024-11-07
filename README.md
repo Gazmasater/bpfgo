@@ -73,12 +73,14 @@ int trace_accept_ret(struct pt_regs *ctx) {
             }
 
             struct socket *sock;
+            // Читаем socket из private_data структуры file
             if (bpf_core_read(&sock, sizeof(sock), &file->private_data) != 0 || !sock) {
                 bpf_printk("Failed to read file->private_data in kretprobe\n");
                 return 0;
             }
 
             struct sock *sk;
+            // Читаем sock из private_data socket
             if (bpf_core_read(&sk, sizeof(sk), &sock->sk) != 0 || !sk) {
                 bpf_printk("Failed to read sock->sk in kretprobe\n");
                 return 0;
@@ -86,6 +88,7 @@ int trace_accept_ret(struct pt_regs *ctx) {
 
             u32 dip;
             u32 portpair;
+            // Читаем IP-адрес и порты из sk
             if (bpf_core_read(&dip, sizeof(dip), &sk->__sk_common.skc_rcv_saddr) != 0) {
                 bpf_printk("Failed to read sk->__sk_common.skc_rcv_saddr in kretprobe\n");
                 return 0;
@@ -112,4 +115,3 @@ int trace_accept_ret(struct pt_regs *ctx) {
 
     return 0;
 }
-
