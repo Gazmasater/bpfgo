@@ -48,13 +48,14 @@ int trace_accept(struct pt_regs *ctx) {
 }
 
 // kretprobe: Извлекаем и выводим полную информацию о соединении
+// Убедитесь, что определение функции trace_accept_ret есть только одно.
 SEC("kretprobe/__sys_accept4")
 int trace_accept_ret(struct pt_regs *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = PT_REGS_RC(ctx);
 
-    // Если соединение не установлено, удаляем информацию из карты
     if (ret < 0) {
+        // Соединение не установлено, удаляем информацию из карты
         int res = bpf_map_delete_elem(&conn_info_map, &pid);
         if (res == 0) {
             bpf_printk("Accept failed, removed connection info for PID=%d\n", pid);
@@ -65,70 +66,6 @@ int trace_accept_ret(struct pt_regs *ctx) {
         // Соединение успешно установлено, извлекаем данные о сокете
         struct conn_info_t *info = bpf_map_lookup_elem(&conn_info_map, &pid);
         if (info) {
-            // Попробуем извлечь информацию о сокете через другие механизмы
-            struct file *file = (struct file *)PT_REGS_PARM1(ctx);
-            if (!file) {
-                bpf_printk("Failed: file is NULL in kretprobe\n");
-                return 0;
-            }
-
-            struct socket *sock;
-            if (bpf_core_read(&sock, sizeof(sock), &file->private_data) != 0 || !sock) {
-                bpf_printk("Failed to read file->private_data in kretprobe\n");
-                return 0;
-            }
-
-            struct sock *sk;
-            if (bpf_core_read(&sk, sizeof(sk), &sock->sk) != 0 || !sk) {
-                bpf_printk("Failed to read sock->sk in kretprobe\n");
-                return 0;
-            }
-
-            u32 dip;
-            u32 portpair;
-            if (bpf_core_read(&dip, sizeof(dip), &sk->__sk_common.skc_rcv_saddr) != 0) {
-                bpf_printk("Failed to read sk->__sk_common.skc_rcv_saddr in kretprobe\n");
-                return 0;
-            }
-
-            if (bpf_core_read(&portpair, sizeof(portpair), &sk->__sk_common.skc_portpair) != 0) {
-                bpf_printk("Failed to read sk->__sk_common.skc_portpair in kretprobe\n");
-                return 0;
-            }
-
-            info->ip = dip;
-            info->sport = bpf_ntohs(portpair >> 16);
-            info->dport = bpf_ntohs(portpair & 0xFFFF);
-
-            bpf_printk("Connection accepted: PID=%d, Comm=%s, IP=%u.%u.%u.%u, Sport=%u, Dport=%u\n",
-                       info->pid, info->comm,
-                       (info->ip >> 0) & 0xFF, (info->ip >> 8) & 0xFF,
-                       (info->ip >> 16) & 0xFF, (info->ip >> 24) & 0xFF,
-                       info->sport, info->dport);
-        } else {
-            bpf_printk("No connection info found for PID=%d after accept\n", pid);
-        }
-    }
-
-    return 0;
-}SEC("kretprobe/__sys_accept4")
-int trace_accept_ret(struct pt_regs *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = PT_REGS_RC(ctx);
-
-    // Если соединение не установлено, удаляем информацию из карты
-    if (ret < 0) {
-        int res = bpf_map_delete_elem(&conn_info_map, &pid);
-        if (res == 0) {
-            bpf_printk("Accept failed, removed connection info for PID=%d\n", pid);
-        } else {
-            bpf_printk("Failed to delete connection info from map for PID=%d\n", pid);
-        }
-    } else {
-        // Соединение успешно установлено, извлекаем данные о сокете
-        struct conn_info_t *info = bpf_map_lookup_elem(&conn_info_map, &pid);
-        if (info) {
-            // Попробуем извлечь информацию о сокете через другие механизмы
             struct file *file = (struct file *)PT_REGS_PARM1(ctx);
             if (!file) {
                 bpf_printk("Failed: file is NULL in kretprobe\n");
@@ -175,20 +112,3 @@ int trace_accept_ret(struct pt_regs *ctx) {
 
     return 0;
 }
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ./ecc fentry.c
-INFO [ecc_rs::bpf_compiler] Compiling bpf object...
-INFO [ecc_rs::bpf_compiler] $ "clang" CommandArgs { inner: ["-g", "-O2", "-target", "bpf", "-Wno-unknown-attributes", "-D__TARGET_ARCH_x86", "-idirafter", "/usr/lib/llvm-18/lib/clang/18/include", "-idirafter", "/usr/local/include", "-idirafter", "/usr/include/x86_64-linux-gnu", "-idirafter", "/usr/include", "-I/tmp/.tmpYF2p6M/include", "-I/tmp/.tmpYF2p6M/include/vmlinux/x86", "-I/home/gaz358/myprog/bpfgo", "-c", "fentry.c", "-o", "fentry.bpf.o"] }
-INFO [ecc_rs::bpf_compiler] 
-ERROR [ecc_rs::bpf_compiler] fentry.c:115:5: error: redefinition of 'trace_accept_ret'
-  115 | int trace_accept_ret(struct pt_regs *ctx) {
-      |     ^
-fentry.c:52:5: note: previous definition is here
-   52 | int trace_accept_ret(struct pt_regs *ctx) {
-      |     ^
-1 error generated.
-
-Error: Failed to compile
-
-Caused by:
