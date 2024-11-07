@@ -163,4 +163,46 @@ int trace_accept(struct pt_regs *ctx) {
 }
 
 char _license[] SEC("license") = "GPL";
+______________________________________________________________________________
+
+    SEC("kretprobe/__sys_accept4")
+
+    int trace_accept_ret(struct pt_regs *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+
+    bpf_printk("kretprobe!!!!!!\n");
+
+
+    struct conn_info_t info = {};
+
+    info.pid = pid;
+    bpf_get_current_comm(&info.comm, sizeof(info.comm));
+
+        bpf_printk("kretprobe pid=%d\n", info.pid) ;
+
+
+    struct sock *sk;
+     // Получаем указатель на структуру sock (например, в PT_REGS_PARM1)
+     sk = (struct sock *)PT_REGS_PARM1(ctx);
+    bpf_printk("kretprobe  SK=%d\n",sk);
+
+     if (sk) {
+
+                bpf_printk("kretprobe  SK!!!!!!\n");
+
+         // Чтение skc_portpair
+        u32 portpair = 0;
+        bpf_probe_read_kernel(&portpair, sizeof(portpair), &sk->__sk_common.skc_portpair);
+
+        // Извлекаем целевой (локальный) и исходный (удалённый) порты
+        info.dport = (portpair >> 16);  // Старшие 16 бит — целевой порт
+        info.sport = (portpair & 0xFFFF);  // Младшие 16 бит — исходный порт
+        bpf_printk("kretprobe Connection initiated: dport=%d, sport=%d\n",   info.dport,   info.sport);
+
+     }
+
+
+    return 0;
+ }
+
 
