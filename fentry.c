@@ -65,7 +65,7 @@ int trace_accept4_ret(struct pt_regs *ctx) {
         return 0;
     }
 
-    // Получаем IP и порт клиента из sockaddr, используя сохраненный указатель
+    // Получаем IP и порт сервера из sockaddr, используя сохраненный указатель
     struct sockaddr_in addr;
 
     if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
