@@ -84,8 +84,10 @@ int trace_accept4_ret(struct pt_regs *ctx) {
             (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
     }
 
+
+
     // Удаляем запись из карты после завершения обработки
-    bpf_map_delete_elem(&conn_info_map, &pid);
+   // bpf_map_delete_elem(&conn_info_map, &pid);
 
     return 0;
 }
@@ -151,7 +153,7 @@ int trace_bind_ret(struct pt_regs *ctx) {
     }
 
     // Удаляем запись из карты после завершения обработки
-    bpf_map_delete_elem(&conn_info_map, &pid);
+   // bpf_map_delete_elem(&conn_info_map, &pid);
 
     return 0;
 }
