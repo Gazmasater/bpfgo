@@ -26,7 +26,7 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
 // kprobe для фиксации начальных данных процесса и дескриптора файла
-SEC("kprobe/__sys_accept4")
+SEC("kprobe/__sys_bind")
 int trace_accept4_entry(struct pt_regs *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
@@ -47,7 +47,7 @@ int trace_accept4_entry(struct pt_regs *ctx) {
 }
 
 // kretprobe для завершения извлечения информации о соединении
-SEC("kretprobe/__sys_accept4")
+SEC("kretprobe/__sys_bind")
 int trace_accept4_ret(struct pt_regs *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = PT_REGS_RC(ctx); // Получаем результат вызова
@@ -75,13 +75,13 @@ int trace_accept4_ret(struct pt_regs *ctx) {
 
     // Извлекаем IP и порт из sockaddr_in, если это IPv4-соединение
     if (addr.sin_family == AF_INET) {
-        conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr); // Преобразуем IP к порядку хоста
-        conn_info->sport = bpf_ntohs(addr.sin_port);      // Преобразуем порт к порядку хоста
+        conn_info->dst_ip = bpf_ntohl(addr.sin_addr.s_addr); // Преобразуем IP к порядку хоста
+        conn_info->dport = bpf_ntohs(addr.sin_port);      // Преобразуем порт к порядку хоста
         
         bpf_printk("Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
             conn_info->pid, conn_info->comm,
-            (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
-            (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
+            (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
+            (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
     }
 
     // Удаляем запись из карты после завершения обработки
