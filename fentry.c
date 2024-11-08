@@ -5,7 +5,9 @@
 
 struct conn_info_t {
     u32 pid;
-    u32 ip;
+    u32 src_ip;
+    u32 dst_ip;
+
     u16 sport;
     u16 dport;
     char comm[16];
@@ -73,13 +75,13 @@ int trace_accept4_ret(struct pt_regs *ctx) {
 
     // Извлекаем IP и порт из sockaddr_in, если это IPv4-соединение
     if (addr.sin_family == AF_INET) {
-        conn_info->ip = bpf_ntohl(addr.sin_addr.s_addr); // Преобразуем IP к порядку хоста
-        conn_info->sport = bpf_ntohs(addr.sin_port);      // Преобразуем порт к порядку хоста
+        conn_info->dst_ip = bpf_ntohl(addr.sin_addr.s_addr); // Преобразуем IP к порядку хоста
+        conn_info->dport = bpf_ntohs(addr.sin_port);      // Преобразуем порт к порядку хоста
         
         bpf_printk("Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
             conn_info->pid, conn_info->comm,
-            (conn_info->ip >> 24) & 0xFF, (conn_info->ip >> 16) & 0xFF,
-            (conn_info->ip >> 8) & 0xFF, conn_info->ip & 0xFF, conn_info->sport);
+            (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
+            (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->sport);
     }
 
     // Удаляем запись из карты после завершения обработки
@@ -87,3 +89,8 @@ int trace_accept4_ret(struct pt_regs *ctx) {
 
     return 0;
 }
+
+
+
+
+
