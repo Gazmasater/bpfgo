@@ -9,6 +9,8 @@ struct conn_info_t {
     u16 sport;
     u16 dport;
     char comm[16];
+    struct sockaddr *sock_addr;   
+    u32 addrlen;           
 };
 
 struct {
@@ -21,21 +23,24 @@ struct {
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
-
-
 // kprobe для фиксации начальных данных процесса и дескриптора файла
 SEC("kprobe/__sys_accept4")
 int trace_accept4_entry(struct pt_regs *ctx) {
-     u64 current_pid_tgid = bpf_get_current_pid_tgid();
+    u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
-    
+
     struct conn_info_t conn_info = {};
     conn_info.pid = pid;
-  bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-     // Сохраняем начальную информацию по PID
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
+    // Сохраняем указатель на sockaddr и длину
+    conn_info.sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
+    conn_info.addrlen = PT_REGS_PARM3(ctx);
+
+    // Сохраняем начальную информацию по PID
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
-     bpf_printk("Accept4 entry: PID=%d, Comm=%s\n", pid, conn_info.comm);
-    
+    bpf_printk("Accept4 entry: PID=%d, Comm=%s\n", pid, conn_info.comm);
+
     return 0;
 }
 
@@ -58,10 +63,10 @@ int trace_accept4_ret(struct pt_regs *ctx) {
         return 0;
     }
 
-    // Получаем указатель на sockaddr через дескриптор сокета
+    // Получаем IP и порт клиента из sockaddr, используя сохраненный указатель
     struct sockaddr_in addr;
-    struct sockaddr *sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
-    if (bpf_probe_read(&addr, sizeof(addr), sock_addr) != 0) {
+
+    if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
         bpf_printk("Failed to read sockaddr for PID=%d\n", pid);
         return 0;
     }
