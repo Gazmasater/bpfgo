@@ -25,14 +25,13 @@ struct {
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
-static __always_inline int init_conn_info(u32 pid, struct pt_regs *ctx, const char *func) {
+static __always_inline int init_conn_info(u32 pid, struct pt_regs *ctx) {
     struct conn_info_t conn_info = {};
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
     conn_info.sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
     conn_info.addrlen = PT_REGS_PARM3(ctx);
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
-    bpf_printk("%s  PID=%d, Comm=%s\n", func, pid, conn_info.comm);
     return 0;
 }
 
@@ -42,7 +41,13 @@ SEC("kprobe/__sys_accept4")
 int trace_accept4_entry(struct pt_regs *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
-    return init_conn_info(pid , ctx, "CLIENT Accept4 entry:");
+    init_conn_info(pid , ctx);
+
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid); 
+    if (conn_info) 
+    { bpf_printk("CLIENT accept4 entry: PID=%d, Comm=%s\n", pid, conn_info->comm); }
+    
+    return 0;
 }
 
 // kretprobe для завершения извлечения информации о соединении
@@ -95,7 +100,13 @@ SEC("kprobe/__sys_bind")
 int trace_bind_entry(struct pt_regs *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
-    return init_conn_info(pid , ctx, "SERVER Accept4 entry:");
+    init_conn_info(pid , ctx);
+
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid); 
+    if (conn_info) 
+    { bpf_printk("SERVER Bind entry: PID=%d, Comm=%s\n", pid, conn_info->comm); }
+
+    return 0;
 }
 
 // kretprobe для завершения извлечения информации о соединении
@@ -136,8 +147,6 @@ int trace_bind_ret(struct pt_regs *ctx) {
             (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
     }
 
-    // Удаляем запись из карты после завершения обработки
-   // bpf_map_delete_elem(&conn_info_map, &pid);
 
     return 0;
 }
