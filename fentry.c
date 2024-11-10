@@ -31,31 +31,22 @@ struct {
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
-static __always_inline int init_conn_info_ab(u32 pid, struct pt_regs *ctx) {
+static __always_inline int init_conn_info(struct bpf_map_info *conn_map,u32 pid, struct pt_regs *ctx) {
     struct conn_info_t conn_info = {};
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
     conn_info.sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
-    conn_info.addrlen = PT_REGS_PARM3(ctx);
-    bpf_map_update_elem(&conn_info_map_ab, &pid, &conn_info, BPF_ANY);
+   // conn_info.addrlen = PT_REGS_PARM3(ctx);
+    bpf_map_update_elem(conn_map, &pid, &conn_info, BPF_ANY);
     return 0;
 }
 
-static __always_inline int init_conn_info_c(u32 pid, struct pt_regs *ctx) {
-    struct conn_info_t conn_info = {};
-    conn_info.pid = pid;
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-    conn_info.sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
-    conn_info.addrlen = PT_REGS_PARM3(ctx);
-    bpf_map_update_elem(&conn_info_map_c, &pid, &conn_info, BPF_ANY);
-    return 0;
-}
 
 SEC("kprobe/__sys_accept4")
 int trace_accept4_entry(struct pt_regs *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
-    init_conn_info_ab(pid, ctx);
+    init_conn_info(&conn_info_map_ab,pid, ctx);
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid); 
     // if (conn_info) {
@@ -105,7 +96,7 @@ SEC("kprobe/__sys_bind")
 int trace_bind_entry(struct pt_regs *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
-    init_conn_info_ab(pid, ctx);
+    init_conn_info(&conn_info_map_ab,pid, ctx);
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid); 
     // if (conn_info) {
@@ -156,7 +147,7 @@ int trace_connect_entry(struct pt_regs *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
 
-    init_conn_info_c(pid, ctx);
+    init_conn_info(&conn_info_map_c ,pid, ctx);
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_c, &pid);
     // if (conn_info) {
