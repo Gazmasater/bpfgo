@@ -63,7 +63,7 @@ int trace_accept4_entry(struct pt_regs *ctx) {
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid); 
     if (conn_info) 
-    { bpf_printk("CLIENT accept4 entry: PID=%d, Comm=%s\n", pid, conn_info->comm); }
+    { bpf_printk("accept4 entry: PID=%d, Comm=%s\n", pid, conn_info->comm); }
     
     return 0;
 }
@@ -100,7 +100,7 @@ int trace_accept4_ret(struct pt_regs *ctx) {
         conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr); // Преобразуем IP к порядку хоста
         conn_info->sport = bpf_ntohs(addr.sin_port);      // Преобразуем порт к порядку хоста
         
-        bpf_printk("CLIENT Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+        bpf_printk("Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
             conn_info->pid, conn_info->comm,
             (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
             (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
@@ -159,7 +159,7 @@ int trace_bind_ret(struct pt_regs *ctx) {
         conn_info->dst_ip = bpf_ntohl(addr.sin_addr.s_addr); // Преобразуем IP к порядку хоста
         conn_info->dport = bpf_ntohs(addr.sin_port);      // Преобразуем порт к порядку хоста
         
-        bpf_printk("SERVER Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+        bpf_printk("Bind : PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
             conn_info->pid, conn_info->comm,
             (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
             (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
@@ -180,7 +180,7 @@ int trace_connect_entry(struct pt_regs *ctx) {
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_c, &pid);
     if (conn_info) {
-        bpf_printk("!!!!!!CLIENT Connect entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
+        bpf_printk("CLIENT Connect entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
     }
 
     return 0;
