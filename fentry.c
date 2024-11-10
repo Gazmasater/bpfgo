@@ -7,7 +7,6 @@ struct conn_info_t {
     u32 pid;
     u32 src_ip;
     u32 dst_ip;
-
     u16 sport;
     u16 dport;
     char comm[16];
@@ -52,125 +51,106 @@ static __always_inline int init_conn_info_c(u32 pid, struct pt_regs *ctx) {
     return 0;
 }
 
-
-
-
 SEC("kprobe/__sys_accept4")
 int trace_accept4_entry(struct pt_regs *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
-    init_conn_info_ab(pid , ctx);
+    init_conn_info_ab(pid, ctx);
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid); 
-    if (conn_info) 
-    { bpf_printk("accept4 entry: PID=%d, Comm=%s\n", pid, conn_info->comm); }
+    // if (conn_info) {
+    //     bpf_printk("ACCEPT4 entry: PID=%d, Comm=%s, Addrlen=%u\n", pid, conn_info->comm, conn_info->addrlen);
+    // }
     
     return 0;
 }
 
-// kretprobe для завершения извлечения информации о соединении
 SEC("kretprobe/__sys_accept4")
 int trace_accept4_ret(struct pt_regs *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = PT_REGS_RC(ctx); // Получаем результат вызова
+    long ret = PT_REGS_RC(ctx);
 
-    // Если результат отрицательный, значит произошла ошибка
     if (ret < 0) {
-        bpf_printk("Accept4 failed for PID=%d\n", pid);
+        bpf_printk("ACCEPT4 failed: PID=%d, Error=%ld\n", pid, ret);
         bpf_map_delete_elem(&conn_info_map_ab, &pid);
         return 0;
     }
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid);
     if (!conn_info) {
-        bpf_printk("No connection info found for PID=%d\n", pid);
+        bpf_printk("No connection info found for ACCEPT4 PID=%d\n", pid);
         return 0;
     }
 
-    // Получаем IP и порт клиента из sockaddr, используя сохраненный указатель
     struct sockaddr_in addr;
-
     if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
         bpf_printk("Failed to read sockaddr for PID=%d\n", pid);
         return 0;
     }
 
-    // Извлекаем IP и порт из sockaddr_in, если это IPv4-соединение
     if (addr.sin_family == AF_INET) {
-        conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr); // Преобразуем IP к порядку хоста
-        conn_info->sport = bpf_ntohs(addr.sin_port);      // Преобразуем порт к порядку хоста
+        conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
+        conn_info->sport = bpf_ntohs(addr.sin_port);
         
-        bpf_printk("Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+        bpf_printk("ACCEPTED connection: PID=%d, Comm=%s, Client IP=%d.%d.%d.%d, Port=%d\n",
             conn_info->pid, conn_info->comm,
             (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
             (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
     }
 
-
-
-
     return 0;
 }
 
-
-// kprobe для фиксации начальных данных процесса и дескриптора файла
 SEC("kprobe/__sys_bind")
 int trace_bind_entry(struct pt_regs *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
-    init_conn_info_ab(pid , ctx);
+    init_conn_info_ab(pid, ctx);
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid); 
-    if (conn_info) 
-    { bpf_printk("SERVER Bind entry: PID=%d, Comm=%s\n", pid, conn_info->comm); }
+    // if (conn_info) {
+    //     bpf_printk("SERVER Bind entry: PID=%d, Comm=%s, Addrlen=%u\n", pid, conn_info->comm, conn_info->addrlen);
+    // }
 
     return 0;
 }
 
-// kretprobe для завершения извлечения информации о соединении
 SEC("kretprobe/__sys_bind")
 int trace_bind_ret(struct pt_regs *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = PT_REGS_RC(ctx); // Получаем результат вызова
+    long ret = PT_REGS_RC(ctx);
 
-    // Если результат отрицательный, значит произошла ошибка
     if (ret < 0) {
-        bpf_printk("Accept4 failed for PID=%d\n", pid);
+        bpf_printk("BIND failed: PID=%d, Error=%ld\n", pid, ret);
         bpf_map_delete_elem(&conn_info_map_ab, &pid);
         return 0;
     }
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid);
     if (!conn_info) {
-        bpf_printk("No connection info found for PID=%d\n", pid);
+        bpf_printk("No connection info found for BIND PID=%d\n", pid);
         return 0;
     }
 
-    // Получаем IP и порт клиента из sockaddr, используя сохраненный указатель
     struct sockaddr_in addr;
-
     if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
         bpf_printk("Failed to read sockaddr for PID=%d\n", pid);
         return 0;
     }
 
-    // Извлекаем IP и порт из sockaddr_in, если это IPv4-соединение
     if (addr.sin_family == AF_INET) {
-        conn_info->dst_ip = bpf_ntohl(addr.sin_addr.s_addr); // Преобразуем IP к порядку хоста
-        conn_info->dport = bpf_ntohs(addr.sin_port);      // Преобразуем порт к порядку хоста
+        conn_info->dst_ip = bpf_ntohl(addr.sin_addr.s_addr);
+        conn_info->dport = bpf_ntohs(addr.sin_port);
         
-        bpf_printk("Bind : PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+        bpf_printk("SERVER Bind: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
             conn_info->pid, conn_info->comm,
             (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
             (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
     }
 
-
     return 0;
 }
 
-
-// kprobe для фиксации начальных данных процесса при вызове connect
 SEC("kprobe/__sys_connect")
 int trace_connect_entry(struct pt_regs *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
@@ -179,29 +159,27 @@ int trace_connect_entry(struct pt_regs *ctx) {
     init_conn_info_c(pid, ctx);
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_c, &pid);
-    if (conn_info) {
-        bpf_printk("CLIENT Connect entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
-    }
+    // if (conn_info) {
+    //     bpf_printk("CLIENT Connect entry: PID=%d, Comm=%s, Addrlen=%u\n", pid, conn_info->comm, conn_info->addrlen);
+    // }
 
     return 0;
 }
 
-// kretprobe для завершения обработки соединения
 SEC("kretprobe/__sys_connect")
 int trace_connect_ret(struct pt_regs *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = PT_REGS_RC(ctx); // Получаем результат вызова
+    long ret = PT_REGS_RC(ctx);
 
-    // Если результат отрицательный, значит произошла ошибка
     if (ret < 0) {
-        bpf_printk("Connect failed for PID=%d\n", pid);
+        bpf_printk("CONNECT failed: PID=%d, Error=%ld\n", pid, ret);
         bpf_map_delete_elem(&conn_info_map_c, &pid);
         return 0;
     }
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_c, &pid);
     if (!conn_info) {
-        bpf_printk("No connection info found for PID=%d\n", pid);
+        bpf_printk("No connection info found for CONNECT PID=%d\n", pid);
         return 0;
     }
 
@@ -215,17 +193,9 @@ int trace_connect_ret(struct pt_regs *ctx) {
         conn_info->dst_ip = bpf_ntohl(addr.sin_addr.s_addr);
         conn_info->dport = bpf_ntohs(addr.sin_port);
 
-        bpf_printk("!!!!!CLIENT Connected to server: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+        bpf_printk("CLIENT Connected to server: PID=%d, Comm=%s, Server IP=%d.%d.%d.%d, Port=%d\n",
             conn_info->pid, conn_info->comm,
             (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
             (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
     }
-
-    return 0;
-}
-
-
-
-
-
-
+    }
