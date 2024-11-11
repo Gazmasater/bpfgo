@@ -42,6 +42,21 @@ static __always_inline int init_conn_info(struct bpf_map_info *conn_map,u32 pid,
 }
 
 
+// static __always_inline struct conn_info_t *conn_info(struct bpf_map_info *conn_map, u32 pid, struct pt_regs *ctx) {
+//     struct conn_info_t *conn_info = bpf_map_lookup_elem(conn_map, &pid);
+//     if (!conn_info) {
+//         struct conn_info_t new_conn_info = {};
+//         new_conn_info.pid = pid;
+//         bpf_get_current_comm(&new_conn_info.comm, sizeof(new_conn_info.comm));
+//         new_conn_info.sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
+//         bpf_map_update_elem(conn_map, &pid, &new_conn_info, BPF_ANY);
+//         conn_info = bpf_map_lookup_elem(conn_map, &pid);
+//     }
+//     return conn_info;
+// }
+
+
+
 SEC("kprobe/__sys_accept4")
 int trace_accept4_entry(struct pt_regs *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
@@ -99,10 +114,7 @@ int trace_bind_entry(struct pt_regs *ctx) {
     init_conn_info(&conn_info_map_ab,pid, ctx);
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid); 
-    // if (conn_info) {
-    //     bpf_printk("SERVER Bind entry: PID=%d, Comm=%s, Addrlen=%u\n", pid, conn_info->comm, conn_info->addrlen);
-    // }
-
+   
     return 0;
 }
 
@@ -150,10 +162,7 @@ int trace_connect_entry(struct pt_regs *ctx) {
     init_conn_info(&conn_info_map_c ,pid, ctx);
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_c, &pid);
-    // if (conn_info) {
-    //     bpf_printk("CLIENT Connect entry: PID=%d, Comm=%s, Addrlen=%u\n", pid, conn_info->comm, conn_info->addrlen);
-    // }
-
+   
     return 0;
 }
 
