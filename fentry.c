@@ -12,6 +12,7 @@ struct conn_info_t {
     char comm[16];
     struct sockaddr *sock_addr;   
     u32 addrlen;  
+    int sockfd
 };
 
 struct {
@@ -98,10 +99,22 @@ SEC("kprobe/__sys_bind")
 int trace_bind_entry(struct pt_regs *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
+    int sockfd = PT_REGS_PARM1(ctx);
+
+    
+    // Логируем файловый дескриптор
+    bpf_printk("BIND called: PID=%d, sockfd=%d\n", pid, sockfd);
+
     init_conn_info(&conn_info_map_ab, pid, ctx);
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid); 
-    return 0;
+struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid);
+    if (conn_info) {
+        // Сохраняем файловый дескриптор в структуре
+        conn_info->sockfd = sockfd;
+        
+        // Логируем сохранение дескриптора
+        bpf_printk("Saved sockfd=%d for PID=%d\n", conn_info->sockfd, pid);
+    }    return 0;
 }
 
 SEC("kretprobe/__sys_bind")
