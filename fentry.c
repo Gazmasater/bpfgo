@@ -64,10 +64,7 @@ int trace_accept4_entry(struct pt_regs *ctx) {
     init_conn_info(&conn_info_map_ab,pid, ctx);
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid); 
-    // if (conn_info) {
-    //     bpf_printk("ACCEPT4 entry: PID=%d, Comm=%s, Addrlen=%u\n", pid, conn_info->comm, conn_info->addrlen);
-    // }
-    
+ 
     return 0;
 }
 
