@@ -11,7 +11,7 @@ struct conn_info_t {
     u16 dport;
     char comm[16];
     struct sockaddr *sock_addr;   
-    u32 addrlen;           
+    u32 addrlen;  
 };
 
 struct {
@@ -28,10 +28,12 @@ struct {
     __type(value, struct conn_info_t);
 } conn_info_map_c SEC(".maps");
 
+
+
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
-static __always_inline int init_conn_info(struct bpf_map_info *conn_map,u32 pid, struct pt_regs *ctx) {
+static __always_inline int init_conn_info(struct bpf_map_info *conn_map, u32 pid, struct pt_regs *ctx) {
     struct conn_info_t conn_info = {};
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
@@ -41,30 +43,13 @@ static __always_inline int init_conn_info(struct bpf_map_info *conn_map,u32 pid,
     return 0;
 }
 
-
-// static __always_inline struct conn_info_t *conn_info(struct bpf_map_info *conn_map, u32 pid, struct pt_regs *ctx) {
-//     struct conn_info_t *conn_info = bpf_map_lookup_elem(conn_map, &pid);
-//     if (!conn_info) {
-//         struct conn_info_t new_conn_info = {};
-//         new_conn_info.pid = pid;
-//         bpf_get_current_comm(&new_conn_info.comm, sizeof(new_conn_info.comm));
-//         new_conn_info.sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
-//         bpf_map_update_elem(conn_map, &pid, &new_conn_info, BPF_ANY);
-//         conn_info = bpf_map_lookup_elem(conn_map, &pid);
-//     }
-//     return conn_info;
-// }
-
-
-
 SEC("kprobe/__sys_accept4")
 int trace_accept4_entry(struct pt_regs *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
-    init_conn_info(&conn_info_map_ab,pid, ctx);
+    init_conn_info(&conn_info_map_ab, pid, ctx);
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid); 
- 
     return 0;
 }
 
@@ -94,24 +79,28 @@ int trace_accept4_ret(struct pt_regs *ctx) {
     if (addr.sin_family == AF_INET) {
         conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
         conn_info->sport = bpf_ntohs(addr.sin_port);
-        
+
         bpf_printk("ACCEPTED connection: PID=%d, Comm=%s, Client IP=%d.%d.%d.%d, Port=%d\n",
             conn_info->pid, conn_info->comm,
             (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
             (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
+        
+        // Successful connection: Add to map
+        bpf_map_update_elem(&conn_info_map_ab, &pid, conn_info, BPF_ANY);
     }
 
     return 0;
 }
 
+
+
 SEC("kprobe/__sys_bind")
 int trace_bind_entry(struct pt_regs *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
-    init_conn_info(&conn_info_map_ab,pid, ctx);
+    init_conn_info(&conn_info_map_ab, pid, ctx);
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid); 
-   
     return 0;
 }
 
@@ -141,11 +130,14 @@ int trace_bind_ret(struct pt_regs *ctx) {
     if (addr.sin_family == AF_INET) {
         conn_info->dst_ip = bpf_ntohl(addr.sin_addr.s_addr);
         conn_info->dport = bpf_ntohs(addr.sin_port);
-        
+
         bpf_printk("SERVER Bind: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
             conn_info->pid, conn_info->comm,
             (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
             (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
+
+        // Successful bind: Add to map
+        bpf_map_update_elem(&conn_info_map_ab, &pid, conn_info, BPF_ANY);
     }
 
     return 0;
@@ -156,10 +148,9 @@ int trace_connect_entry(struct pt_regs *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
 
-    init_conn_info(&conn_info_map_c ,pid, ctx);
+    init_conn_info(&conn_info_map_c, pid, ctx);
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_c, &pid);
-   
     return 0;
 }
 
@@ -194,5 +185,10 @@ int trace_connect_ret(struct pt_regs *ctx) {
             conn_info->pid, conn_info->comm,
             (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
             (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
+        
+        // Successful connection: Add to map
+        bpf_map_update_elem(&conn_info_map_c, &pid, conn_info, BPF_ANY);
     }
-    }
+
+    return 0;
+}
