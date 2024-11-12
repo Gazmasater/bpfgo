@@ -1,5 +1,4 @@
-clang -O2 -g -target bpf -D__TARGET_ARCH_x86 -c accept4_kprobe.c -o accept4_kprobe.o
-
+clang -O2 -g -target bpf -D__TARGET_ARCH_x86 -c fentry.c -o fentry.o
 Пояснение ключей:
 
 -O2 — оптимизация кода.
@@ -12,16 +11,21 @@ clang -O2 -g -target bpf -D__TARGET_ARCH_x86 -c accept4_kprobe.c -o accept4_kpro
 
 -c — компиляция без линковки, создается объектный файл.
 
--o accept4_kprobe.o — имя выходного файла.
+-o fentry.o — имя выходного файла.
 
 Проверьте скомпилированный объектный файл: Убедитесь, что файл accept4_kprobe.o был создан и корректен. Вы можете использовать команду file, чтобы проверить его тип:
 
-file accept4_kprobe.o
+file fentry.o
 
 Вы должны увидеть что-то вроде:
 
-accept4_kprobe.o: ELF 64-bit LSB relocatable, BPF, ...
+fentry.o: ELF 64-bit LSB relocatable, BPF, ...
 
 Пример команды для загрузки с использованием bpftool:
 
-sudo bpftool prog load accept4_kprobe.o /sys/fs/bpf/accept4_kprobe
+sudo bpftool prog load fentry.o /sys/fs/bpf/fentry
+
+sudo rm /sys/fs/bpf/fentry
+
+
+sudo bpftool prog show

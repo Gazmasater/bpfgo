@@ -1,0 +1,6 @@
+дали свой объектник rm bpf_prog.o
+2. загрузи ecli: wget https://aka.pw/bpf-ecli -O ecli && chmod +x ./ecli
+3. загрузи компилятор ecc: wget https://github.com/eunomia-bpf/eunomia-bpf/releases/latest/download/ecc && chmod +x ./ecc
+4. скомпилируй свою программу с помощью ecc: ./ecc ebpf_prog.c
+5. запусти программу используя ecli: sudo ./ecli run package.json (package.json создастся на этапе компиляции через ecc)
+6. смотри лог в отдельном терминале через sudo cat /sys/kernel/debug/tracing/trace_pipe
