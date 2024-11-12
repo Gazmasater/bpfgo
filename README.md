@@ -1,3 +1,11 @@
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+    __uint(max_entries, 1024);
+    __type(key, struct conn_key_t);
+    __type(value, struct conn_info_t);
+} conn_info_map SEC(".maps");
+
+
 SEC("kretprobe/__sys_accept4")
 int trace_accept4_ret(struct pt_regs *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
