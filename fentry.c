@@ -48,6 +48,9 @@ SEC("kprobe/__sys_accept4")
 int trace_accept4_entry(struct pt_regs *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
+
+
+
     init_conn_info(&conn_info_map_ab, pid, ctx);
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid); 
@@ -73,7 +76,7 @@ int trace_accept4_ret(struct pt_regs *ctx) {
 
     struct sockaddr_in addr;
     if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
-        bpf_printk("Failed to read sockaddr for PID=%d\n", pid);
+        bpf_printk("kprobe/__sys_accept4 Failed to read sockaddr for PID=%d\n", pid);
         return 0;
     }
 
@@ -85,6 +88,7 @@ int trace_accept4_ret(struct pt_regs *ctx) {
             conn_info->pid, conn_info->comm,
             (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
             (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
+
         
         // Successful connection: Add to map
         bpf_map_update_elem(&conn_info_map_ab, &pid, conn_info, BPF_ANY);
@@ -105,16 +109,19 @@ int trace_bind_entry(struct pt_regs *ctx) {
     // Логируем файловый дескриптор
     bpf_printk("BIND called: PID=%d, sockfd=%d\n", pid, sockfd);
 
-    init_conn_info(&conn_info_map_ab, pid, ctx);
 
-struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid);
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid);
     if (conn_info) {
         // Сохраняем файловый дескриптор в структуре
         conn_info->sockfd = sockfd;
         
         // Логируем сохранение дескриптора
         bpf_printk("Saved sockfd=%d for PID=%d\n", conn_info->sockfd, pid);
-    }    return 0;
+    }
+
+        init_conn_info(&conn_info_map_ab, pid, ctx);
+
+        return 0;
 }
 
 SEC("kretprobe/__sys_bind")
@@ -136,7 +143,7 @@ int trace_bind_ret(struct pt_regs *ctx) {
 
     struct sockaddr_in addr;
     if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
-        bpf_printk("Failed to read sockaddr for PID=%d\n", pid);
+        bpf_printk("kretprobe/__sys_bind Failed to read sockaddr for PID=%d\n", pid);
         return 0;
     }
 
@@ -186,7 +193,7 @@ int trace_connect_ret(struct pt_regs *ctx) {
 
     struct sockaddr_in addr;
     if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
-        bpf_printk("Failed to read sockaddr for PID=%d\n", pid);
+        bpf_printk("kretprobe/__sys_connect Failed to read sockaddr for PID=%d\n", pid);
         return 0;
     }
 
