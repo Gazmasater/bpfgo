@@ -40,3 +40,16 @@ cat /sys/kernel/tracing/trace_pipe
 cat /sys/kernel/tracing/trace_pipe | grep sys_accept4
 
 cat /sys/kernel/tracing/kprobe_events
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+fentry.c:117:19: error: redefinition of 'bind'
+  117 | int BPF_KRETPROBE(bind)
+      |                   ^
+fentry.c:103:16: note: previous definition is here
+  103 | int BPF_KPROBE(bind)
+      |                ^
+fentry.c:166:19: error: redefinition of 'sys_connect'
+  166 | int BPF_KRETPROBE(sys_connect)
+      |                   ^
+fentry.c:156:16: note: previous definition is here
+  156 | int BPF_KPROBE(sys_connect)
