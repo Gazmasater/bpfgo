@@ -41,6 +41,9 @@ bash
 sudo cat /proc/sys/kernel/bpf_enabled
 Если вывод 0, значит, логирование сообщений BPF отключено. В этом случае вам нужно включить его, установив значение 1:
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo cat /proc/sys/kernel/bpf_enabled
+cat: /proc/sys/kernel/bpf_enabled: No such file or directory
+
 bash
 Копировать код
 sudo sysctl -w kernel.bpf_enabled=1
