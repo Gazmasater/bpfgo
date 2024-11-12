@@ -1,0 +1,27 @@
+clang -O2 -g -target bpf -D__TARGET_ARCH_x86 -c accept4_kprobe.c -o accept4_kprobe.o
+
+Пояснение ключей:
+
+-O2 — оптимизация кода.
+
+-g — включение отладочной информации.
+
+-target bpf — установка цели компиляции для eBPF.
+
+-D__TARGET_ARCH_x86 — указание целевой архитектуры (например, x86, arm, arm64 и т.д.).
+
+-c — компиляция без линковки, создается объектный файл.
+
+-o accept4_kprobe.o — имя выходного файла.
+
+Проверьте скомпилированный объектный файл: Убедитесь, что файл accept4_kprobe.o был создан и корректен. Вы можете использовать команду file, чтобы проверить его тип:
+
+file accept4_kprobe.o
+
+Вы должны увидеть что-то вроде:
+
+accept4_kprobe.o: ELF 64-bit LSB relocatable, BPF, ...
+
+Пример команды для загрузки с использованием bpftool:
+
+sudo bpftool prog load accept4_kprobe.o /sys/fs/bpf/accept4_kprobe
