@@ -44,6 +44,13 @@ sudo cat /proc/sys/kernel/bpf_enabled
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo cat /proc/sys/kernel/bpf_enabled
 cat: /proc/sys/kernel/bpf_enabled: No such file or directory
 
+bpf_trace_printk("PID=%d\n", pid);
+Затем вы можете просматривать вывод с помощью:
+
+bash
+Копировать код
+sudo cat /sys/kernel/debug/tracing/trace_pipe
+
 bash
 Копировать код
 sudo sysctl -w kernel.bpf_enabled=1
