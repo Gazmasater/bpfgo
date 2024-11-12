@@ -12,7 +12,6 @@ struct conn_info_t {
     char comm[16];
     struct sockaddr *sock_addr;   
     u32 addrlen;  
-    int sockfd
 };
 
 struct {
@@ -60,10 +59,10 @@ int trace_accept4_entry(struct pt_regs *ctx) {
 SEC("kretprobe/__sys_accept4")
 int trace_accept4_ret(struct pt_regs *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = PT_REGS_RC(ctx);
+    int ret = PT_REGS_RC(ctx);
 
     if (ret < 0) {
-        bpf_printk("ACCEPT4 failed: PID=%d, Error=%ld\n", pid, ret);
+    //    bpf_printk("ACCEPT4 failed: PID=%d, Error=%ld\n", pid, ret);
         bpf_map_delete_elem(&conn_info_map_ab, &pid);
         return 0;
     }
@@ -103,23 +102,12 @@ SEC("kprobe/__sys_bind")
 int trace_bind_entry(struct pt_regs *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
-    int sockfd = PT_REGS_PARM1(ctx);
-
-    
-    // Логируем файловый дескриптор
-    bpf_printk("BIND called: PID=%d, sockfd=%d\n", pid, sockfd);
 
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid);
-    if (conn_info) {
-        // Сохраняем файловый дескриптор в структуре
-        conn_info->sockfd = sockfd;
-        
-        // Логируем сохранение дескриптора
-        bpf_printk("Saved sockfd=%d for PID=%d\n", conn_info->sockfd, pid);
-    }
 
-        init_conn_info(&conn_info_map_ab, pid, ctx);
+    init_conn_info(&conn_info_map_ab, pid, ctx);
+
 
         return 0;
 }
@@ -127,10 +115,10 @@ int trace_bind_entry(struct pt_regs *ctx) {
 SEC("kretprobe/__sys_bind")
 int trace_bind_ret(struct pt_regs *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = PT_REGS_RC(ctx);
+    int ret = PT_REGS_RC(ctx);
 
     if (ret < 0) {
-        bpf_printk("BIND failed: PID=%d, Error=%ld\n", pid, ret);
+     //   bpf_printk("BIND failed: PID=%d, Error=%ld\n", pid, ret);
         bpf_map_delete_elem(&conn_info_map_ab, &pid);
         return 0;
     }
@@ -170,20 +158,19 @@ int trace_connect_entry(struct pt_regs *ctx) {
 
     init_conn_info(&conn_info_map_c, pid, ctx);
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_c, &pid);
     return 0;
 }
 
 SEC("kretprobe/__sys_connect")
 int trace_connect_ret(struct pt_regs *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = PT_REGS_RC(ctx);
+   // int ret = PT_REGS_RC(ctx);
 
-    if (ret < 0) {
-        bpf_printk("CONNECT failed: PID=%d, Error=%ld\n", pid, ret);
-        bpf_map_delete_elem(&conn_info_map_c, &pid);
-        return 0;
-    }
+    // if (ret < 0) {
+    //   //  bpf_printk("CONNECT failed: PID=%d, Error=%ld\n", pid, ret);
+    //     bpf_map_delete_elem(&conn_info_map_c, &pid);
+    //     return 0;
+    // }
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_c, &pid);
     if (!conn_info) {
