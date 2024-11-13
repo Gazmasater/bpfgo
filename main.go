@@ -3,6 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -49,7 +52,13 @@ func main() {
 	}
 
 	fmt.Println("Программа привязана к событиям. Используйте 'bpftool prog show' для проверки.")
-	select {} // Блокируем программу, чтобы привязка оставалась активной
+	// Канал для захвата сигналов
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	// Ожидание сигнала
+	sig := <-sigs
+	fmt.Printf("Получен сигнал %s, завершение работы.\n", sig)
 }
 
 // attachKprobe привязывает eBPF-программу к событию kprobe
