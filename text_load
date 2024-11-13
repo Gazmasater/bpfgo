@@ -1,4 +1,4 @@
-clang -O2 -g -target bpf -D__TARGET_ARCH_x86 -c fentry.c -o fentry.o
+clang -O2 -g -target bpf -D__TARGET_ARCH_x86 -c kprobe.c -o kprobe.o
 Пояснение ключей:
 
 -O2 — оптимизация кода.
@@ -23,9 +23,9 @@ fentry.o: ELF 64-bit LSB relocatable, BPF, ...
 
 Пример команды для загрузки с использованием bpftool:
 
-sudo bpftool prog load fentry.o /sys/fs/bpf/fentry
+sudo bpftool prog load kprobe.o /sys/fs/bpf/kprobe type kprobe
 
-sudo rm /sys/fs/bpf/fentry
+sudo rm /sys/fs/bpf/kprobe
 
 
 sudo bpftool prog show
