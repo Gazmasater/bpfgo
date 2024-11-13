@@ -55,13 +55,12 @@ func main() {
 // attachKprobe привязывает eBPF-программу к событию kprobe
 func attachKprobe(program *ebpf.Program, event string) error {
 	// Привязываем программу kprobe к событию ядра
-	kprobeLink, err := link.Kprobe(link.KprobeOptions{
-		Program: program,
-		Event:   event, // Указываем точку события (например, "sys_accept4")
-	})
+	kprobeLink, err := link.Kprobe(event, program, nil)
 	if err != nil {
 		return fmt.Errorf("ошибка привязки kprobe к %s: %v", event, err)
 	}
+
+	// Закрытие ссылки будет выполнено после завершения работы программы
 	defer kprobeLink.Close()
 
 	fmt.Printf("Программа успешно привязана к событию %s\n", event)
