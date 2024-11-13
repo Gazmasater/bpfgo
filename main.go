@@ -12,39 +12,51 @@ import (
 )
 
 func main() {
-	// Загружаем eBPF-программу из файла
-	spec, err := ebpf.LoadCollectionSpec("program.o")
+	spec, err := ebpf.LoadCollectionSpec("kprobe.o")
 	if err != nil {
 		log.Fatalf("Ошибка загрузки eBPF программы: %v", err)
 	}
 
-	// Создаем коллекцию программ и карт
+	// коллекцию программ и карт
 	collection, err := ebpf.NewCollection(spec)
 	if err != nil {
 		log.Fatalf("Ошибка создания коллекции: %v", err)
 	}
 	defer collection.Close()
 
-	// Привязываем программы к нужным системным вызовам (например, sys_accept4, sys_bind, sys_connect)
 	for name, program := range collection.Programs {
 		fmt.Printf("Программа: %s\n", name)
 
-		// Привязываем программу к событию kprobe для sys_accept4
-		err := attachKprobe(program, "sys_accept4")
+		err := attachKprobe(program, "sys_accept4", false)
 		if err != nil {
-			log.Fatalf("Ошибка привязки программы %s к sys_accept4: %v", name, err)
+			log.Fatalf("Ошибка привязки kprobe: %v", err)
+		}
+
+		err = attachKprobe(program, "sys_accept4", true)
+		if err != nil {
+			log.Fatalf("Ошибка привязки kretprobe: %v", err)
 		}
 
 		// Привязываем программу к событию kprobe для sys_bind
-		err = attachKprobe(program, "sys_bind")
+		err = attachKprobe(program, "sys_bind", false)
 		if err != nil {
-			log.Fatalf("Ошибка привязки программы %s к sys_bind: %v", name, err)
+			log.Fatalf("Ошибка привязки kprobe: %v", err)
+		}
+
+		err = attachKprobe(program, "sys_bind", true)
+		if err != nil {
+			log.Fatalf("Ошибка привязки kretprobe: %v", err)
 		}
 
 		// Привязываем программу к событию kprobe для sys_connect
-		err = attachKprobe(program, "sys_connect")
+		err = attachKprobe(program, "sys_connect", false)
 		if err != nil {
-			log.Fatalf("Ошибка привязки программы %s к sys_connect: %v", name, err)
+			log.Fatalf("Ошибка привязки kprobe: %v", err)
+		}
+
+		err = attachKprobe(program, "sys_connect", true)
+		if err != nil {
+			log.Fatalf("Ошибка привязки kretprobe: %v", err)
 		}
 
 		// Прерываем цикл, если привязка прошла успешно
@@ -62,16 +74,28 @@ func main() {
 }
 
 // attachKprobe привязывает eBPF-программу к событию kprobe
-func attachKprobe(program *ebpf.Program, event string) error {
-	// Привязываем программу kprobe к событию ядра
-	kprobeLink, err := link.Kprobe(event, program, nil)
-	if err != nil {
-		return fmt.Errorf("ошибка привязки kprobe к %s: %v", event, err)
+func attachKprobe(program *ebpf.Program, event string, isRetprobe bool) error {
+	var kprobeLink link.Link
+	var err error
+
+	if isRetprobe {
+		// Привязываем программу к kretprobe событию
+		kprobeLink, err = link.Kretprobe(event, program, nil)
+		if err != nil {
+			return fmt.Errorf("ошибка привязки kretprobe к %s: %v", event, err)
+		}
+		fmt.Printf("Программа успешно привязана к событию kretprobe %s\n", event)
+	} else {
+		// Привязываем программу к kprobe событию
+		kprobeLink, err = link.Kprobe(event, program, nil)
+		if err != nil {
+			return fmt.Errorf("ошибка привязки kprobe к %s: %v", event, err)
+		}
+		fmt.Printf("Программа успешно привязана к событию kprobe %s\n", event)
 	}
 
 	// Закрытие ссылки будет выполнено после завершения работы программы
 	defer kprobeLink.Close()
 
-	fmt.Printf("Программа успешно привязана к событию %s\n", event)
 	return nil
 }
