@@ -193,6 +193,7 @@ SEC("kprobe/__sys_connect")
 int trace_connect_entry(struct pt_regs *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
+    
 
     init_conn_info_connect(pid, ctx);
 
