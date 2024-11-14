@@ -33,23 +33,34 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
 // Функция для инициализации информации о соединении
-static __always_inline int init_conn_info(u32 pid, struct sockaddr *sock_addr, u32 addrlen, struct conn_info_t *conn_info) {
+static __always_inline int init_conn_info(u32 pid, struct sockaddr *sock_addr,struct conn_info_t *conn_info) {
     conn_info->pid = pid;
     bpf_get_current_comm(&conn_info->comm, sizeof(conn_info->comm));
     conn_info->sock_addr = sock_addr;
-    conn_info->addrlen = addrlen;
     return 0;
 }
 
+struct sys_enter_accept4_args {
+    unsigned short common_type;
+    unsigned char common_flags;
+    unsigned char common_preempt_count;
+    int common_pid;
+    int __syscall_nr;
+    int fd;
+    struct sockaddr *upeer_sockaddr;
+    int *upeer_addrlen;
+    int flags;
+};
+
+
+
 // Tracepoint для accept4
 SEC("tracepoint/syscalls/sys_enter_accept4")
-int trace_accept4_entry(struct trace_event_raw_sys_enter *ctx) {
+int trace_accept4_entry(struct sys_enter_accept4_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    struct sockaddr *sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
-    u32 addrlen = PT_REGS_PARM3(ctx);
-
+    struct sockaddr *sock_addr = (struct sockaddr *)upeer_sockaddr(ctx);
     struct conn_info_t conn_info = {};
-    init_conn_info(pid, sock_addr, addrlen, &conn_info);
+    init_conn_info(pid, sock_addr, &conn_info);
 
     bpf_map_update_elem(&conn_info_map_ab, &pid, &conn_info, BPF_ANY);
 
@@ -58,147 +69,21 @@ int trace_accept4_entry(struct trace_event_raw_sys_enter *ctx) {
     return 0;
 }
 
-// Tracepoint для завершения accept4
-SEC("tracepoint/syscalls/sys_exit_accept4")
-int trace_accept4_ret(struct trace_event_raw_sys_exit *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = PT_REGS_RC(ctx);
 
-    if (ret < 0) {
-        bpf_printk("Accept4 failed for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map_ab, &pid);
-        return 0;
-    }
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ./ecc fentry.c
+INFO [ecc_rs::bpf_compiler] Compiling bpf object...
+INFO [ecc_rs::bpf_compiler] $ "clang" CommandArgs { inner: ["-g", "-O2", "-target", "bpf", "-Wno-unknown-attributes", "-D__TARGET_ARCH_x86", "-idirafter", "/usr/lib/llvm-18/lib/clang/18/include", "-idirafter", "/usr/local/include", "-idirafter", "/usr/include/x86_64-linux-gnu", "-idirafter", "/usr/include", "-I/tmp/.tmpJD98Bb/include", "-I/tmp/.tmpJD98Bb/include/vmlinux/x86", "-I/home/gaz358/myprog/bpfgo", "-c", "fentry.c", "-o", "fentry.bpf.o"] }
+INFO [ecc_rs::bpf_compiler] 
+ERROR [ecc_rs::bpf_compiler] fentry.c:61:53: error: call to undeclared function 'upeer_sockaddr'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+   61 |     struct sockaddr *sock_addr = (struct sockaddr *)upeer_sockaddr(ctx);
+      |                                                     ^
+fentry.c:61:34: warning: cast to 'struct sockaddr *' from smaller integer type 'int' [-Wint-to-pointer-cast]
+   61 |     struct sockaddr *sock_addr = (struct sockaddr *)upeer_sockaddr(ctx);
+      |                                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+1 warning and 1 error generated.
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid);
-    if (!conn_info) {
-        bpf_printk("No connection info found for PID=%d\n", pid);
-        return 0;
-    }
+Error: Failed to compile
 
-    struct sockaddr_in addr;
-    if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
-        bpf_printk("Failed to read sockaddr for PID=%d\n", pid);
-        return 0;
-    }
-
-    if (addr.sin_family == AF_INET) {
-        conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
-        conn_info->sport = bpf_ntohs(addr.sin_port);
-
-        bpf_printk("CLIENT Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-            conn_info->pid, conn_info->comm,
-            (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
-            (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
-    }
-
-    return 0;
-}
-
-// Tracepoint для bind
-SEC("tracepoint/syscalls/sys_enter_bind")
-int trace_bind_entry(struct trace_event_raw_sys_enter *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    struct sockaddr *sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
-    u32 addrlen = PT_REGS_PARM3(ctx);
-
-    struct conn_info_t conn_info = {};
-    init_conn_info(pid, sock_addr, addrlen, &conn_info);
-
-    bpf_map_update_elem(&conn_info_map_ab, &pid, &conn_info, BPF_ANY);
-
-    bpf_printk("SERVER Bind entry: PID=%d, Comm=%s\n", pid, conn_info.comm);
-
-    return 0;
-}
-
-// Tracepoint для завершения bind
-SEC("tracepoint/syscalls/sys_exit_bind")
-int trace_bind_ret(struct trace_event_raw_sys_exit *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = PT_REGS_RC(ctx);
-
-    if (ret < 0) {
-        bpf_printk("Bind failed for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map_ab, &pid);
-        return 0;
-    }
-
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid);
-    if (!conn_info) {
-        bpf_printk("No connection info found for PID=%d\n", pid);
-        return 0;
-    }
-
-    struct sockaddr_in addr;
-    if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
-        bpf_printk("Failed to read sockaddr for PID=%d\n", pid);
-        return 0;
-    }
-
-    if (addr.sin_family == AF_INET) {
-        conn_info->dst_ip = bpf_ntohl(addr.sin_addr.s_addr);
-        conn_info->dport = bpf_ntohs(addr.sin_port);
-
-        bpf_printk("SERVER Bind: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-            conn_info->pid, conn_info->comm,
-            (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
-            (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
-    }
-
-    return 0;
-}
-
-// Tracepoint для connect
-SEC("tracepoint/syscalls/sys_enter_connect")
-int trace_connect_entry(struct trace_event_raw_sys_enter *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    struct sockaddr *sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
-    u32 addrlen = PT_REGS_PARM3(ctx);
-
-    struct conn_info_t conn_info = {};
-    init_conn_info(pid, sock_addr, addrlen, &conn_info);
-
-    bpf_map_update_elem(&conn_info_map_c, &pid, &conn_info, BPF_ANY);
-
-    bpf_printk("CLIENT Connect entry: PID=%d, Comm=%s\n", pid, conn_info.comm);
-
-    return 0;
-}
-
-// Tracepoint для завершения connect
-SEC("tracepoint/syscalls/sys_exit_connect")
-int trace_connect_ret(struct trace_event_raw_sys_exit *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = PT_REGS_RC(ctx);
-
-    if (ret < 0) {
-        bpf_printk("Connect failed for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map_c, &pid);
-        return 0;
-    }
-
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_c, &pid);
-    if (!conn_info) {
-        bpf_printk("No connection info found for PID=%d\n", pid);
-        return 0;
-    }
-
-    struct sockaddr_in addr;
-    if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
-        bpf_printk("Failed to read sockaddr for PID=%d\n", pid);
-        return 0;
-    }
-
-    if (addr.sin_family == AF_INET) {
-        conn_info->dst_ip = bpf_ntohl(addr.sin_addr.s_addr);
-        conn_info->dport = bpf_ntohs(addr.sin_port);
-
-        bpf_printk("CLIENT Connected to server: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-            conn_info->pid, conn_info->comm,
-            (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
-            (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
-    }
-
-    return 0;
-}
+Caused by:
+    Failed to run clang(exit code = Some(1))
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
