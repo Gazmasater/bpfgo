@@ -20,14 +20,22 @@ struct {
     __uint(max_entries, 1024);
     __type(key, u32);
     __type(value, struct conn_info_t);
-} conn_info_map_ab SEC(".maps");
+} conn_info_map_accept SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __uint(max_entries, 1024);
     __type(key, u32);
     __type(value, struct conn_info_t);
-} conn_info_map_c SEC(".maps");
+} conn_info_map_bind SEC(".maps");
+
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+    __uint(max_entries, 1024);
+    __type(key, u32);
+    __type(value, struct conn_info_t);
+} conn_info_map_connect SEC(".maps");
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
@@ -38,7 +46,7 @@ static __always_inline int init_conn_info_accept(u32 pid, struct pt_regs *ctx) {
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
     conn_info.sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
     conn_info.addrlen = PT_REGS_PARM3(ctx);
-    bpf_map_update_elem(&conn_info_map_ab, &pid, &conn_info, BPF_ANY);
+    bpf_map_update_elem(&conn_info_map_accept, &pid, &conn_info, BPF_ANY);
     return 0;
 }
 
@@ -48,7 +56,7 @@ static __always_inline int init_conn_info_bind(u32 pid, struct pt_regs *ctx) {
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
     conn_info.sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
     conn_info.addrlen = PT_REGS_PARM3(ctx);
-    bpf_map_update_elem(&conn_info_map_ab, &pid, &conn_info, BPF_ANY);
+    bpf_map_update_elem(&conn_info_map_bind, &pid, &conn_info, BPF_ANY);
     return 0;
 }
 
@@ -58,7 +66,7 @@ static __always_inline int init_conn_info_connect(u32 pid, struct pt_regs *ctx) 
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
     conn_info.sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
     conn_info.addrlen = PT_REGS_PARM3(ctx);
-    bpf_map_update_elem(&conn_info_map_c, &pid, &conn_info, BPF_ANY);
+    bpf_map_update_elem(&conn_info_map_connect, &pid, &conn_info, BPF_ANY);
     return 0;
 }
 
@@ -71,7 +79,7 @@ int trace_accept4_entry(struct pt_regs *ctx) {
     u32 pid = current_pid_tgid >> 32;
     init_conn_info_accept(pid , ctx);
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid); 
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &pid); 
     if (conn_info) 
   //  { bpf_printk("SERVER accept4 entry: PID=%d, Comm=%s\n", pid, conn_info->comm); }
     
@@ -87,11 +95,11 @@ int trace_accept4_ret(struct pt_regs *ctx) {
     // Если результат отрицательный, значит произошла ошибка
     if (ret < 0) {
         bpf_printk("Accept4 failed for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map_ab, &pid);
+        bpf_map_delete_elem(&conn_info_map_accept, &pid);
         return 0;
     }
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid);
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &pid);
     if (!conn_info) {
         bpf_printk("No connection info found for PID=%d\n", pid);
         return 0;
@@ -130,7 +138,7 @@ int trace_bind_entry(struct pt_regs *ctx) {
     u32 pid = current_pid_tgid >> 32;
     init_conn_info_bind(pid , ctx);
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid); 
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_bind, &pid); 
     if (conn_info) 
   //  { bpf_printk("SERVER Bind entry: PID=%d, Comm=%s\n", pid, conn_info->comm); }
 
@@ -146,11 +154,11 @@ int trace_bind_ret(struct pt_regs *ctx) {
     // Если результат отрицательный, значит произошла ошибка
     if (ret < 0) {
         bpf_printk("Accept4 failed for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map_ab, &pid);
+        bpf_map_delete_elem(&conn_info_map_bind, &pid);
         return 0;
     }
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid);
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_bind, &pid);
     if (!conn_info) {
         bpf_printk("No connection info found for PID=%d\n", pid);
         return 0;
@@ -188,9 +196,9 @@ int trace_connect_entry(struct pt_regs *ctx) {
 
     init_conn_info_connect(pid, ctx);
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_c, &pid);
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_connect, &pid);
     if (conn_info) {
-        bpf_printk("!!!!!!CLIENT Connect entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
+  //      bpf_printk("!!!!!!CLIENT Connect entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
     }
 
     return 0;
@@ -205,11 +213,11 @@ int trace_connect_ret(struct pt_regs *ctx) {
     // Если результат отрицательный, значит произошла ошибка
     if (ret < 0) {
         bpf_printk("Connect failed for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map_c, &pid);
+        bpf_map_delete_elem(&conn_info_map_connect, &pid);
         return 0;
     }
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_c, &pid);
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_connect, &pid);
     if (!conn_info) {
         bpf_printk("No connection info found for PID=%d\n", pid);
         return 0;
