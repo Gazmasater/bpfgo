@@ -1,0 +1,10 @@
+struct sys_enter_accept_args {
+    unsigned short common_type;
+    unsigned char common_flags;
+    unsigned char common_preempt_count;
+    int common_pid;
+    int __syscall_nr;
+    int fd;
+    struct sockaddr *upeer_sockaddr;
+    int *upeer_addrlen;
+};
