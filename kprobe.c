@@ -37,12 +37,22 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 static __always_inline int init_conn_info(void *conn_map, u32 pid, struct pt_regs *ctx)
 {
+    // Проверяем, есть ли уже запись для данного PID
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(conn_map, &pid);
+    if (conn_info)
+    {
+        // Если запись существует, ничего не делаем
+        return 0;
+    }
 
-    struct conn_info_t conn_info = {};
-    conn_info.pid = pid;
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-    conn_info.sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
-    bpf_map_update_elem(conn_map, &pid, &conn_info, BPF_ANY);
+    // Инициализируем структуру для нового PID
+    struct conn_info_t new_conn_info = {};
+    new_conn_info.pid = pid;
+    bpf_get_current_comm(&new_conn_info.comm, sizeof(new_conn_info.comm));
+    new_conn_info.sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
+
+    // Добавляем новую запись в карту
+    bpf_map_update_elem(conn_map, &pid, &new_conn_info, BPF_ANY);
     return 0;
 }
 
@@ -50,9 +60,9 @@ SEC("kprobe/sys_accept4")
 int trace_accept4_entry(struct pt_regs *ctx)
 {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
-    u32 pid = current_pid_tgid >>
+    u32 pid = current_pid_tgid >> 32;
 
-              init_conn_info(&conn_info_map_ab, pid, ctx);
+    init_conn_info(&conn_info_map_ab, pid, ctx);
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid);
     if (conn_info)
@@ -71,7 +81,7 @@ int trace_accept4_ret(struct pt_regs *ctx)
 
     if (ret < 0)
     {
-        //    bpf_printk("ACCEPT4 failed: PID=%d, Error=%ld\n", pid, ret);
+        // Если соединение не установлено, удаляем информацию из карты
         bpf_map_delete_elem(&conn_info_map_ab, &pid);
         return 0;
     }
@@ -86,7 +96,6 @@ int trace_accept4_ret(struct pt_regs *ctx)
     struct sockaddr_in addr;
     if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0)
     {
-        //    bpf_printk("kprobe/__sys_accept4 Failed to read sockaddr for PID=%d\n", pid);
         return 0;
     }
 
@@ -100,7 +109,7 @@ int trace_accept4_ret(struct pt_regs *ctx)
                    (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
                    (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
 
-        // Successful connection: Add to map
+        // Обновляем карту с новой информацией
         bpf_map_update_elem(&conn_info_map_ab, &pid, conn_info, BPF_ANY);
     }
 
@@ -128,7 +137,7 @@ int trace_bind_ret(struct pt_regs *ctx)
 
     if (ret < 0)
     {
-        //   bpf_printk("BIND failed: PID=%d, Error=%ld\n", pid, ret);
+        // Если bind не удался, удаляем информацию из карты
         bpf_map_delete_elem(&conn_info_map_ab, &pid);
         return 0;
     }
@@ -143,7 +152,6 @@ int trace_bind_ret(struct pt_regs *ctx)
     struct sockaddr_in addr;
     if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0)
     {
-        bpf_printk("kretprobe/__sys_bind Failed to read sockaddr for PID=%d\n", pid);
         return 0;
     }
 
@@ -157,7 +165,7 @@ int trace_bind_ret(struct pt_regs *ctx)
                    (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
                    (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
 
-        // Successful bind: Add to map
+        // Обновляем карту с новой информацией
         bpf_map_update_elem(&conn_info_map_ab, &pid, conn_info, BPF_ANY);
     }
 
@@ -184,8 +192,8 @@ int trace_connect_ret(struct pt_regs *ctx)
 
     if (ret < 0)
     {
-        //   bpf_printk("connect failed: PID=%d, Error=%ld\n", pid, ret);
-        bpf_map_delete_elem(&conn_info_map_ab, &pid);
+        // Если connect не удался, удаляем информацию из карты
+        bpf_map_delete_elem(&conn_info_map_c, &pid);
         return 0;
     }
 
@@ -199,7 +207,6 @@ int trace_connect_ret(struct pt_regs *ctx)
     struct sockaddr_in addr;
     if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0)
     {
-        //  bpf_printk("kretprobe/__sys_connect Failed to read sockaddr for PID=%d\n", pid);
         return 0;
     }
 
@@ -213,7 +220,7 @@ int trace_connect_ret(struct pt_regs *ctx)
                    (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
                    (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
 
-        // Successful connection: Add to map
+        // Обновляем карту с новой информацией
         bpf_map_update_elem(&conn_info_map_c, &pid, conn_info, BPF_ANY);
     }
 
