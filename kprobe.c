@@ -69,7 +69,7 @@ SEC("tracepoint/syscalls/sys_enter_accept")
 int trace_accept_entry(struct trace_event_raw_sys_enter *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
-    init_conn_info_accept(pid , (struct pt_regs *)ctx);
+    init_conn_info_accept(pid , ctx);
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid); 
     if (conn_info) 
