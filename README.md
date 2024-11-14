@@ -11,3 +11,16 @@ int trace_accept4_entry(struct sys_enter_accept4_args *ctx) {
 
     return 0;
 }
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/fentry.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "136",
+	"severity": 8,
+	"message": "struct \"sys_enter_accept4_args\" has no field \"si\"",
+	"source": "C/C++",
+	"startLineNumber": 61,
+	"startColumn": 53,
+	"endLineNumber": 61,
+	"endColumn": 66
+}]
