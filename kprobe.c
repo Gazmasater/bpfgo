@@ -81,13 +81,11 @@ struct sys_enter_accept_args {
 
 
 
-SEC("tracepoint/syscalls/sys_enter_accept")
+SEC("tracepoint/syscalls/sys_enter_accept4")
 int trace_accept_entry(struct sys_enter_accept_args *ctx)
 {
     u64 current_pid_tgid = bpf_get_current_pid_tgid(); // Получаем PID и TGID
     u32 pid = current_pid_tgid >> 32;                  // Извлекаем PID
-        bpf_printk("Hello");
-
 
     // Инициализация данных соединения с использованием аргументов из `ctx`
     struct conn_info_t conn_info = {};
@@ -104,7 +102,7 @@ int trace_accept_entry(struct sys_enter_accept_args *ctx)
         // Выводим информацию о процессе, используя bpf_probe_read_str для строки
         char comm[16];
         bpf_probe_read(comm, sizeof(comm), conn_info_lookup->comm);
-        bpf_printk("CLIENT accept entry: PID=%d, Comm=%s\n", pid, comm);
+        bpf_printk("SERVER accept entry: PID=%d, Comm=%s\n", pid, comm);
     }
 
     return 0;
