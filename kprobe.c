@@ -65,8 +65,8 @@ static __always_inline int init_conn_info_connect(u32 pid, struct pt_regs *ctx) 
 
 
 
-SEC("tracepoint/syscalls/sys_enter_accept")
-int trace_accept_entry(struct trace_event_raw_sys_enter *ctx) {
+SEC("kprobe/__sys_accept4")
+int trace_accept4_entry(struct pt_regs *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
     init_conn_info_accept(pid , ctx);
@@ -190,7 +190,7 @@ int trace_connect_entry(struct pt_regs *ctx) {
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_c, &pid);
     if (conn_info) {
- //       bpf_printk("!!!!!!CLIENT Connect entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
+        bpf_printk("!!!!!!CLIENT Connect entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
     }
 
     return 0;
