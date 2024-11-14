@@ -22,7 +22,7 @@ struct
     __uint(max_entries, 1024);
     __type(key, u32);
     __type(value, struct conn_info_t);
-} conn_info_map_ab SEC(".maps");
+} conn_info_map_accept SEC(".maps");
 
 struct
 {
@@ -30,7 +30,15 @@ struct
     __uint(max_entries, 1024);
     __type(key, u32);
     __type(value, struct conn_info_t);
-} conn_info_map_c SEC(".maps");
+} conn_info_map_bind SEC(".maps");
+
+struct
+{
+    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+    __uint(max_entries, 1024);
+    __type(key, u32);
+    __type(value, struct conn_info_t);
+} conn_info_map_connect SEC(".maps");
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
@@ -56,37 +64,35 @@ static __always_inline int init_conn_info(void *conn_map, u32 pid, struct pt_reg
     return 0;
 }
 
-SEC("kprobe/sys_accept4")
-int trace_accept4_entry(struct pt_regs *ctx)
+SEC("tracepoint/syscalls/sys_enter_accept4")
+int trace_accept4_entry(struct trace_event_raw_sys_enter *ctx)
 {
-    u64 current_pid_tgid = bpf_get_current_pid_tgid();
-    u32 pid = current_pid_tgid >> 32;
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    init_conn_info(&conn_info_map_accept, pid, (struct pt_regs *)ctx);
 
-    init_conn_info(&conn_info_map_ab, pid, ctx);
-
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid);
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &pid);
     if (conn_info)
     {
-        bpf_printk("CLIENT accept4 entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
+        bpf_printk("SERVER accept4 entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
     }
 
     return 0;
 }
 
-SEC("kretprobe/sys_accept4")
-int trace_accept4_ret(struct pt_regs *ctx)
+SEC("tracepoint/syscalls/sys_exit_accept4")
+int trace_accept4_ret(struct trace_event_raw_sys_exit *ctx)
 {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    int ret = PT_REGS_RC(ctx);
+    int ret = ctx->ret;
 
     if (ret < 0)
     {
         // Если соединение не установлено, удаляем информацию из карты
-        bpf_map_delete_elem(&conn_info_map_ab, &pid);
+        bpf_map_delete_elem(&conn_info_map_accept, &pid);
         return 0;
     }
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid);
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &pid);
     if (!conn_info)
     {
         bpf_printk("No connection info found for ACCEPT4 PID=%d\n", pid);
@@ -110,39 +116,35 @@ int trace_accept4_ret(struct pt_regs *ctx)
                    (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
 
         // Обновляем карту с новой информацией
-        bpf_map_update_elem(&conn_info_map_ab, &pid, conn_info, BPF_ANY);
+        bpf_map_update_elem(&conn_info_map_accept, &pid, conn_info, BPF_ANY);
     }
 
     return 0;
 }
 
-SEC("kprobe/sys_bind")
-int trace_bind_entry(struct pt_regs *ctx)
+SEC("tracepoint/syscalls/sys_enter_bind")
+int trace_bind_entry(struct trace_event_raw_sys_enter *ctx)
 {
-    u64 current_pid_tgid = bpf_get_current_pid_tgid();
-    u32 pid = current_pid_tgid >> 32;
-
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid);
-
-    init_conn_info(&conn_info_map_ab, pid, ctx);
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    init_conn_info(&conn_info_map_bind, pid, (struct pt_regs *)ctx);
 
     return 0;
 }
 
-SEC("kretprobe/sys_bind")
-int trace_bind_ret(struct pt_regs *ctx)
+SEC("tracepoint/syscalls/sys_exit_bind")
+int trace_bind_ret(struct trace_event_raw_sys_exit *ctx)
 {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    int ret = PT_REGS_RC(ctx);
+    int ret = ctx->ret;
 
     if (ret < 0)
     {
         // Если bind не удался, удаляем информацию из карты
-        bpf_map_delete_elem(&conn_info_map_ab, &pid);
+        bpf_map_delete_elem(&conn_info_map_bind, &pid);
         return 0;
     }
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid);
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_bind, &pid);
     if (!conn_info)
     {
         bpf_printk("No connection info found for BIND PID=%d\n", pid);
@@ -166,38 +168,35 @@ int trace_bind_ret(struct pt_regs *ctx)
                    (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
 
         // Обновляем карту с новой информацией
-        bpf_map_update_elem(&conn_info_map_ab, &pid, conn_info, BPF_ANY);
+        bpf_map_update_elem(&conn_info_map_bind, &pid, conn_info, BPF_ANY);
     }
 
     return 0;
 }
 
-SEC("kprobe/sys_connect")
-int trace_connect_entry(struct pt_regs *ctx)
+SEC("tracepoint/syscalls/sys_enter_connect")
+int trace_connect_entry(struct trace_event_raw_sys_enter *ctx)
 {
-    u64 current_pid_tgid = bpf_get_current_pid_tgid();
-    u32 pid = current_pid_tgid >> 32;
-
-    init_conn_info(&conn_info_map_c, pid, ctx);
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    init_conn_info(&conn_info_map_connect, pid, (struct pt_regs *)ctx);
 
     return 0;
 }
 
-SEC("kretprobe/sys_connect")
-int trace_connect_ret(struct pt_regs *ctx)
+SEC("tracepoint/syscalls/sys_exit_connect")
+int trace_connect_ret(struct trace_event_raw_sys_exit *ctx)
 {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-
-    int ret = PT_REGS_RC(ctx);
+    int ret = ctx->ret;
 
     if (ret < 0)
     {
         // Если connect не удался, удаляем информацию из карты
-        bpf_map_delete_elem(&conn_info_map_c, &pid);
+        bpf_map_delete_elem(&conn_info_map_connect, &pid);
         return 0;
     }
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_c, &pid);
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_connect, &pid);
     if (!conn_info)
     {
         bpf_printk("No connection info found for CONNECT PID=%d\n", pid);
@@ -221,7 +220,7 @@ int trace_connect_ret(struct pt_regs *ctx)
                    (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
 
         // Обновляем карту с новой информацией
-        bpf_map_update_elem(&conn_info_map_c, &pid, conn_info, BPF_ANY);
+        bpf_map_update_elem(&conn_info_map_connect, &pid, conn_info, BPF_ANY);
     }
 
     return 0;
