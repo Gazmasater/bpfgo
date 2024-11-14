@@ -1,7 +1,7 @@
 SEC("tracepoint/syscalls/sys_enter_accept4")
 int trace_accept4_entry(struct sys_enter_accept4_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    struct sockaddr *sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);  // Получаем указатель на sockaddr из второго параметра
+    struct sockaddr *sock_addr = ctx->upeer_sockaddr;  // Прямой доступ к полю upeer_sockaddr из структуры
     struct conn_info_t conn_info = {};
     init_conn_info(pid, sock_addr, &conn_info);
 
@@ -11,16 +11,3 @@ int trace_accept4_entry(struct sys_enter_accept4_args *ctx) {
 
     return 0;
 }
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/fentry.c",
-	"owner": "C/C++: IntelliSense",
-	"code": "136",
-	"severity": 8,
-	"message": "struct \"sys_enter_accept4_args\" has no field \"si\"",
-	"source": "C/C++",
-	"startLineNumber": 61,
-	"startColumn": 53,
-	"endLineNumber": 61,
-	"endColumn": 66
-}]
