@@ -71,20 +71,40 @@ static __always_inline int init_conn_info_connect(u32 pid, struct pt_regs *ctx) 
 }
 
 
+struct sys_enter_accept_args {
+    unsigned short common_type;
+    unsigned char common_flags;
+    unsigned char common_preempt_count;
+    int common_pid;
+    int __syscall_nr;
+    int fd;
+    struct sockaddr *upeer_sockaddr;
+    int *upeer_addrlen;
+};
 
 
-SEC("kprobe/__sys_accept4")
-int trace_accept4_entry(struct pt_regs *ctx) {
-    u64 current_pid_tgid = bpf_get_current_pid_tgid();
-    u32 pid = current_pid_tgid >> 32;
-    init_conn_info_accept(pid , ctx);
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &pid); 
-    if (conn_info) 
-  //  { bpf_printk("SERVER accept4 entry: PID=%d, Comm=%s\n", pid, conn_info->comm); }
-    
+
+SEC("tracepoint/syscalls/sys_enter_accept")
+int trace_accept_entry(struct sys_enter_accept_args *ctx) {
+    u64 current_pid_tgid = bpf_get_current_pid_tgid();  // Получаем PID и TGID
+     u32 pid = current_pid_tgid >> 32;  // Извлекаем PID
+
+    // // Инициализация данных соединения
+    // init_conn_info_accept(pid, ctx);
+
+    // // Получаем информацию о соединении из карты
+     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &pid); 
+    if (conn_info) {
+        // Выводим информацию о процессе, используя bpf_probe_read_str для строки
+        char comm[16];
+        bpf_probe_read_str(comm, sizeof(comm), conn_info->comm);
+        bpf_printk("CLIENT accept entry: PID=%d, Comm=%s\n", pid, comm);
+    }
+
     return 0;
 }
+
 
 // kretprobe для завершения извлечения информации о соединении
 SEC("kretprobe/__sys_accept4")
