@@ -2,6 +2,7 @@
 #include "bpf/bpf_tracing.h"
 #include "bpf/bpf_endian.h"
 #include "bpf/bpf_core_read.h"
+//#include "netinet/in.h""
 
 struct conn_info_t {
     u32 pid;
@@ -70,6 +71,7 @@ int trace_accept4_entry(struct sys_enter_accept4_args *ctx) {
     struct sockaddr *sock_addr = ctx->upeer_sockaddr; 
     struct conn_info_t conn_info = {};
     init_conn_info(pid, sock_addr, &conn_info);
+    bpf_printk("sys_enter_accept4  conn_info.sock_addr=%d",conn_info.sock_addr);
 
     bpf_map_update_elem(&conn_info_map_accept, &pid, &conn_info, BPF_ANY);
 
@@ -90,13 +92,16 @@ int trace_accept4_ret(struct sys_exit_accept4_args *ctx) {
     }
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &pid);
+    
     if (!conn_info) {
         bpf_printk("No connection info found for PID=%d\n", pid);
         return 0;
     }
 
+    bpf_printk("sys_exit_accept4  conn_info=%d",conn_info->sock_addr);
     struct sockaddr_in addr;
-    if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
+
+    if (bpf_probe_read_kernel(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
         bpf_printk("Failed to read sockaddr for PID=%d\n", pid);
         return 0;
     }
