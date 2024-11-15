@@ -67,7 +67,7 @@ struct sys_exit_accept4_args {
 SEC("tracepoint/syscalls/sys_enter_accept4")
 int trace_accept4_entry(struct sys_enter_accept4_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    struct sockaddr *sock_addr = ctx->upeer_sockaddr;  // Прямой доступ к полю upeer_sockaddr из структуры
+    struct sockaddr *sock_addr = ctx->upeer_sockaddr; 
     struct conn_info_t conn_info = {};
     init_conn_info(pid, sock_addr, &conn_info);
 
