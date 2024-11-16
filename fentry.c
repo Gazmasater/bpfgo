@@ -15,6 +15,35 @@ struct conn_info_t {
     u32 addrlen;           
 };
 
+struct sys_enter_accept4_args {
+    unsigned short common_type;
+    unsigned char common_flags;
+    unsigned char common_preempt_count;
+    int common_pid;
+    int __syscall_nr;
+    int fd;
+    struct sockaddr *upeer_sockaddr;
+    int *upeer_addrlen;
+    int flags;
+};
+
+struct sys_exit_accept4_args {
+    unsigned short common_type;
+    unsigned char common_flags;
+    unsigned char common_preempt_count;
+    int common_pid;
+    int __syscall_nr;
+    long ret;
+};
+
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+    __uint(max_entries, 1024);
+    __type(key, u32);
+    __type(value, struct sockaddr);
+} sock_addr_map SEC(".maps");
+
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
     __uint(max_entries, 1024);
@@ -39,12 +68,17 @@ struct {
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
-static __always_inline int init_conn_info_accept(u32 pid, struct pt_regs *ctx) {
+static __always_inline int init_conn_info_accept(u32 pid, struct sys_enter_accept4_args *ctx) {
     struct conn_info_t conn_info = {};
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-    conn_info.sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
-    conn_info.addrlen = PT_REGS_PARM3(ctx);
+
+    // Сохраняем sockaddr в отдельной карте
+    struct sockaddr addr;
+    if (bpf_probe_read_user(&addr, sizeof(addr), ctx->upeer_sockaddr) == 0) {
+        bpf_map_update_elem(&sock_addr_map, &pid, &addr, BPF_ANY);
+    }
+
     bpf_map_update_elem(&conn_info_map_accept, &pid, &conn_info, BPF_ANY);
     return 0;
 }
@@ -72,54 +106,35 @@ static __always_inline int init_conn_info_connect(u32 pid, struct pt_regs *ctx) 
 }
 
 
-struct sys_enter_accept4_args {
-    unsigned short common_type;
-    unsigned char common_flags;
-    unsigned char common_preempt_count;
-    int common_pid;
-    int __syscall_nr;
-    int fd;
-    struct sockaddr *upeer_sockaddr;
-    int *upeer_addrlen;
-    int flags;
-};
-
-struct sys_exit_accept4_args {
-    unsigned short common_type;
-    unsigned char common_flags;
-    unsigned char common_preempt_count;
-    int common_pid;
-    int __syscall_nr;
-    long ret
-};
 
 
 
 
 
-SEC("kprobe/__sys_accept4")
-int trace_accept4_entry(struct pt_regs *ctx) {
+SEC("tracepoint/syscalls/sys_enter_accept")
+int trace_accept4_entry(struct sys_enter_accept4_args *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
-    init_conn_info_accept(pid , ctx);
+    init_conn_info_accept(pid, ctx);
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &pid); 
-    if (conn_info) 
-    { bpf_printk("SERVER accept4 entry: PID=%d, Comm=%s\n", pid, conn_info->comm); }
-    
+    if (conn_info) {
+        bpf_printk("SERVER accept4 entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
+    }
     return 0;
 }
 
-// kretprobe для завершения извлечения информации о соединении
-SEC("kretprobe/__sys_accept4")
-int trace_accept4_ret(struct pt_regs *ctx) {
+// Tracepoint для выхода из вызова accept4
+SEC("tracepoint/syscalls/sys_exit_accept")
+int trace_accept4_ret(struct sys_exit_accept4_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = PT_REGS_RC(ctx); // Получаем результат вызова
+    long ret = ctx->ret; // Получаем результат вызова
 
     // Если результат отрицательный, значит произошла ошибка
     if (ret < 0) {
         bpf_printk("Accept4 failed for PID=%d\n", pid);
         bpf_map_delete_elem(&conn_info_map_accept, &pid);
+        bpf_map_delete_elem(&sock_addr_map, &pid);
         return 0;
     }
 
@@ -129,10 +144,15 @@ int trace_accept4_ret(struct pt_regs *ctx) {
         return 0;
     }
 
-    // Получаем IP и порт клиента из sockaddr, используя сохраненный указатель
+    // Получаем sockaddr из карты
     struct sockaddr_in addr;
+    struct sockaddr *sock_addr = bpf_map_lookup_elem(&sock_addr_map, &pid);
+    if (!sock_addr) {
+        bpf_printk("No sockaddr found for PID=%d\n", pid);
+        return 0;
+    }
 
-    if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
+    if (bpf_probe_read_kernel(&addr, sizeof(addr), sock_addr) != 0) {
         bpf_printk("Failed to read sockaddr for PID=%d\n", pid);
         return 0;
     }
@@ -140,7 +160,7 @@ int trace_accept4_ret(struct pt_regs *ctx) {
     // Извлекаем IP и порт из sockaddr_in, если это IPv4-соединение
     if (addr.sin_family == AF_INET) {
         conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr); // Преобразуем IP к порядку хоста
-        conn_info->sport = bpf_ntohs(addr.sin_port);      // Преобразуем порт к порядку хоста
+        conn_info->sport = bpf_ntohs(addr.sin_port);         // Преобразуем порт к порядку хоста
         
         bpf_printk("SERVER Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
             conn_info->pid, conn_info->comm,
@@ -148,9 +168,9 @@ int trace_accept4_ret(struct pt_regs *ctx) {
             (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
     }
 
-
-
-
+    // Удаляем данные из карт
+    bpf_map_delete_elem(&conn_info_map_accept, &pid);
+    bpf_map_delete_elem(&sock_addr_map, &pid);
     return 0;
 }
 
