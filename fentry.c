@@ -19,7 +19,7 @@ struct sys_enter_accept_args {
     unsigned short common_type;
     unsigned char common_flags;
     unsigned char common_preempt_count;
-    int common_pid;
+   int common_pid;
     int __syscall_nr;
     int fd;
     struct sockaddr *upeer_sockaddr;
@@ -82,22 +82,21 @@ struct {
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
-static __always_inline int init_conn_info_accept(u32 pid, struct sys_enter_accept_args *ctx) {
+static __always_inline int init_conn_info_accept(struct sys_enter_accept_args *ctx) {
 
 bpf_printk("HELLO init_conn_info_accept");
     struct conn_info_t conn_info = {};
-    conn_info.pid = pid;
+    conn_info.pid = ctx->common_pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-
     // Сохраняем sockaddr в отдельной карте
-    struct sockaddr addr;
+    struct sockaddr addr={};
     if (bpf_probe_read_user(&addr, sizeof(addr), ctx->upeer_sockaddr) == 0) {
-        bpf_map_update_elem(&sock_addr_map, &pid, &addr, BPF_ANY);
+        bpf_map_update_elem(&sock_addr_map, & conn_info.pid , &addr, BPF_ANY);
 
     } else  bpf_printk("no save sockaddr in map")    ;
     
 
-    bpf_map_update_elem(&conn_info_map_accept, &pid, &conn_info, BPF_ANY);
+    bpf_map_update_elem(&conn_info_map_accept, & conn_info.pid , &conn_info, BPF_ANY);
 
 
     return 0;
@@ -132,13 +131,13 @@ static __always_inline int init_conn_info_connect(u32 pid, struct pt_regs *ctx) 
 
 
 
-SEC("tracepoint/syscalls/sys_enter_accept4")
+SEC("tracepoint/syscalls/sys_enter_accept")
 int trace_accept4_entry(struct sys_enter_accept_args *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
     bpf_printk("HELLO sys_enter_accept");
 
-    init_conn_info_accept(pid, ctx);
+    init_conn_info_accept(ctx);
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &pid); 
     if (conn_info) {
