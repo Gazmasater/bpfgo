@@ -85,8 +85,10 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 static __always_inline int init_conn_info_accept(struct sys_enter_accept_args *ctx) {
 
 bpf_printk("HELLO init_conn_info_accept");
+ u64 current_pid_tgid = bpf_get_current_pid_tgid();
+    u32 pid = current_pid_tgid >> 32;
     struct conn_info_t conn_info = {};
-    conn_info.pid = ctx->common_pid;
+    conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
     // Сохраняем sockaddr в отдельной карте
     struct sockaddr addr={};
@@ -133,15 +135,14 @@ static __always_inline int init_conn_info_connect(u32 pid, struct pt_regs *ctx) 
 
 SEC("tracepoint/syscalls/sys_enter_accept")
 int trace_accept4_entry(struct sys_enter_accept_args *ctx) {
-    u64 current_pid_tgid = bpf_get_current_pid_tgid();
-    u32 pid = current_pid_tgid >> 32;
+
     bpf_printk("HELLO sys_enter_accept");
 
     init_conn_info_accept(ctx);
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &pid); 
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &conn_info->pid); 
     if (conn_info) {
-        bpf_printk("SERVER accept entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
+        bpf_printk("SERVER accept entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
     }
     return 0;
 }
