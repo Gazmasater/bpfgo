@@ -23,15 +23,16 @@ struct bpf_map_def SEC("maps") sock_addr_map = {
 static __always_inline int init_conn_info_accept(struct bpf_raw_tracepoint_args *ctx) {
     bpf_printk("HELLO init_conn_info_accept");
 
-    // Используем PID из структуры bpf_raw_tracepoint_args
-    int pid = ctx->common_pid;
-
+    // Получаем PID и TGID из 64-битного значения
+    u64 current_pid_tgid = bpf_get_current_pid_tgid();
+    u32 pid = current_pid_tgid >> 32;  // Извлекаем PID процесса (старшие 32 бита)
+    
     // Инициализируем структуру conn_info
     struct conn_info_t conn_info = {};
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));  // Получаем имя процесса
 
-    // Читаем sockaddr из аргумента upeer_sockaddr
+    // Читаем sockaddr из аргумента upeer_sockaddr (ctx->args[1] соответствует upeer_sockaddr)
     struct sockaddr addr = {};
     if (ctx->args[1] && bpf_probe_read_user(&addr, sizeof(addr), (void *)ctx->args[1]) == 0) {
         // Сохраняем sockaddr в карту
@@ -54,8 +55,9 @@ int trace_accept4_entry(struct bpf_raw_tracepoint_args *ctx) {
     // Инициализация информации о соединении
     init_conn_info_accept(ctx);
 
-    // Получаем PID из структуры bpf_raw_tracepoint_args
-    int pid = ctx->common_pid;
+    // Получаем PID из 64-битного значения
+    u64 current_pid_tgid = bpf_get_current_pid_tgid();
+    u32 pid = current_pid_tgid >> 32;  // Извлекаем PID процесса (старшие 32 бита)
 
     // Извлекаем информацию о соединении из карты
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &pid);
