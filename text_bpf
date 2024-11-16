@@ -1,1 +1,9 @@
 cat /sys/kernel/debug/tracing/events/syscalls/sys_enter_accept/format
+
+clang -O2 -target bpf -c hello.c -o hello.o
+
+bpftool prog load hello.o /sys/fs/bpf/hello
+
+bpftool prog attach /sys/fs/bpf/hello tracepoint syscalls sys_enter_accept
+
+
