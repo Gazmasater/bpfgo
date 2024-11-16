@@ -83,24 +83,25 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
 static __always_inline int init_conn_info_accept(struct sys_enter_accept_args *ctx) {
+    bpf_printk("HELLO init_conn_info_accept");
 
-bpf_printk("HELLO init_conn_info_accept");
-    u64 current_pid_tgid = bpf_get_current_pid_tgid();
-    int pid = current_pid_tgid >> 32;
+    int pid = ctx->common_pid;
+
+    // Инициализируем conn_info
     struct conn_info_t conn_info = {};
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-    // Сохраняем sockaddr в отдельной карте
-    struct sockaddr addr={};
-    if (bpf_probe_read_user(&addr, sizeof(addr), ctx->upeer_sockaddr) == 0) {
-        bpf_map_update_elem(&sock_addr_map, & conn_info.pid , &addr, BPF_ANY);
 
-    } else  bpf_printk("no save sockaddr in map")    ;
-    
+    // Читаем sockaddr
+    struct sockaddr addr = {};
+    if (ctx->upeer_sockaddr && bpf_probe_read_user(&addr, sizeof(addr), ctx->upeer_sockaddr) == 0) {
+        bpf_map_update_elem(&sock_addr_map, &pid, &addr, BPF_ANY);
+    } else {
+        bpf_printk("no save sockaddr in map");
+    }
 
-    bpf_map_update_elem(&conn_info_map_accept, & conn_info.pid , &conn_info, BPF_ANY);
-
-
+    // Сохраняем conn_info
+    bpf_map_update_elem(&conn_info_map_accept, &pid, &conn_info, BPF_ANY);
     return 0;
 }
 
@@ -135,14 +136,20 @@ static __always_inline int init_conn_info_connect(u32 pid, struct pt_regs *ctx) 
 
 SEC("tracepoint/syscalls/sys_enter_accept")
 int trace_accept4_entry(struct sys_enter_accept_args *ctx) {
-
     bpf_printk("HELLO sys_enter_accept");
 
+    // Инициализация информации о соединении
     init_conn_info_accept(ctx);
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &conn_info->pid); 
+    // Читаем PID из структуры
+    int pid = ctx->common_pid;
+
+    // Читаем conn_info из карты
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &pid);
     if (conn_info) {
         bpf_printk("SERVER accept entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
+    } else {
+        bpf_printk("conn_info not found for PID=%d\n", pid);
     }
     return 0;
 }
