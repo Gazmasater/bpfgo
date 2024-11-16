@@ -5,3 +5,7 @@ sys_enter_accept
 sys_enter_accept4
 sys_exit_accept
 sys_exit_accept4
+
+
+sudo bpftrace -e 'tracepoint:syscalls:sys_enter_accept { printf("HELLO sys_enter_accept\n"); }'
+
