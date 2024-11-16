@@ -1,132 +1,27 @@
-#include "vmlinux.h"
-#include "bpf/bpf_tracing.h"
-#include "bpf/bpf_endian.h"
-#include "bpf/bpf_core_read.h"
+az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./ecli run package.json
+[sudo] password for gaz358: 
+INFO [faerie::elf] strtab: 0xc7e symtab 0xcb8 relocs 0xd00 sh_offset 0xd00
+libbpf: prog 'trace_accept4_entry': BPF program load failed: Permission denied
+libbpf: prog 'trace_accept4_entry': -- BEGIN PROG LOAD LOG --
+0: R1=ctx() R10=fp0
+; int trace_accept4_entry(struct sys_enter_accept_args *ctx) {
+0: (bf) r6 = r1                       ; R1=ctx() R6_w=ctx()
+; bpf_printk("HELLO sys_enter_accept");
+1: (18) r1 = 0xffff9f6c05ab1710       ; R1_w=map_value(map=fentry_b.rodata,ks=4,vs=145)
+3: (b7) r2 = 23                       ; R2_w=23
+4: (85) call bpf_trace_printk#6       ; R0_w=scalar()
+; bpf_printk("HELLO init_conn_info_accept");
+5: (18) r1 = 0xffff9f6c05ab176d       ; R1_w=map_value(map=fentry_b.rodata,ks=4,vs=145,off=93)
+7: (b7) r2 = 28                       ; R2_w=28
+8: (85) call bpf_trace_printk#6       ; R0=scalar()
+; int pid = ctx->common_pid;
+9: (61) r1 = *(u32 *)(r6 +4)
+invalid bpf_context access off=4 size=4
+processed 8 insns (limit 1000000) max_states_per_insn 0 total_states 1 peak_states 1 mark_read 1
+-- END PROG LOAD LOG --
+libbpf: prog 'trace_accept4_entry': failed to load: -13
+libbpf: failed to load object 'fentry_bpf�iw'
+Error: Failed to run native eBPF program
 
-struct conn_info_t {
-    u32 pid;
-    u32 ip;
-    u16 sport;
-    u16 dport;
-    char comm[16];
-};
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 1024);
-    __type(key, u32);
-    __type(value, struct conn_info_t);
-} conn_info_map SEC(".maps");
-
-char LICENSE[] SEC("license") = "Dual BSD/GPL";
-
-SEC("kprobe/inet_csk_accept")
-int trace_accept(struct pt_regs *ctx) {
-    struct sock *sk = (struct sock *)PT_REGS_PARM1(ctx);
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-
-    struct conn_info_t info = {};
-    info.pid = pid;
-    bpf_get_current_comm(info.comm, sizeof(info.comm));
-
-    // Чтение IP и портов
-    u32 dip;
-    u32 portpair;
-    if (bpf_core_read(&dip, sizeof(dip), &sk->__sk_common.skc_rcv_saddr) != 0 ||
-        bpf_core_read(&portpair, sizeof(portpair), &sk->__sk_common.skc_portpair) != 0) {
-        return 0;
-    }
-
-    info.ip = dip;
-    info.sport = portpair >> 16;        // Старшие 16 бит — локальный порт
-    info.dport = portpair & 0xFFFF;     // Младшие 16 бит — удаленный порт
-
-    // Сохраняем информацию в карту
-    bpf_map_update_elem(&conn_info_map, &pid, &info, BPF_ANY);
-    bpf_printk("Connection started: PID=%d, Comm=%s", info.pid, info.comm);
-
-    return 0;
-}
-
-SEC("kretprobe/inet_csk_accept")
-int trace_accept_ret(struct pt_regs *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = PT_REGS_RC(ctx);
-
-    if (ret < 0) {
-        // Соединение не установлено, удаляем запись
-        bpf_map_delete_elem(&conn_info_map, &pid);
-        bpf_printk("Accept failed, removing connection info from map\n");
-    } else {
-        // Подключение успешно, можно вывести информацию
-        struct conn_info_t *info = bpf_map_lookup_elem(&conn_info_map, &pid);
-        if (info) {
-            bpf_printk("Connection accepted: PID=%d, Comm=%s, IP=%u.%u.%u.%u, Sport=%u, Dport=%u",
-                       info->pid, info->comm,
-                       (info->ip >> 0) & 0xFF, (info->ip >> 8) & 0xFF,
-                       (info->ip >> 16) & 0xFF, (info->ip >> 24) & 0xFF,
-                       info->sport, info->dport);
-        }
-    }
-
-    return 0;
-}
-
-+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-#include "vmlinux.h"
-#include <bpf/bpf_tracing.h>
-#include <bpf/bpf_core_read.h>
-
-struct conn_info_t {
-    u32 pid;
-    u32 ip;
-    u16 sport;
-    u16 dport;
-    char comm[16];
-};
-
-BPF_HASH(conn_info_map, u32, struct conn_info_t);  // Хэш-таблица для хранения информации
-
-char LICENSE[] SEC("license") = "Dual BSD/GPL";
-
-// kprobe на sys_accept для сохранения информации при начале соединения
-SEC("kprobe/sys_accept")
-int trace_sys_accept(struct pt_regs *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    
-    struct conn_info_t info = {};
-    info.pid = pid;
-    bpf_get_current_comm(&info.comm, sizeof(info.comm));
-
-    // Сохраняем базовую информацию в карту
-    conn_info_map.update(&pid, &info);
-    bpf_printk("sys_accept called: PID=%d, Comm=%s", info.pid, info.comm);
-    
-    return 0;
-}
-
-// kretprobe на sys_accept для получения результата соединения
-SEC("kretprobe/sys_accept")
-int trace_sys_accept_ret(struct pt_regs *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = PT_REGS_RC(ctx);
-
-    // Проверка, успешен ли вызов sys_accept
-    if (ret < 0) {
-        bpf_printk("Accept failed for PID=%d", pid);
-        conn_info_map.delete(&pid);  // Удаляем из карты, если соединение не установлено
-        return 0;
-    }
-
-    struct conn_info_t *info = conn_info_map.lookup(&pid);
-    if (!info) {
-        return 0; // Если информации нет, выходим
-    }
-
-    info->dport = ret;  // Пример использования результата (добавьте необходимые поля)
-    bpf_printk("Connection accepted: PID=%d, Comm=%s, Dport=%u", info->pid, info->comm, info->dport);
-
-    return 0;
-}
-
+Caused by:
+    Bpf error: Failed to start polling: Bpf("Failed to load and attach: Failed to load bpf object\n\nCaused by:\n    System error, errno: 13"), RecvError
