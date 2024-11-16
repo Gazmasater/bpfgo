@@ -1,0 +1,8 @@
+Проверка какой вызов использует приложение:
+
+-в одном терминале strace -e trace=network nc -l -p 1234
+- в другом nc 127.0.0.1 1234
+
+Тестирование с помощью bpftrace 
+
+sudo bpftrace -e 'tracepoint:syscalls:sys_exit_accept4 { printf("HELLO sys_exit_accept4\n"); }'
