@@ -19,7 +19,7 @@ struct sys_enter_accept_args {
     unsigned short common_type;
     unsigned char common_flags;
     unsigned char common_preempt_count;
-   int common_pid;
+    int common_pid;
     int __syscall_nr;
     int fd;
     struct sockaddr *upeer_sockaddr;
@@ -85,8 +85,8 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 static __always_inline int init_conn_info_accept(struct sys_enter_accept_args *ctx) {
 
 bpf_printk("HELLO init_conn_info_accept");
- u64 current_pid_tgid = bpf_get_current_pid_tgid();
-    u32 pid = current_pid_tgid >> 32;
+    u64 current_pid_tgid = bpf_get_current_pid_tgid();
+    int pid = current_pid_tgid >> 32;
     struct conn_info_t conn_info = {};
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
