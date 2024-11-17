@@ -226,6 +226,13 @@ SEC("tracepoint/syscalls/sys_exit_accept4")
         return 0;
     }
 
+
+//      if (bpf_probe_read_user(&addr, sizeof(addr), (void *)conn_info->sock_addr) != 0) {
+//     bpf_printk("Failed to read sockaddr for PID=%d\n", pid);
+//     return 0;
+// }
+
+
 //     // Извлекаем IP и порт из sockaddr_in, если это IPv4-соединение
 //     if (addr.sin_family == AF_INET) {
 //         conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr); // Преобразуем IP к порядку хоста
