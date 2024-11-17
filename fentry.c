@@ -227,20 +227,22 @@ int trace_accept4_ret(struct sys_exit_accept4_args *ctx) {
     }
     bpf_printk("sys_exit_accept4  pid=%d",conn_info->pid);
     // // Получаем sockaddr и извлекаем IP и порт
-    //  struct sockaddr_in *addr = &conn_info->sock_addr;
-    // if (addr->sin_family == AF_INET) {
-    //     conn_info->src_ip = bpf_ntohl(addr->sin_addr.s_addr);  // Преобразуем IP в хостовый порядок
-    //     conn_info->sport = bpf_ntohs(addr->sin_port);          // Преобразуем порт в хостовый порядок
+    struct sockaddr_in *addr = &conn_info->sock_addr;
+    bpf_printk("sys_exit_accept4  AF_INET=%d",addr->sin_family);
 
-    //     bpf_printk("CLIENT Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-    //         conn_info->pid, conn_info->comm,
-    //         (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
-    //         (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
-    // } else {
-    //     bpf_printk("Unsupported address family for PID=%d\n", pid);
-    // }
+   //  if (addr->sin_family == AF_INET) {
+        conn_info->src_ip = bpf_ntohl(addr->sin_addr.s_addr);  // Преобразуем IP в хостовый порядок
+        conn_info->sport = bpf_ntohs(addr->sin_port);          // Преобразуем порт в хостовый порядок
 
-    // bpf_map_update_elem(&conn_info_map_accept, &pid, &conn_info, BPF_ANY);
+        bpf_printk("CLIENT Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+            conn_info->pid, conn_info->comm,
+            (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
+            (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
+  //   } else {
+   //      bpf_printk("Unsupported address family for PID=%d\n", pid);
+   //  }
+
+   //  bpf_map_update_elem(&conn_info_map_accept, &pid, &conn_info, BPF_ANY);
 
     return 0;
 }
