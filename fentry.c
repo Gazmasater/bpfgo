@@ -144,13 +144,13 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 //     return 0;
 // }
 
-static __always_inline int init_conn_info_bind(struct sys_enter_accept4_args *ctx) {
+static __always_inline int init_conn_info_bind(struct sys_enter_bind_args *ctx) {
     struct conn_info_t conn_info = {};
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-    conn_info.sock_addr = (struct sockaddr *)ctx->upeer_sockaddr;
+    conn_info.sock_addr = (struct sockaddr *)ctx->umyaddr;
     bpf_map_update_elem(&conn_info_map_bind, &pid, &conn_info, BPF_ANY);
     return 0;
 }
