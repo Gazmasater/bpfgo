@@ -281,8 +281,10 @@ int trace_bind_entry(struct sys_enter_accept4_args *ctx) {
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_bind, &pid); 
     if (conn_info) 
-    { bpf_printk("trace SERVER Bind entry: PID=%d, Comm=%s\n", pid, conn_info->comm); }
+    {
+        bpf_printk("sys_enter_bind  sock_addr=%d",conn_info->sock_addr);
 
+        bpf_printk("trace SERVER Bind entry: PID=%d, Comm=%s\n", pid, *conn_info->comm); }
     return 0;
 }
 
@@ -351,6 +353,9 @@ int trace_bind_ret(struct sys_exit_bind_args *ctx) {
 
     // Получаем IP и порт клиента из sockaddr, используя сохраненный указатель
     struct sockaddr_in addr;
+
+        bpf_printk("trace sys_exit_bind  sock_addr=%d",conn_info->sock_addr);
+
 
     if (bpf_probe_read_user(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
         bpf_printk("trace __sys_bind Failed to read sockaddr for PID=%d\n", pid);
