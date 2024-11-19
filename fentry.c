@@ -371,7 +371,7 @@ int trace_bind_ret(struct sys_exit_bind_args *ctx) {
     bpf_printk("sys_exit_bind conn_infosockaddr=%p",conn_info->sock_addr);
 
     struct sockaddr_in addr;
-    if (bpf_probe_read_user(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
+    if (bpf_probe_read_user(&addr, sizeof(addr), (void *)conn_info->sock_addr) != 0) {
         bpf_printk("trace __sys_bind: Failed to read sockaddr for PID=%d\n", pid);
         return 0;
     }
