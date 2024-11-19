@@ -138,6 +138,7 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 //     u64 current_pid_tgid = bpf_get_current_pid_tgid();
 //     u32 pid = current_pid_tgid >> 32;
 //     conn_info.pid = pid;
+
 //     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 //     conn_info.sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
 //     bpf_map_update_elem(&conn_info_map_bind, &pid, &conn_info, BPF_ANY);
@@ -148,10 +149,24 @@ static __always_inline int init_conn_info_bind(struct sys_enter_bind_args *ctx) 
     struct conn_info_t conn_info = {};
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
+    
+    // Получаем PID и имя процесса
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-    conn_info.sock_addr = (struct sockaddr *)ctx->umyaddr;
+    bpf_printk("init LENGTH=%u",ctx->addrlen);
+
+
+    // Безопасное копирование структуры sockaddr
+    struct sockaddr *sock_addr;
+    if (bpf_probe_read(&sock_addr, sizeof(sock_addr), &ctx->umyaddr) == 0) {
+        conn_info.sock_addr = sock_addr;
+    } else {
+        return -1;  // Если не удалось прочитать указатель, выходим с ошибкой
+    }
+
+    // Обновляем карту с информацией о соединении
     bpf_map_update_elem(&conn_info_map_bind, &pid, &conn_info, BPF_ANY);
+    
     return 0;
 }
 
@@ -274,19 +289,22 @@ static __always_inline int init_conn_info_bind(struct sys_enter_bind_args *ctx) 
 
 // kprobe для фиксации начальных данных процесса и дескриптора файла
 SEC("tracepoint/syscalls/sys_enter_bind")
-int trace_bind_entry(struct sys_enter_accept4_args *ctx) {
+int trace_bind_entry(struct sys_enter_bind_args *ctx) {
     u64 current_pid_tgid = bpf_get_current_pid_tgid();
     u32 pid = current_pid_tgid >> 32;
+
     init_conn_info_bind(ctx);
+    bpf_printk("LENGTH=%u",ctx->addrlen);
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_bind, &pid); 
-    if (conn_info) 
-    {
-        bpf_printk("sys_enter_bind  sock_addr=%d",conn_info->sock_addr);
 
-        bpf_printk("trace SERVER Bind entry: PID=%d, Comm=%s\n", pid, *conn_info->comm); }
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_bind, &pid);
+    if (conn_info) {
+        bpf_printk("sys_enter_bind: sock_addr=%p\n", conn_info->sock_addr);
+        bpf_printk("trace SERVER Bind entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
+    }
     return 0;
 }
+
 
 
 // // kretprobe для завершения извлечения информации о соединении
@@ -336,44 +354,39 @@ int trace_bind_entry(struct sys_enter_accept4_args *ctx) {
 SEC("tracepoint/syscalls/sys_exit_bind")
 int trace_bind_ret(struct sys_exit_bind_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret ;
+    long ret = ctx->ret;
 
     // Если результат отрицательный, значит произошла ошибка
     if (ret < 0) {
-        bpf_printk("trace __sys_bind Accept4 failed for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map_accept, &pid);
+        bpf_printk("trace __sys_bind: Bind failed for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map_bind, &pid);
         return 0;
     }
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_bind, &pid);
     if (!conn_info) {
-        bpf_printk("trace __sys_bind No connection info found for PID=%d\n", pid);
+        bpf_printk("trace __sys_bind: No connection info found for PID=%d\n", pid);
         return 0;
     }
 
-    // Получаем IP и порт клиента из sockaddr, используя сохраненный указатель
+    bpf_printk("sys_exit_bind conn_infosockaddr=%p",conn_info->sock_addr);
+
     struct sockaddr_in addr;
-
-        bpf_printk("trace sys_exit_bind  sock_addr=%d",conn_info->sock_addr);
-
-
     if (bpf_probe_read_user(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
-        bpf_printk("trace __sys_bind Failed to read sockaddr for PID=%d\n", pid);
+        bpf_printk("trace __sys_bind: Failed to read sockaddr for PID=%d\n", pid);
         return 0;
     }
 
     // Извлекаем IP и порт из sockaddr_in, если это IPv4-соединение
     if (addr.sin_family == AF_INET) {
         conn_info->dst_ip = bpf_ntohl(addr.sin_addr.s_addr); // Преобразуем IP к порядку хоста
-        conn_info->dport = bpf_ntohs(addr.sin_port);      // Преобразуем порт к порядку хоста
-        
-        bpf_printk("trace __sys_bind SERVER Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+        conn_info->dport = bpf_ntohs(addr.sin_port);         // Преобразуем порт к порядку хоста
+
+        bpf_printk("trace __sys_bind: SERVER Bound address: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
             conn_info->pid, conn_info->comm,
             (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
             (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
     }
-
-
     return 0;
 }
 
