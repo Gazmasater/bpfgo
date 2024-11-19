@@ -153,13 +153,13 @@ static __always_inline int init_conn_info_bind(struct sys_enter_bind_args *ctx) 
     // Получаем PID и имя процесса
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-    bpf_printk("init LENGTH=%u",ctx->addrlen);
 
 
     // Безопасное копирование структуры sockaddr
     struct sockaddr *sock_addr;
     if (bpf_probe_read(&sock_addr, sizeof(sock_addr), &ctx->umyaddr) == 0) {
         conn_info.sock_addr = sock_addr;
+        bpf_printk("COPY sockaddr");
     } else {
         return -1;  // Если не удалось прочитать указатель, выходим с ошибкой
     }
@@ -294,7 +294,6 @@ int trace_bind_entry(struct sys_enter_bind_args *ctx) {
     u32 pid = current_pid_tgid >> 32;
 
     init_conn_info_bind(ctx);
-    bpf_printk("LENGTH=%u",ctx->addrlen);
 
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_bind, &pid);
