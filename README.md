@@ -1,60 +1,73 @@
-static __always_inline int init_conn_info_bind(struct sys_enter_bind_args *ctx) {
-    struct conn_info_t conn_info = {};
-    u64 current_pid_tgid = bpf_get_current_pid_tgid();
-    u32 pid = current_pid_tgid >> 32;
+#include <linux/ptrace.h>
+#include <linux/socket.h>
+#include <linux/in.h>
 
-    // Получаем PID и имя процесса
+struct conn_info_t {
+    u32 pid;
+    u32 dst_ip;
+    u16 dst_port;
+    char comm[TASK_COMM_LEN];
+    u32 fd;  // ФД сокета
+};
+
+BPF_HASH(conn_info_map, u32, struct conn_info_t);
+
+SEC("tracepoint/syscalls/sys_enter_bind")
+int trace_bind_entry(struct trace_event_raw_sys_enter *ctx) {
+    // Получаем PID процесса
+    u64 pid_tgid = bpf_get_current_pid_tgid();
+    u32 pid = pid_tgid >> 32;
+
+    // Получаем информацию о процессе
+    struct conn_info_t conn_info = {};
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
-    // Копируем данные sockaddr сразу в conn_info
-    struct sockaddr_in addr;
-    if (bpf_probe_read_user(&addr, sizeof(addr), (void *)ctx->umyaddr) == 0) {
-        conn_info.sock_addr_in = addr; // Сохраняем копию структуры
-        bpf_printk("COPY sockaddr_in");
-    } else {
-        bpf_printk("Failed to read sockaddr in sys_enter_bind for PID=%d\n", pid);
-        return -1;  // Если не удалось прочитать указатель, выходим с ошибкой
-    }
+    // Получаем аргументы sys_enter_bind (fd и sockaddr) с использованием PT_REGS
+    int fd = PT_REGS_PARM1(ctx);  // Получаем fd сокета из первого параметра
+    struct sockaddr_in *sock_addr = (struct sockaddr_in *)PT_REGS_PARM2(ctx); // sockaddr из второго параметра
 
-    // Обновляем карту с информацией о соединении
-    bpf_map_update_elem(&conn_info_map_bind, &pid, &conn_info, BPF_ANY);
+    // Запоминаем только fd и pid для будущего использования
+    conn_info.fd = fd;
+
+    // Сохраняем информацию в карте
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
     return 0;
 }
 
-
 SEC("tracepoint/syscalls/sys_exit_bind")
-int trace_bind_ret(struct sys_exit_bind_args *ctx) {
+int trace_bind_exit(struct trace_event_raw_sys_exit *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
+    long ret = PT_REGS_RC(ctx);  // Получаем результат системного вызова
 
-    // Если результат отрицательный, значит произошла ошибка
     if (ret < 0) {
-        bpf_printk("trace __sys_bind: Bind failed for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map_bind, &pid);
-        return 0;
+        // Обработка ошибки
+        bpf_printk("Bind failed for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map, &pid);
+    } else {
+        // Логирование успешной привязки
+        struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
+        if (conn_info) {
+            // Получаем sockaddr после того как системный вызов выполнен
+            struct sockaddr_in *sock_addr = (struct sockaddr_in *)PT_REGS_PARM2(ctx); // sockaddr из второго параметра
+
+            if (sock_addr) {
+                conn_info->dst_ip = bpf_ntohl(sock_addr->sin_addr.s_addr); // Преобразуем IP в порядок хоста
+                conn_info->dst_port = bpf_ntohs(sock_addr->sin_port);     // Преобразуем порт в порядок хоста
+
+                bpf_printk("Bind success for PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+                           conn_info->pid,
+                           conn_info->comm,
+                           (conn_info->dst_ip >> 24) & 0xFF,
+                           (conn_info->dst_ip >> 16) & 0xFF,
+                           (conn_info->dst_ip >> 8) & 0xFF,
+                           conn_info->dst_ip & 0xFF,
+                           conn_info->dst_port);
+            }
+            // Удаляем информацию о соединении после использования
+            bpf_map_delete_elem(&conn_info_map, &pid);
+        }
     }
-
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_bind, &pid);
-    if (!conn_info) {
-        bpf_printk("trace __sys_bind: No connection info found for PID=%d\n", pid);
-        return 0;
-    }
-
-    // Извлекаем IP и порт из сохраненной структуры sockaddr_in
-    if (conn_info->sock_addr_in.sin_family == AF_INET) {
-        conn_info->dst_ip = bpf_ntohl(conn_info->sock_addr_in.sin_addr.s_addr);
-        conn_info->dport = bpf_ntohs(conn_info->sock_addr_in.sin_port);
-
-        bpf_printk("trace __sys_bind: SERVER Bound address: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-            conn_info->pid, conn_info->comm,
-            (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
-            (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
-    }
-
-    // Удаляем запись из карты, если больше не нужна
-    bpf_map_delete_elem(&conn_info_map_bind, &pid);
-
     return 0;
 }
