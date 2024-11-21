@@ -7,6 +7,8 @@
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <arpa/inet.h>
+#include <fcntl.h>  // Для O_NONBLOCK
+
 
 #define PORT 8080
 
@@ -98,4 +100,12 @@ gdb ./server
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <fcntl.h>  // Для O_NONBLOCK
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ gcc -o server server.c
+server.c: In function ‘main’:
+server.c:49:17: warning: implicit declaration of function ‘accept4’; did you mean ‘accept’? [-Wimplicit-function-declaration]
+   49 |     newsockfd = accept4(sockfd, (struct sockaddr *) &client_addr, &client_len, SOCK_NONBLOCK);
+      |                 ^~~~~~~
+      |                 accept
 
