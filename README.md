@@ -8,7 +8,7 @@
 #include <netinet/ip.h>
 #include <arpa/inet.h>
 #include <fcntl.h>  // Для O_NONBLOCK
-
+#include <sys/select.h>
 
 #define PORT 8080
 
@@ -17,7 +17,7 @@ int main() {
     struct sockaddr_in server_addr, client_addr;
     socklen_t client_len;
     char buffer[256];
-    
+
     // Создание сокета
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) {
@@ -46,20 +46,45 @@ int main() {
     client_len = sizeof(client_addr);
 
     // Принятие соединения
-    newsockfd = accept4(sockfd, (struct sockaddr *) &client_addr, &client_len, SOCK_NONBLOCK);
+    newsockfd = accept(sockfd, (struct sockaddr *) &client_addr, &client_len);
     if (newsockfd < 0) {
         perror("ERROR on accept");
         exit(1);
     }
 
-    // Чтение данных от клиента
-    memset(buffer, 0, 256);
-    if (read(newsockfd, buffer, 255) < 0) {
-        perror("ERROR reading from socket");
-        exit(1);
-    }
+    // Установка неблокирующего режима
+    int flags = fcntl(newsockfd, F_GETFL, 0);
+    fcntl(newsockfd, F_SETFL, flags | O_NONBLOCK);
 
-    printf("Message from client: %s\n", buffer);
+    // Использование select для ожидания данных
+    fd_set readfds;
+    struct timeval tv;
+
+    FD_ZERO(&readfds);
+    FD_SET(newsockfd, &readfds);
+
+    tv.tv_sec = 5;  // Таймаут на 5 секунд
+    tv.tv_usec = 0;
+
+    int activity = select(newsockfd + 1, &readfds, NULL, NULL, &tv);
+    if (activity < 0) {
+        perror("select error");
+    } else if (activity == 0) {
+        printf("Timeout, no data available\n");
+    } else {
+        if (FD_ISSET(newsockfd, &readfds)) {
+            memset(buffer, 0, 256);
+            if (read(newsockfd, buffer, 255) < 0) {
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    printf("No data available, try again later.\n");
+                } else {
+                    perror("ERROR reading from socket");
+                    exit(1);
+                }
+            }
+            printf("Message from client: %s\n", buffer);
+        }
+    }
 
     // Закрытие сокетов
     close(newsockfd);
