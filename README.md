@@ -83,6 +83,9 @@ gdb --version
 
 gcc -o server server.c
 
+gcc -o server server.c -D_GNU_SOURCE
+
+
 objdump -d server | grep accept4
 
 gdb ./server
@@ -101,11 +104,4 @@ gdb ./server
 #include <arpa/inet.h>
 #include <fcntl.h>  // Для O_NONBLOCK
 
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ gcc -o server server.c
-server.c: In function ‘main’:
-server.c:49:17: warning: implicit declaration of function ‘accept4’; did you mean ‘accept’? [-Wimplicit-function-declaration]
-   49 |     newsockfd = accept4(sockfd, (struct sockaddr *) &client_addr, &client_len, SOCK_NONBLOCK);
-      |                 ^~~~~~~
-      |                 accept
 
