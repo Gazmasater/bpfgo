@@ -1,80 +1,89 @@
-#include <linux/ptrace.h>
-#include <bcc/proto.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#include <arpa/inet.h>
 
-BPF_HASH(conn_info_map, u32, struct conn_info_t);
+#define PORT 8080
 
-struct conn_info_t {
-    u32 pid;
-    u32 dst_ip;
-    u16 dport;
-    struct sockaddr_in *sock_addr;
-    char comm[TASK_COMM_LEN];
-};
+int main() {
+    int sockfd, newsockfd;
+    struct sockaddr_in server_addr, client_addr;
+    socklen_t client_len;
+    char buffer[256];
+    
+    // Создание сокета
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        perror("ERROR opening socket");
+        exit(1);
+    }
 
-// Tracepoint для sys_bind (enter)
-SEC("tracepoint/syscalls/sys_enter_bind")
-int trace_bind_enter(struct trace_event_raw_sys_enter *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    struct sockaddr_in addr;
-    struct conn_info_t conn_info = {};
+    // Настройка адреса сервера
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(PORT);
 
-    // Получаем параметры системного вызова
-    struct sockaddr *addr_ptr = (struct sockaddr *)PT_REGS_PARM2(ctx);
+    // Привязка сокета к адресу
+    if (bind(sockfd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
+        perror("ERROR on binding");
+        exit(1);
+    }
 
-    // Проверяем, что адрес - это sockaddr_in
-    if (!addr_ptr || addr_ptr->sa_family != AF_INET)
-        return 0;
+    // Прослушивание входящих соединений
+    if (listen(sockfd, 5) < 0) {
+        perror("ERROR on listen");
+        exit(1);
+    }
 
-    // Сохраняем данные о сокете в мапу
-    conn_info.pid = pid;
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+    client_len = sizeof(client_addr);
 
-    // Сохраняем указатель на sockaddr_in
-    conn_info.sock_addr = (struct sockaddr_in *)addr_ptr;
-    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+    // Принятие соединения
+    newsockfd = accept4(sockfd, (struct sockaddr *) &client_addr, &client_len, SOCK_NONBLOCK);
+    if (newsockfd < 0) {
+        perror("ERROR on accept");
+        exit(1);
+    }
+
+    // Чтение данных от клиента
+    memset(buffer, 0, 256);
+    if (read(newsockfd, buffer, 255) < 0) {
+        perror("ERROR reading from socket");
+        exit(1);
+    }
+
+    printf("Message from client: %s\n", buffer);
+
+    // Закрытие сокетов
+    close(newsockfd);
+    close(sockfd);
 
     return 0;
 }
 
-// Tracepoint для sys_bind (exit)
-SEC("tracepoint/syscalls/sys_exit_bind")
-int trace_bind_exit(struct trace_event_raw_sys_exit *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = PT_REGS_RC(ctx);  // Получаем результат вызова
 
-    // Если произошла ошибка, удаляем запись из мапы
-    if (ret < 0) {
-        bpf_printk("sys_bind Failed for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map, &pid);
-        return 0;
-    }
+sudo apt update
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
-    if (!conn_info) {
-        bpf_printk("sys_bind No connection info found for PID=%d\n", pid);
-        return 0;
-    }
+sudo apt install binutils
 
-    // Получаем IP и порт клиента из sockaddr
-    struct sockaddr_in addr;
-    if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
-        bpf_printk("sys_bind Failed to read sockaddr for PID=%d\n", pid);
-        return 0;
-    }
+sudo apt install gdb
 
-    // Извлекаем IP и порт из sockaddr_in
-    if (addr.sin_family == AF_INET) {
-        conn_info->dst_ip = bpf_ntohl(addr.sin_addr.s_addr);  // Преобразуем IP в порядок хоста
-        conn_info->dport = bpf_ntohs(addr.sin_port);  // Преобразуем порт в порядок хоста
 
-        bpf_printk("sys_bind Completed: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-                    conn_info->pid, conn_info->comm,
-                    (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
-                    (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
-    }
+objdump --version
+gdb --version
 
-    // Удаляем информацию о соединении из мапы после обработки
-    bpf_map_delete_elem(&conn_info_map, &pid);
 
-    return 0;
-}
+
+gcc -o server server.c
+
+objdump -d server | grep accept4
+
+gdb ./server
+
+(gdb) break __sys_accept4
+(gdb) run
