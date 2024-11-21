@@ -94,14 +94,5 @@ gdb ./server
 (gdb) run
 
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <fcntl.h>  // Для O_NONBLOCK
-
-
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ./server
+ERROR reading from socket: Resource temporarily unavailable
