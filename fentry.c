@@ -166,9 +166,9 @@ int trace_accept4_entry(struct pt_regs *ctx)
 	init_conn_info_accept(ctx);
 
 	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &pid);
-	if (conn_info)
+	if (conn_info&&( conn_info->comm!="dockerd"))
 	{
-		bpf_printk("SERVER accept4 entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
+		bpf_printk("SERVER accept4 entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
 	}
 
 	return 0;
@@ -283,7 +283,7 @@ int trace_connect_entry(struct pt_regs *ctx)
 	init_conn_info_connect(ctx);
 
 	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_connect, &pid);
-	if (conn_info)
+	if (conn_info&&( conn_info->comm!="dockerd"))
 	{
 		bpf_printk("enter_connect CLIENT Connect entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
 	}
