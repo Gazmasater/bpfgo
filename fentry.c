@@ -126,6 +126,7 @@ static __always_inline int init_conn_info_accept(struct pt_regs *ctx)
 	conn_info.pid = pid;
 	bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 	conn_info.sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
+	bpf_printk("INIT sockaddr=%p",conn_info.sock_addr);
 	conn_info.addrlen = PT_REGS_PARM3(ctx);
 	bpf_map_update_elem(&conn_info_map_accept, &pid, &conn_info, BPF_ANY);
 	return 0;
@@ -193,6 +194,9 @@ int trace_accept4_ret(struct pt_regs *ctx)
 		bpf_printk("EXIT_accept No connection info found for PID=%d\n", pid);
 		return 0;
 	}
+
+	bpf_printk("EXIT sockaddr=%p",conn_info->sock_addr);
+
 
 	struct sockaddr_in addr;
 
