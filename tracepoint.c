@@ -16,6 +16,20 @@ struct conn_info_t
 	u32 addrlen;
 };
 
+struct sys_enter_accept_args
+{
+	unsigned short common_type;
+	unsigned char common_flags;
+	unsigned char common_preempt_count;
+	int common_pid;
+	int __syscall_nr;
+	int fd;
+	int __padding;
+	struct sockaddr *upeer_sockaddr;
+	int *upeer_addrlen;
+};
+
+
 struct sys_enter_accept4_args
 {
 	unsigned short common_type;
@@ -136,20 +150,6 @@ static __always_inline int init_conn_info_accept4(struct sys_enter_accept4_args 
     return init_conn_info((struct sockaddr *)ctx->upeer_sockaddr, &conn_info_map_accept_four, bpf_get_current_pid_tgid() >> 32);
 }
 
-
-
-// static __always_inline int init_conn_info_bind(struct sys_enter_bind_args *ctx)
-// {
-// 	u64 current_pid_tgid = bpf_get_current_pid_tgid();
-// 	u32 pid = current_pid_tgid >> 32;
-
-// 	struct conn_info_t conn_info = {};
-// 	conn_info.pid = pid;
-// 	bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-// 	conn_info.sock_addr = (struct sockaddr *)ctx->umyaddr;
-// 	bpf_map_update_elem(&conn_info_map_bind, &pid, &conn_info, BPF_ANY);
-// 	return 0;
-// }
 
 static __always_inline int init_conn_info_bind(struct sys_enter_bind_args *ctx)
 {
