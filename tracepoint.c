@@ -23,7 +23,8 @@ struct sys_enter_accept4_args
 	unsigned char common_preempt_count;
 	int common_pid;
 	int __syscall_nr;
-	long fd;
+	int fd;
+	int __padding;
 	struct sockaddr *upeer_sockaddr;
 	int *upeer_addrlen;
 	int flags;
@@ -47,7 +48,8 @@ struct sys_enter_bind_args
 	unsigned char common_preempt_count;
 	int common_pid;
 	int __syscall_nr;
-	long fd;
+	int fd;
+	int __padding;	
 	struct sockaddr *umyaddr;
 	int addrlen;
 };
@@ -179,7 +181,9 @@ int trace_bind_ret(struct sys_enter_accept4_args *ctx){
 	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &pid);
 	if (conn_info&&( conn_info->comm!="dockerd"))
 	{
-//		bpf_printk("SERVER accept4 entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
+		
+		bpf_printk("SERVER accept4 entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
+
 	}
 
 	return 0;
