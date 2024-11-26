@@ -1,25 +1,50 @@
-static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf_map_def *map, u32 pid)
-{
-    struct conn_info_t conn_info = {};
-    conn_info.pid = pid;
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-    conn_info.sock_addr = sock_addr;
-    bpf_map_update_elem(map, &pid, &conn_info, BPF_ANY);
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+int main() {
+    int server_fd, client_fd;
+    struct sockaddr_in server_addr, client_addr;
+    socklen_t addr_len = sizeof(client_addr);
+    
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd == -1) {
+        perror("Socket creation failed");
+        return 1;
+    }
+
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(12345);
+
+    if (bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
+        perror("Bind failed");
+        close(server_fd);
+        return 1;
+    }
+
+    if (listen(server_fd, 5) == -1) {
+        perror("Listen failed");
+        close(server_fd);
+        return 1;
+    }
+
+    printf("Waiting for a connection...\n");
+    client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &addr_len);
+    if (client_fd == -1) {
+        perror("Accept failed");
+        close(server_fd);
+        return 1;
+    }
+
+    printf("Connection established.\n");
+    close(client_fd);
+    close(server_fd);
     return 0;
 }
 
-static __always_inline int init_conn_info_accept(struct sys_enter_accept4_args *ctx)
-{
-    return init_conn_info((struct sockaddr *)ctx->upeer_sockaddr, &conn_info_map_accept, bpf_get_current_pid_tgid() >> 32);
-}
+gcc -o simple_accept_server simple_accept_server.c
 
-static __always_inline int init_conn_info_bind(struct sys_enter_bind_args *ctx)
-{
-    return init_conn_info((struct sockaddr *)ctx->umyaddr, &conn_info_map_bind, bpf_get_current_pid_tgid() >> 32);
-}
-
-static __always_inline int init_conn_info_connect(struct sys_enter_connect_args *ctx)
-{
-    return init_conn_info((struct sockaddr *)ctx->uservaddr, &conn_info_map_connect, bpf_get_current_pid_tgid() >> 32);
-}
-
+./simple_accept_server
