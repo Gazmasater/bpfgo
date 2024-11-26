@@ -63,7 +63,7 @@ struct sys_exit_bind_args
 	long ret;
 };
 
-struct sys_enter_connec_argst
+struct sys_enter_connect_args
 {
 
 	unsigned short common_type;
@@ -142,7 +142,7 @@ static __always_inline int init_conn_info_bind(struct sys_enter_bind_args *ctx)
 	return 0;
 }
 
-static __always_inline int init_conn_info_connect(struct sys_enter_connec_argst *ctx)
+static __always_inline int init_conn_info_connect(struct sys_enter_connect_args *ctx)
 {
 	u64 current_pid_tgid = bpf_get_current_pid_tgid();
 	u32 pid = current_pid_tgid >> 32;
@@ -162,7 +162,7 @@ int trace_bind_ret(struct sys_enter_accept4_args *ctx){
 	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &pid);
 	if (conn_info&&( conn_info->comm!="dockerd"))
 	{
-		bpf_printk("SERVER accept4 entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
+//		bpf_printk("SERVER accept4 entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
 	}
 
 	return 0;
@@ -221,7 +221,7 @@ int trace_bind_enter(struct sys_enter_bind_args *ctx)
 	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_bind, &pid);
 	if (conn_info)
 	{
-		bpf_printk("SERVER Bind entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
+//		bpf_printk("SERVER Bind entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
 	}
 
 	return 0;
