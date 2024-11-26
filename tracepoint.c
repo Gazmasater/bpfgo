@@ -23,7 +23,7 @@ struct sys_enter_accept4_args
 	unsigned char common_preempt_count;
 	int common_pid;
 	int __syscall_nr;
-	int fd;
+	long fd;
 	struct sockaddr *upeer_sockaddr;
 	int *upeer_addrlen;
 	int flags;
@@ -47,7 +47,7 @@ struct sys_enter_bind_args
 	unsigned char common_preempt_count;
 	int common_pid;
 	int __syscall_nr;
-	int fd;
+	long fd;
 	struct sockaddr *umyaddr;
 	int addrlen;
 };
@@ -71,7 +71,7 @@ struct sys_enter_connec_argst
 	unsigned char common_preempt_count;
 	int common_pid;
 	int __syscall_nr;
-	int fd;
+	long fd;
 	struct sockaddr *uservaddr;
 	int addrlen;
 };
@@ -79,14 +79,13 @@ struct sys_enter_connec_argst
 struct sys_exit_connect_args
 {
 
-	unsigned short common_type;
-	unsigned char common_flags;
-	unsigned char common_preempt_count;
-	int common_pid;
-	int __syscall_nr;
-	int fd;
-	struct sockaddr *uservaddr;
-	int addrlen;
+unsigned short common_type;      
+unsigned char common_flags;      
+unsigned char common_preempt_count;    
+int common_pid; 
+int __syscall_nr; 
+long ret; 
+
 };
 
 struct
@@ -116,23 +115,21 @@ struct
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
-static __always_inline int init_conn_info_accept(struct pt_regs *ctx)
+static __always_inline int init_conn_info_accept(struct sys_enter_accept4_args *ctx)
 {
 
-	u64 current_pid_tgid = bpf_get_current_pid_tgid();
-	u32 pid = current_pid_tgid >> 32;
+	u32 pid = bpf_get_current_pid_tgid() >> 32;
 
 	struct conn_info_t conn_info = {};
 	conn_info.pid = pid;
 	bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-	conn_info.sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
+	conn_info.sock_addr = (struct sockaddr *)ctx->upeer_sockaddr;
 	bpf_printk("INIT sockaddr=%p",conn_info.sock_addr);
-	conn_info.addrlen = PT_REGS_PARM3(ctx);
 	bpf_map_update_elem(&conn_info_map_accept, &pid, &conn_info, BPF_ANY);
 	return 0;
 }
 
-static __always_inline int init_conn_info_bind(struct pt_regs *ctx)
+static __always_inline int init_conn_info_bind(struct sys_enter_bind_args *ctx)
 {
 	u64 current_pid_tgid = bpf_get_current_pid_tgid();
 	u32 pid = current_pid_tgid >> 32;
@@ -140,30 +137,26 @@ static __always_inline int init_conn_info_bind(struct pt_regs *ctx)
 	struct conn_info_t conn_info = {};
 	conn_info.pid = pid;
 	bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-	conn_info.sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
-	conn_info.addrlen = PT_REGS_PARM3(ctx);
+	conn_info.sock_addr = (struct sockaddr *)ctx->umyaddr;
 	bpf_map_update_elem(&conn_info_map_bind, &pid, &conn_info, BPF_ANY);
 	return 0;
 }
 
-static __always_inline int init_conn_info_connect(struct pt_regs *ctx)
+static __always_inline int init_conn_info_connect(struct sys_enter_connec_argst *ctx)
 {
 	u64 current_pid_tgid = bpf_get_current_pid_tgid();
 	u32 pid = current_pid_tgid >> 32;
 	struct conn_info_t conn_info = {};
 	conn_info.pid = pid;
 	bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-	conn_info.sock_addr = (struct sockaddr *)PT_REGS_PARM2(ctx);
-	conn_info.addrlen = PT_REGS_PARM3(ctx);
+	conn_info.sock_addr = (struct sockaddr *)ctx->uservaddr;
 	bpf_map_update_elem(&conn_info_map_connect, &pid, &conn_info, BPF_ANY);
 	return 0;
 }
 
-SEC("kprobe/__sys_accept4")
-int trace_accept4_entry(struct pt_regs *ctx)
-{
-	u64 current_pid_tgid = bpf_get_current_pid_tgid();
-	u32 pid = current_pid_tgid >> 32;
+SEC("tracepoint/syscalls/sys_enter_accept4")
+int trace_bind_ret(struct sys_enter_accept4_args *ctx){
+	u32 pid = bpf_get_current_pid_tgid() >> 32;
 	init_conn_info_accept(ctx);
 
 	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &pid);
@@ -175,11 +168,10 @@ int trace_accept4_entry(struct pt_regs *ctx)
 	return 0;
 }
 
-SEC("kretprobe/__sys_accept4")
-int trace_accept4_ret(struct pt_regs *ctx)
-{
+SEC("tracepoint/syscalls/sys_exit_accept4")
+int trace_accept4_exit(struct sys_exit_accept4_args *ctx){
 	u32 pid = bpf_get_current_pid_tgid() >> 32;
-	long ret = PT_REGS_RC(ctx);
+	long ret = ctx->ret;
 
 	if (ret < 0)
 	{
@@ -220,11 +212,10 @@ int trace_accept4_ret(struct pt_regs *ctx)
 	return 0;
 }
 
-SEC("kprobe/__sys_bind")
-int trace_bind_entry(struct pt_regs *ctx)
+SEC("tracepoint/syscalls/sys_enter_bind")
+int trace_bind_enter(struct sys_enter_bind_args *ctx)
 {
-	u64 current_pid_tgid = bpf_get_current_pid_tgid();
-	u32 pid = current_pid_tgid >> 32;
+	u32 pid = bpf_get_current_pid_tgid() >> 32;
 	init_conn_info_bind(ctx);
 
 	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_bind, &pid);
@@ -236,11 +227,11 @@ int trace_bind_entry(struct pt_regs *ctx)
 	return 0;
 }
 
-SEC("kretprobe/__sys_bind")
-int trace_bind_ret(struct pt_regs *ctx)
+SEC("tracepoint/syscalls/sys_exit_bind")
+int trace_bind_exit(struct sys_exit_bind_args *ctx)
 {
 	u32 pid = bpf_get_current_pid_tgid() >> 32;
-	long ret = PT_REGS_RC(ctx);
+	long ret = ctx->ret;
 
 	if (ret < 0)
 	{
@@ -278,11 +269,10 @@ int trace_bind_ret(struct pt_regs *ctx)
 	return 0;
 }
 
-SEC("kprobe/__sys_connect")
-int trace_connect_entry(struct pt_regs *ctx)
+SEC("tracepoint/syscalls/sys_enter_connect")
+int trace_connect_enter(struct sys_enter_connect_args *ctx)
 {
-	u64 current_pid_tgid = bpf_get_current_pid_tgid();
-	u32 pid = current_pid_tgid >> 32;
+	u32 pid = bpf_get_current_pid_tgid() >> 32;
 
 	init_conn_info_connect(ctx);
 
@@ -295,11 +285,11 @@ int trace_connect_entry(struct pt_regs *ctx)
 	return 0;
 }
 
-SEC("kretprobe/__sys_connect")
-int trace_connect_ret(struct pt_regs *ctx)
+SEC("tracepoint/syscalls/sys_exit_connect")
+int trace_connect_exit(struct sys_exit_connect_args *ctx)
 {
 	u32 pid = bpf_get_current_pid_tgid() >> 32;
-	long ret = PT_REGS_RC(ctx);
+	long ret = ctx->ret;
 
 	if (ret < 0)
 	{
