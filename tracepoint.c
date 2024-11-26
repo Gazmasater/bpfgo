@@ -74,6 +74,7 @@ struct sys_enter_connect_args
 	long fd;
 	struct sockaddr *uservaddr;
 	int addrlen;
+	//char padding[4];
 };
 
 struct sys_exit_connect_args
@@ -84,7 +85,7 @@ unsigned char common_flags;
 unsigned char common_preempt_count;    
 int common_pid; 
 int __syscall_nr; 
-long ret; 
+int ret; 
 
 };
 
@@ -144,8 +145,7 @@ static __always_inline int init_conn_info_bind(struct sys_enter_bind_args *ctx)
 
 static __always_inline int init_conn_info_connect(struct sys_enter_connect_args *ctx)
 {
-	u64 current_pid_tgid = bpf_get_current_pid_tgid();
-	u32 pid = current_pid_tgid >> 32;
+	u32 pid = bpf_get_current_pid_tgid() >> 32;
 	struct conn_info_t conn_info = {};
 	conn_info.pid = pid;
 	bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
@@ -289,7 +289,9 @@ SEC("tracepoint/syscalls/sys_exit_connect")
 int trace_connect_exit(struct sys_exit_connect_args *ctx)
 {
 	u32 pid = bpf_get_current_pid_tgid() >> 32;
-	long ret = ctx->ret;
+	int ret = ctx->ret;
+
+	bpf_printk("exit connect RET=%d",ret);
 
 	if (ret < 0)
 	{
