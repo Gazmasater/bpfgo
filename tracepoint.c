@@ -137,7 +137,6 @@ static __always_inline int init_conn_info_accept(struct sys_enter_accept4_args *
 	conn_info.pid = pid;
 	bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 	conn_info.sock_addr = (struct sockaddr *)ctx->upeer_sockaddr;
-	bpf_printk("INIT sockaddr=%p",conn_info.sock_addr);
 	bpf_map_update_elem(&conn_info_map_accept, &pid, &conn_info, BPF_ANY);
 	return 0;
 }
@@ -309,7 +308,6 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx)
 	u32 pid = bpf_get_current_pid_tgid() >> 32;
 	int ret = ctx->ret;
 
-	bpf_printk("exit connect RET=%d",ret);
 
 	if (ret < 0)
 	{
