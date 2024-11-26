@@ -111,6 +111,14 @@ struct
 	__uint(max_entries, 1024);
 	__type(key, u32);
 	__type(value, struct conn_info_t);
+} conn_info_map_accept SEC(".maps");
+
+struct
+{
+	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+	__uint(max_entries, 1024);
+	__type(key, u32);
+	__type(value, struct conn_info_t);
 } conn_info_map_accept_four SEC(".maps");
 
 struct
@@ -143,6 +151,11 @@ static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf
     return 0;
 }
 
+static __always_inline int init_conn_info_accept(struct sys_enter_accept_args *ctx)
+{
+    return init_conn_info((struct sockaddr *)ctx->upeer_sockaddr, &conn_info_map_accept, bpf_get_current_pid_tgid() >> 32);
+}
+
 
 
 static __always_inline int init_conn_info_accept4(struct sys_enter_accept4_args *ctx)
@@ -163,31 +176,30 @@ static __always_inline int init_conn_info_connect(struct sys_enter_connect_args 
     return init_conn_info((struct sockaddr *)ctx->uservaddr, &conn_info_map_connect, bpf_get_current_pid_tgid() >> 32);
 }
 
-
-SEC("tracepoint/syscalls/sys_enter_accept4")
-int trace_bind_ret(struct sys_enter_accept4_args *ctx){
+SEC("tracepoint/syscalls/sys_enter_accept")
+int trace_accept_enter(struct sys_enter_accept_args *ctx){
 	u32 pid = bpf_get_current_pid_tgid() >> 32;
-	init_conn_info_accept4(ctx);
+	init_conn_info_accept(ctx);
 
 	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept_four, &pid);
-	if (conn_info&&( conn_info->comm!="dockerd"))
+	if (conn_info)
 	{
 		
-	//	bpf_printk("SERVER accept4 entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
+		bpf_printk("SERVER accept entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
 
 	}
 
 	return 0;
 }
 
-SEC("tracepoint/syscalls/sys_exit_accept4")
-int trace_accept4_exit(struct sys_exit_accept4_args *ctx){
+SEC("tracepoint/syscalls/sys_exit_accept")
+int trace_accept_exit(struct sys_exit_accept4_args *ctx){
 	u32 pid = bpf_get_current_pid_tgid() >> 32;
 	long ret = ctx->ret;
 
 	if (ret < 0)
 	{
-		bpf_printk("EXIT_accept Accept4 failed for PID=%d\n", pid);
+		bpf_printk("EXIT_accept Accept failed for PID=%d\n", pid);
 		bpf_map_delete_elem(&conn_info_map_accept_four, &pid);
 		return 0;
 	}
@@ -216,6 +228,69 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx){
 		conn_info->sport = bpf_ntohs(addr.sin_port);
 
 		bpf_printk("EXIT_accept Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+				   conn_info->pid, conn_info->comm,
+				   (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
+				   (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
+	}
+
+	return 0;
+}
+
+
+
+SEC("tracepoint/syscalls/sys_enter_accept4")
+int trace_bind_ret(struct sys_enter_accept4_args *ctx){
+	u32 pid = bpf_get_current_pid_tgid() >> 32;
+	init_conn_info_accept4(ctx);
+
+	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept_four, &pid);
+	if (conn_info)
+	{
+		
+	//	bpf_printk("SERVER accept4 entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
+
+	}
+
+	return 0;
+}
+
+
+SEC("tracepoint/syscalls/sys_exit_accept4")
+int trace_accept4_exit(struct sys_exit_accept4_args *ctx){
+	u32 pid = bpf_get_current_pid_tgid() >> 32;
+	long ret = ctx->ret;
+
+	if (ret < 0)
+	{
+		bpf_printk("EXIT_accept Accept4 failed for PID=%d\n", pid);
+		bpf_map_delete_elem(&conn_info_map_accept_four, &pid);
+		return 0;
+	}
+
+	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept_four, &pid);
+	if (!conn_info)
+	{
+		bpf_printk("EXIT_accept4 No connection info found for PID=%d\n", pid);
+		return 0;
+	}
+
+	bpf_printk("EXIT_accept4 sockaddr=%p",conn_info->sock_addr);
+
+
+	struct sockaddr_in addr;
+
+	if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0)
+	{
+		bpf_printk("EXIT_accept4 Failed to read sockaddr for PID=%d\n", pid);
+		return 0;
+	}
+
+	if (addr.sin_family == AF_INET)
+	{
+		conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
+		conn_info->sport = bpf_ntohs(addr.sin_port);
+
+		bpf_printk("EXIT_accept4 Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
 				   conn_info->pid, conn_info->comm,
 				   (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
 				   (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
@@ -289,7 +364,7 @@ int trace_connect_enter(struct sys_enter_connect_args *ctx)
 	init_conn_info_connect(ctx);
 
 	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_connect, &pid);
-	if (conn_info&&( conn_info->comm!="dockerd"))
+	if (conn_info)
 	{
 		bpf_printk("enter_connect CLIENT Connect entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
 	}
