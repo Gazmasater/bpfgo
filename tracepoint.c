@@ -62,7 +62,7 @@ struct sys_exit_bind_args
 	unsigned char common_preempt_count;
 	int common_pid;
 	int __syscall_nr;
-	long ret;
+	int ret;
 };
 
 struct sys_enter_connect_args
@@ -97,7 +97,7 @@ struct
 	__uint(max_entries, 1024);
 	__type(key, u32);
 	__type(value, struct conn_info_t);
-} conn_info_map_accept SEC(".maps");
+} conn_info_map_accept_four SEC(".maps");
 
 struct
 {
@@ -130,42 +130,33 @@ static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf
 }
 
 
-static __always_inline int init_conn_info_accept(struct sys_enter_accept4_args *ctx)
+
+static __always_inline int init_conn_info_accept4(struct sys_enter_accept4_args *ctx)
 {
-
-	u32 pid = bpf_get_current_pid_tgid() >> 32;
-
-	struct conn_info_t conn_info = {};
-	conn_info.pid = pid;
-	bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-	conn_info.sock_addr = (struct sockaddr *)ctx->upeer_sockaddr;
-	bpf_map_update_elem(&conn_info_map_accept, &pid, &conn_info, BPF_ANY);
-	return 0;
+    return init_conn_info((struct sockaddr *)ctx->upeer_sockaddr, &conn_info_map_accept_four, bpf_get_current_pid_tgid() >> 32);
 }
 
-static __always_inline int init_conn_info_bind(struct sys_enter_bind_args *ctx)
-{
-	u64 current_pid_tgid = bpf_get_current_pid_tgid();
-	u32 pid = current_pid_tgid >> 32;
 
-	struct conn_info_t conn_info = {};
-	conn_info.pid = pid;
-	bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-	conn_info.sock_addr = (struct sockaddr *)ctx->umyaddr;
-	bpf_map_update_elem(&conn_info_map_bind, &pid, &conn_info, BPF_ANY);
-	return 0;
-}
 
-// static __always_inline int init_conn_info_connect(struct sys_enter_connect_args *ctx)
+// static __always_inline int init_conn_info_bind(struct sys_enter_bind_args *ctx)
 // {
-// 	u32 pid = bpf_get_current_pid_tgid() >> 32;
+// 	u64 current_pid_tgid = bpf_get_current_pid_tgid();
+// 	u32 pid = current_pid_tgid >> 32;
+
 // 	struct conn_info_t conn_info = {};
 // 	conn_info.pid = pid;
 // 	bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-// 	conn_info.sock_addr = (struct sockaddr *)ctx->uservaddr;
-// 	bpf_map_update_elem(&conn_info_map_connect, &pid, &conn_info, BPF_ANY);
+// 	conn_info.sock_addr = (struct sockaddr *)ctx->umyaddr;
+// 	bpf_map_update_elem(&conn_info_map_bind, &pid, &conn_info, BPF_ANY);
 // 	return 0;
 // }
+
+static __always_inline int init_conn_info_bind(struct sys_enter_bind_args *ctx)
+{
+    return init_conn_info((struct sockaddr *)ctx->umyaddr, &conn_info_map_connect, bpf_get_current_pid_tgid() >> 32);
+}
+
+
 
 static __always_inline int init_conn_info_connect(struct sys_enter_connect_args *ctx)
 {
@@ -176,13 +167,13 @@ static __always_inline int init_conn_info_connect(struct sys_enter_connect_args 
 SEC("tracepoint/syscalls/sys_enter_accept4")
 int trace_bind_ret(struct sys_enter_accept4_args *ctx){
 	u32 pid = bpf_get_current_pid_tgid() >> 32;
-	init_conn_info_accept(ctx);
+	init_conn_info_accept4(ctx);
 
-	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &pid);
+	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept_four, &pid);
 	if (conn_info&&( conn_info->comm!="dockerd"))
 	{
 		
-		bpf_printk("SERVER accept4 entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
+	//	bpf_printk("SERVER accept4 entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
 
 	}
 
@@ -197,11 +188,11 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx){
 	if (ret < 0)
 	{
 		bpf_printk("EXIT_accept Accept4 failed for PID=%d\n", pid);
-		bpf_map_delete_elem(&conn_info_map_accept, &pid);
+		bpf_map_delete_elem(&conn_info_map_accept_four, &pid);
 		return 0;
 	}
 
-	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &pid);
+	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept_four, &pid);
 	if (!conn_info)
 	{
 		bpf_printk("EXIT_accept No connection info found for PID=%d\n", pid);
