@@ -166,7 +166,7 @@ static __always_inline int init_conn_info_accept4(struct sys_enter_accept4_args 
 
 static __always_inline int init_conn_info_bind(struct sys_enter_bind_args *ctx)
 {
-    return init_conn_info((struct sockaddr *)ctx->umyaddr, &conn_info_map_connect, bpf_get_current_pid_tgid() >> 32);
+    return init_conn_info((struct sockaddr *)ctx->umyaddr, &conn_info_map_bind, bpf_get_current_pid_tgid() >> 32);
 }
 
 
