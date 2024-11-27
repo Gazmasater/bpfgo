@@ -1,0 +1,108 @@
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./ecli run package.json
+INFO [faerie::elf] strtab: 0x210c symtab 0x2148 relocs 0x2190 sh_offset 0x2190
+libbpf: prog 'trace_accept_exit': BPF program load failed: Invalid argument
+libbpf: prog 'trace_accept_exit': -- BEGIN PROG LOAD LOG --
+0: R1=ctx() R10=fp0
+; int trace_accept_exit(struct sys_exit_accept4_args *ctx){
+0: (bf) r6 = r1                       ; R1=ctx() R6_w=ctx()
+; u32 pid = bpf_get_current_pid_tgid() >> 32;
+1: (85) call bpf_get_current_pid_tgid#14      ; R0_w=scalar()
+; u32 pid = bpf_get_current_pid_tgid() >> 32;
+2: (77) r0 >>= 32                     ; R0_w=scalar(smin=0,smax=umax=0xffffffff,var_off=(0x0; 0xffffffff))
+; u32 pid = bpf_get_current_pid_tgid() >> 32;
+3: (63) *(u32 *)(r10 -4) = r0         ; R0_w=scalar(smin=0,smax=umax=0xffffffff,var_off=(0x0; 0xffffffff)) R10=fp0 fp-8=mmmm????
+; long ret = ctx->ret;
+4: (79) r1 = *(u64 *)(r6 +16)         ; R1_w=scalar() R6_w=ctx()
+; if (ret < 0)
+5: (65) if r1 s> 0xffffffff goto pc+11 17: R0_w=scalar(smin=0,smax=umax=0xffffffff,var_off=(0x0; 0xffffffff)) R1_w=scalar(smin=0,umax=0x7fffffffffffffff,var_off=(0x0; 0x7fffffffffffffff)) R6_w=ctx() R10=fp0 fp-8=mmmm????
+; bpf_map_delete_elem(&conn_info_map_accept_four, &pid);
+17: (bf) r2 = r10                     ; R2_w=fp0 R10=fp0
+; struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept_four, &pid);
+18: (07) r2 += -4                     ; R2_w=fp-4
+19: (18) r1 = 0xffff8bda8c879800      ; R1_w=map_ptr(map=conn_info_map_a,ks=4,vs=48)
+21: (85) call bpf_map_lookup_elem#1   ; R0=map_value_or_null(id=2,map=conn_info_map_a,ks=4,vs=48)
+22: (bf) r6 = r0                      ; R0=map_value_or_null(id=2,map=conn_info_map_a,ks=4,vs=48) R6_w=map_value_or_null(id=2,map=conn_info_map_a,ks=4,vs=48)
+; struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept_four, &pid);
+23: (7b) *(u64 *)(r10 -16) = r6       ; R6_w=map_value_or_null(id=2,map=conn_info_map_a,ks=4,vs=48) R10=fp0 fp-16_w=map_value_or_null(id=2,map=conn_info_map_a,ks=4,vs=48)
+; if (!conn_info)
+24: (55) if r6 != 0x0 goto pc+6 31: R0=map_value(map=conn_info_map_a,ks=4,vs=48) R6_w=map_value(map=conn_info_map_a,ks=4,vs=48) R10=fp0 fp-8=mmmm???? fp-16_w=map_value(map=conn_info_map_a,ks=4,vs=48)
+; bpf_printk("EXIT sockaddr=%p",conn_info->sock_addr);
+31: (79) r3 = *(u64 *)(r6 +32)        ; R3_w=scalar() R6_w=map_value(map=conn_info_map_a,ks=4,vs=48)
+32: (18) r1 = 0xffff8bda8582b18d      ; R1_w=map_value(map=tracepoi.rodata,ks=4,vs=974,off=125)
+34: (b7) r2 = 17                      ; R2_w=17
+35: (85) call bpf_trace_printk#6      ; R0_w=scalar()
+; if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0)
+36: (79) r3 = *(u64 *)(r6 +32)        ; R3_w=scalar() R6_w=map_value(map=conn_info_map_a,ks=4,vs=48)
+37: (bf) r1 = r10                     ; R1_w=fp0 R10=fp0
+; bpf_printk("EXIT sockaddr=%p",conn_info->sock_addr);
+38: (07) r1 += -32                    ; R1_w=fp-32
+; if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0)
+39: (b7) r2 = 16                      ; R2_w=16
+40: (85) call bpf_probe_read#4        ; R0=scalar() fp-24=mmmmmmmm fp-32=mmmmmmmm
+; if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0)
+41: (15) if r0 == 0x0 goto pc+6 48: R0=0 R6=map_value(map=conn_info_map_a,ks=4,vs=48) R10=fp0 fp-8=mmmm???? fp-16=map_value(map=conn_info_map_a,ks=4,vs=48) fp-24=mmmmmmmm fp-32=mmmmmmmm
+48: (bf) r1 = r10                     ; R1_w=fp0 R10=fp0
+; if (addr.sin_family == AF_INET)
+49: (07) r1 += -32                    ; R1_w=fp-32
+50: (69) r1 = *(u16 *)(r1 +0)         ; R1=scalar(smin=smin32=0,smax=umax=smax32=umax32=0xffff,var_off=(0x0; 0xffff)) fp-32=mmmmmmmm
+; if (addr.sin_family == AF_INET)
+51: (55) if r1 != 0x2 goto pc+34      ; R1=2
+52: (bf) r2 = r10                     ; R2_w=fp0 R10=fp0
+; conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
+53: (07) r2 += -32                    ; R2_w=fp-32
+54: (61) r1 = *(u32 *)(r2 +4)         ; R1_w=scalar(smin=0,smax=umax=0xffffffff,var_off=(0x0; 0xffffffff)) R2_w=fp-32 fp-32=mmmmmmmm
+55: (bf) r3 = r1                      ; R1_w=scalar(id=3,smin=0,smax=umax=0xffffffff,var_off=(0x0; 0xffffffff)) R3_w=scalar(id=3,smin=0,smax=umax=0xffffffff,var_off=(0x0; 0xffffffff))
+56: (dc) r3 = be32 r3                 ; R3_w=scalar()
+; conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
+57: (63) *(u32 *)(r6 +4) = r3         ; R3_w=scalar() R6=map_value(map=conn_info_map_a,ks=4,vs=48)
+; conn_info->sport = bpf_ntohs(addr.sin_port);
+58: (69) r4 = *(u16 *)(r2 +2)         ; R2_w=fp-32 R4_w=scalar(smin=smin32=0,smax=umax=smax32=umax32=0xffff,var_off=(0x0; 0xffff)) fp-32=mmmmmmmm
+59: (dc) r4 = be16 r4                 ; R4_w=scalar()
+; conn_info->sport = bpf_ntohs(addr.sin_port);
+60: (6b) *(u16 *)(r6 +12) = r4        ; R4_w=scalar() R6=map_value(map=conn_info_map_a,ks=4,vs=48)
+; bpf_printk("EXIT_accept Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+61: (61) r2 = *(u32 *)(r6 +0)         ; R2_w=scalar(smin=0,smax=umax=0xffffffff,var_off=(0x0; 0xffffffff)) R6=map_value(map=conn_info_map_a,ks=4,vs=48)
+62: (7b) *(u64 *)(r10 -40) = r4       ; R4_w=scalar() R10=fp0 fp-40_w=mmmmmmmm
+63: (57) r3 &= 255                    ; R3_w=scalar(smin=smin32=0,smax=umax=smax32=umax32=255,var_off=(0x0; 0xff))
+64: (7b) *(u64 *)(r10 -48) = r3       ; R3_w=scalar(smin=smin32=0,smax=umax=smax32=umax32=255,var_off=(0x0; 0xff)) R10=fp0 fp-48_w=scalar(smin=smin32=0,smax=umax=smax32=umax32=255,var_off=(0x0; 0xff))
+; conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
+65: (bf) r3 = r1                      ; R1_w=scalar(id=3,smin=0,smax=umax=0xffffffff,var_off=(0x0; 0xffffffff)) R3_w=scalar(id=3,smin=0,smax=umax=0xffffffff,var_off=(0x0; 0xffffffff))
+66: (dc) r3 = be64 r3                 ; R3_w=scalar()
+; bpf_printk("EXIT_accept Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+67: (bf) r4 = r3                      ; R3_w=scalar(id=4) R4_w=scalar(id=4)
+68: (77) r4 >>= 40                    ; R4_w=scalar(smin=smin32=0,smax=umax=smax32=umax32=0xffffff,var_off=(0x0; 0xffffff))
+69: (57) r4 &= 255                    ; R4_w=scalar(smin=smin32=0,smax=umax=smax32=umax32=255,var_off=(0x0; 0xff))
+70: (7b) *(u64 *)(r10 -56) = r4       ; R4_w=scalar(smin=smin32=0,smax=umax=smax32=umax32=255,var_off=(0x0; 0xff)) R10=fp0 fp-56_w=scalar(smin=smin32=0,smax=umax=smax32=umax32=255,var_off=(0x0; 0xff))
+71: (dc) r1 = be16 r1                 ; R1_w=scalar()
+72: (57) r1 &= 255                    ; R1_w=scalar(smin=smin32=0,smax=umax=smax32=umax32=255,var_off=(0x0; 0xff))
+73: (7b) *(u64 *)(r10 -64) = r1       ; R1_w=scalar(smin=smin32=0,smax=umax=smax32=umax32=255,var_off=(0x0; 0xff)) R10=fp0 fp-64_w=scalar(smin=smin32=0,smax=umax=smax32=umax32=255,var_off=(0x0; 0xff))
+74: (77) r3 >>= 56                    ; R3_w=scalar(smin=smin32=0,smax=umax=smax32=umax32=255,var_off=(0x0; 0xff))
+75: (7b) *(u64 *)(r10 -72) = r3       ; R3_w=scalar(smin=smin32=0,smax=umax=smax32=umax32=255,var_off=(0x0; 0xff)) R10=fp0 fp-72_w=scalar(smin=smin32=0,smax=umax=smax32=umax32=255,var_off=(0x0; 0xff))
+76: (07) r6 += 16                     ; R6_w=map_value(map=conn_info_map_a,ks=4,vs=48,off=16)
+77: (7b) *(u64 *)(r10 -80) = r6       ; R6_w=map_value(map=conn_info_map_a,ks=4,vs=48,off=16) R10=fp0 fp-80_w=map_value(map=conn_info_map_a,ks=4,vs=48,off=16)
+78: (7b) *(u64 *)(r10 -88) = r2       ; R2_w=scalar(smin=0,smax=umax=0xffffffff,var_off=(0x0; 0xffffffff)) R10=fp0 fp-88_w=scalar(smin=0,smax=umax=0xffffffff,var_off=(0x0; 0xffffffff))
+79: (bf) r3 = r10                     ; R3_w=fp0 R10=fp0
+; conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
+80: (07) r3 += -88                    ; R3_w=fp-88
+; bpf_printk("EXIT_accept Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+81: (18) r1 = 0xffff8bda8582b1ce      ; R1_w=map_value(map=tracepoi.rodata,ks=4,vs=974,off=190)
+83: (b7) r2 = 75                      ; R2_w=75
+84: (b7) r4 = 56                      ; R4_w=56
+85: (85) call bpf_trace_vprintk#177   ; R0=scalar()
+86: (bf) r2 = r10                     ; R2_w=fp0 R10=fp0
+; bpf_map_update_elem(&conn_info_map_accept_four, &pid, &conn_info, BPF_ANY);
+87: (07) r2 += -4                     ; R2_w=fp-4
+88: (bf) r3 = r10                     ; R3_w=fp0 R10=fp0
+89: (07) r3 += -16                    ; R3_w=fp-16
+90: (18) r1 = 0xffff8bda8c879800      ; R1_w=map_ptr(map=conn_info_map_a,ks=4,vs=48)
+92: (b7) r4 = 0                       ; R4_w=0
+93: (85) call bpf_map_update_elem#2
+invalid indirect access to stack R3 off=-16 size=48
+processed 91 insns (limit 1000000) max_states_per_insn 0 total_states 6 peak_states 6 mark_read 2
+-- END PROG LOAD LOG --
+libbpf: prog 'trace_accept_exit': failed to load: -22
+libbpf: failed to load object 'tracepoint_bpf'
+Error: Failed to run native eBPF program
+
+Caused by:
+    Bpf error: Failed to start polling: Bpf("Failed to load and attach: Failed to load bpf object\n\nCaused by:\n    System error, errno: 22"), RecvError
