@@ -233,6 +233,9 @@ int trace_accept_exit(struct sys_exit_accept4_args *ctx){
 				   (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
 	}
 
+    bpf_map_update_elem(&conn_info_map_accept_four, &pid, &conn_info, BPF_ANY);
+
+
 	return 0;
 }
 
