@@ -90,7 +90,6 @@ struct sys_enter_connect_args
 	long fd;
 	struct sockaddr *uservaddr;
 	int addrlen;
-	//char padding[4];
 };
 
 struct sys_exit_connect_args
@@ -200,11 +199,11 @@ int trace_accept_exit(struct sys_exit_accept4_args *ctx){
 	if (ret < 0)
 	{
 		bpf_printk("EXIT_accept Accept failed for PID=%d\n", pid);
-		bpf_map_delete_elem(&conn_info_map_accept_four, &pid);
+		bpf_map_delete_elem(&conn_info_map_accept, &pid);
 		return 0;
 	}
 
-	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept_four, &pid);
+	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &pid);
 	if (!conn_info)
 	{
 		bpf_printk("EXIT_accept No connection info found for PID=%d\n", pid);
@@ -219,6 +218,8 @@ int trace_accept_exit(struct sys_exit_accept4_args *ctx){
 	if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0)
 	{
 		bpf_printk("EXIT_accept Failed to read sockaddr for PID=%d\n", pid);
+		bpf_map_delete_elem(&conn_info_map_accept, &pid);
+
 		return 0;
 	}
 
@@ -233,7 +234,7 @@ int trace_accept_exit(struct sys_exit_accept4_args *ctx){
 				   (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
 	}
 
-    bpf_map_update_elem(&conn_info_map_accept_four, &pid, &conn_info, BPF_ANY);
+    bpf_map_update_elem(&conn_info_map_accept, &pid, conn_info, BPF_ANY);
 
 
 	return 0;
@@ -285,6 +286,8 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx){
 	if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0)
 	{
 		bpf_printk("EXIT_accept4 Failed to read sockaddr for PID=%d\n", pid);
+		bpf_map_delete_elem(&conn_info_map_accept_four, &pid);
+
 		return 0;
 	}
 
@@ -298,6 +301,9 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx){
 				   (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
 				   (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
 	}
+
+	    bpf_map_update_elem(&conn_info_map_accept_four, &pid, conn_info, BPF_ANY);
+
 
 	return 0;
 }
@@ -342,6 +348,8 @@ int trace_bind_exit(struct sys_exit_bind_args *ctx)
 	if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0)
 	{
 		bpf_printk("EXIT_bind Failed to read sockaddr for PID=%d\n", pid);
+		bpf_map_delete_elem(&conn_info_map_bind, &pid);
+
 		return 0;
 	}
 
@@ -355,6 +363,9 @@ int trace_bind_exit(struct sys_exit_bind_args *ctx)
 				   (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
 				   (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
 	}
+
+		bpf_map_update_elem(&conn_info_map_bind, &pid, conn_info, BPF_ANY);
+
 
 	return 0;
 }
@@ -400,6 +411,8 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx)
 	if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0)
 	{
 		bpf_printk("exit_connect Failed to read sockaddr for PID=%d\n", pid);
+		bpf_map_delete_elem(&conn_info_map_connect, &pid);
+
 		return 0;
 	}
 
@@ -413,6 +426,9 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx)
 				   (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
 				   (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
 	}
+
+	bpf_map_update_elem(&conn_info_map_connect, &pid, conn_info, BPF_ANY);
+
 
 	return 0;
 }
