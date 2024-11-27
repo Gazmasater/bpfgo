@@ -63,6 +63,7 @@ struct
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
+#define AF_INET6 10
 
 
 static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf_map_def *map, u32 pid)
@@ -103,45 +104,62 @@ int trace_bind_ret(struct sys_enter_accept4_args *ctx){
 
 
 SEC("tracepoint/syscalls/sys_exit_accept4")
-int trace_accept4_exit(struct sys_exit_accept4_args *ctx){
-	u32 pid = bpf_get_current_pid_tgid() >> 32;
-	long ret = ctx->ret;
+int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    long ret = ctx->ret;
 
-	if (ret < 0)
-	{
-		bpf_printk("EXIT_accept Accept4 failed for PID=%d\n", pid);
-		bpf_map_delete_elem(&conn_info_map_accept_four, &pid);
-		return 0;
-	}
-
-	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept_four, &pid);
-	if (!conn_info)
-	{
-		bpf_printk("EXIT_accept4 No connection info found for PID=%d\n", pid);
-		return 0;
-	}
-
-	u16 family;
-    if (bpf_probe_read(&family, sizeof(family), conn_info->sock_addr) != 0) {
-        bpf_printk("EXIT_accept4 Failed to read address family for PID=%d\n", pid);
+    if (ret < 0) {
+        bpf_printk("EXIT_accept Accept4 failed for PID=%d\n", pid);
         bpf_map_delete_elem(&conn_info_map_accept_four, &pid);
         return 0;
     }
 
-	struct sockaddr_in6 addr;
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept_four, &pid);
+    if (!conn_info) {
+        bpf_printk("EXIT_accept4 No connection info found for PID=%d\n", pid);
+        return 0;
+    }
 
-	if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0)
-	{
-		bpf_printk("EXIT_accept4 Failed to read sockaddr for PID=%d\n", pid);
-		bpf_map_delete_elem(&conn_info_map_accept_four, &pid);
+    // Читаем первый байт для sa_family
+    u8 sa_family;
+    if (bpf_probe_read(&sa_family, sizeof(sa_family), conn_info->sock_addr) != 0) {
+        bpf_printk("EXIT_accept4 Failed to read sa_family for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map_accept_four, &pid);
+        return 0;
+    }
 
-		return 0;
-	}
+    if (sa_family == AF_INET) {
+        struct sockaddr_in addr4;
+        if (bpf_probe_read(&addr4, sizeof(addr4), conn_info->sock_addr) != 0) {
+            bpf_printk("EXIT_accept4 Failed to read sockaddr_in for PID=%d\n", pid);
+            bpf_map_delete_elem(&conn_info_map_accept_four, &pid);
+            return 0;
+        }
 
-	bpf_printk("EXIT_ACCEPT4 PROTOCOL=%d",addr.sin6_family);
+        conn_info->src_ip = bpf_ntohl(addr4.sin_addr.s_addr);
+        conn_info->sport = bpf_ntohs(addr4.sin_port);
 
+        bpf_printk("EXIT_accept4 Accepted IPv4 connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+                   conn_info->pid, conn_info->comm,
+                   (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
+                   (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
+    } else if (sa_family == AF_INET6) {
+        struct sockaddr_in6 addr6;
+        if (bpf_probe_read(&addr6, sizeof(addr6), conn_info->sock_addr) != 0) {
+            bpf_printk("EXIT_accept4 Failed to read sockaddr_in6 for PID=%d\n", pid);
+            bpf_map_delete_elem(&conn_info_map_accept_four, &pid);
+            return 0;
+        }
 
+        conn_info->sport = bpf_ntohs(addr6.sin6_port);
+		bpf_printk("EXIT ACCEPT4 IP6 port=%d",  conn_info->sport );
 
-	return 0;
+        
+    } else {
+        bpf_printk("EXIT_accept4 Unknown protocol family for PID=%d, sa_family=%d\n", pid, sa_family);
+    }
+
+    bpf_map_update_elem(&conn_info_map_accept_four, &pid, conn_info, BPF_ANY);
+
+    return 0;
 }
-
