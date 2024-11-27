@@ -291,6 +291,8 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx){
 		return 0;
 	}
 
+	bpf_printk("PROTOCOL=%d",addr.sin_family);
+
 	if (addr.sin_family == AF_INET)
 	{
 		conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
