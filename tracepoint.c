@@ -7,6 +7,8 @@ struct conn_info_t
 {
 	u32 pid;
 	u32 src_ip;
+    u32 src_ip6;
+
 	u32 dst_ip;
 
 	u16 sport;
@@ -152,9 +154,17 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
         }
 
         conn_info->sport = bpf_ntohs(addr6.sin6_port);
-		bpf_printk("EXIT ACCEPT4 IP6 port=%d",  conn_info->sport );
+        conn_info->src_ip6 = bpf_ntohs(addr6.sin6_addr);
 
-        
+
+        // Выводим IPv6 адрес
+        bpf_printk("EXIT_accept4 Accepted IPv6 connection: PID=%d, Comm=%s, IP=[%x:%x:%x:%x:%x:%x:%x:%x], Port=%d\n",
+                   conn_info->pid, conn_info->comm,
+                   ntohs(addr6.sin6_addr.in6_u[0]), ntohs(addr6.sin6_addr.in6_u[1]),
+                   ntohs(addr6.sin6_addr.in6_u[2]), ntohs(aaddr6.sin6_addr.in6_u[3]),
+                   ntohs(addr6.sin6_addr.in6_u[4]), ntohs(addr6.sin6_addr.in6_u[5]),
+                   ntohs(addr6.sin6_addr.in6_u[6]), ntohs(addr6.sin6_addr.in6_u[7]),
+                   conn_info->sport);
     } else {
         bpf_printk("EXIT_accept4 Unknown protocol family for PID=%d, sa_family=%d\n", pid, sa_family);
     }
