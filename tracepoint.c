@@ -32,16 +32,17 @@ struct sys_enter_accept_args
 
 struct sys_enter_accept4_args
 {
-	unsigned short common_type;
-	unsigned char common_flags;
-	unsigned char common_preempt_count;
-	int common_pid;
-	int __syscall_nr;
-	int fd;
-	int __padding;
-	struct sockaddr *upeer_sockaddr;
-	int *upeer_addrlen;
-	int flags;
+	unsigned short common_type; //2
+	unsigned char common_flags;//1
+	unsigned char common_preempt_count;//1
+	int common_pid;//4
+	int __syscall_nr;//4
+	int fd;//4
+	int __padding;//4
+
+	struct sockaddr *upeer_sockaddr;//8
+	int *upeer_addrlen;//8
+	int flags;//4
 };
 
 struct sys_exit_accept4_args
@@ -222,6 +223,8 @@ int trace_accept_exit(struct sys_exit_accept4_args *ctx){
 
 		return 0;
 	}
+
+	bpf_printk("sys_exit_accept PROTOCOL=%d",addr.sin_family);
 
 	if (addr.sin_family == AF_INET)
 	{
