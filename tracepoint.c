@@ -115,6 +115,28 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
             return 0;
         }
 
+// Выводим содержимое поля addr6.sin6_addr до копирования
+bpf_printk("EXIT_accept4 addr6.sin6_addr: ");
+for (int i = 0; i < 16; i++) {
+    bpf_printk("%02x", addr6.sin6_addr.in6_u.u6_addr8[i]);
+}
+bpf_printk("\n");
+
+// Копирование IPv6-адреса в src_ip6
+if (bpf_probe_read(conn_info->src_ip6, sizeof(conn_info->src_ip6), addr6.sin6_addr.in6_u.u6_addr8) != 0) {
+    bpf_printk("EXIT_accept4 Failed to copy IPv6 address for PID=%d\n", pid);
+    bpf_map_delete_elem(&conn_info_map_accept_four, &pid);
+    return 0;
+}
+
+// Выводим поле conn_info->src_ip6 после копирования
+bpf_printk("EXIT_accept4 src_ip6 for PID=%d: ", pid);
+for (int i = 0; i < 16; i++) {
+    bpf_printk("%02x", conn_info->src_ip6[i]);
+}
+bpf_printk("\n");
+
+
 
         conn_info->sport = bpf_ntohs(addr6.sin6_port);
         bpf_printk("exit ACCEPT4 IP6 PORT=%d",conn_info->sport);
