@@ -24,6 +24,23 @@ struct socket_info {
 };
 
 
+struct sys_enter_sendto_args
+{
+        short common_type;     
+        unsigned char common_flags;       
+        unsigned char common_preempt_count;     
+        int common_p;
+        int __syscall_nr; 
+        int fd;  
+        void * buff;     
+        size_t len;       
+        unsigned int flags;       
+        struct sockaddr * addr;   
+        int addr_len;    
+
+};
+
+
 struct sys_enter_accept_args
 {
 	unsigned short common_type;
@@ -406,48 +423,88 @@ int trace_bind_enter(struct sys_enter_bind_args *ctx)
 SEC("tracepoint/syscalls/sys_exit_bind")
 int trace_bind_exit(struct sys_exit_bind_args *ctx)
 {
-	u32 pid = bpf_get_current_pid_tgid() >> 32;
-	long ret = ctx->ret;
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    long ret = ctx->ret;
 
-	if (ret < 0)
-	{
-		bpf_printk("EXIT_bind  failed for PID=%d\n", pid);
-		bpf_map_delete_elem(&conn_info_map_bind, &pid);
-		return 0;
-	}
+    if (ret < 0)
+    {
+        bpf_printk("EXIT_bind failed for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map_bind, &pid);
+        bpf_map_delete_elem(&conn_info_map_bind_udp, &pid); // Удаляем для UDP тоже
+        return 0;
+    }
 
-	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_bind, &pid);
-	if (!conn_info)
-	{
-		bpf_printk("EXIT_bind No connection info found for PID=%d\n", pid);
-		return 0;
-	}
+    struct socket_info *sock_info = bpf_map_lookup_elem(&socket_map, &pid);
+    if (!sock_info)
+    {
+        bpf_printk("EXIT_bind No socket info found for PID=%d\n", pid);
+        return 0;
+    }
 
-	struct sockaddr_in addr;
+    if (sock_info->type == SOCK_DGRAM) // Для UDP
+    {
+        struct conn_info_t *conn_info_udp = bpf_map_lookup_elem(&conn_info_map_bind_udp, &pid);
+        if (!conn_info_udp)
+        {
+            bpf_printk("EXIT_bind No UDP connection info found for PID=%d\n", pid);
+            return 0;
+        }
 
-	if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0)
-	{
-		bpf_printk("EXIT_bind Failed to read sockaddr for PID=%d\n", pid);
-		bpf_map_delete_elem(&conn_info_map_bind, &pid);
+        struct sockaddr_in addr;
+        if (bpf_probe_read(&addr, sizeof(addr), conn_info_udp->sock_addr) != 0)
+        {
+            bpf_printk("EXIT_bind Failed to read sockaddr for UDP PID=%d\n", pid);
+            bpf_map_delete_elem(&conn_info_map_bind_udp, &pid);
+            return 0;
+        }
 
-		return 0;
-	}
+        if (addr.sin_family == AF_INET)
+        {
+            conn_info_udp->dst_ip = bpf_ntohl(addr.sin_addr.s_addr);
+            conn_info_udp->dport = bpf_ntohs(addr.sin_port);
 
-	if (addr.sin_family == AF_INET)
-	{
-		conn_info->dst_ip = bpf_ntohl(addr.sin_addr.s_addr);
-		conn_info->dport = bpf_ntohs(addr.sin_port);
+            bpf_printk("EXIT_bind UDP connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+                       conn_info_udp->pid, conn_info_udp->comm,
+                       (conn_info_udp->dst_ip >> 24) & 0xFF, (conn_info_udp->dst_ip >> 16) & 0xFF,
+                       (conn_info_udp->dst_ip >> 8) & 0xFF, conn_info_udp->dst_ip & 0xFF,
+                       conn_info_udp->dport);
+        }
 
-		bpf_printk("EXIT_bind SERVER  connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-				   conn_info->pid, conn_info->comm,
-				   (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
-				   (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
-	}
+        bpf_map_update_elem(&conn_info_map_bind_udp, &pid, conn_info_udp, BPF_ANY);
+    }
+    else // Для TCP
+    {
+        struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_bind, &pid);
+        if (!conn_info)
+        {
+            bpf_printk("EXIT_bind No TCP connection info found for PID=%d\n", pid);
+            return 0;
+        }
 
-		bpf_map_update_elem(&conn_info_map_bind, &pid, conn_info, BPF_ANY);
+        struct sockaddr_in addr;
+        if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0)
+        {
+            bpf_printk("EXIT_bind Failed to read sockaddr for TCP PID=%d\n", pid);
+            bpf_map_delete_elem(&conn_info_map_bind, &pid);
+            return 0;
+        }
 
+        if (addr.sin_family == AF_INET)
+        {
+            conn_info->dst_ip = bpf_ntohl(addr.sin_addr.s_addr);
+            conn_info->dport = bpf_ntohs(addr.sin_port);
 
-	return 0;
+            bpf_printk("EXIT_bind TCP connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+                       conn_info->pid, conn_info->comm,
+                       (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
+                       (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF,
+                       conn_info->dport);
+        }
+
+        bpf_map_update_elem(&conn_info_map_bind, &pid, conn_info, BPF_ANY);
+    }
+
+    return 0;
 }
 
 // SEC("tracepoint/syscalls/sys_enter_connect")
