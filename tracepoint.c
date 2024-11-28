@@ -12,7 +12,7 @@ struct conn_info_t {
     char comm[16];
     struct sockaddr *sock_addr;
     u32 addrlen;
-    u8 src_ip6[16]; // IPv6 адрес сохраняется как массив байтов
+    u16 src_ip6[16]; // IPv6 адрес сохраняется как массив байтов
 };
 
 struct sys_enter_accept4_args {
