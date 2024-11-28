@@ -135,6 +135,14 @@ struct
 	__uint(max_entries, 1024);
 	__type(key, u32);
 	__type(value, struct conn_info_t);
+} conn_info_map_bind_udp SEC(".maps");
+
+struct
+{
+	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+	__uint(max_entries, 1024);
+	__type(key, u32);
+	__type(value, struct conn_info_t);
 } conn_info_map_connect SEC(".maps");
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
@@ -150,6 +158,13 @@ static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf
     bpf_map_update_elem(map, &pid, &conn_info, BPF_ANY);
     return 0;
 }
+
+static __always_inline int init_conn_info_bind_udp(struct sys_enter_bind_udp_args *ctx)
+{
+    return init_conn_info((struct sockaddr *)ctx->upeer_sockaddr, &conn_info_map_bind_udp, bpf_get_current_pid_tgid() >> 32);
+}
+
+
 
 static __always_inline int init_conn_info_accept(struct sys_enter_accept_args *ctx)
 {
