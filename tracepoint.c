@@ -39,6 +39,18 @@ struct sys_enter_sendto_args
         int addr_len;     
 };
 
+struct sys_exit_sendto_args
+{
+        unsigned short common_type;       
+        unsigned char common_flags;       
+        unsigned char common_preempt_count;       
+        int common_pid;
+        int __syscall_nr; 
+        long ret; 
+
+
+};
+
 
 struct sys_enter_accept_args
 {
