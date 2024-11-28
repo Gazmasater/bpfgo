@@ -275,22 +275,32 @@ int trace_socket(struct trace_event_raw_sys_enter *ctx) {
 }
 
 
+#define TASK_COMM_LEN 16
+
 SEC("tracepoint/syscalls/sys_enter_sendto")
-int trace_bind_ret(struct sys_enter_sendto_args *ctx){
-	u32 pid = bpf_get_current_pid_tgid() >> 32;
-	init_conn_info_sendto(ctx);
+int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    
+    // Инициализируем информацию о соединении
+    init_conn_info_sendto(ctx);
 
-	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sendto, &pid);
-	if (conn_info)
-	{
-		
-	bpf_printk("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!11CLIENT UDP sendto entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
+    // Получаем информацию о соединении для текущего процесса
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sendto, &pid);
+    if (conn_info) {
+        // Проверяем, если имя процесса содержит меньше 4 символов
+        int comm_len = 0;
+        while (comm_len < TASK_COMM_LEN && conn_info->comm[comm_len] != '\0') {
+            comm_len++;
+        }
 
-	}
+        // Если длина имени процесса меньше 4, выводим информацию
+        if (comm_len < 4) {
+            bpf_printk("CLIENT UDP sendto entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
+        }
+    }
 
-	return 0;
+    return 0;
 }
-
 
 
 // SEC("tracepoint/syscalls/sys_enter_accept")
@@ -447,12 +457,12 @@ int trace_bind_enter(struct sys_enter_bind_args *ctx)
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_bind, &pid);
     if (conn_info) {
-         bpf_printk("TCP Bind entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
+ //        bpf_printk("TCP Bind entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
     }
 
     struct conn_info_t *conn_info_udp = bpf_map_lookup_elem(&conn_info_map_bind_udp, &pid);
     if (conn_info_udp) {
-         bpf_printk("UDP Bind entry: PID=%d, Comm=%s\n", pid, conn_info_udp->comm);
+ //        bpf_printk("UDP Bind entry: PID=%d, Comm=%s\n", pid, conn_info_udp->comm);
     }
 
     return 0;
