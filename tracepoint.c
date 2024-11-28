@@ -124,20 +124,21 @@ bpf_printk("\n");
 
 
 // Копирование IPv6-адреса в src_ip6
-if (bpf_probe_read(conn_info->src_ip6, sizeof(conn_info->src_ip6), addr6.sin6_addr.in6_u.u6_addr8) != 0) {
-    bpf_printk("EXIT_accept4 Failed to copy IPv6 address for PID=%d\n", pid);
-    bpf_map_delete_elem(&conn_info_map_accept_four, &pid);
-    return 0;
-}
+// if (bpf_probe_read(conn_info->src_ip6, sizeof(conn_info->src_ip6), addr6.sin6_addr.in6_u.u6_addr16) != 0) {
+//     bpf_printk("EXIT_accept4 Failed to copy IPv6 address for PID=%d\n", pid);
+//     bpf_map_delete_elem(&conn_info_map_accept_four, &pid);
+//     return 0;
+// }
 
-// Выводим поле conn_info->src_ip6 после копирования
-bpf_printk("EXIT_accept4 src_ip6 for PID=%d: ", pid);
-for (int i = 0; i < 8; i++) {
-    uint16_t addr = (conn_info->src_ip6[2*i] << 8) | conn_info->src_ip6[2*i + 1];
-    bpf_printk("%02x%02x ", (addr >> 8) & 0xFF, addr & 0xFF);
-}
-bpf_printk("\n");
-
+// Выводим IPv6-адрес после копирования
+// bpf_printk("EXIT_accept4 src_ip6 for PID=%d: ", pid);
+// for (int i = 0; i < 8; i++) {
+//     // Читаем два байта за раз и выводим их как 16-битное значение
+//     uint16_t addr = (conn_info->src_ip6[2*i] << 8) | conn_info->src_ip6[2*i + 1];
+//     // Выводим адрес в формате двух байтов
+//     bpf_printk("%02x%02x ", (addr >> 8) & 0xFF, addr & 0xFF);
+// }
+// bpf_printk("\n");
 
 
         conn_info->sport = bpf_ntohs(addr6.sin6_port);
