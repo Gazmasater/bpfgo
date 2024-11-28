@@ -147,6 +147,8 @@ struct
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
+#define SOCK_DGRAM 2
+
 
 
 static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf_map_def *map, u32 pid)
@@ -159,10 +161,8 @@ static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf
     return 0;
 }
 
-static __always_inline int init_conn_info_bind_udp(struct sys_enter_bind_udp_args *ctx)
-{
-    return init_conn_info((struct sockaddr *)ctx->upeer_sockaddr, &conn_info_map_bind_udp, bpf_get_current_pid_tgid() >> 32);
-}
+
+
 
 
 
@@ -183,6 +183,12 @@ static __always_inline int init_conn_info_bind(struct sys_enter_bind_args *ctx)
 {
     return init_conn_info((struct sockaddr *)ctx->umyaddr, &conn_info_map_bind, bpf_get_current_pid_tgid() >> 32);
 }
+
+static __always_inline int init_conn_info_bind_udp(struct sys_enter_bind_args *ctx)
+{
+    return init_conn_info((struct sockaddr *)ctx->umyaddr, &conn_info_map_bind_udp, bpf_get_current_pid_tgid() >> 32);
+}
+
 
 
 
