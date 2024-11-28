@@ -26,18 +26,17 @@ struct socket_info {
 
 struct sys_enter_sendto_args
 {
-        short common_type;     
+        unsigned short common_type;      
         unsigned char common_flags;       
-        unsigned char common_preempt_count;     
-        int common_p;
+        unsigned char common_preempt_count;       
+        int common_pid;
         int __syscall_nr; 
-        int fd;  
-        void * buff;     
-        size_t len;       
+        int fd;   
+        void * buff;      
+        size_t len;      
         unsigned int flags;       
-        struct sockaddr * addr;   
-        int addr_len;    
-
+        struct sockaddr * addr;  
+        int addr_len;     
 };
 
 
