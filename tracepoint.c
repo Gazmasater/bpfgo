@@ -115,21 +115,10 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
             return 0;
         }
 
-        if (bpf_probe_read(&conn_info->src_ip6, sizeof(conn_info->src_ip6), addr6.sin6_addr.s6_addr) != 0) {
-            bpf_printk("EXIT_accept4 Failed to read IPv6 address for PID=%d\n", pid);
-            bpf_map_delete_elem(&conn_info_map_accept_four, &pid);
-            return 0;
-        }
 
         conn_info->sport = bpf_ntohs(addr6.sin6_port);
+        bpf_printk("exit ACCEPT4 IP6 PORT=%d",conn_info->sport);
 
-        bpf_printk("EXIT_accept4 Accepted IPv6 connection: PID=%d, Comm=%s, IP=[%x:%x:%x:%x:%x:%x:%x:%x], Port=%d\n",
-                   conn_info->pid, conn_info->comm,
-                   bpf_ntohs(((u16 *)conn_info->src_ip6)[0]), bpf_ntohs(((u16 *)conn_info->src_ip6)[1]),
-                   bpf_ntohs(((u16 *)conn_info->src_ip6)[2]), bpf_ntohs(((u16 *)conn_info->src_ip6)[3]),
-                   bpf_ntohs(((u16 *)conn_info->src_ip6)[4]), bpf_ntohs(((u16 *)conn_info->src_ip6)[5]),
-                   bpf_ntohs(((u16 *)conn_info->src_ip6)[6]), bpf_ntohs(((u16 *)conn_info->src_ip6)[7]),
-                   conn_info->sport);
     } else {
         bpf_printk("EXIT_accept4 Unknown protocol family for PID=%d, sa_family=%d\n", pid, sa_family);
     }
@@ -138,4 +127,3 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
 
     return 0;
 }
-
