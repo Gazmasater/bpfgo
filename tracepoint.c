@@ -280,23 +280,15 @@ int trace_socket(struct trace_event_raw_sys_enter *ctx) {
 SEC("tracepoint/syscalls/sys_enter_sendto")
 int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    
-    // Инициализируем информацию о соединении
+
     init_conn_info_sendto(ctx);
 
     // Получаем информацию о соединении для текущего процесса
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sendto, &pid);
     if (conn_info) {
-        // Проверяем, если имя процесса содержит меньше 4 символов
-        int comm_len = 0;
-        while (comm_len < TASK_COMM_LEN && conn_info->comm[comm_len] != '\0') {
-            comm_len++;
-        }
-
-        // Если длина имени процесса меньше 4, выводим информацию
-        if (comm_len < 4) {
+        
             bpf_printk("CLIENT UDP sendto entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
-        }
+        
     }
 
     return 0;
