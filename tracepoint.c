@@ -155,6 +155,14 @@ struct
 	__uint(max_entries, 1024);
 	__type(key, u32);
 	__type(value, struct conn_info_t);
+} conn_info_map_sendto SEC(".maps");
+
+struct
+{
+	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+	__uint(max_entries, 1024);
+	__type(key, u32);
+	__type(value, struct conn_info_t);
 } conn_info_map_accept SEC(".maps");
 
 struct
@@ -205,9 +213,10 @@ static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf
     return 0;
 }
 
-
-
-
+static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *ctx)
+{
+    return init_conn_info((struct sockaddr *)ctx->addr, &conn_info_map_sendto, bpf_get_current_pid_tgid() >> 32);
+}
 
 
 static __always_inline int init_conn_info_accept(struct sys_enter_accept_args *ctx)
@@ -264,6 +273,24 @@ int trace_socket(struct trace_event_raw_sys_enter *ctx) {
 
     return 0;
 }
+
+
+SEC("tracepoint/syscalls/sys_enter_sendto")
+int trace_bind_ret(struct sys_enter_sendto_args *ctx){
+	u32 pid = bpf_get_current_pid_tgid() >> 32;
+	init_conn_info_sendto(ctx);
+
+	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sendto, &pid);
+	if (conn_info)
+	{
+		
+	bpf_printk("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!11CLIENT UDP sendto entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
+
+	}
+
+	return 0;
+}
+
 
 
 // SEC("tracepoint/syscalls/sys_enter_accept")
