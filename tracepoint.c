@@ -44,6 +44,7 @@ struct sys_enter_sendto_args
         int addr_len;     
 };
 
+
 struct sys_exit_sendto_args
 {
         unsigned short common_type;       
@@ -52,9 +53,36 @@ struct sys_exit_sendto_args
         int common_pid;
         int __syscall_nr; 
         long ret; 
+};
 
+struct sys_enter_recvfrom
+{
+        unsigned short common_type;       
+        unsigned char common_flags;       
+        unsigned char common_preempt_count;      
+        int common_pid;
+        int __syscall_nr; 
+        int fd;   
+        void * ubuf;      
+        size_t size;     
+        unsigned int flags;       
+        struct sockaddr * addr;   
+        int * addr_len;   
 
 };
+
+struct sys_exit_recvfrom
+
+{
+        unsigned short common_type;       
+        unsigned char common_flags;       
+        unsigned char common_preempt_count;       
+        int common_pid;   
+        int __syscall_nr; 
+        long ret; 
+
+};
+
 
 
 struct sys_enter_accept_args
@@ -298,10 +326,9 @@ int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
 
     // Получаем информацию о соединении для текущего процесса
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sendto, &pid);
-    if (conn_info) {
+    if (conn_info&&conn_info->comm[0]=='n') {
         
-            bpf_printk("CLIENT UDP sendto entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
-
+        bpf_printk("CLIENT UDP sendto entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
         
     }
 
@@ -463,12 +490,12 @@ int trace_bind_enter(struct sys_enter_bind_args *ctx)
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_bind, &pid);
     if (conn_info) {
- //        bpf_printk("TCP Bind entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
+         bpf_printk("TCP Bind entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
     }
 
     struct conn_info_t *conn_info_udp = bpf_map_lookup_elem(&conn_info_map_bind_udp, &pid);
     if (conn_info_udp) {
- //        bpf_printk("UDP Bind entry: PID=%d, Comm=%s\n", pid, conn_info_udp->comm);
+        bpf_printk("UDP Bind entry: PID=%d, Comm=%s\n", pid, conn_info_udp->comm);
     }
 
     return 0;
