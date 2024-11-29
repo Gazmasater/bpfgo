@@ -346,6 +346,44 @@ int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx) {
     return 0;
 }
 
+SEC("tracepoint/syscalls/sys_exit_recvfrom")
+int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    ssize_t ret = ctx->ret;  // Результат системного вызова
+
+    // Проверяем, есть ли информация о соединении для текущего процесса
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_recvfrom, &pid);
+    if (conn_info && conn_info->comm[0] == 'n') {
+        if (ret > 0) {
+            struct sockaddr_in addr = {};
+            if (bpf_probe_read_user(&addr, sizeof(addr), conn_info->sock_addr) == 0) {
+                // Обновляем информацию в conn_info
+                conn_info->dst_ip = bpf_ntohl(addr.sin_addr.s_addr);
+                conn_info->dport = bpf_ntohs(addr.sin_port);
+
+                // Логируем полученную информацию
+                bpf_printk("CLIENT UDP sys_exit_recvfrom: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d, Bytes=%ld\n",
+                           conn_info->pid, conn_info->comm,
+                           (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
+                           (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF,
+                           conn_info->dport);
+
+                // Сохраняем обратно в карту
+                bpf_map_update_elem(&conn_info_map_recvfrom, &pid, conn_info, BPF_ANY);
+            } else {
+                bpf_printk("CLIENT UDP sys_exit_recvfrom: Failed to read sockaddr for PID=%d, Comm=%s\n",
+                           conn_info->pid, conn_info->comm);
+            }
+        } else {
+            bpf_printk("CLIENT UDP sys_exit_recvfrom failed: PID=%d, Comm=%s, Return=%ld\n",
+                       conn_info->pid, conn_info->comm, ret);
+        }
+    }
+
+    return 0;
+}
+
+
 
 SEC("tracepoint/syscalls/sys_enter_sendto")
 int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
