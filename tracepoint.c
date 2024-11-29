@@ -78,7 +78,8 @@ struct sys_exit_recvfrom_args
         unsigned char common_flags;       
         unsigned char common_preempt_count;       
         int common_pid;   
-        int __syscall_nr; 
+        int __syscall_nr;
+        int __padding; 
         long ret; 
 
 };
@@ -349,7 +350,7 @@ int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx) {
 SEC("tracepoint/syscalls/sys_exit_recvfrom")
 int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    ssize_t ret = ctx->ret;  // Результат системного вызова
+    long ret = ctx->ret;
 
     // Проверяем, есть ли информация о соединении для текущего процесса
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_recvfrom, &pid);
