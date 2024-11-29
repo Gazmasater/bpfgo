@@ -55,7 +55,7 @@ struct sys_exit_sendto_args
         long ret; 
 };
 
-struct sys_enter_recvfrom
+struct sys_enter_recvfrom_args
 {
         unsigned short common_type;       
         unsigned char common_flags;       
@@ -71,7 +71,7 @@ struct sys_enter_recvfrom
 
 };
 
-struct sys_exit_recvfrom
+struct sys_exit_recvfrom_args
 
 {
         unsigned short common_type;       
@@ -201,6 +201,14 @@ struct
 	__uint(max_entries, 1024);
 	__type(key, u32);
 	__type(value, struct conn_info_t);
+} conn_info_map_recvfrom SEC(".maps");
+
+struct
+{
+	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+	__uint(max_entries, 1024);
+	__type(key, u32);
+	__type(value, struct conn_info_t);
 } conn_info_map_accept SEC(".maps");
 
 struct
@@ -251,7 +259,10 @@ static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf
     return 0;
 }
 
-
+static __always_inline int init_conn_info_recvfrom(struct sys_enter_recvfrom_args *ctx)
+{
+    return init_conn_info((struct sockaddr *)ctx->addr, &conn_info_map_recvfrom, bpf_get_current_pid_tgid() >> 32);
+}
 
 
 static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *ctx)
@@ -317,6 +328,24 @@ int trace_socket(struct trace_event_raw_sys_enter *ctx) {
 
 
 #define TASK_COMM_LEN 16
+
+SEC("tracepoint/syscalls/sys_enter_recvfrom")
+int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+
+    init_conn_info_recvfrom(ctx);
+
+    // Получаем информацию о соединении для текущего процесса
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_recvfrom, &pid);
+    if (conn_info&&conn_info->comm[0]=='n') {
+        
+        bpf_printk("CLIENT UDP sys_enter_recvfrom entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
+        
+    }
+
+    return 0;
+}
+
 
 SEC("tracepoint/syscalls/sys_enter_sendto")
 int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
