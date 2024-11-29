@@ -16,11 +16,16 @@ struct conn_info_t
 	u32 addrlen;
 };
 
+struct event_t {
+    u32 pid;
+    char comm[16];
+};
+
 struct socket_info {
     int domain;
     int type;
     int protocol;
-    char comm[TASK_COMM_LEN];
+    char comm[16];
 };
 
 
@@ -140,6 +145,11 @@ int __syscall_nr;
 int ret; 
 
 };
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+} events SEC(".maps");
+
 
 
 struct {
@@ -290,6 +300,9 @@ int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
             bpf_printk("CLIENT UDP sendto entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
         
     }
+
+
+    
 
     return 0;
 }
