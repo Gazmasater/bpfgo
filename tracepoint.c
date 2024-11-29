@@ -146,9 +146,9 @@ int ret;
 
 };
 
-struct {
-    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-} events SEC(".maps");
+// struct {
+//     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+// } events SEC(".maps");
 
 
 
@@ -222,6 +222,9 @@ static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf
     bpf_map_update_elem(map, &pid, &conn_info, BPF_ANY);
     return 0;
 }
+
+
+
 
 static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *ctx)
 {
@@ -298,11 +301,9 @@ int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
     if (conn_info) {
         
             bpf_printk("CLIENT UDP sendto entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
+
         
     }
-
-
-    
 
     return 0;
 }
