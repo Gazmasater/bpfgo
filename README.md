@@ -1,9 +1,6 @@
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo bpftrace trace_udp.bpf
+[sudo] password for gaz358: 
+trace_udp.bpf:1:1-23: ERROR: tracepoint not found: net:udp_rcv
 tracepoint:net:udp_rcv
-{
-    $src_ip = args->saddr;
-    $dst_ip = args->daddr;
-    
-    printf("UDP packet received from IP: %d.%d.%d.%d:%d to IP: %d.%d.%d.%d:%d\n",
-           ($src_ip >> 24) & 0xFF, ($src_ip >> 16) & 0xFF, ($src_ip >> 8) & 0xFF, $src_ip & 0xFF, args->sport,
-           ($dst_ip >> 24) & 0xFF, ($dst_ip >> 16) & 0xFF, ($dst_ip >> 8) & 0xFF, $dst_ip & 0xFF, args->dport);
-}
+~~~~~~~~~~~~~~~~~~~~~~
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
