@@ -1,0 +1,2 @@
+nc -l -u 12345
+echo -n "Hello UDP Server8899!" | nc -u 127.0.0.1 12345
