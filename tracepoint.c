@@ -350,14 +350,16 @@ int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx) {
 SEC("tracepoint/syscalls/sys_exit_recvfrom")
 int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
+    int ret = ctx->ret;
+    bpf_printk("sys_exit_recvfrom RET=%d",ret);
 
     // Проверяем, есть ли информация о соединении для текущего процесса
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_recvfrom, &pid);
     if (conn_info && conn_info->comm[0] == 'n') {
         if (ret > 0) {
             struct sockaddr_in addr = {};
-            if (bpf_probe_read_user(&addr, sizeof(addr), conn_info->sock_addr) == 0) {
+            
+            if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) == 0) {
                 // Обновляем информацию в conn_info
                 conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
                 conn_info->sport = bpf_ntohs(addr.sin_port);
