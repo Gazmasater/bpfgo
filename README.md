@@ -21,8 +21,14 @@ args->dport — это порт назначения.
 Важные замечания:
 Функция inet_ntop() используется для преобразования IP-адресов в строковый формат в bpftrace.
 Убедитесь, что ваш скрипт запускается через bpftrace, а не напрямую в оболочке Linux.
-Попробуйте этот вариант, и он должен работать для отображения IP-адресов и портов UDP-пакетов.
 
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo bpftrace trace_udp.bpf
+[sudo] password for gaz358: 
+trace_udp.bpf:4:12-21: ERROR: Unknown function: inet_ntop
+           inet_ntop(args->saddr), args->sport, inet_ntop(args->daddr), args->dport);
+           ~~~~~~~~~
 
 
 
