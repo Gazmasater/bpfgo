@@ -80,7 +80,7 @@ struct sys_exit_recvfrom_args
         int common_pid;   //4
         int __syscall_nr;//4
         int __padding;
-        long ret; //8
+        long ret; ///8
 
 };
 
