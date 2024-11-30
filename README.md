@@ -1,36 +1,9 @@
-Ошибка, которую вы видите, происходит потому, что функция inet_ntoa() не доступна в контексте bpftrace. В bpftrace нет встроенной поддержки этой функции, так как это низкоуровневая утилита для работы с eBPF, а не полноценная среда с доступом к стандартным библиотекам C.
-
-Для работы с IP-адресами в bpftrace вам нужно использовать другой способ преобразования числовых значений в строковый формат. Например, bpftrace предоставляет встроенную функцию inet_ntop() для преобразования числовых значений в строковые IP-адреса.
-
-Вот пример, как можно изменить ваш скрипт для использования функции inet_ntop():
-
-Пример с использованием bpftrace:
-bpftrace
-Копировать код
 tracepoint:net:udp_rcv
 {
-    printf("UDP packet received from IP: %s:%d to IP: %s:%d\n",
-           inet_ntop(args->saddr), args->sport, inet_ntop(args->daddr), args->dport);
+    $src_ip = args->saddr;
+    $dst_ip = args->daddr;
+    
+    printf("UDP packet received from IP: %d.%d.%d.%d:%d to IP: %d.%d.%d.%d:%d\n",
+           ($src_ip >> 24) & 0xFF, ($src_ip >> 16) & 0xFF, ($src_ip >> 8) & 0xFF, $src_ip & 0xFF, args->sport,
+           ($dst_ip >> 24) & 0xFF, ($dst_ip >> 16) & 0xFF, ($dst_ip >> 8) & 0xFF, $dst_ip & 0xFF, args->dport);
 }
-Объяснение:
-inet_ntop() — это функция для преобразования IP-адреса из числового представления в строковый формат (например, 192.168.1.1).
-args->saddr — это IP-адрес источника (отправителя).
-args->daddr — это IP-адрес назначения.
-args->sport — это порт источника (отправителя).
-args->dport — это порт назначения.
-Важные замечания:
-Функция inet_ntop() используется для преобразования IP-адресов в строковый формат в bpftrace.
-Убедитесь, что ваш скрипт запускается через bpftrace, а не напрямую в оболочке Linux.
-
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo bpftrace trace_udp.bpf
-[sudo] password for gaz358: 
-trace_udp.bpf:4:12-21: ERROR: Unknown function: inet_ntop
-           inet_ntop(args->saddr), args->sport, inet_ntop(args->daddr), args->dport);
-           ~~~~~~~~~
-
-
-
-
-
