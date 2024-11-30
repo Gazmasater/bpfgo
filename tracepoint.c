@@ -74,13 +74,13 @@ struct sys_enter_recvfrom_args
 struct sys_exit_recvfrom_args
 
 {
-        unsigned short common_type;       
-        unsigned char common_flags;       
-        unsigned char common_preempt_count;       
-        int common_pid;   
-        int __syscall_nr;
-        int __padding; 
-        long ret; 
+        unsigned short common_type;  //2     
+        unsigned char common_flags;   //1    
+        unsigned char common_preempt_count;    //1   
+        int common_pid;   //4
+        int __syscall_nr;//4
+        int __padding;
+        long ret; //8
 
 };
 
@@ -359,15 +359,15 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
             struct sockaddr_in addr = {};
             if (bpf_probe_read_user(&addr, sizeof(addr), conn_info->sock_addr) == 0) {
                 // Обновляем информацию в conn_info
-                conn_info->dst_ip = bpf_ntohl(addr.sin_addr.s_addr);
-                conn_info->dport = bpf_ntohs(addr.sin_port);
+                conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
+                conn_info->sport = bpf_ntohs(addr.sin_port);
 
                 // Логируем полученную информацию
                 bpf_printk("CLIENT UDP sys_exit_recvfrom: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d, Bytes=%ld\n",
                            conn_info->pid, conn_info->comm,
-                           (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
-                           (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF,
-                           conn_info->dport);
+                           (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
+                           (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF,
+                           conn_info->sport);
 
                 // Сохраняем обратно в карту
                 bpf_map_update_elem(&conn_info_map_recvfrom, &pid, conn_info, BPF_ANY);
