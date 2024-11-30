@@ -46,12 +46,13 @@ struct sys_enter_accept4_args
 
 struct sys_exit_accept4_args
 {
-	unsigned short common_type;
-	unsigned char common_flags;
-	unsigned char common_preempt_count;
-	int common_pid;
-	int __syscall_nr;
-	long ret;
+	unsigned short common_type;//2
+	unsigned char common_flags;//1
+	unsigned char common_preempt_count;//1
+	int common_pid;//4
+	int __syscall_nr;//4
+	int __padding;
+	long ret;//8
 };
 
 struct sys_enter_bind_args
