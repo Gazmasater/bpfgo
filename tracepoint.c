@@ -23,35 +23,32 @@ struct socket_info {
     char comm[16];
 };
 
-struct sys_enter_recvfrom_args
-{
-        unsigned short common_type; //2      
-        unsigned char common_flags;   //1   
-        unsigned char common_preempt_count;     //1 
-        int common_pid;   //4
-        int __syscall_nr; //4
-        int fd;  //4
-        void * ubuf;   //8   
-        size_t size;   //8   
-        unsigned int flags;    //4 
-		int __padding;
-        struct sockaddr * addr;   //8
-        int * addr_len;  //8
+struct sys_enter_recvfrom_args {
+    unsigned short common_type;           // offset: 0, size: 2
+    unsigned char common_flags;           // offset: 2, size: 1
+    unsigned char common_preempt_count;   // offset: 3, size: 1
+    int common_pid;                       // offset: 4, size: 4
+    int __syscall_nr;                     // offset: 8, size: 4
+    int pad1;                             // padding to align the next field
+    int fd;                               // offset: 16, size: 8
+    void *ubuf;                           // offset: 24, size: 8
+    size_t size;                          // offset: 32, size: 8
+    unsigned int flags;                   // offset: 40, size: 4
+    int pad2;                             // padding to align the next field
+    struct sockaddr *addr;                // offset: 48, size: 8
+    int *addr_len;                        // offset: 56, size: 8
+} ;
 
+struct sys_exit_recvfrom_args {
+    unsigned short common_type;           // offset: 0, size: 2
+    unsigned char common_flags;           // offset: 2, size: 1
+    unsigned char common_preempt_count;   // offset: 3, size: 1
+    int common_pid;                       // offset: 4, size: 4
+    int __syscall_nr;                     // offset: 8, size: 4
+    int pad1;                             // padding to align the next field
+    long ret;                             // offset: 16, size: 8
+} ;
 
-};
-
-struct sys_exit_recvfrom_args
-{
-
-		unsigned short common_type;    //2  
-        unsigned char common_flags;    //1   s
-        unsigned char common_preempt_count;   //1    
-        int common_pid;   //4
-        int __syscall_nr; //4
-        int ret; //8
-
-};
 
 // struct sys_enter_accept_args
 // {
