@@ -89,33 +89,33 @@ struct sys_exit_recvfrom_args {
 // 	long ret;//8
 // };
 
-struct sys_enter_bind_args
-{
+// struct sys_enter_bind_args
+// {
 
-	unsigned short common_type;//2
-	unsigned char common_flags;//1
-	unsigned char common_preempt_count;//1
-	int common_pid;//4
-	int __syscall_nr;//4
-	int fd;//4
-	int __padding;//4
+// 	unsigned short common_type;//2
+// 	unsigned char common_flags;//1
+// 	unsigned char common_preempt_count;//1
+// 	int common_pid;//4
+// 	int __syscall_nr;//4
+// 	int fd;//4
+// 	int __padding;//4
 
 
-	struct sockaddr *umyaddr;//8
-	int addrlen;//4
+// 	struct sockaddr *umyaddr;//8
+// 	int addrlen;//4
 
-};
+// };
 
-struct sys_exit_bind_args
-{
+// struct sys_exit_bind_args
+// {
 
-	unsigned short common_type;//2
-	unsigned char common_flags;//1
-	unsigned char common_preempt_count;//1
-	int common_pid;//4
-	int __syscall_nr;//4
-	int ret;//4
-};
+// 	unsigned short common_type;//2
+// 	unsigned char common_flags;//1
+// 	unsigned char common_preempt_count;//1
+// 	int common_pid;//4
+// 	int __syscall_nr;//4
+// 	int ret;//4
+// };
 
 // struct sys_enter_connect_args
 // {
@@ -175,21 +175,21 @@ struct
 // 	__type(value, struct conn_info_t);
 // } conn_info_map_accept_four SEC(".maps");
 
-struct
-{
-	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
-	__uint(max_entries, 1024);
-	__type(key, u32);
-	__type(value, struct conn_info_t);
-} conn_info_map_bind SEC(".maps");
+// struct
+// {
+// 	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+// 	__uint(max_entries, 1024);
+// 	__type(key, u32);
+// 	__type(value, struct conn_info_t);
+// } conn_info_map_bind SEC(".maps");
 
-struct
-{
-	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
-	__uint(max_entries, 1024);
-	__type(key, u32);
-	__type(value, struct conn_info_t);
-} conn_info_map_bind_udp SEC(".maps");
+// struct
+// {
+// 	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+// 	__uint(max_entries, 1024);
+// 	__type(key, u32);
+// 	__type(value, struct conn_info_t);
+// } conn_info_map_bind_udp SEC(".maps");
 
 
 // struct
@@ -233,15 +233,15 @@ static __always_inline int init_conn_info_recvfrom(struct sys_enter_recvfrom_arg
 // }
 
 
-static __always_inline int init_conn_info_bind(struct sys_enter_bind_args *ctx)
-{
-    return init_conn_info((struct sockaddr *)ctx->umyaddr, &conn_info_map_bind, bpf_get_current_pid_tgid() >> 32);
-}
+// static __always_inline int init_conn_info_bind(struct sys_enter_bind_args *ctx)
+// {
+//     return init_conn_info((struct sockaddr *)ctx->umyaddr, &conn_info_map_bind, bpf_get_current_pid_tgid() >> 32);
+// }
 
-static __always_inline int init_conn_info_bind_udp(struct sys_enter_bind_args *ctx)
-{
-    return init_conn_info((struct sockaddr *)ctx->umyaddr, &conn_info_map_bind_udp, bpf_get_current_pid_tgid() >> 32);
-}
+// static __always_inline int init_conn_info_bind_udp(struct sys_enter_bind_args *ctx)
+// {
+//     return init_conn_info((struct sockaddr *)ctx->umyaddr, &conn_info_map_bind_udp, bpf_get_current_pid_tgid() >> 32);
+// }
 
 
 
@@ -250,28 +250,6 @@ static __always_inline int init_conn_info_bind_udp(struct sys_enter_bind_args *c
 //     return init_conn_info((struct sockaddr *)ctx->uservaddr, &conn_info_map_connect, bpf_get_current_pid_tgid() >> 32);
 // }
 
-// SEC("tracepoint/syscalls/sys_enter_socket")
-// int trace_socket(struct trace_event_raw_sys_enter *ctx) {
-//     u32 pid = bpf_get_current_pid_tgid() >> 32;
-
-//     int domain = (int)ctx->args[0];  
-//     int type = (int)ctx->args[1];    
-//     int protocol = (int)ctx->args[2]; 
-
-    
-//     struct socket_info sock_info = {};
-//     sock_info.domain = domain;
-//     sock_info.type = type;
-//     sock_info.protocol = protocol;
-
-
-//     bpf_get_current_comm(sock_info.comm, sizeof(sock_info.comm));
-
-    
-//     bpf_map_update_elem(&socket_map, &pid, &sock_info, BPF_ANY);
-
-//     return 0;
-// }
 
 
  SEC("tracepoint/syscalls/sys_enter_recvfrom")
@@ -331,7 +309,7 @@ if (conn_info->comm[0]=='u'&&conn_info->comm[1]=='d') {
 		conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
 		conn_info->sport = bpf_ntohs(addr.sin_port);
 
-		bpf_printk("UDP SYS_exit_recvfrom Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+		bpf_printk("UDP SYS_exit_recvfrom  connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
 				   conn_info->pid, conn_info->comm,
 				   (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
 				   (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
