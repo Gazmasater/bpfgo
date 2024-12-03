@@ -58,26 +58,29 @@ struct sys_exit_accept4_args
 struct sys_enter_bind_args
 {
 
-	unsigned short common_type;
-	unsigned char common_flags;
-	unsigned char common_preempt_count;
-	int common_pid;
-	int __syscall_nr;
-	int fd;
-	int __padding;	
-	struct sockaddr *umyaddr;
-	int addrlen;
+	unsigned short common_type;//2
+	unsigned char common_flags;//1
+	unsigned char common_preempt_count;//1
+	int common_pid;//4
+	int __syscall_nr;//4
+	int fd;//4
+	int __padding;//4
+
+
+	struct sockaddr *umyaddr;//8
+	int addrlen;//4
+
 };
 
 struct sys_exit_bind_args
 {
 
-	unsigned short common_type;
-	unsigned char common_flags;
-	unsigned char common_preempt_count;
-	int common_pid;
-	int __syscall_nr;
-	int ret;
+	unsigned short common_type;//2
+	unsigned char common_flags;//1
+	unsigned char common_preempt_count;//1
+	int common_pid;//4
+	int __syscall_nr;//4
+	int ret;//4
 };
 
 struct sys_enter_connect_args
@@ -318,7 +321,8 @@ int trace_bind_enter(struct sys_enter_bind_args *ctx)
 	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_bind, &pid);
 	if (conn_info)
 	{
-//		bpf_printk("SERVER Bind entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
+
+		bpf_printk("SERVER Bind entry: PID=%d, Comm=%s", pid, conn_info->comm);
 	}
 
 	return 0;
@@ -329,6 +333,7 @@ int trace_bind_exit(struct sys_exit_bind_args *ctx)
 {
 	u32 pid = bpf_get_current_pid_tgid() >> 32;
 	long ret = ctx->ret;
+	
 
 	if (ret < 0)
 	{
