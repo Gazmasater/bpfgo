@@ -12,7 +12,8 @@ struct conn_info_t
 	u32 addrlen;
 	u16 sport;
 	u16 dport;
-	u8 call; //0- accept 1-accept4 2-connect 3-recvfrom 4-sendto
+	u8  call;//0- accept 1-accept4 2-connect 3-recvfrom 4-sendto
+	u8 protocol; 
 	char comm[16];
 	
 };
@@ -65,28 +66,28 @@ struct sys_enter_recvfrom_args {
 } ;
 
 struct sys_exit_recvfrom_args {
-    unsigned short common_type;           // offset: 0, size: 2s
-    unsigned char common_flags;           // offset: 2, size: 1
-    unsigned char common_preempt_count;   // offset: 3, size: 1
-    int common_pid;                       // offset: 4, size: 4
-    int __syscall_nr;                     // offset: 8, size: 4
-    int pad1;                             // padding to align the next field
-    int ret;                             // offset: 16, size: 8
+    unsigned short common_type;           
+    unsigned char common_flags;          
+    unsigned char common_preempt_count;  
+    int common_pid;                      
+    int __syscall_nr;                    
+    int pad1;                             
+    int ret;                             
 } ;
 
 
-// struct sys_enter_accept_args
-// {
-// 	unsigned short common_type;
-// 	unsigned char common_flags;
-// 	unsigned char common_preempt_count;
-// 	int common_pid;
-// 	int __syscall_nr;
-// 	int fd;
-// 	int __padding;
-// 	struct sockaddr *upeer_sockaddr;
-// 	int *upeer_addrlen;
-// };
+struct sys_enter_accept_args
+{
+	unsigned short common_type;
+	unsigned char common_flags;
+	unsigned char common_preempt_count;
+	int common_pid;
+	int __syscall_nr;
+	int fd;
+	int pad1;
+	struct sockaddr *upeer_sockaddr;
+	int *upeer_addrlen;
+};
 
 
 struct sys_enter_accept4_args
@@ -177,6 +178,14 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf_map_def *map, u32 pid, u8 call)
 {
     struct conn_info_t conn_info = {};
+	if (conn_info.call==0||conn_info.call==1||conn_info.call==2) {
+		conn_info.protocol=1;
+
+	}else {
+
+		conn_info.protocol=2;
+
+	}
     conn_info.pid = pid;
 	conn_info.call=call;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
@@ -332,11 +341,6 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx){
 		return 0;
 	}
 
-if (conn_info->comm[0]=='u'&&conn_info->comm[1]=='d') {
-	bpf_printk("UDP SYS_exit_recvfrom sockaddr=%p",conn_info->sock_addr);
-	}
-
-
 
 	struct sockaddr_in addr;
 
@@ -470,11 +474,6 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx){
 		return 0;
 	}
 
-	if (conn_info->comm[0]=='n') {
-
-	bpf_printk("EXIT_accept4 sockaddr=%p",conn_info->sock_addr);
-
-	}
 
 
 	struct sockaddr_in addr;
