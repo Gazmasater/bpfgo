@@ -1,3 +1,5 @@
+//go:build ignore
+
 #include "vmlinux.h"
 #include "bpf/bpf_tracing.h"
 #include "bpf/bpf_endian.h"
