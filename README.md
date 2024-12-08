@@ -1,30 +1,9 @@
-Постоянное изменение (сохранение после перезагрузки)
-Отредактируйте файл конфигурации sysctl: Чтобы сделать изменения постоянными, откройте файл /etc/sysctl.conf с помощью текстового редактора, например:
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./ecli run package.json
+INFO [faerie::elf] strtab: 0x246c symtab 0x24a8 relocs 0x24f0 sh_offset 0x24f0
+libbpf: map 'output': failed to create: Invalid argument(-22)
+libbpf: failed to load object 'tracepoint_bpf'
+Error: Failed to run native eBPF program
 
-bash
-Копировать код
-sudo nano /etc/sysctl.conf
-Добавьте строку для изменения параметра: В конце файла добавьте следующую строку:
-
-bash
-Копировать код
-kernel.perf_event_paranoid = 0
-Примените изменения: После того как вы сохранили изменения, примените их командой:
-
-bash
-Копировать код
-sudo sysctl -p
-Проверьте, что параметр применился: Как и в случае с временным изменением, выполните команду:
-
-bash
-Копировать код
-cat /proc/sys/kernel/perf_event_paranoid
-Вы должны увидеть значение 0.
-
-Теперь ваш пользователь будет иметь доступ к событиям профилирования с уровнем безопасности, который позволяет использовать как CPU события, так и трассировки ядра и eBPF.
-
-
-
-
-
-
+Caused by:
+    Bpf error: Failed to start polling: Bpf("Failed to load and attach: Failed to load bpf object\n\nCaused by:\n    System error, errno: 22"), RecvError
+gaz358@gaz358-BOD-WXX9:~/myprog/b
