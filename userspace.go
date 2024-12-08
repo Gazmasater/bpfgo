@@ -24,8 +24,8 @@ type ConnInfo struct {
 
 func main() {
 	// Путь к карте BPF
-	mapPathSC := "/sys/fs/bpf/my_map_sc" // Путь к карте conn_info_map_sc
-	mapPathRA := "/sys/fs/bpf/my_map_ra" // Путь к карте conn_info_map_ra
+	mapPathSC := "/sys/fs/bpf/my_map_sc"
+	mapPathRA := "/sys/fs/bpf/my_map_ra"
 
 	// Открытие карты BPF (для conn_info_map_sc)
 	mapFD, err := ebpf.LoadPinnedMap(mapPathSC, nil)
