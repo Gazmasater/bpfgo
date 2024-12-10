@@ -1,27 +1,13 @@
-#include <linux/bpf.h>
-#include <bpf/bpf_helpers.h>
-#include <linux/ptrace.h>
-
-// Определение структуры данных, передаваемой в userspace
-struct event {
-    u32 pid;
-    char comm[16];
+struct bpf_map_def SEC("maps") perf_event_array = {
+    .type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
+    .key_size = sizeof(u32),
+    .value_size = sizeof(u32),
+    .max_entries = 0,  // Устанавливается автоматически.
 };
 
-struct {
-    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY); // Карта для perf
-} events SEC(".maps");
-
-SEC("tp/syscalls/sys_enter_write")
-int handle_write(struct trace_event_raw_sys_enter *ctx) {
-    struct event e = {};
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    e.pid = pid;
-    bpf_get_current_comm(&e.comm, sizeof(e.comm));
-
-    // Отправка данных в perf
-    bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, &e, sizeof(e));
+SEC("tracepoint/syscalls/sys_enter_open")
+int tracepoint_handler(struct tracepoint__syscalls__sys_enter_open *ctx) {
+    char msg[] = "sys_open called";
+    bpf_perf_event_output(ctx, &perf_event_array, BPF_F_CURRENT_CPU, &msg, sizeof(msg));
     return 0;
 }
-
-char LICENSE[] SEC("license") = "GPL";
