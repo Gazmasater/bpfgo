@@ -1,64 +1,27 @@
+#include <linux/bpf.h>
+#include <bpf/bpf_helpers.h>
+#include <linux/ptrace.h>
 
-{
-  "name": "ringbuf_example",
-  "maps": {
-    "ringbuf": {
-      "type": "ringbuf",
-      "max_entries": 4096
-    }
-  },
-  "progs": {
-    "handle_event": {
-      "attach": "tracepoint",
-      "tp": "syscalls:sys_enter_write"
-    }
-  }
-}
-
-
-"type": "ringbuf" указывает, что это кольцевой буфер.
-"max_entries" задаёт размер буфера (например, 4096 байт).
-Проверка eBPF-кода В eBPF-коде карта ringbuf должна быть определена правильно, например:
-
-
+// Определение структуры данных, передаваемой в userspace
+struct event {
+    u32 pid;
+    char comm[16];
+};
 
 struct {
-    __uint(type, BPF_MAP_TYPE_RINGBUF); // Указываем, что это RINGBUF
-    __uint(max_entries, 4096);         // Размер буфера
-} ringbuf SEC(".maps");
+    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY); // Карта для perf
+} events SEC(".maps");
 
+SEC("tp/syscalls/sys_enter_write")
+int handle_write(struct trace_event_raw_sys_enter *ctx) {
+    struct event e = {};
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    e.pid = pid;
+    bpf_get_current_comm(&e.comm, sizeof(e.comm));
 
-Карта должна экспортироваться через SEC(".maps").
-Имя карты в eBPF-коде (ringbuf) должно точно совпадать с именем в package.json.
-Обновление ecli Убедитесь, что вы используете последнюю версию ecli. Выполните:
+    // Отправка данных в perf
+    bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, &e, sizeof(e));
+    return 0;
+}
 
-bash
-Копировать код
-
-cargo install ecli --force
-
-Это обновит ecli до последней версии.
-
-Просмотр полного трассировки (backtrace) Ошибка unwrap() указывает, что библиотека не смогла обработать вашу карту. Запустите команду с RUST_BACKTRACE=1 для полного вывода:
-
-bash
-Копировать код
-
-RUST_BACKTRACE=1 sudo ./ecli run package.json
-
-Это поможет узнать, на каком этапе произошёл сбой. Вполне возможно, ошибка в формате ELF-файла или в настройках карты.
-
-Пример рабочего файла Если хотите, отправьте:
-
-Ваш package.json.
-Код определения карты в eBPF-программе.
-Это поможет точнее диагностировать проблему.
-
-,"meta":{"bpf_skel":{"data_sections":[],"maps":[{"ident":"ringbuf","name":"ringbuf"},{"ident":"rodata_str1_1","name":".rodata.str1.1"}],"obj_name":"tracepoint_bpf","progs":[{"attach":"tp/syscalls/sys_enter_write","link":true,"name":"handle_write"}]},"eunomia_version":"0.3.4"}}
-
-
-
-
-
-
-
+char LICENSE[] SEC("license") = "GPL";
