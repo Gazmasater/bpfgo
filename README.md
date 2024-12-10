@@ -1,8 +1,63 @@
+
+{
+  "name": "ringbuf_example",
+  "maps": {
+    "ringbuf": {
+      "type": "ringbuf",
+      "max_entries": 4096
+    }
+  },
+  "progs": {
+    "handle_event": {
+      "attach": "tracepoint",
+      "tp": "syscalls:sys_enter_write"
+    }
+  }
+}
+
+
+"type": "ringbuf" указывает, что это кольцевой буфер.
+"max_entries" задаёт размер буфера (например, 4096 байт).
+Проверка eBPF-кода В eBPF-коде карта ringbuf должна быть определена правильно, например:
+
+
+
+struct {
+    __uint(type, BPF_MAP_TYPE_RINGBUF); // Указываем, что это RINGBUF
+    __uint(max_entries, 4096);         // Размер буфера
+} ringbuf SEC(".maps");
+
+
+Карта должна экспортироваться через SEC(".maps").
+Имя карты в eBPF-коде (ringbuf) должно точно совпадать с именем в package.json.
+Обновление ecli Убедитесь, что вы используете последнюю версию ecli. Выполните:
+
+bash
+Копировать код
+
+cargo install ecli --force
+
+Это обновит ecli до последней версии.
+
+Просмотр полного трассировки (backtrace) Ошибка unwrap() указывает, что библиотека не смогла обработать вашу карту. Запустите команду с RUST_BACKTRACE=1 для полного вывода:
+
+bash
+Копировать код
+
 RUST_BACKTRACE=1 sudo ./ecli run package.json
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ RUST_BACKTRACE=1 sudo ./ecli run package.json
-[sudo] password for gaz358: 
-INFO [faerie::elf] strtab: 0x2e3 symtab 0x320 relocs 0x368 sh_offset 0x368
-thread '<unnamed>' panicked at ecli-lib/src/runner/task_manager/mod.rs:252:22:
-called `Result::unwrap()` on an `Err` value: Export map named `ringbuf` found, but no export type is provided
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Это поможет узнать, на каком этапе произошёл сбой. Вполне возможно, ошибка в формате ELF-файла или в настройках карты.
+
+Пример рабочего файла Если хотите, отправьте:
+
+Ваш package.json.
+Код определения карты в eBPF-программе.
+Это поможет точнее диагностировать проблему.
+
+
+
+
+
+
+
+
