@@ -87,6 +87,15 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
 Теперь структура events и данные, которые она обрабатывает, определены и готовы к использованию.
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./ecli run package.json
+[sudo] password for gaz358: 
+INFO [faerie::elf] strtab: 0x2295 symtab 0x22d0 relocs 0x2318 sh_offset 0x2318
+thread '<unnamed>' panicked at ecli-lib/src/runner/task_manager/mod.rs:252:22:
+called `Result::unwrap()` on an `Err` value: Export map named `events` found, but no export type is provided
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+
 
 
 
