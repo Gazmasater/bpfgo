@@ -54,8 +54,7 @@ RUST_BACKTRACE=1 sudo ./ecli run package.json
 Код определения карты в eBPF-программе.
 Это поможет точнее диагностировать проблему.
 
-"maps":[{"ident":"ringbuf","name":"ringbuf"},
-
+,"meta":{"bpf_skel":{"data_sections":[],"maps":[{"ident":"ringbuf","name":"ringbuf"},{"ident":"rodata_str1_1","name":".rodata.str1.1"}],"obj_name":"tracepoint_bpf","progs":[{"attach":"tp/syscalls/sys_enter_write","link":true,"name":"handle_write"}]},"eunomia_version":"0.3.4"}}
 
 
 
