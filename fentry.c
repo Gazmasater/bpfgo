@@ -63,7 +63,7 @@ int trace_accept4_entry(struct pt_regs *ctx) {
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid); 
     if (conn_info) 
-    { bpf_printk("CLIENT accept4 entry: PID=%d, Comm=%s\n", pid, conn_info->comm); }
+    { bpf_printk(" Accept4 entry: PID=%d, Comm=%s\n", pid, conn_info->comm); }
     
     return 0;
 }
@@ -81,14 +81,14 @@ int trace_accept4_ret(struct pt_regs *ctx) {
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid);
     if (!conn_info) {
-        bpf_printk("No connection info found for PID=%d\n", pid);
+        bpf_printk("Accept4 No connection info found for PID=%d\n", pid);
         return 0;
     }
 
     struct sockaddr_in addr;
 
     if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
-        bpf_printk("Failed to read sockaddr for PID=%d\n", pid);
+        bpf_printk("Accept4 Failed to read sockaddr for PID=%d\n", pid);
         return 0;
     }
 
@@ -96,7 +96,7 @@ int trace_accept4_ret(struct pt_regs *ctx) {
         conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr); 
         conn_info->sport = bpf_ntohs(addr.sin_port);      
         
-        bpf_printk("CLIENT Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+        bpf_printk("Accept4  connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
             conn_info->pid, conn_info->comm,
             (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
             (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
@@ -117,7 +117,7 @@ int trace_bind_entry(struct pt_regs *ctx) {
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid); 
     if (conn_info) 
-    { bpf_printk("SERVER Bind entry: PID=%d, Comm=%s\n", pid, conn_info->comm); }
+    { bpf_printk(" Bind entry: PID=%d, Comm=%s\n", pid, conn_info->comm); }
 
     return 0;
 }
@@ -128,29 +128,29 @@ int trace_bind_ret(struct pt_regs *ctx) {
     long ret = PT_REGS_RC(ctx); 
 
     if (ret < 0) {
-        bpf_printk("Accept4 failed for PID=%d\n", pid);
+        bpf_printk("Bind exit failed for PID=%d\n", pid);
         bpf_map_delete_elem(&conn_info_map_ab, &pid);
         return 0;
     }
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ab, &pid);
     if (!conn_info) {
-        bpf_printk("No connection info found for PID=%d\n", pid);
+        bpf_printk("Bind exit No connection info found for PID=%d\n", pid);
         return 0;
     }
 
     struct sockaddr_in addr;
 
     if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
-        bpf_printk("Failed to read sockaddr for PID=%d\n", pid);
-        return 0;
+        bpf_printk("Bind exit Failed to read sockaddr for PID=%d\n", pid);
+        return 0; 
     }
 
     if (addr.sin_family == AF_INET) {
         conn_info->dst_ip = bpf_ntohl(addr.sin_addr.s_addr); 
         conn_info->dport = bpf_ntohs(addr.sin_port);      
         
-        bpf_printk("SERVER Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+        bpf_printk("Bind exit connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
             conn_info->pid, conn_info->comm,
             (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
             (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
@@ -170,7 +170,7 @@ int trace_connect_entry(struct pt_regs *ctx) {
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_c, &pid);
     if (conn_info) {
-        bpf_printk("!!!!!!CLIENT Connect entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
+        bpf_printk(" Connect entry: PID=%d, Comm=%s\n", pid, conn_info->comm);
     }
 
     return 0;
@@ -182,20 +182,20 @@ int trace_connect_ret(struct pt_regs *ctx) {
     long ret = PT_REGS_RC(ctx); 
 
     if (ret < 0) {
-        bpf_printk("Connect failed for PID=%d\n", pid);
+        bpf_printk("Connect exit failed for PID=%d\n", pid);
         bpf_map_delete_elem(&conn_info_map_c, &pid);
         return 0;
     }
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_c, &pid);
     if (!conn_info) {
-        bpf_printk("No connection info found for PID=%d\n", pid);
+        bpf_printk("Connect exit No connection info found for PID=%d\n", pid);
         return 0;
     }
 
     struct sockaddr_in addr;
     if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
-        bpf_printk("Failed to read sockaddr for PID=%d\n", pid);
+        bpf_printk("Connect exit Failed to read sockaddr for PID=%d\n", pid);
         return 0;
     }
 
@@ -203,7 +203,7 @@ int trace_connect_ret(struct pt_regs *ctx) {
         conn_info->dst_ip = bpf_ntohl(addr.sin_addr.s_addr);
         conn_info->dport = bpf_ntohs(addr.sin_port);
 
-        bpf_printk("!!!!!CLIENT Connected to server: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+        bpf_printk("Connect exit: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
             conn_info->pid, conn_info->comm,
             (conn_info->dst_ip >> 24) & 0xFF, (conn_info->dst_ip >> 16) & 0xFF,
             (conn_info->dst_ip >> 8) & 0xFF, conn_info->dst_ip & 0xFF, conn_info->dport);
