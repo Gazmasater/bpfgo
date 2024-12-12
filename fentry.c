@@ -16,14 +16,14 @@ struct conn_info_t {
 };
 
 struct {
-    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+    __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 1024);
     __type(key, u32);
     __type(value, struct conn_info_t);
 } conn_info_map_ab SEC(".maps");
 
 struct {
-    __uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+    __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 1024);
     __type(key, u32);
     __type(value, struct conn_info_t);
