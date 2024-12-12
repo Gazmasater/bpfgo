@@ -1,17 +1,32 @@
-struct bpf_map_def SEC("maps") output = {
-    .type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
-    .max_entries = 1024,
+#include "vmlinux.h"
+#include "bpf/bpf_tracing.h"
+#include "bpf/bpf_core_read.h"
+
+// Структура события для отправки в userspace
+struct event {
+    u32 pid;
+    char comm[16];
 };
 
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/tracepoint.c",
-	"owner": "C/C++: IntelliSense",
-	"code": "70",
-	"severity": 8,
-	"message": "incomplete type \"struct bpf_map_def\" is not allowed",
-	"source": "C/C++",
-	"startLineNumber": 166,
-	"startColumn": 32,
-	"endLineNumber": 166,
-	"endColumn": 38
-}]
+struct {
+    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+    __uint(max_entries, 1024);
+} perf_event_array SEC(".maps");
+
+SEC("tracepoint/syscalls/sys_enter_open")
+int tracepoint_handler(struct sys_enter_open_args *ctx) {
+    struct event evt = {};
+    
+    // Получение PID
+    evt.pid = bpf_get_current_pid_tgid() >> 32;
+    
+    // Получение имени процесса
+    bpf_get_current_comm(&evt.comm, sizeof(evt.comm));
+    
+    // Отправка данных в userspace через perf_event_array
+    bpf_perf_event_output(ctx, &perf_event_array, BPF_F_CURRENT_CPU, &evt, sizeof(evt));
+    
+    return 0;
+}
+
+char LICENSE[] SEC("license") = "GPL";
