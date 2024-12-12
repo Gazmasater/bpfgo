@@ -252,7 +252,7 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx){
 
 	if (ret < 0)
 	{
-		//bpf_printk("RET UDP SYS_exit_recvfrom failed for PID=%d\n", pid);
+		bpf_printk("RET sys_exit_sendto failed for PID=%d\n", pid);
 		bpf_map_delete_elem(&conn_info_map_sc, &pid);
 		return 0;
 	}
@@ -266,14 +266,14 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx){
 		return 0;
 	}
 
-if (conn_info->comm[0]=='u'&&conn_info->comm[1]=='d') {
-	bpf_printk("UDP sys_exit_sendto sockaddr=%p",conn_info->sock_addr);
-	}
+// if (conn_info->comm[0]=='u'&&conn_info->comm[1]=='d') {
+// 	bpf_printk("UDP sys_exit_sendto sockaddr=%p",conn_info->sock_addr);
+// 	}
 
-if (conn_info->comm[0]!='u'&&conn_info->comm[1]!='d'){
+// if (conn_info->comm[0]!='u'&&conn_info->comm[1]!='d'){
 
-	return 0;
-}
+// 	return 0;
+// }
 
 
 	struct sockaddr_in addr;
@@ -328,7 +328,7 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx){
 
 	if (ret < 0)
 	{
-		//bpf_printk("RET UDP SYS_exit_recvfrom failed for PID=%d\n", pid);
+		bpf_printk("RET UDP SYS_exit_recvfrom failed for PID=%d\n", pid);
 		bpf_map_delete_elem(&conn_info_map_ra, &pid);
 		return 0;
 	}
@@ -464,7 +464,7 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx){
 
 	if (ret < 0)
 	{
-	//	bpf_printk("EXIT_accept Accept4 failed for PID=%d\n", pid);
+	    bpf_printk("EXIT_accept Accept4 failed for PID=%d\n", pid);
 		bpf_map_delete_elem(&conn_info_map_ra, &pid);
 		return 0;
 	}
