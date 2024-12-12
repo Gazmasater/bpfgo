@@ -1,1 +1,0 @@
-{"bpf_skel":{"data_sections":[],"maps":[{"ident":"perf_event_array","name":"perf_event_array"},{"ident":"rodata_str1_1","name":".rodata.str1.1"}],"obj_name":"tracepoint_bpf","progs":[{"attach":"tracepoint/syscalls/sys_enter_open","link":true,"name":"tracepoint_handler"}]},"eunomia_version":"0.3.4"}
