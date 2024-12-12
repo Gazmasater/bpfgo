@@ -25,7 +25,7 @@ struct event {
 
 struct {
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY); // Карта для perf
-    __uint(max_entries, 1024);
+    __uint(max_entries, 8);
 } perf_event_array SEC(".maps");
 
 
