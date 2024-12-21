@@ -9,3 +9,14 @@ efivarfs        184K  182K     0 100% /sys/firmware/efi/efivars
 tmpfs           1.6G  108K  1.6G   1% /run/user/1000
 /dev/sda1       117G  5.8G  112G   5% /media/gaz358/Ubuntu 24.0
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
+sudo apt-get autoclean
+
+sudo apt-get autoremove
+
+sudo apt-get clean
+
+du -h --max-depth=1 /
+
+
+
