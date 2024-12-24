@@ -1,17 +1,5 @@
-struct bpf_map_def SEC("maps") output = {
-    .type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
-    .max_entries = 1024,
-};
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/tracepoint.c",
-	"owner": "C/C++: IntelliSense",
-	"code": "70",
-	"severity": 8,
-	"message": "incomplete type \"struct bpf_map_def\" is not allowed",
-	"source": "C/C++",
-	"startLineNumber": 166,
-	"startColumn": 32,
-	"endLineNumber": 166,
-	"endColumn": 38
-}]
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./ecli run package.json
+INFO [faerie::elf] strtab: 0x2508 symtab 0x2540 relocs 0x2588 sh_offset 0x2588
+thread '<unnamed>' panicked at ecli-lib/src/runner/task_manager/mod.rs:252:22:
+called `Result::unwrap()` on an `Err` value: Export map named `events` found, but no export type is provided
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
