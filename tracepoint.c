@@ -270,13 +270,6 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         return 0;
     }
 
-    if (conn_info->comm[0] == 'u' && conn_info->comm[1] == 'd') {
-        bpf_printk("UDP sys_exit_sendto: sockaddr=%p", conn_info->sock_addr);
-    }
-
-    if (conn_info->comm[0] != 'u' || conn_info->comm[1] != 'd') {
-        return 0;
-    }
 
     struct sockaddr_in addr;
     if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
@@ -295,22 +288,19 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
                    (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
     }
 
-    // Создаём структуру для отправки данных через ringbuf
     struct event_t {
         u32 pid;
-    //    char comm[16];
+        char comm[16];
         u32 src_ip;
         u16 sport;
     } event = {};
 
-    // Заполняем данные события
     event.pid = conn_info->pid;
- //   __builtin_memcpy(event.comm, conn_info->comm, sizeof(event.comm));
+    __builtin_memcpy(event.comm, conn_info->comm, sizeof(event.comm));
     event.src_ip = conn_info->src_ip;
     event.sport = conn_info->sport;
 
-    // Отправляем данные в кольцевой буфер
-    bpf_ringbuf_output(&events, &event, sizeof(event), 0);
+   bpf_ringbuf_output(&events, &event, sizeof(event), 0);
 
     bpf_map_update_elem(&conn_info_map_sc, &pid, conn_info, BPF_ANY);
 
