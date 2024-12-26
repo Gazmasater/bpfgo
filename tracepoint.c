@@ -147,11 +147,11 @@ int ret;
 };
 
 
-struct
-{
-    __uint(type, BPF_MAP_TYPE_RINGBUF);
-    __uint(max_entries, 1 << 24);
-} events SEC(".maps");
+// struct
+// {
+//     __uint(type, BPF_MAP_TYPE_RINGBUF);
+//     __uint(max_entries, 1 << 24);
+// } events SEC(".maps");
 
 struct
 {
@@ -288,19 +288,19 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
                    (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
     }
 
-    struct event_t {
-        u32 pid;
-        char comm[16];
-        u32 src_ip;
-        u16 sport;
-    } event = {};
+    // struct event_t {
+    //     u32 pid;
+    //     char comm[16];
+    //     u32 src_ip;
+    //     u16 sport;
+    // } event = {};
 
-    event.pid = conn_info->pid;
-    __builtin_memcpy(event.comm, conn_info->comm, sizeof(event.comm));
-    event.src_ip = conn_info->src_ip;
-    event.sport = conn_info->sport;
+    // event.pid = conn_info->pid;
+    // __builtin_memcpy(event.comm, conn_info->comm, sizeof(event.comm));
+    // event.src_ip = conn_info->src_ip;
+    // event.sport = conn_info->sport;
 
-   bpf_ringbuf_output(&events, &event, sizeof(event), 0);
+   //bpf_ringbuf_output(&events, &event, sizeof(event), 0);
 
     bpf_map_update_elem(&conn_info_map_sc, &pid, conn_info, BPF_ANY);
 
