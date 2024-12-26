@@ -17,8 +17,6 @@ struct conn_info_t
 	u32 addrlen;
 	u16 sport;
 	u16 dport;
-	u8  call;//0- accept 1-accept4 2-connect 3-recvfrom 4-sendto
-	u8 protocol; 
 	char comm[16];
 	
 };
@@ -185,19 +183,19 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
 
-static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf_map_def *map, u32 pid, u8 call)
+static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf_map_def *map, u32 pid)
 {
     struct conn_info_t conn_info = {};
-	if (conn_info.call==0||conn_info.call==1||conn_info.call==2) {
-		conn_info.protocol=1;
+	// if (conn_info.call==0||conn_info.call==1||conn_info.call==2) {
+	// 	conn_info.protocol=1;
 
-	}else {
+	// }else {
 
-		conn_info.protocol=2;
+	// 	conn_info.protocol=2;
 
-	}
+	// }
     conn_info.pid = pid;
-	conn_info.call=call;
+//	conn_info.call=call;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
     conn_info.sock_addr = sock_addr;
     bpf_map_update_elem(map, &pid, &conn_info, BPF_ANY);
@@ -206,13 +204,13 @@ static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf
 
 static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *ctx)
 {
-    return init_conn_info((struct sockaddr *)ctx->addr, &conn_info_map_sc, bpf_get_current_pid_tgid() >> 32,4);
+    return init_conn_info((struct sockaddr *)ctx->addr, &conn_info_map_sc, bpf_get_current_pid_tgid() >> 32);
 }
 
 
 static __always_inline int init_conn_info_recvfrom(struct sys_enter_recvfrom_args *ctx)
 {
-    return init_conn_info((struct sockaddr *)ctx->addr, &conn_info_map_ra, bpf_get_current_pid_tgid() >> 32,3);
+    return init_conn_info((struct sockaddr *)ctx->addr, &conn_info_map_ra, bpf_get_current_pid_tgid() >> 32);
 }
 
 
@@ -225,13 +223,13 @@ static __always_inline int init_conn_info_recvfrom(struct sys_enter_recvfrom_arg
 
 static __always_inline int init_conn_info_accept4(struct sys_enter_accept4_args *ctx)
 {
-    return init_conn_info((struct sockaddr *)ctx->upeer_sockaddr, &conn_info_map_ra, bpf_get_current_pid_tgid() >> 32,1);
+    return init_conn_info((struct sockaddr *)ctx->upeer_sockaddr, &conn_info_map_ra, bpf_get_current_pid_tgid() >> 32);
 }
 
 
 static __always_inline int init_conn_info_connect(struct sys_enter_connect_args *ctx)
 {
-    return init_conn_info((struct sockaddr *)ctx->uservaddr, &conn_info_map_sc, bpf_get_current_pid_tgid() >> 32,2);
+    return init_conn_info((struct sockaddr *)ctx->uservaddr, &conn_info_map_sc, bpf_get_current_pid_tgid() >> 32);
 }
 
 
