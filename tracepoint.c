@@ -18,6 +18,7 @@ struct conn_info_t
 	u16 sport;
 	u16 dport;
 	char comm[16];
+	u32 pad;
 	
 };
 
@@ -186,16 +187,7 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf_map_def *map, u32 pid)
 {
     struct conn_info_t conn_info = {};
-	// if (conn_info.call==0||conn_info.call==1||conn_info.call==2) {
-	// 	conn_info.protocol=1;
-
-	// }else {
-
-	// 	conn_info.protocol=2;
-
-	// }
     conn_info.pid = pid;
-//	conn_info.call=call;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
     conn_info.sock_addr = sock_addr;
     bpf_map_update_elem(map, &pid, &conn_info, BPF_ANY);
@@ -206,6 +198,10 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
 {
     return init_conn_info((struct sockaddr *)ctx->addr, &conn_info_map_sc, bpf_get_current_pid_tgid() >> 32);
 }
+
+
+
+
 
 
 static __always_inline int init_conn_info_recvfrom(struct sys_enter_recvfrom_args *ctx)
