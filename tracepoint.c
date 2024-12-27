@@ -272,6 +272,14 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         return 0;
     }
 
+
+if (addr.sin_family == 0) {
+    bpf_printk("UDP sys_exit_sendto: Failed to read sockaddr for PID=%d\n", pid);
+    bpf_map_delete_elem(&conn_info_map_sc, &pid);
+    return 0;
+}
+
+
     if (addr.sin_family == AF_INET) {
         conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
         conn_info->sport = bpf_ntohs(addr.sin_port);
@@ -282,19 +290,6 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
                    (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
     }
 
-    // struct event_t {
-    //     u32 pid;
-    //     char comm[16];
-    //     u32 src_ip;
-    //     u16 sport;
-    // } event = {};
-
-    // event.pid = conn_info->pid;
-    // __builtin_memcpy(event.comm, conn_info->comm, sizeof(event.comm));
-    // event.src_ip = conn_info->src_ip;
-    // event.sport = conn_info->sport;
-
-   //bpf_ringbuf_output(&events, &event, sizeof(event), 0);
 
     bpf_map_update_elem(&conn_info_map_sc, &pid, conn_info, BPF_ANY);
 
