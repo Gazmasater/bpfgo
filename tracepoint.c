@@ -272,14 +272,6 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         return 0;
     }
 
-
-if (addr.sin_family == 0) {
-    bpf_printk("UDP sys_exit_sendto: Failed to read sockaddr for PID=%d\n", pid);
-    bpf_map_delete_elem(&conn_info_map_sc, &pid);
-    return 0;
-}
-
-
     if (addr.sin_family == AF_INET) {
         conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
         conn_info->sport = bpf_ntohs(addr.sin_port);
