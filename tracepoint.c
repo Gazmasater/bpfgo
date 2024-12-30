@@ -23,6 +23,8 @@ struct conn_info_t
 };
 
 
+
+
 struct sys_enter_sendto_args
 {
 
@@ -257,13 +259,12 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         return 0;
     }
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid);
-    if (!conn_info) {
-        bpf_printk("UDP sys_exit_sendto: No connection info found for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map_sc, &pid);
-        return 0;
-    }
-
+struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid);
+if (!conn_info) {
+    bpf_printk("UDP sys_exit_sendto: No connection info found for PID=%d\n", pid);
+    bpf_map_delete_elem(&conn_info_map_sc, &pid);
+    return 0;
+}
 
     struct sockaddr_in addr;
     if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
