@@ -17,23 +17,9 @@ struct conn_info_t
 	u32 addrlen;
 	u16 sport;
 	u16 dport;
-	u8  call;//0- accept 1-accept4 2-connect 3-recvfrom 4-sendto
-	u8 protocol; 
 	char comm[16];
 	
 };
-
-struct trace_info {
-    u8 type; // Тип события
-    u32 pid; // PID процесса
-    char comm[16]; // Имя команды
-    u32 src_ip;
-    u16 sport;
-    u32 dst_ip;
-    u16 dport;
-};
-
-
 
 struct sys_enter_sendto_args
 {
@@ -158,13 +144,6 @@ int ret;
 };
 
 
-// struct
-// {
-//     __uint(type, BPF_MAP_TYPE_RINGBUF);
-//     __uint(max_entries, 1 << 24);
-// } events SEC(".maps");
-
-
 struct
 {
 	__uint(type, BPF_MAP_TYPE_HASH);
@@ -200,16 +179,8 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf_map_def *map, u32 pid, u8 call)
 {
     struct conn_info_t conn_info = {};
-	if (conn_info.call==0||conn_info.call==1||conn_info.call==2) {
-		conn_info.protocol=1;
 
-	}else {
-
-		conn_info.protocol=2;
-
-	}
     conn_info.pid = pid;
-	conn_info.call=call;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
     conn_info.sock_addr = sock_addr;
     bpf_map_update_elem(map, &pid, &conn_info, BPF_ANY);
@@ -270,36 +241,24 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
-    if (ret < 0) {
-        bpf_map_delete_elem(&conn_info_map_sc, &pid);
-        return 0;
-    }
+if (ret < 0) {
+    bpf_map_delete_elem(&conn_info_map_sc, &pid);
+    return 0;
+}
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid);
-    if (!conn_info) {
-        bpf_printk("UDP sys_exit_sendto: No connection info found for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map_sc, &pid);
-        return 0;
-    }
+struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid);
+if (!conn_info) {
+    bpf_printk("UDP sys_exit_sendto: No connection info found for PID=%d\n", pid);
+    bpf_map_delete_elem(&conn_info_map_sc, &pid);
+    return 0;
+}
 
-    struct sockaddr_in *sock_addr = BPF_CORE_READ(conn_info, sock_addr);
-    if (!sock_addr) {
-        bpf_printk("UDP sys_exit_sendto: sockaddr is NULL for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map_sc, &pid);
-        return 0;
-    }
+struct sockaddr_in addr;
 
-
-    // u16 sin_family = BPF_CORE_READ(sock_addr, sin_family);
-    // if (sin_family == AF_INET) {
-    //     conn_info->src_ip = bpf_ntohl(BPF_CORE_READ(sock_addr, sin_addr.s_addr));
-    //     conn_info->sport = bpf_ntohs(BPF_CORE_READ(sock_addr, sin_port));
-
-    //     bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-    //                conn_info->pid, conn_info->comm,
-    //                (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
-    //                (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
-    // }
+if (BPF_CORE_READ_INTO(&addr, conn_info, sock_addr) != 0) {
+    bpf_printk("Failed to resolve CO-RE field sock_addr\n");
+    return 0;
+}
 
     bpf_map_update_elem(&conn_info_map_sc, &pid, conn_info, BPF_ANY);
 
