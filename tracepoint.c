@@ -23,6 +23,17 @@ struct conn_info_t
 	
 };
 
+struct trace_info {
+    u8 type; // Тип события
+    u32 pid; // PID процесса
+    char comm[16]; // Имя команды
+    u32 src_ip;
+    u16 sport;
+    u32 dst_ip;
+    u16 dport;
+};
+
+
 
 struct sys_enter_sendto_args
 {
@@ -153,6 +164,7 @@ int ret;
 //     __uint(max_entries, 1 << 24);
 // } events SEC(".maps");
 
+
 struct
 {
 	__uint(type, BPF_MAP_TYPE_HASH);
@@ -270,23 +282,18 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         return 0;
     }
 
+    struct sockaddr_in *sock_addr = BPF_CORE_READ(conn_info, sock_addr);
+    if (!sock_addr) {
+        bpf_printk("UDP sys_exit_sendto: sockaddr is NULL for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map_sc, &pid);
+        return 0;
+    }
 
-//    struct sockaddr_in addr;
-	struct sock_addr *a1;
-	a1=BPF_CORE_READ(conn_info,sock_addr);
 
-	if (!a1) {
-		return 0;
-	};
-    // if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
-    //     bpf_printk("UDP sys_exit_sendto: Failed to read sockaddr for PID=%d\n", pid);
-    //     bpf_map_delete_elem(&conn_info_map_sc, &pid);
-    //     return 0;
-    // }
-
-    // if (addr.sin_family == AF_INET) {
-    //     conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
-    //     conn_info->sport = bpf_ntohs(addr.sin_port);
+    // u16 sin_family = BPF_CORE_READ(sock_addr, sin_family);
+    // if (sin_family == AF_INET) {
+    //     conn_info->src_ip = bpf_ntohl(BPF_CORE_READ(sock_addr, sin_addr.s_addr));
+    //     conn_info->sport = bpf_ntohs(BPF_CORE_READ(sock_addr, sin_port));
 
     //     bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
     //                conn_info->pid, conn_info->comm,
@@ -294,8 +301,7 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     //                (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
     // }
 
-
-    // bpf_map_update_elem(&conn_info_map_sc, &pid, conn_info, BPF_ANY);
+    bpf_map_update_elem(&conn_info_map_sc, &pid, conn_info, BPF_ANY);
 
     return 0;
 }
