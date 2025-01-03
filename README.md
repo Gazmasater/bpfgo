@@ -40,6 +40,7 @@ struct conn_info_t
 	
 };
 
+
 SEC("tracepoint/syscalls/sys_exit_sendto")
 int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
@@ -59,7 +60,7 @@ if (!conn_info) {
 
 
 
-struct sockaddr_in *addr;
+struct sockaddr_in *addr=NULL;
 addr = BPF_CORE_READ(conn_info, sock_addr);
 
 if (!addr) {
@@ -72,8 +73,7 @@ if (!addr) {
     return 0;
 }
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./ecli run package.json
-INFO [faerie::elf] strtab: 0x21b0 symtab 0x21e8 relocs 0x2230 sh_offset 0x2230
+INFO [faerie::elf] strtab: 0x21a4 symtab 0x21e0 relocs 0x2228 sh_offset 0x2228
 libbpf: prog 'trace_sendto_exit': BPF program load failed: Invalid argument
 libbpf: prog 'trace_sendto_exit': -- BEGIN PROG LOAD LOG --
 0: R1=ctx() R10=fp0
@@ -93,7 +93,7 @@ libbpf: prog 'trace_sendto_exit': -- BEGIN PROG LOAD LOG --
 12: (bf) r2 = r10                     ; R2_w=fp0 R10=fp0
 ; struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid);
 13: (07) r2 += -4                     ; R2_w=fp-4
-14: (18) r1 = 0xffff9ff2f4587400      ; R1_w=map_ptr(map=conn_info_map_s,ks=4,vs=48)
+14: (18) r1 = 0xffff8a60dc5c9000      ; R1_w=map_ptr(map=conn_info_map_s,ks=4,vs=48)
 16: (85) call bpf_map_lookup_elem#1   ; R0_w=map_value_or_null(id=1,map=conn_info_map_s,ks=4,vs=48)
 17: (bf) r6 = r0                      ; R0=map_value_or_null(id=1,map=conn_info_map_s,ks=4,vs=48) R6=map_value_or_null(id=1,map=conn_info_map_s,ks=4,vs=48)
 ; if (!conn_info) {
@@ -109,3 +109,5 @@ Error: Failed to run native eBPF program
 
 Caused by:
     Bpf error: Failed to start polling: Bpf("Failed to load and attach: Failed to load bpf object\n\nCaused by:\n    System error, errno: 22"), RecvError
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
