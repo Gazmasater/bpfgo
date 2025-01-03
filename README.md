@@ -24,3 +24,13 @@ than enough for any practical purpose.
 Expands to:
 
 ({ typeof((conn_info)->sock_addr) __r; ({ bpf_probe_read_kernel((void *)(&__r), sizeof(*(&__r)), (const void *)__builtin_preserve_access_index(&((typeof(((conn_info))))(((conn_info))))->sock_addr)); }); __r; })
+
+
+
+struct sockaddr_in *addr;
+addr = BPF_CORE_READ(conn_info, sock_addr);
+if (!addr) {
+    bpf_printk("Failed to read sock_addr using BPF_CORE_READ\n");
+    return 0;
+}
+
