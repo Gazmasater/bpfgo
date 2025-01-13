@@ -31,6 +31,10 @@ bash
 RUST_BACKTRACE=1 ./ecc tracepoint.c
 Это поможет выяснить дополнительные причины проблемы, если ошибка связана не только с переменной окружения.
 
+az358@gaz358-BOD-WXX9:~/myprog/bpfgo/eunomia-bpf$ make install
+make: *** No rule to make target 'install'.  Stop.
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/eunomia-bpf$ 
+
 
 
 
