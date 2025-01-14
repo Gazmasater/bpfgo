@@ -44,6 +44,8 @@ CODE_OF_CONDUCT.md  documents        examples      LICENSE     README_zh.md
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/eunomia-bpf$ 
 
 
+sudo apt update
+sudo apt install build-essential
 
 
 
