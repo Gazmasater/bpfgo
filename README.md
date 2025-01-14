@@ -199,5 +199,33 @@ sudo apt install curl -y
 curl --version
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/eunomia-bpf$ sudo make
+[sudo] password for gaz358: 
+make -C bpf-loader-rs
+make[1]: Entering directory '/home/gaz358/myprog/bpfgo/eunomia-bpf/bpf-loader-rs'
+sudo apt-get update 
+Hit:1 http://ru.archive.ubuntu.com/ubuntu noble InRelease
+Hit:2 http://ru.archive.ubuntu.com/ubuntu noble-updates InRelease            
+Hit:3 http://ru.archive.ubuntu.com/ubuntu noble-backports InRelease          
+Hit:4 http://security.ubuntu.com/ubuntu noble-security InRelease
+Reading package lists... Done
+sudo apt install libelf-dev zlib1g-dev -y
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+libelf-dev is already the newest version (0.190-1.1build4).
+zlib1g-dev is already the newest version (1:1.3.dfsg-3.1ubuntu2.1).
+The following packages were automatically installed and are no longer required:
+  amd64-microcode bpfcc-tools bpftrace ieee-data intel-microcode iucode-tool libbpfcc
+  linux-headers-generic-hwe-24.04 python3-bpfcc python3-netaddr thermald ubuntu-kernel-accessories
+Use 'sudo apt autoremove' to remove them.
+0 upgraded, 0 newly installed, 0 to remove and 105 not upgraded.
+cargo build --release
+make[1]: cargo: No such file or directory
+make[1]: *** [Makefile:2: build] Error 127
+make[1]: Leaving directory '/home/gaz358/myprog/bpfgo/eunomia-bpf/bpf-loader-rs'
+make: *** [Makefile:42: bpf-loader-rs] Error 2
+
+
 
 
