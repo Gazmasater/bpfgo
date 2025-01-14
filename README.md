@@ -177,7 +177,22 @@ make: *** [Makefile:42: bpf-loader-rs] Error 2
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/eunomia-bpf$ 
 
 
+Установка Rust и Cargo:
+Запустите команду установки Rust:
 
+bash
+Копировать код
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+Следуйте инструкциям установщика. После установки выполните:
+
+bash
+Копировать код
+source $HOME/.cargo/env
+Убедитесь, что cargo установлен:
+
+bash
+Копировать код
+cargo --version
 
 
 
