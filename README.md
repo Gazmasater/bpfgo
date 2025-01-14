@@ -35,13 +35,13 @@ az358@gaz358-BOD-WXX9:~/myprog/bpfgo/eunomia-bpf$ make install
 make: *** No rule to make target 'install'.  Stop.
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/eunomia-bpf$ 
 
+______________________________________________________________________________
 
-
-
-
-
-
-
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/eunomia-bpf$ ls
+bpf-loader-rs       compiler         ecli          flake.lock  Makefile      third_party
+codecov.yaml        CONTRIBUTING.md  eunomia-sdks  flake.nix   README.md
+CODE_OF_CONDUCT.md  documents        examples      LICENSE     README_zh.md
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/eunomia-bpf$ 
 
 
 
