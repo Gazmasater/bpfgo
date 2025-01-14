@@ -194,5 +194,10 @@ bash
 Копировать код
 cargo --version
 
+sudo apt update
+sudo apt install curl -y
+curl --version
+
+
 
 
