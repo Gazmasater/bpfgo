@@ -188,16 +188,7 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf_map_def *map, u32 pid, u8 call)
 {
     struct conn_info_t conn_info = {};
-	if (conn_info.call==0||conn_info.call==1||conn_info.call==2) {
-		conn_info.protocol=1;
-
-	}else {
-
-		conn_info.protocol=2;
-
-	}
     conn_info.pid = pid;
-	conn_info.call=call;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
     conn_info.sock_addr = sock_addr;
     bpf_map_update_elem(map, &pid, &conn_info, BPF_ANY);
@@ -258,55 +249,31 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
+    // Удаление информации о соединении в случае ошибки вызова
     if (ret < 0) {
         bpf_map_delete_elem(&conn_info_map_sc, &pid);
         return 0;
     }
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid);
-    if (!conn_info) {
-        bpf_printk("UDP sys_exit_sendto: No connection info found for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map_sc, &pid);
-        return 0;
-    }
-
-
-    struct sockaddr_in addr;
-    if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
-        bpf_printk("UDP sys_exit_sendto: Failed to read sockaddr for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map_sc, &pid);
-        return 0;
-    }
-
-    if (addr.sin_family == AF_INET) {
-        conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
-        conn_info->sport = bpf_ntohs(addr.sin_port);
-
-        bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-                   conn_info->pid, conn_info->comm,
-                   (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
-                   (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
-    }
-
-    // struct event_t {
-    //     u32 pid;
-    //     char comm[16];
-    //     u32 src_ip;
-    //     u16 sport;
-    // } event = {};
-
-    // event.pid = conn_info->pid;
-    // __builtin_memcpy(event.comm, conn_info->comm, sizeof(event.comm));
-    // event.src_ip = conn_info->src_ip;
-    // event.sport = conn_info->sport;
-
-   //bpf_ringbuf_output(&events, &event, sizeof(event), 0);
-
-    bpf_map_update_elem(&conn_info_map_sc, &pid, conn_info, BPF_ANY);
-
+struct sockaddr_in addr;
+if (BPF_CORE_READ(&addr, sin_family) != AF_INET) {
+    bpf_printk("UDP sys_exit_sendto: Invalid address family for PID=%d\n", pid);
+    bpf_map_delete_elem(&conn_info_map_sc, &pid);
     return 0;
 }
 
+
+u32 src_ip = BPF_CORE_READ(&addr, sin_addr.s_addr);
+u16 src_port = BPF_CORE_READ(&addr, sin_port);
+
+bpf_printk("UDP sys_exit_sendto: IP=%d.%d.%d.%d, Port=%d\n",
+           (src_ip >> 24) & 0xFF, (src_ip >> 16) & 0xFF,
+           (src_ip >> 8) & 0xFF, src_ip & 0xFF,
+           bpf_ntohs(src_port));
+
+
+    return 0;
+}
 
  SEC("tracepoint/syscalls/sys_enter_recvfrom")
  int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx){
