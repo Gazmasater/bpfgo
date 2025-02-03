@@ -17,7 +17,6 @@ struct conn_info_t
 	u32 addrlen;
 	u16 sport;
 	u16 dport;
-	u8  call;//0- accept 1-accept4 2-connect 3-recvfrom 4-sendto
 	u8 protocol; 
 	char comm[16];
 	
@@ -89,19 +88,10 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
 
-static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf_map_def *map, u32 pid, u8 call)
+static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf_map_def *map, u32 pid)
 {
     struct conn_info_t conn_info = {};
-	if (conn_info.call==0||conn_info.call==1||conn_info.call==2) {
-		conn_info.protocol=1;
-
-	}else {
-
-		conn_info.protocol=2;
-
-	}
     conn_info.pid = pid;
-	conn_info.call=call;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
     conn_info.sock_addr = sock_addr;
     bpf_map_update_elem(map, &pid, &conn_info, BPF_ANY);
@@ -110,7 +100,7 @@ static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf
 
 static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *ctx)
 {
-    return init_conn_info((struct sockaddr *)ctx->addr, &conn_info_map_sc, bpf_get_current_pid_tgid() >> 32,4);
+    return init_conn_info((struct sockaddr *)ctx->addr, &conn_info_map_sc, bpf_get_current_pid_tgid() >> 32);
 }
 
 
@@ -137,6 +127,8 @@ SEC("tracepoint/syscalls/sys_exit_sendto")
 int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
+        bpf_printk("sys_exit_sendto!!!!!!!!!!!!!!!!1");
+
 
     if (ret < 0) {
         bpf_map_delete_elem(&conn_info_map_sc, &pid);
@@ -151,14 +143,6 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     }
 
 
-    struct sockaddr_in  addr;
-    if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
-        bpf_printk("UDP sys_exit_sendto: Failed to read sockaddr for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map_sc, &pid);
-        return 0;
-    }
-
-
     struct task_struct *task;
     struct files_struct *files;
     struct fdtable *fdt;
@@ -168,6 +152,14 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     struct sock *sk;
 
     bpf_core_read(&task, sizeof(task), (void *)bpf_get_current_task());
+    pid_t pid1;
+    bpf_core_read(&pid1, sizeof(pid), &task->pid);
+
+    bpf_printk("Extracted PID: %d\n", pid1);
+
+
+
+    
 
     // Получаем указатель на структуру файлов
     bpf_core_read(&files, sizeof(files), &task->files);
