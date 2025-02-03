@@ -127,8 +127,6 @@ SEC("tracepoint/syscalls/sys_exit_sendto")
 int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
-        bpf_printk("sys_exit_sendto!!!!!!!!!!!!!!!!1");
-
 
     if (ret < 0) {
         bpf_map_delete_elem(&conn_info_map_sc, &pid);
@@ -141,6 +139,18 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         bpf_map_delete_elem(&conn_info_map_sc, &pid);
         return 0;
     }
+
+
+    struct sockaddr_in addr;
+    if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
+        bpf_printk("UDP sys_exit_sendto: Failed to read sockaddr for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map_sc, &pid);
+        return 0;
+    }
+
+
+        bpf_printk("!!!!!!!!!!!!!!!!!!");
+
 
 
     struct task_struct *task;
@@ -159,21 +169,25 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
 
 
 
-    
-
-    // Получаем указатель на структуру файлов
-    bpf_core_read(&files, sizeof(files), &task->files);
-
-    // Получаем таблицу файловых дескрипторов
-    bpf_core_read(&fdt, sizeof(fdt), &files->fdt);
-
-    // Получаем массив файловых дескрипторов
-    bpf_core_read(&fd_array, sizeof(fd_array), &fdt->fd);
 
 
 
- 
+
+
+
+    if (addr.sin_family == AF_INET) {
+        conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
+        conn_info->sport = bpf_ntohs(addr.sin_port);
+
+        bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+                   conn_info->pid, conn_info->comm,
+                   (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
+                   (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
+    }
+
+
+    bpf_map_update_elem(&conn_info_map_sc, &pid, conn_info, BPF_ANY);
+
     return 0;
 }
-
 
