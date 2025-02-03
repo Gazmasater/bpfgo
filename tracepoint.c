@@ -148,11 +148,6 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         return 0;
     }
 
-
-        bpf_printk("!!!!!!!!!!!!!!!!!!");
-
-
-
     struct task_struct *task;
     struct files_struct *files;
     struct fdtable *fdt;
@@ -163,15 +158,9 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
 
     bpf_core_read(&task, sizeof(task), (void *)bpf_get_current_task());
     pid_t pid1;
-    bpf_core_read(&pid1, sizeof(pid), &task->pid);
+    bpf_core_read(&pid1, sizeof(pid1), &task->pid);
 
     bpf_printk("Extracted PID: %d\n", pid1);
-
-
-
-
-
-
 
 
 
