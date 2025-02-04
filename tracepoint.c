@@ -128,6 +128,9 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
+    bpf_printk("sys_exit_sendto PID=%d\n", pid);
+
+
     if (ret < 0) {
         bpf_map_delete_elem(&conn_info_map_sc, &pid);
         return 0;
