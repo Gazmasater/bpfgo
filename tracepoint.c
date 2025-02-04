@@ -169,15 +169,21 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     // Получаем sock
     bpf_core_read(&sk, sizeof(sk), &sock->sk);
 
-    // Читаем IP и порт
+    // Читаем src_ip и src_port
     struct inet_sock *inet = (struct inet_sock *)sk;
-    u32 src_ip, dst_ip;
-    u16 src_port, dst_port;
-
+    u32 src_ip;
+    u16 src_port;
+    
     bpf_core_read(&src_ip, sizeof(src_ip), &inet->inet_saddr);
     bpf_core_read(&src_port, sizeof(src_port), &inet->inet_sport);
 
-    
+
+    bpf_printk("UDP sys_exit_sendto: PID=%d, src_ip=%d.%d.%d.%d\n", 
+           pid, 
+           (src_ip >> 24) & 0xFF, (src_ip >> 16) & 0xFF, 
+           (src_ip >> 8) & 0xFF, src_ip & 0xFF);
+
+
 
     // Обновляем данные
     bpf_map_update_elem(&conn_info_map_sc, &pid, conn_info, BPF_ANY);
