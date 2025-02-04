@@ -150,40 +150,74 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
 
     // Получаем task_struct
     bpf_core_read(&task, sizeof(task), (void *)bpf_get_current_task());
+    if (!task) {
+        bpf_printk("UDP sys_exit_sendto: Failed to read task_struct for PID=%d\n", pid);
+        return 0;
+    }
 
     // Достаем files_struct
     bpf_core_read(&files, sizeof(files), &task->files);
+    if (!files) {
+        bpf_printk("UDP sys_exit_sendto: Failed to read files_struct for PID=%d\n", pid);
+        return 0;
+    }
 
     // Получаем fdtable
     bpf_core_read(&fdt, sizeof(fdt), &files->fdt);
+    if (!fdt) {
+        bpf_printk("UDP sys_exit_sendto: Failed to read fdtable for PID=%d\n", pid);
+        return 0;
+    }
 
     // Читаем массив файловых дескрипторов
     bpf_core_read(&fd_array, sizeof(fd_array), &fdt->fd);
+    if (!fd_array) {
+        bpf_printk("UDP sys_exit_sendto: Failed to read fd_array for PID=%d\n", pid);
+        return 0;
+    }
 
-    // Берем file по какому-нибудь дескриптору (например, 3)
+    // Берем file по дескриптору (например, 3)
     bpf_core_read(&file, sizeof(file), &fd_array[3]);
+    if (!file) {
+        bpf_printk("UDP sys_exit_sendto: Failed to read file from fd_array for PID=%d\n", pid);
+        return 0;
+    }
 
     // Получаем socket
     bpf_core_read(&sock, sizeof(sock), &file->private_data);
+    if (!sock) {
+        bpf_printk("UDP sys_exit_sendto: Failed to read socket for PID=%d\n", pid);
+        return 0;
+    }
 
     // Получаем sock
     bpf_core_read(&sk, sizeof(sk), &sock->sk);
+    if (!sk) {
+        bpf_printk("UDP sys_exit_sendto: sk is NULL for PID=%d\n", pid);
+        return 0;
+    }
 
     // Читаем src_ip и src_port
     struct inet_sock *inet = (struct inet_sock *)sk;
-    u32 src_ip;
-    u16 src_port;
-    
+    if (!inet) {
+        bpf_printk("UDP sys_exit_sendto: inet is NULL for PID=%d\n", pid);
+        return 0;
+    }
+
+    u32 src_ip = 0;
+    u16 src_port = 0;
+
     bpf_core_read(&src_ip, sizeof(src_ip), &inet->inet_saddr);
     bpf_core_read(&src_port, sizeof(src_port), &inet->inet_sport);
 
+    // Проверяем, что IP считался корректно
+    bpf_printk("UDP sys_exit_sendto: Read src_ip raw = 0x%x\n", src_ip);
 
+    // Выводим IP в человекочитаемом формате
     bpf_printk("UDP sys_exit_sendto: PID=%d, src_ip=%d.%d.%d.%d\n", 
            pid, 
            (src_ip >> 24) & 0xFF, (src_ip >> 16) & 0xFF, 
-           (src_ip >> 8) & 0xFF, src_ip & 0xFF);
-
-
+           (src_ip >> 8) & 0xFF, src_ip & 0xFF); // Преобразуем порт в host byte order
 
     // Обновляем данные
     bpf_map_update_elem(&conn_info_map_sc, &pid, conn_info, BPF_ANY);
