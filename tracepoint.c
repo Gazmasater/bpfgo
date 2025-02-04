@@ -140,14 +140,6 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         return 0;
     }
 
-
-    struct sockaddr_in addr;
-    if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
-        bpf_printk("UDP sys_exit_sendto: Failed to read sockaddr for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map_sc, &pid);
-        return 0;
-    }
-
     struct task_struct *task;
     struct files_struct *files;
     struct fdtable *fdt;
@@ -156,27 +148,39 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     struct socket *sock;
     struct sock *sk;
 
+    // Получаем task_struct
     bpf_core_read(&task, sizeof(task), (void *)bpf_get_current_task());
-    pid_t pid1;
-    bpf_core_read(&pid1, sizeof(pid1), &task->pid);
 
-    bpf_printk("Extracted PID: %d\n", pid1);
+    // Достаем files_struct
+    bpf_core_read(&files, sizeof(files), &task->files);
 
+    // Получаем fdtable
+    bpf_core_read(&fdt, sizeof(fdt), &files->fdt);
 
+    // Читаем массив файловых дескрипторов
+    bpf_core_read(&fd_array, sizeof(fd_array), &fdt->fd);
 
-    if (addr.sin_family == AF_INET) {
-        conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
-        conn_info->sport = bpf_ntohs(addr.sin_port);
+    // Берем file по какому-нибудь дескриптору (например, 3)
+    bpf_core_read(&file, sizeof(file), &fd_array[3]);
 
-        bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-                   conn_info->pid, conn_info->comm,
-                   (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
-                   (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
-    }
+    // Получаем socket
+    bpf_core_read(&sock, sizeof(sock), &file->private_data);
 
+    // Получаем sock
+    bpf_core_read(&sk, sizeof(sk), &sock->sk);
 
+    // Читаем IP и порт
+    struct inet_sock *inet = (struct inet_sock *)sk;
+    u32 src_ip, dst_ip;
+    u16 src_port, dst_port;
+
+    bpf_core_read(&src_ip, sizeof(src_ip), &inet->inet_saddr);
+    bpf_core_read(&src_port, sizeof(src_port), &inet->inet_sport);
+
+    
+
+    // Обновляем данные
     bpf_map_update_elem(&conn_info_map_sc, &pid, conn_info, BPF_ANY);
 
     return 0;
 }
-
