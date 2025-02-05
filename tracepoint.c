@@ -126,32 +126,7 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
 SEC("tracepoint/syscalls/sys_exit_sendto")
 int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
 
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
-
-
-    if (ret < 0) {
-        bpf_map_delete_elem(&conn_info_map_sc, &pid);
-        return 0;
-    }
-
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid);
-    if (!conn_info) {
-        bpf_printk("UDP sys_exit_sendto: No connection info found for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map_sc, &pid);
-        return 0;
-    }
-
-
-    struct sockaddr_in addr;
-    if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
-        bpf_printk("UDP sys_exit_sendto: Failed to read sockaddr for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map_sc, &pid);
-        return 0;
-    }
-
-
-struct task_struct *task=NULL;
+struct task_struct *task;
 struct files_struct *files;
 struct fdtable *fdt;
 struct file **fd_array;
@@ -163,9 +138,39 @@ int pid2 = 0;
 
 
 // Получаем task_struct
-bpf_core_read(&task, sizeof(task), (void *)bpf_get_current_task());
+task = (struct task_struct *)bpf_get_current_task();
 
-bpf_core_read(&pid2, sizeof(pid2), &task->pid);
+// Проверяем, что task не NULL
+if (task) {
+    pid2=BPF_CORE_READ(task,pid);
+}
+
+
+    long ret = ctx->ret;
+
+
+    if (ret < 0) {
+        bpf_map_delete_elem(&conn_info_map_sc, &pid2);
+        return 0;
+    }
+
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid2);
+    if (!conn_info) {
+        bpf_printk("UDP sys_exit_sendto: No connection info found for PID=%d\n", pid2);
+        bpf_map_delete_elem(&conn_info_map_sc, &pid2);
+        return 0;
+    }
+
+
+    struct sockaddr_in addr;
+    if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
+        bpf_printk("UDP sys_exit_sendto: Failed to read sockaddr for PID=%d\n", pid2);
+        bpf_map_delete_elem(&conn_info_map_sc, &pid2);
+        return 0;
+    }
+
+
+
 
 
     if (addr.sin_family == AF_INET) {
@@ -181,7 +186,7 @@ bpf_core_read(&pid2, sizeof(pid2), &task->pid);
     }
 
 
-    bpf_map_update_elem(&conn_info_map_sc, &pid, conn_info, BPF_ANY);
+    bpf_map_update_elem(&conn_info_map_sc, &pid2, conn_info, BPF_ANY);
 
     return 0;
 }
