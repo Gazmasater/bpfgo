@@ -125,10 +125,9 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
 
 SEC("tracepoint/syscalls/sys_exit_sendto")
 int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
+
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
-
-    bpf_printk("UDP !!!!!!!!!!!!!! PID=%d\n", pid);
 
 
     if (ret < 0) {
@@ -151,18 +150,32 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         return 0;
     }
 
-        bpf_printk("1111UDP !!!!!!!!!!!!!! PID=%d\n", pid);
+
+struct task_struct *task=NULL;
+struct files_struct *files;
+struct fdtable *fdt;
+struct file **fd_array;
+struct file *file;
+struct socket *sock;
+struct sock *sk;
+
+int pid2 = 0;
+
+
+// Получаем task_struct
+bpf_core_read(&task, sizeof(task), (void *)bpf_get_current_task());
+
+bpf_core_read(&pid2, sizeof(pid2), &task->pid);
 
 
     if (addr.sin_family == AF_INET) {
         conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
         conn_info->sport = bpf_ntohs(addr.sin_port);
 
-                bpf_printk("222UDP !!!!!!!!!!!!!! PID=%d\n", pid);
 
 
-        bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-                   conn_info->pid, conn_info->comm,
+        bpf_printk("UDP sys_exit_sendto: Connection: PID!!!=%d, PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+                   pid2,conn_info->pid, conn_info->comm,
                    (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
                    (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
     }
