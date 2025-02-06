@@ -130,7 +130,7 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
 
 struct task_struct *task;
 struct files_struct *files;
-struct fdtable *fdt;
+//struct fdtable *fdt;
 struct file *file;
 struct socket *sock;
 struct sock *sk;
@@ -147,6 +147,10 @@ if (!task) return 0;
 pid2 = BPF_CORE_READ(task, pid);
 files = BPF_CORE_READ(task, files);
 if (!files) return 0;
+
+struct fdtable *fdt = BPF_CORE_READ(files, fdt);
+if (!fdt) return 0;
+
 
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid2);
