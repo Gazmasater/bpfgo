@@ -145,10 +145,10 @@ task = (struct task_struct *)bpf_get_current_task();
 if (!task) return 0;
 
 pid2 = BPF_CORE_READ(task, pid);
-files = BPF_CORE_READ(task, files);
-if (!files) return 0;
+// files = BPF_CORE_READ(task, files);
+// if (!files) return 0;
 
-struct fdtable *fdt = BPF_CORE_READ(files, fdt);
+struct fdtable *fdt = BPF_CORE_READ(task,files, fdt);
 if (!fdt) return 0;
 
 
