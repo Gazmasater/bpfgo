@@ -135,62 +135,19 @@ struct file *file;
 struct socket *sock;
 struct sock *sk;
 struct inet_sock *inet;
-__be32 saddr;
+__be32 src_ip;
 __be16 sport;
 int pid2 = 0;
+int fd;
 
-// Получаем task_struct
+// Получаем текущий процесс
 task = (struct task_struct *)bpf_get_current_task();
-if (!task) {
-    bpf_printk("task ");
-
-    return 0;
-}
+if (!task) return 0;
 
 pid2 = BPF_CORE_READ(task, pid);
+files = BPF_CORE_READ(task, files);
+if (!files) return 0;
 
-
-
-// Получаем files_struct
-file = BPF_CORE_READ(task,files,fdt,fd);
-if (!file) {
-
-    return 0;
-}
-
-
-// // Получаем socket
-// sock = BPF_CORE_READ(file, private_data);
-// if (!sock) {
-//     bpf_printk("sock ");
-
-//     return 0;
-// }
-
-// // Получаем структуру sock
-// sk = BPF_CORE_READ(sock, sk);
-// if (!sk) {
-//         bpf_printk("sk ");
-
-//     return 0;
-// }
-
-// // Приводим к inet_sock и читаем исходный IP/порт
-// inet = (struct inet_sock *)sk;
-// saddr = BPF_CORE_READ(inet, inet_saddr);
-// sport = BPF_CORE_READ(inet, inet_sport);
-
-
-
-
-
-    long ret = ctx->ret;
-
-
-    if (ret < 0) {
-        bpf_map_delete_elem(&conn_info_map_sc, &pid2);
-        return 0;
-    }
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid2);
     if (!conn_info) {
@@ -199,31 +156,7 @@ if (!file) {
         return 0;
     }
 
-
-    struct sockaddr_in addr;
-    if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
-        bpf_printk("UDP sys_exit_sendto: Failed to read sockaddr for PID=%d\n", pid2);
-        bpf_map_delete_elem(&conn_info_map_sc, &pid2);
-        return 0;
-    }
-
-
-
-
-
-    if (addr.sin_family == AF_INET) {
-        conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
-        conn_info->sport = bpf_ntohs(addr.sin_port);
-
-
-
-        bpf_printk("UDP sys_exit_sendto: Connection: PID!!!=%d, PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-                   pid2,conn_info->pid, conn_info->comm,
-                   (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
-                   (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);    }
-
-
-    bpf_map_update_elem(&conn_info_map_sc, &pid2, conn_info, BPF_ANY);
+bpf_printk("sys_exit_sendto PID_enter=%d PID=%d Name=%s",conn_info->pid,pid2,conn_info->comm);
 
     return 0;
 }
