@@ -126,24 +126,62 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
 SEC("tracepoint/syscalls/sys_exit_sendto")
 int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
 
+
+
 struct task_struct *task;
 struct files_struct *files;
 struct fdtable *fdt;
-struct file **fd_array;
 struct file *file;
 struct socket *sock;
 struct sock *sk;
-
+struct inet_sock *inet;
+__be32 saddr;
+__be16 sport;
 int pid2 = 0;
-
 
 // Получаем task_struct
 task = (struct task_struct *)bpf_get_current_task();
+if (!task) {
+    bpf_printk("task ");
 
-// Проверяем, что task не NULL
-if (task) {
-    pid2=BPF_CORE_READ(task,pid);
+    return 0;
 }
+
+pid2 = BPF_CORE_READ(task, pid);
+
+
+
+// Получаем files_struct
+file = BPF_CORE_READ(task,files,fdt,fd);
+if (!file) {
+
+    return 0;
+}
+
+
+// // Получаем socket
+// sock = BPF_CORE_READ(file, private_data);
+// if (!sock) {
+//     bpf_printk("sock ");
+
+//     return 0;
+// }
+
+// // Получаем структуру sock
+// sk = BPF_CORE_READ(sock, sk);
+// if (!sk) {
+//         bpf_printk("sk ");
+
+//     return 0;
+// }
+
+// // Приводим к inet_sock и читаем исходный IP/порт
+// inet = (struct inet_sock *)sk;
+// saddr = BPF_CORE_READ(inet, inet_saddr);
+// sport = BPF_CORE_READ(inet, inet_sport);
+
+
+
 
 
     long ret = ctx->ret;
@@ -182,8 +220,7 @@ if (task) {
         bpf_printk("UDP sys_exit_sendto: Connection: PID!!!=%d, PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
                    pid2,conn_info->pid, conn_info->comm,
                    (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
-                   (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
-    }
+                   (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);    }
 
 
     bpf_map_update_elem(&conn_info_map_sc, &pid2, conn_info, BPF_ANY);
