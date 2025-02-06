@@ -73,6 +73,14 @@ struct
 	__type(value, struct conn_info_t);
 } conn_info_map_ra SEC(".maps");
 
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 10240);
+    __type(key, u32);
+    __type(value, int);
+} fd_map SEC(".maps");
+
+
 
 
 
@@ -109,6 +117,10 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
  SEC("tracepoint/syscalls/sys_enter_sendto")
  int trace_sendto_enter(struct sys_enter_sendto_args *ctx){
 	u32 pid = bpf_get_current_pid_tgid() >> 32;
+    int fd = ctx->fd;  // fd передается первым аргументом в sendto()
+    
+    bpf_map_update_elem(&fd_map, &pid, &fd, BPF_ANY);
+
 	init_conn_info_sendto(ctx);
 
 	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid);
@@ -123,44 +135,63 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
  }
 
 
-SEC("tracepoint/syscalls/sys_exit_sendto")
-int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
+ SEC("tracepoint/syscalls/sys_exit_sendto")
+ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
+     struct task_struct *task;
+     struct fdtable *fdt;
+     struct file *file;
+     struct socket *sock;
+     struct sock *sk;
+     struct inet_sock *inet;
+     __be32 src_ip;
+     __be16 sport;
+     int *fd_ptr;
+     u32 pid = bpf_get_current_pid_tgid() >> 32;
+ 
+     // Получаем fd из eBPF-карты
+     fd_ptr = bpf_map_lookup_elem(&fd_map, &pid);
+     if (!fd_ptr) return 0;
+     
+     int fd = *fd_ptr;
+     bpf_map_delete_elem(&fd_map, &pid); // Удаляем запись, чтобы не засорять карту
+ 
+     // Получаем текущий процесс
+     task = (struct task_struct *)bpf_get_current_task();
+     if (!task) return 0;
+
+     u32 pid2=BPF_CORE_READ(task,pid);
+ 
+     // Получаем fdtable
+     file = BPF_CORE_READ(task, files, fdt,fd);
+     if (!file) return 0;
+ 
+ 
+    //  // Получаем socket * из file
+    //  sock = BPF_CORE_READ(file, private_data);
+    //  if (!sock) return 0;
+ 
+    //  // Получаем struct sock * из socket
+    //  sk = BPF_CORE_READ(sock, sk);
+    //  if (!sk) return 0;
+ 
+    //  // Получаем struct inet_sock * из struct sock
+    //  inet = (struct inet_sock *)sk;
+ 
+    //  // Читаем IP и порт
+    //  src_ip = BPF_CORE_READ(inet, inet_saddr);
+    //  sport = BPF_CORE_READ(inet, inet_sport);
+
+     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid);
+     if (!conn_info) {
+         bpf_printk("UDP sys_exit_sendto: No connection info found for PID=%d\n", pid);
+         bpf_map_delete_elem(&conn_info_map_sc, &pid);
+         return 0;
+     }
 
 
-
-struct task_struct *task;
-struct files_struct *files;
-//struct fdtable *fdt;
-struct file *file;
-struct socket *sock;
-struct sock *sk;
-struct inet_sock *inet;
-__be32 src_ip;
-__be16 sport;
-int pid2 = 0;
-int fd;
-
-// Получаем текущий процесс
-task = (struct task_struct *)bpf_get_current_task();
-if (!task) return 0;
-
-pid2 = BPF_CORE_READ(task, pid);
-// files = BPF_CORE_READ(task, files);
-// if (!files) return 0;
-
-struct fdtable *fdt = BPF_CORE_READ(task,files, fdt);
-if (!fdt) return 0;
-
-
-
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid2);
-    if (!conn_info) {
-        bpf_printk("UDP sys_exit_sendto: No connection info found for PID=%d\n", pid2);
-        bpf_map_delete_elem(&conn_info_map_sc, &pid2);
-        return 0;
-    }
-
-bpf_printk("sys_exit_sendto PID_enter=%d PID=%d Name=%s",conn_info->pid,pid2,conn_info->comm);
-
-    return 0;
-}
+ 
+     bpf_printk("sys_exit_sendto NAME=%s PID=%d PID2=%d src_ip=%x sport=%d\n",conn_info->comm, pid, pid2,src_ip, sport);
+ 
+     return 0;
+ }
+ 
