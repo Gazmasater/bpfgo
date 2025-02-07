@@ -160,29 +160,9 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
      if (!task) return 0;
 
      u32 pid2=BPF_CORE_READ(task,pid);
- 
-     // Получаем fdtable
-     file = BPF_CORE_READ(task, files, fdt, fd);
 
-    //  struct fdtable *fdt = BPF_CORE_READ(task, files, fdt);
-    //  if (!fdt) return 0;
 
-      
  
-    //  // Получаем socket * из file
-    //  sock = BPF_CORE_READ(file, private_data);
-    //  if (!sock) return 0;
- 
-    //  // Получаем struct sock * из socket
-    //  sk = BPF_CORE_READ(sock, sk);
-    //  if (!sk) return 0;
- 
-    //  // Получаем struct inet_sock * из struct sock
-    //  inet = (struct inet_sock *)sk;
- 
-    //  // Читаем IP и порт
-    //  src_ip = BPF_CORE_READ(inet, inet_saddr);
-    //  sport = BPF_CORE_READ(inet, inet_sport);
 
      struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid);
      if (!conn_info) {
