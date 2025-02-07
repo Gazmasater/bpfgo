@@ -138,8 +138,8 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
  SEC("tracepoint/syscalls/sys_exit_sendto")
  int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
      struct task_struct *task;
-     struct fdtable *fdt;
-     struct file *file;
+     //struct fdtable *fdt;
+     //struct file *file;
      struct socket *sock;
      struct sock *sk;
      struct inet_sock *inet;
@@ -170,6 +170,14 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
          bpf_map_delete_elem(&conn_info_map_sc, &pid);
          return 0;
      }
+
+     struct files_struct *files = BPF_CORE_READ(task, files);
+     struct fdtable *fdt = BPF_CORE_READ(files, fdt);
+     struct file **fd_array = BPF_CORE_READ(fdt, fd);
+     
+
+
+
 
 
  
