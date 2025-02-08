@@ -146,6 +146,7 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
      __be32 src_ip;
      __be16 sport;
      int *fd_ptr;
+     char comm[16];
      u32 pid = bpf_get_current_pid_tgid() >> 32;
  
      // Получаем fd из eBPF-карты
@@ -160,6 +161,7 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
      if (!task) return 0;
 
      u32 pid2=BPF_CORE_READ(task,pid);
+     BPF_CORE_READ_INTO(&comm,task,comm);
 
 
  
@@ -171,9 +173,9 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
          return 0;
      }
 
-     struct files_struct *files = BPF_CORE_READ(task, files);
-     struct fdtable *fdt = BPF_CORE_READ(files, fdt);
-     struct file **fd_array = BPF_CORE_READ(fdt, fd);
+    //  struct files_struct *files = BPF_CORE_READ(task, files);
+    //  struct fdtable *fdt = BPF_CORE_READ(files, fdt);
+    //  struct file **fd_array = BPF_CORE_READ(fdt, fd);
      
 
 
@@ -181,7 +183,7 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
 
 
  
-     bpf_printk("sys_exit_sendto NAME=%s PID=%d PID2=%d src_ip=%x sport=%d\n",conn_info->comm, pid, pid2,src_ip, sport);
+     bpf_printk("sys_exit_sendto NAME=%s PID=%d PID2=%d src_ip=%x sport=%d\n",comm, pid, pid2,src_ip, sport);
  
      return 0;
  }
