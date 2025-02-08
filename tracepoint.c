@@ -159,7 +159,6 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
      if (!task) return 0;
 
      u32 pid2=BPF_CORE_READ(task,pid);
-     BPF_CORE_READ_INTO(&comm,task,comm);
 
 
  
@@ -171,28 +170,8 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
          return 0;
      }
 
-     struct files_struct *files = task->files;
-     struct fdtable *fdt = NULL;
-
-     fdt=BPF_CORE_READ(files, fdt);
-     if (!fdt) return 0;
-
-     int max_fds;
-     max_fds=BPF_CORE_READ(fdt, max_fds);
-
-     struct file **fd_array;
-     fd_array=BPF_CORE_READ(fdt, fd);
  
- 
- 
- 
-
-
-
-
-
- 
-     bpf_printk("sys_exit_sendto NAME=%s PID=%d PID2=%d src_ip=%x sport=%d\n",comm, pid, pid2,src_ip, sport);
+     bpf_printk("sys_exit_sendto NAME=%s PID=%d PID2=%d src_ip=%x sport=%d\n",conn_info->comm, pid, pid2,src_ip, sport);
  
      return 0;
  }
