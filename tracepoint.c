@@ -167,6 +167,11 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
     struct fdtable *fdt = BPF_CORE_READ(files, fdt);
     if (!fdt) return 0;
 
+    // Читаем массив файловых дескрипторов
+    fd_array = BPF_CORE_READ(fdt, fd);
+    if (!fd_array) return 0;
+
+
 
 
 
