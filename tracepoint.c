@@ -160,6 +160,10 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
 
      u32 pid2=BPF_CORE_READ(task,pid);
 
+    BPF_CORE_READ(task, files,fdt,fd);
+
+
+
 
  
 
