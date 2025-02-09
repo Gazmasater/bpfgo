@@ -167,11 +167,13 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
     struct fdtable *fdt = BPF_CORE_READ(files, fdt);
     if (!fdt) return 0;
 
-    struct file **fd_array = NULL;
-    fd_array = BPF_CORE_READ(fdt, fd);
-    if (!fd_array) return 0;
-
-
+    struct file **file_ptr = BPF_CORE_READ(fdt, fd);
+    if (!file_ptr) return 0;
+    
+    struct file *file;
+    bpf_core_read_user(&file, sizeof(file), file_ptr); // Читаем указатель из пользовательской памяти
+    if (!file) return 0;
+        
 
 
      struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid);
