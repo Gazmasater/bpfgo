@@ -175,12 +175,6 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
 
 
 
-
-
-
-
- 
-
      struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid);
      if (!conn_info) {
          bpf_printk("UDP sys_exit_sendto: No connection info found for PID=%d\n", pid);
