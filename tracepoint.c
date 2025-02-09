@@ -138,7 +138,7 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
  SEC("tracepoint/syscalls/sys_exit_sendto")
  int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
      struct task_struct *task;
-     struct socket *sock;
+     //struct socket *sock;
      struct sock *sk;
      struct inet_sock *inet;
      __be32 src_ip;
@@ -173,6 +173,10 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
     struct file *file;
     bpf_core_read_user(&file, sizeof(file), file_ptr); // Читаем указатель из пользовательской памяти
     if (!file) return 0;
+
+    struct socket *sock = BPF_CORE_READ(file, private_data);
+    if (!sock) return 0;
+
         
 
 
