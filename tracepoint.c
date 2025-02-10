@@ -174,11 +174,11 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
     bpf_core_read_user(&file, sizeof(file), file_ptr); // Читаем указатель из пользовательской памяти
     if (!file) return 0;
 
-    struct socket *sock;
-    if (bpf_core_read(&sock, sizeof(sock), &file->private_data))
-        return 0;
+    // struct socket *sock;
+    // if (bpf_core_read(&sock, sizeof(sock), &file->private_data))
+    //     return 0;
     
-        
+    
 
 
      struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid);
@@ -189,8 +189,9 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
      }
 
  
-     bpf_printk("sys_exit_sendto NAME=%s PID=%d PID2=%d src_ip=%x sport=%d\n",conn_info->comm, pid, pid2,src_ip, sport);
- 
+     //bpf_printk("sys_exit_sendto Private_data=%p NAME=%s PID=%d PID2=%d src_ip=%x sport=%d\n",file->private_data,conn_info->comm, pid, pid2,src_ip, sport);
+     bpf_printk("sys_exit_sendto  NAME=%s PID=%d PID2=%d src_ip=%x sport=%d\n",conn_info->comm, pid, pid2,src_ip, sport);
+
      return 0;
  }
  
