@@ -171,7 +171,7 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
     if (!file_ptr) return 0;
     
      struct file *file;
-     bpf_probe_read(&file, sizeof(file), file_ptr); // Читаем указатель из пользовательской памяти
+     bpf_probe_read(&file, sizeof(file), file_ptr); 
      if (!file) return 0;
 
     struct socket *sock;
