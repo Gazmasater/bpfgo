@@ -10,7 +10,6 @@
 
 struct conn_info_t
 {
-	struct sockaddr *sock_addr;
 	u32 pid;
 	u32 src_ip;
 	u32 dst_ip;
@@ -79,15 +78,6 @@ struct {
     __type(value, int);
 } fd_map SEC(".maps");
 
-
-
-// struct
-// {
-// 	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
-// 	__uint(max_entries, 1024);
-// 	__type(key, u32);
-// 	__type(value, struct conn_info_t);
-// } conn_info_map_accept SEC(".maps");
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
