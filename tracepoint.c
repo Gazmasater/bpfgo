@@ -141,8 +141,8 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         __be32 ip_addr = 0;
         __be16 port;
 
-        bpf_core_read(&ip_addr, sizeof(ip_addr), &addr->sin_addr.s_addr);
-        bpf_core_read(&port, sizeof(port), &addr->sin_port);
+        ip_addr=BPF_CORE_READ(addr,sin_addr.s_addr);
+        port=BPF_CORE_READ(addr,sin_port);
 
         conn_info->src_ip = bpf_ntohl(ip_addr);
         conn_info->sport = bpf_ntohs(port);
