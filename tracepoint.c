@@ -138,13 +138,15 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
 
     struct sockaddr_in *addr = bpf_map_lookup_elem(&fd_map, &pid);
      if (addr && addr->sin_family == AF_INET) {
-         conn_info->src_ip = bpf_ntohl(addr->sin_addr.s_addr);
-    //     conn_info->sport = bpf_ntohs(addr->sin_port);
+        __be32 ip_addr = 0;
+        bpf_core_read(&ip_addr, sizeof(ip_addr), &addr->sin_addr.s_addr);
+        conn_info->src_ip = bpf_ntohl(ip_addr);
+        //     conn_info->sport = bpf_ntohs(addr->sin_port);
 
-    //     bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-    //                conn_info->pid, conn_info->comm,
-    //                (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
-    //                (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
+        bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+                   conn_info->pid, conn_info->comm,
+                   (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
+                   (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
     }
 
     // bpf_map_update_elem(&conn_info_map_sc, &pid, conn_info, BPF_ANY);
