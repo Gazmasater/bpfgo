@@ -17,7 +17,6 @@ struct conn_info_t
 	u32 addrlen;
 	u16 sport;
 	u16 dport;
-	u8 protocol; 
 	char comm[16];
 	
 };
@@ -99,22 +98,19 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 SEC("tracepoint/syscalls/sys_enter_sendto")
 int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    int fd = ctx->fd;  // fd передается первым аргументом в sendto()
-
-    bpf_map_update_elem(&fd_map, &pid, &fd, BPF_ANY);
-
     struct conn_info_t conn_info = {};
+
     conn_info.pid = pid;
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
     conn_info.sock_addr = (struct sockaddr *)ctx->addr;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
     bpf_map_update_elem(&conn_info_map_sc, &pid, &conn_info, BPF_ANY);
 
-    struct conn_info_t *saved_conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid);
-    if (saved_conn_info) {
-        bpf_printk("SERVER sys_enter_sendto: PID=%d, Comm=%s\n", saved_conn_info->pid, saved_conn_info->comm);
+    struct conn_info_t *stored_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid);
+    if (stored_info) {
+        bpf_printk("SERVER sys_enter_sendto: PID=%d, Comm=%s\n", stored_info->pid, stored_info->comm);
     }
-
+    
     return 0;
 }
 
@@ -136,7 +132,7 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     }
 
     struct sockaddr_in addr;
-    if (bpf_probe_read_user(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
+    if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
         bpf_printk("UDP sys_exit_sendto: Failed to read sockaddr for PID=%d\n", pid);
         bpf_map_delete_elem(&conn_info_map_sc, &pid);
         return 0;
@@ -153,6 +149,5 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     }
 
     bpf_map_update_elem(&conn_info_map_sc, &pid, conn_info, BPF_ANY);
-
     return 0;
 }
