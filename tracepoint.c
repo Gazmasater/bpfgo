@@ -1,4 +1,4 @@
-//go:build ignore
+// go:build ignore
 
 #include "vmlinux.h"
 #include "bpf/bpf_tracing.h"
@@ -16,6 +16,7 @@ struct conn_info_t
     u16 sport;
     u16 dport;
     char comm[16];
+    //      ^^^^^^ 16 мало. сделай 64 хотя бы
 };
 
 struct
@@ -25,6 +26,7 @@ struct
     __type(key, u32);
     __type(value, struct conn_info_t);
 } conn_info_map_sc SEC(".maps");
+//^^^^^^^^^^^^^^^ зачем такие сложные названия? можно же просто назвать conn_info_map
 
 struct
 {
@@ -33,19 +35,25 @@ struct
     __type(key, u32);
     __type(value, struct conn_info_t);
 } conn_info_map_ra SEC(".maps");
+//^^^^^^^^^^^^^^^ эта мапа нигде не используется
 
-struct {
+struct
+{
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 10240);
+    //                  ^^^^^^ 1024?
     __type(key, u32);
     __type(value, int);
 } fd_map SEC(".maps");
+//^^^^^^ название странное! по сути оно хранит sockaddr, ну так и назови типа sock_addr_map
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
+// TODO trace_event_raw_sys_enter и sys_enter_sendto выглядят странно. Лучше задать самописные структуры из описания точки и примеров cilium
 SEC("tracepoint/syscalls/sys_enter_sendto")
-int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx) {
+int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx)
+{
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     struct conn_info_t conn_info = {};
 
@@ -57,42 +65,41 @@ int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx) {
 
     bpf_probe_read(&addr, sizeof(addr), addr_ptr);
     bpf_map_update_elem(&fd_map, &pid, &addr, BPF_ANY);
+    //  ^^^^^^^^^^^^^^^^^^^^^^^^^^^ Зачем использовать дополнительную мапу для хранения addr? можно ведь все хранить в одной conn_info_map_sc
     bpf_map_update_elem(&conn_info_map_sc, &pid, &conn_info, BPF_ANY);
-
-    struct conn_info_t *stored_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid);
-    if (stored_info) {
-        bpf_printk("SERVER sys_enter_sendto: PID=%d, Comm=%s\n", stored_info->pid, stored_info->comm);
-    }
 
     return 0;
 }
 
 SEC("tracepoint/syscalls/sys_exit_sendto")
-int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx) {
+int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx)
+{
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
-    if (ret < 0) {
+    if (ret < 0)
+    {
         bpf_map_delete_elem(&conn_info_map_sc, &pid);
         bpf_map_delete_elem(&fd_map, &pid);
         return 0;
     }
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid);
-    if (!conn_info) {
+    if (!conn_info)
+    {
         bpf_printk("UDP sys_exit_sendto: No connection info found for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map_sc, &pid);
-        bpf_map_delete_elem(&fd_map, &pid);
         return 0;
     }
 
     struct sockaddr_in *addr = bpf_map_lookup_elem(&fd_map, &pid);
-    if (addr && addr->sin_family == AF_INET) {
+    //      ^^^^^^^^^^ в мапе же в sys_enter_sendto сохраняешь тип sockaddr, а тут используешь sockaddr_in
+    if (addr && addr->sin_family == AF_INET)
+    {
         __be32 ip_addr = 0;
         __be16 port;
 
-        ip_addr = BPF_CORE_READ(addr, sin_addr.s_addr);
-        port = BPF_CORE_READ(addr, sin_port);
+        ip_addr = BPF_CORE_READ(addr, sin_addr.s_addr); // TODO BPF_CORE_READ тут лишнее
+        port = BPF_CORE_READ(addr, sin_port);           // TODO BPF_CORE_READ тут лишнее
 
         conn_info->src_ip = bpf_ntohl(ip_addr);
         conn_info->sport = bpf_ntohs(port);
@@ -101,9 +108,10 @@ int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx) {
                    conn_info->pid, conn_info->comm,
                    (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
                    (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
+
+        bpf_map_update_elem(&conn_info_map_sc, &pid, conn_info, BPF_ANY);
     }
 
-    bpf_map_update_elem(&conn_info_map_sc, &pid, conn_info, BPF_ANY);
-    bpf_map_delete_elem(&fd_map, &pid);
+    // TODO вот тут должна быть отправка через perf_event_output conn_info в юзерспейс
     return 0;
 }
