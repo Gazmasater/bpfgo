@@ -1,5 +1,10 @@
 bpf2go --version
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go install github.com/cilium/ebpf/cmd/bpf2go@latest
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go --version
+bpf2go: command not found
+
+
 bpf2go trace ebpf/trace.c -- -target bpf
 
 
