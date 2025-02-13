@@ -13,7 +13,14 @@ bpf2go: command not found
 bpf2go trace ebpf/trace.c -- -target bpf
 
 
-
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ls
+bpf           error             go.mod        README.md   text_eccli  tracepoint.bpf.o      udp_client.c
+common_new.h  eunomia-bpf       go.sum        test        texttest    tracepoint.c          udp_server
+ecc           fentry.bpf.o      main.go       textBPF     text_theor  tracepoint.skel.json  udp_server.c
+ecli          fentry.skel.json  package.json  textDocker  text_udp    udp_client            vmlinux.h
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go trace bpf/trace.c -- -target bpf
+Error: missing package, you should either set the go-package flag or the GOPACKAGE env
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
 
