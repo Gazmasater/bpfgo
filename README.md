@@ -15,6 +15,10 @@ struct {
 } trace_events SEC(".maps.export");
 
 
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, conn_info, sizeof(*conn_info));
+
+
+
 
 
 
