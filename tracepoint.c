@@ -156,16 +156,8 @@ int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx)
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
-    struct sockaddr_in addr = {};
-    void *addr_ptr = (void *)ctx->addr;
-    if (addr_ptr) {
-        bpf_probe_read(&addr, sizeof(addr), addr_ptr);
-
-        if (addr.sin_family == AF_INET) {
-            conn_info.src_ip = bpf_ntohl(addr.sin_addr.s_addr);
-            conn_info.sport = bpf_ntohs(addr.sin_port);
-        }
-    }
+    // Сохраняем указатель на sockaddr для чтения в sys_exit
+    conn_info.sock_addr = ctx->addr;
 
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
     return 0;
@@ -187,6 +179,15 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx)
     if (!conn_info)
     {
         return 0;
+    }
+
+    struct sockaddr_in addr = {};
+    if (conn_info->sock_addr) { // Адрес передавался в sys_enter_recvfrom
+        bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr);
+        if (addr.sin_family == AF_INET) {
+            conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
+            conn_info->sport = bpf_ntohs(addr.sin_port);
+        }
     }
 
     bpf_printk("UDP sys_exit_recvfrom: PID=%d, Comm=%s, Src_IP=%d.%d.%d.%d, Src_Port=%d\n",
