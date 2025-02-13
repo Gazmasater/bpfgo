@@ -1,3 +1,6 @@
+export PATH=$PATH:$HOME/go/bin
+
+
 bpf2go --version
 
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go install github.com/cilium/ebpf/cmd/bpf2go@latest
