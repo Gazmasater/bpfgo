@@ -1,3 +1,5 @@
+nano ~/.bashrc   # для bash
+
 export PATH=$PATH:$HOME/go/bin
 
 
