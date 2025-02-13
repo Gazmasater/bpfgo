@@ -17,7 +17,7 @@ struct conn_info_t
     u32 addrlen;
     u16 sport;
     u16 dport;
-    char comm[16];
+    char comm[64];
 };
 
 struct sys_enter_sendto_args
