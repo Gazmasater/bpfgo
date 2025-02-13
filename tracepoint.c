@@ -80,7 +80,11 @@ struct {
 
 struct {
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-} events SEC(".maps");
+    __uint(key_size, sizeof(u32));
+    __uint(value_size, sizeof(u32));
+    __uint(max_entries, 128); 
+} trace_events SEC(".maps.export");
+
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
@@ -129,7 +133,6 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx)
         }
     }
 
-    //bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, conn_info, sizeof(*conn_info));
 
     bpf_map_delete_elem(&conn_info_map, &pid);
     return 0;
@@ -179,7 +182,6 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx)
         }
     }
 
-    //bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, conn_info, sizeof(*conn_info));
 
     bpf_map_delete_elem(&conn_info_map, &pid);
     return 0;
