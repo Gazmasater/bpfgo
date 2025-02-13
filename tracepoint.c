@@ -141,7 +141,6 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx)
                (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
                (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
 
-    // Можно удалить, если данные не нужны дальше
     bpf_map_delete_elem(&conn_info_map, &pid);
     return 0;
 }
@@ -156,7 +155,6 @@ int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx)
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
-    // Сохраняем указатель на sockaddr для чтения в sys_exit
     conn_info.sock_addr = ctx->addr;
 
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
@@ -182,7 +180,7 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx)
     }
 
     struct sockaddr_in addr = {};
-    if (conn_info->sock_addr) { // Адрес передавался в sys_enter_recvfrom
+    if (conn_info->sock_addr) { 
         bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr);
         if (addr.sin_family == AF_INET) {
             conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
