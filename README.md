@@ -24,14 +24,12 @@ struct {
 
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, conn_info, sizeof(*conn_info));
 
-clang --version
-llc --version
-bpftool version
+struct {
+    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+    __uint(key_size, sizeof(u32));
+    __uint(value_size, sizeof(u32));
+    __uint(max_entries, 128);
+    __uint(pinning, LIBBPF_PIN_BY_NAME);
+} trace_events SEC(".maps");
 
-
-Рекомендуемые версии:
-
-Clang: 12+
-LLVM: 12+
-bpftool: 6.x+ (если ядро 6.x)
-
+bpftool map create /sys/fs/bpf/trace_events type perf_event_array key 4 value 4 entries 128
