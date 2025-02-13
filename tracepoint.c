@@ -78,12 +78,15 @@ struct {
     __type(value, struct conn_info_t);
 } conn_info_map SEC(".maps");
 
+
+
+
 struct {
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
     __uint(key_size, sizeof(u32));
     __uint(value_size, sizeof(u32));
     __uint(max_entries, 128); 
-} trace_events SEC(".maps.export");
+} trace_events SEC(".maps");
 
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
@@ -134,6 +137,10 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx)
     }
 
 
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, conn_info, sizeof(*conn_info));
+
+
+
     bpf_map_delete_elem(&conn_info_map, &pid);
     return 0;
 }
@@ -181,6 +188,9 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx)
             conn_info->sport = bpf_ntohs(addr.sin_port);
         }
     }
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, conn_info, sizeof(*conn_info));
+
 
 
     bpf_map_delete_elem(&conn_info_map, &pid);
