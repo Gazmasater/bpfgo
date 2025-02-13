@@ -104,7 +104,7 @@ int trace_sendto_enter(struct sys_enter_sendto_args *ctx)
 
     struct sockaddr_in addr = {};
     void *addr_ptr = (void *)ctx->addr;   
-    bpf_core_read(&addr, sizeof(addr), addr_ptr);
+    bpf_probe_read(&addr, sizeof(addr), addr_ptr);
     
     if (addr.sin_family == AF_INET)
     {
