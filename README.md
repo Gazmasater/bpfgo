@@ -20,12 +20,16 @@ struct {
 
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ./ecc tracepoint.c
+INFO [ecc_rs::bpf_compiler] Compiling bpf object...
+INFO [ecc_rs::bpf_compiler] $ "/tmp/.tmpbTxAAV/bin/bpftool" CommandArgs { inner: ["gen", "skeleton", "tracepoint.bpf.o", "-j"] }
+INFO [ecc_rs::bpf_compiler] {"error":"failed to open BPF object file: Relocation failed"}
 
+ERROR [ecc_rs::bpf_compiler] libbpf: elf: skipping unrecognized data section(13) .maps.export
+libbpf: prog 'trace_sendto_exit': bad map relo against 'trace_events' in section '.maps.export'
 
+Error: Failed to compile
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./ecli run package.json
-[sudo] password for gaz358: 
-INFO [faerie::elf] strtab: 0xe18 symtab 0xe50 relocs 0xe98 sh_offset 0xe98
-thread '<unnamed>' panicked at ecli-lib/src/runner/task_manager/mod.rs:252:22:
-called `Result::unwrap()` on an `Err` value: Export map named `trace_events` found, but no export type is provided
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Caused by:
+    Failed to generate skeleton json(exit code = Some(91))
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
