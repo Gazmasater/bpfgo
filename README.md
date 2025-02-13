@@ -29,4 +29,9 @@ llc --version
 bpftool version
 
 
+Рекомендуемые версии:
+
+Clang: 12+
+LLVM: 12+
+bpftool: 6.x+ (если ядро 6.x)
 
