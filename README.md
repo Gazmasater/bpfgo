@@ -1,3 +1,12 @@
+bpf2go --version
+
+bpf2go trace ebpf/trace.c -- -target bpf
+
+
+
+
+
+
 1. Установка bpf2go
 Если у тебя ещё нет bpf2go, установи его:
 
