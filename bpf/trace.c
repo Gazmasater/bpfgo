@@ -21,10 +21,10 @@ struct conn_info_t
 
 struct event_t {
     u32 pid;
-    // u32 src_ip;
-    // u16 sport;
-    // u16 pad;
-    // char comm[64];
+    u32 src_ip;
+    u16 sport;
+    u16 pad;
+    char comm[64];
 };
 
 struct sys_enter_sendto_args
@@ -101,7 +101,7 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
 SEC("tracepoint/syscalls/sys_enter_sendto")
-int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
+int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     struct conn_info_t conn_info = {};
 
@@ -109,10 +109,7 @@ int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
     
-    if (ctx->addr) {
-        bpf_probe_read(&conn_info.sock_addr, sizeof(conn_info.sock_addr), ctx->addr);
-    }
-    
+    void *addr_ptr = (void *)ctx->args[4];    
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
     return 0;
 }
@@ -138,18 +135,18 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         conn_info->sport = bpf_ntohs(addr->sin_port);
     }
 
-    // bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-    //     conn_info->pid, conn_info->comm,
-    //     (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
-    //     (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
+    bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+        conn_info->pid, conn_info->comm,
+        (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
+        (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
 
    struct event_t event = {
-       .pid = conn_info->pid,
-     // .src_ip = conn_info->src_ip,
-      //.sport = conn_info->sport,
+    .pid = conn_info->pid,
+    .src_ip = conn_info->src_ip,
+    .sport = conn_info->sport,
   };
 
-  //  __builtin_memcpy(event.comm, conn_info->comm, sizeof(event.comm));
+    __builtin_memcpy(event.comm, conn_info->comm, sizeof(event.comm));
    // bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &event, sizeof(event));
 
 
@@ -158,11 +155,3 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     bpf_map_delete_elem(&conn_info_map, &pid);
     return 0;
 }
-
-
-
-
-
-
-
-
