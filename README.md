@@ -14,10 +14,10 @@ import (
 
 // Event структура должна совпадать с event_t в BPF-коде
 type Event struct {
-	PID    uint32
-	SrcIP  uint32
-	Sport  uint16
-	Comm   [16]byte
+	PID   uint32
+	SrcIP uint32
+	Sport uint16
+	Comm  [16]byte
 }
 
 func main() {
@@ -25,7 +25,9 @@ func main() {
 	objs := struct {
 		TraceEvents *ebpf.Map
 	}{}
-	if err := loadTraceObjects(&objs); err != nil {
+
+	opts := &ebpf.CollectionOptions{}
+	if err := loadTraceObjects(&objs, opts); err != nil {
 		log.Fatalf("loading BPF objects: %v", err)
 	}
 	defer objs.TraceEvents.Close()
@@ -70,9 +72,6 @@ func main() {
 	fmt.Println("\nExiting...")
 }
 
-
-opts := &ebpf.CollectionOptions{}
-if err := loadTraceObjects(&objs, opts); err != nil {
 
 
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go run .
