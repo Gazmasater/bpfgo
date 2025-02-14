@@ -1,3 +1,14 @@
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go trace bpf/trace.c -- -target bpf
+Compiled /home/gaz358/myprog/bpfgo/trace_bpfel.o
+Stripped /home/gaz358/myprog/bpfgo/trace_bpfel.o
+Error: can't write /home/gaz358/myprog/bpfgo/trace_bpfel.go: can't generate types: template: common:17:4: executing "common" at <$.TypeDeclaration>: error calling TypeDeclaration: Struct:"conn_info_t": field 0: type *btf.Pointer: not supported
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
+
+
+
+
+
 Ошибка missing package, you should either set the go-package flag or the GOPACKAGE env означает, что для успешной генерации файла с кодом Go необходимо указать пакет Go, в котором будет размещен сгенерированный код.
 
 Чтобы исправить эту ошибку, можно выполнить следующие шаги:
