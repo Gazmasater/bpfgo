@@ -4,6 +4,13 @@ bpf2go -target native -pkg main trace bpf/trace.c -- -I/usr/include/
 GOPACKAGE=main bpf2go -target native -go-package main trace bpf/trace.c -- -I/usr/include/
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ GOPACKAGE=main bpf2go -target native -go-package main trace bpf/trace.c -- -I/usr/include/
+Compiled /home/gaz358/myprog/bpfgo/trace_x86_bpfel.o
+Stripped /home/gaz358/myprog/bpfgo/trace_x86_bpfel.o
+Wrote /home/gaz358/myprog/bpfgo/trace_x86_bpfel.go
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
+
 
 SEC("tracepoint/syscalls/sys_enter_sendto")
 int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
