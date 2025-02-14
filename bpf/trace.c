@@ -81,12 +81,12 @@ struct {
 
 
 
-struct {
-    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-    __uint(key_size, sizeof(u32));
-    __uint(value_size, sizeof(u32));
-    __uint(max_entries, 128); 
-} trace_events SEC(".maps");
+// struct {
+//     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+//     __uint(key_size, sizeof(u32));
+//     __uint(value_size, sizeof(u32));
+//     __uint(max_entries, 128); 
+// } trace_events SEC(".maps");
 
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
@@ -136,8 +136,13 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx)
         }
     }
 
+    bpf_printk("UDP sys_exit_sendto: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+        conn_info->pid, conn_info->comm,
+        (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
+        (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
 
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, conn_info, sizeof(*conn_info));
+
+    //bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, conn_info, sizeof(*conn_info));
 
 
 
@@ -189,7 +194,13 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx)
         }
     }
 
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, conn_info, sizeof(*conn_info));
+
+    bpf_printk("UDP sys_exit_recvfrom: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+        conn_info->pid, conn_info->comm,
+        (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
+        (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
+
+    //bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, conn_info, sizeof(*conn_info));
 
 
 
