@@ -1,10 +1,4 @@
-struct {
-    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-    __uint(key_size, sizeof(u32));
-    __uint(value_size, 80); // Используем 80 байт для структуры event_t
-    __uint(max_entries, 128); 
-} trace_events SEC(".maps");
-
+dmesg | tail -n 20 
 
 
 
