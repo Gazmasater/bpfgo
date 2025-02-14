@@ -148,6 +148,7 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx)
         .pid = conn_info->pid,
         .src_ip = conn_info->src_ip,
         .sport = conn_info->sport,
+
     };
 
     __builtin_memcpy(event.comm, conn_info->comm, sizeof(event.comm));
@@ -214,12 +215,22 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx)
     }
 
 
+    struct event_t event = {
+        .pid = conn_info->pid,
+        .src_ip = conn_info->src_ip,
+        .sport = conn_info->sport,
+    };
+
+    __builtin_memcpy(event.comm, conn_info->comm, sizeof(event.comm));
+
+
+
     bpf_printk("UDP sys_exit_recvfrom: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
         conn_info->pid, conn_info->comm,
         (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
         (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
 
-    //bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, conn_info, sizeof(*conn_info));
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &event, sizeof(event));
 
 
 
