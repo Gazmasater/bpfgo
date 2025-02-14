@@ -1,7 +1,72 @@
-struct bpf_map_def SEC("maps") trace_events = {
-    .type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
-    .max_entries = 128, // Укажите количество CPU на вашей системе
-};
+clang -target bpf -O2 -c program.c -o program.o
+
+
+
+package main
+
+import (
+    "fmt"
+    "log"
+    "os"
+
+    "github.com/cilium/ebpf"
+    "github.com/cilium/ebpf/link"
+)
+
+func main() {
+    // Открываем объект BPF
+    obj, err := ebpf.LoadObjectFromFile("your_bpf_program.o")
+    if err != nil {
+        log.Fatalf("Ошибка при загрузке BPF объекта: %v", err)
+    }
+    defer obj.Close()
+
+    // Находим программу trace_sendto_enter
+    progEnter, err := obj.Program("trace_sendto_enter")
+    if err != nil {
+        log.Fatalf("Не удалось найти программу trace_sendto_enter: %v", err)
+    }
+
+    // Находим программу trace_sendto_exit
+    progExit, err := obj.Program("trace_sendto_exit")
+    if err != nil {
+        log.Fatalf("Не удалось найти программу trace_sendto_exit: %v", err)
+    }
+
+    // Загружаем BPF объект
+    if err := obj.Load(); err != nil {
+        log.Fatalf("Ошибка при загрузке BPF объекта: %v", err)
+    }
+
+    // Прикрепляем программу trace_sendto_enter
+    linkEnter, err := link.AttachTracepoint(link.TracepointOptions{
+        Program: progEnter,
+        Category: "syscalls",
+        Name: "sys_enter_sendto",
+    })
+    if err != nil {
+        log.Fatalf("Ошибка при прикреплении trace_sendto_enter: %v", err)
+    }
+    defer linkEnter.Close()
+
+    // Прикрепляем программу trace_sendto_exit
+    linkExit, err := link.AttachTracepoint(link.TracepointOptions{
+        Program: progExit,
+        Category: "syscalls",
+        Name: "sys_exit_sendto",
+    })
+    if err != nil {
+        log.Fatalf("Ошибка при прикреплении trace_sendto_exit: %v", err)
+    }
+    defer linkExit.Close()
+
+    // Ожидаем сигнала для завершения работы
+    sigs := make(chan os.Signal, 1)
+    signal.Notify(sigs, os.Interrupt)
+    <-sigs
+
+    fmt.Println("Завершение работы программы")
+}
 
 
 
