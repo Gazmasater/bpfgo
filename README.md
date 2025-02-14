@@ -1,6 +1,20 @@
 clang -target bpf -O2 -c program.c -o program.o
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go run .
+# load
+./main.go:41:25: undefined: link.AttachTracepoint
+./main.go:42:3: unknown field Program in struct literal of type link.TracepointOptions
+./main.go:43:3: unknown field Category in struct literal of type link.TracepointOptions
+./main.go:44:3: unknown field Name in struct literal of type link.TracepointOptions
+./main.go:51:24: undefined: link.AttachTracepoint
+./main.go:52:3: unknown field Program in struct literal of type link.TracepointOptions
+./main.go:53:3: unknown field Category in struct literal of type link.TracepointOptions
+./main.go:54:3: unknown field Name in struct literal of type link.TracepointOptions
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
+
+
 
 package main
 
