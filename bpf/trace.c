@@ -115,7 +115,7 @@ int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx) {
 }
 
 SEC("tracepoint/syscalls/sys_exit_sendto")
-int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
+int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
@@ -147,7 +147,7 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
   };
 
     __builtin_memcpy(event.comm, conn_info->comm, sizeof(event.comm));
-   // bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &event, sizeof(event));
+    bpf_perf_event_output((void *)ctx, &trace_events, BPF_F_CURRENT_CPU, &event, sizeof(event));
 
 
     
