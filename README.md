@@ -75,6 +75,12 @@ opts := &ebpf.CollectionOptions{}
 if err := loadTraceObjects(&objs, opts); err != nil {
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go run .
+2025/02/14 14:45:36 loading BPF objects: nil pointer to struct { TraceEvents *ebpf.Map }
+exit status 1
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
+
 
 
 
