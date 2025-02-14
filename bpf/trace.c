@@ -88,20 +88,19 @@ struct {
 
 
 
-
 struct {
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-    __uint(key_size, sizeof(u32));
-    __uint(value_size, sizeof(u32));
-    __uint(max_entries, 128); 
-} trace_events SEC(".maps");
+    __uint(key_size, sizeof(__u32));
+    __uint(value_size, sizeof(__u32));
+   // __uint(max_entries, 128); 
+} events SEC(".maps");
 
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
 SEC("tracepoint/syscalls/sys_enter_sendto")
-int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx) {
+int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     struct conn_info_t conn_info = {};
 
@@ -109,13 +108,13 @@ int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx) {
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
     
-    void *addr_ptr = (void *)ctx->args[4];    
+    void *addr_ptr = (void *)ctx->addr;    
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
     return 0;
 }
 
 SEC("tracepoint/syscalls/sys_exit_sendto")
-int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx) {
+int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
@@ -147,11 +146,8 @@ int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx) {
   };
 
     __builtin_memcpy(event.comm, conn_info->comm, sizeof(event.comm));
-    bpf_perf_event_output((void *)ctx, &trace_events, BPF_F_CURRENT_CPU, &event, sizeof(event));
+    bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, &event, sizeof(event));
 
 
-    
-
-    bpf_map_delete_elem(&conn_info_map, &pid);
-    return 0;
+        return 0;
 }
