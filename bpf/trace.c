@@ -21,10 +21,10 @@ struct conn_info_t
 
 struct event_t {
     u32 pid;
-    u32 src_ip;
-    u16 sport;
-    u16 pad;
-    char comm[64];
+    // u32 src_ip;
+    // u16 sport;
+    // u16 pad;
+    // char comm[64];
 };
 
 struct sys_enter_sendto_args
@@ -107,6 +107,7 @@ int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
 
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
     
     if (ctx->addr) {
         bpf_probe_read(&conn_info.sock_addr, sizeof(conn_info.sock_addr), ctx->addr);
@@ -142,14 +143,14 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
         (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
 
-    struct event_t event = {
-        .pid = conn_info->pid,
-        .src_ip = conn_info->src_ip,
-        .sport = conn_info->sport,
-    };
+   struct event_t event = {
+       .pid = conn_info->pid,
+     // .src_ip = conn_info->src_ip,
+      //.sport = conn_info->sport,
+  };
 
-    __builtin_memcpy(event.comm, conn_info->comm, sizeof(event.comm));
-    //bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &event, sizeof(event));
+  //  __builtin_memcpy(event.comm, conn_info->comm, sizeof(event.comm));
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &event, sizeof(event));
 
 
     
