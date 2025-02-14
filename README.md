@@ -8,63 +8,53 @@ import (
     "log"
     "os"
     "os/signal"
+    "syscall"
 
     "github.com/cilium/ebpf"
     "github.com/cilium/ebpf/link"
+    "github.com/cilium/ebpf/rlimit"
 )
 
-//go:embed your_bpf_program.o
-var bpfProgram []byte
-
 func main() {
-    // Загрузить eBPF-объект из скомпилированного байткода
-    spec, err := ebpf.LoadCollectionSpecFromReader(bytes.NewReader(bpfProgram))
-    if err != nil {
-        log.Fatalf("ошибка при загрузке спецификации BPF: %v", err)
+    // Снимаем ограничения на использование памяти для eBPF
+    if err := rlimit.RemoveMemlock(); err != nil {
+        log.Fatalf("не удалось снять ограничение на память: %v", err)
     }
 
-    // Создать коллекцию eBPF-объектов
-    coll, err := ebpf.NewCollection(spec)
+    // Загружаем eBPF-объект из файла
+    obj, err := ebpf.LoadCollection("trace.bpf.o")
     if err != nil {
-        log.Fatalf("ошибка при создании коллекции BPF: %v", err)
+        log.Fatalf("ошибка при загрузке eBPF-объекта: %v", err)
     }
-    defer coll.Close()
+    defer obj.Close()
 
-    // Получить программы из коллекции
-    progEnter := coll.Programs["trace_sendto_enter"]
+    // Получаем eBPF-программы из загруженного объекта
+    progEnter := obj.Programs["trace_sendto_enter"]
     if progEnter == nil {
         log.Fatalf("программа trace_sendto_enter не найдена")
     }
 
-    progExit := coll.Programs["trace_sendto_exit"]
+    progExit := obj.Programs["trace_sendto_exit"]
     if progExit == nil {
         log.Fatalf("программа trace_sendto_exit не найдена")
     }
 
-    // Привязать программы к соответствующим tracepoint
-    linkEnter, err := link.AttachTracepoint(link.TracepointOptions{
-        Program:   progEnter,
-        Category:  "syscalls",
-        Name:      "sys_enter_sendto",
-    })
+    // Привязываем программы к соответствующим tracepoint'ам
+    linkEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", progEnter, nil)
     if err != nil {
         log.Fatalf("ошибка при привязке trace_sendto_enter: %v", err)
     }
     defer linkEnter.Close()
 
-    linkExit, err := link.AttachTracepoint(link.TracepointOptions{
-        Program:   progExit,
-        Category:  "syscalls",
-        Name:      "sys_exit_sendto",
-    })
+    linkExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", progExit, nil)
     if err != nil {
         log.Fatalf("ошибка при привязке trace_sendto_exit: %v", err)
     }
     defer linkExit.Close()
 
-    // Ожидание сигнала завершения
+    // Ожидаем сигнала завершения
     sigs := make(chan os.Signal, 1)
-    signal.Notify(sigs, os.Interrupt)
+    signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
     <-sigs
 
     log.Println("Завершение работы программы")
