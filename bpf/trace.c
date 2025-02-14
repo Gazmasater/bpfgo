@@ -138,10 +138,10 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         conn_info->sport = bpf_ntohs(addr->sin_port);
     }
 
-    bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-        conn_info->pid, conn_info->comm,
-        (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
-        (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
+    // bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+    //     conn_info->pid, conn_info->comm,
+    //     (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
+    //     (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
 
    struct event_t event = {
        .pid = conn_info->pid,
@@ -150,7 +150,7 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
   };
 
   //  __builtin_memcpy(event.comm, conn_info->comm, sizeof(event.comm));
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &event, sizeof(event));
+   // bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &event, sizeof(event));
 
 
     
