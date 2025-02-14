@@ -1,3 +1,35 @@
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo dmesg | tail -n 20
+[sudo] password for gaz358: 
+[   12.879769] FAT-fs (sda1): Volume was not properly unmounted. Some data may be corrupt. Please run fsck.
+[   14.846631] audit: type=1400 audit(1739551480.391:165): apparmor="DENIED" operation="capable" class="cap" profile="/snap/snapd/23545/usr/lib/snapd/snap-confine" pid=2838 comm="snap-confine" capability=12  capname="net_admin"
+[   14.846642] audit: type=1400 audit(1739551480.391:166): apparmor="DENIED" operation="capable" class="cap" profile="/snap/snapd/23545/usr/lib/snapd/snap-confine" pid=2838 comm="snap-confine" capability=38  capname="perfmon"
+[   17.884684] audit: type=1400 audit(1739551483.429:167): apparmor="DENIED" operation="capable" class="cap" profile="/snap/snapd/23545/usr/lib/snapd/snap-confine" pid=2917 comm="snap-confine" capability=12  capname="net_admin"
+[   17.884719] audit: type=1400 audit(1739551483.429:168): apparmor="DENIED" operation="capable" class="cap" profile="/snap/snapd/23545/usr/lib/snapd/snap-confine" pid=2917 comm="snap-confine" capability=38  capname="perfmon"
+[   17.886581] audit: type=1400 audit(1739551483.431:169): apparmor="DENIED" operation="capable" class="cap" profile="/snap/snapd/23545/usr/lib/snapd/snap-confine" pid=2917 comm="snap-confine" capability=4  capname="fsetid"
+[   18.601134] audit: type=1326 audit(1739551484.145:170): auid=1000 uid=1000 gid=1000 ses=3 subj=snap.snap-store.snap-store pid=2917 comm="snap-store" exe="/snap/snap-store/1248/bin/snap-store" sig=0 arch=c000003e syscall=203 compat=0 ip=0x7cc799665531 code=0x50000
+[   18.601140] audit: type=1326 audit(1739551484.145:171): auid=1000 uid=1000 gid=1000 ses=3 subj=snap.snap-store.snap-store pid=2917 comm="snap-store" exe="/snap/snap-store/1248/bin/snap-store" sig=0 arch=c000003e syscall=141 compat=0 ip=0x7cc7996e478b code=0x50000
+[   18.602549] audit: type=1326 audit(1739551484.147:172): auid=1000 uid=1000 gid=1000 ses=3 subj=snap.snap-store.snap-store pid=2917 comm="snap-store" exe="/snap/snap-store/1248/bin/snap-store" sig=0 arch=c000003e syscall=203 compat=0 ip=0x7cc799665531 code=0x50000
+[   18.602580] audit: type=1326 audit(1739551484.147:173): auid=1000 uid=1000 gid=1000 ses=3 subj=snap.snap-store.snap-store pid=2917 comm="snap-store" exe="/snap/snap-store/1248/bin/snap-store" sig=0 arch=c000003e syscall=203 compat=0 ip=0x7cc799665531 code=0x50000
+[   18.602608] audit: type=1326 audit(1739551484.147:174): auid=1000 uid=1000 gid=1000 ses=3 subj=snap.snap-store.snap-store pid=2917 comm="snap-store" exe="/snap/snap-store/1248/bin/snap-store" sig=0 arch=c000003e syscall=203 compat=0 ip=0x7cc799665531 code=0x50000
+[   18.602616] audit: type=1326 audit(1739551484.147:175): auid=1000 uid=1000 gid=1000 ses=3 subj=snap.snap-store.snap-store pid=2917 comm="snap-store" exe="/snap/snap-store/1248/bin/snap-store" sig=0 arch=c000003e syscall=203 compat=0 ip=0x7cc799665531 code=0x50000
+[   18.602619] audit: type=1326 audit(1739551484.147:176): auid=1000 uid=1000 gid=1000 ses=3 subj=snap.snap-store.snap-store pid=2917 comm="snap-store" exe="/snap/snap-store/1248/bin/snap-store" sig=0 arch=c000003e syscall=203 compat=0 ip=0x7cc799665531 code=0x50000
+[   27.391629] warning: `ThreadPoolForeg' uses wireless extensions which will stop working for Wi-Fi 7 hardware; use nl80211
+[   69.929280] kauditd_printk_skb: 9 callbacks suppressed
+[   69.929283] audit: type=1400 audit(1739551535.045:186): apparmor="DENIED" operation="open" class="file" profile="snap-update-ns.firefox" name="/usr/local/share/" pid=3813 comm="5" requested_mask="r" denied_mask="r" fsuid=0 ouid=0
+[   70.843513] audit: type=1107 audit(1739551535.959:187): pid=940 uid=101 auid=4294967295 ses=4294967295 subj=unconfined msg='apparmor="DENIED" operation="dbus_method_call"  bus="system" path="/org/freedesktop/timedate1" interface="org.freedesktop.DBus.Properties" member="GetAll" mask="send" name=":1.108" pid=3781 label="snap.firefox.firefox" peer_pid=3937 peer_label="unconfined"
+                exe="/usr/bin/dbus-daemon" sauid=101 hostname=? addr=? terminal=?'
+[   70.845742] audit: type=1107 audit(1739551535.962:188): pid=940 uid=101 auid=4294967295 ses=4294967295 subj=unconfined msg='apparmor="DENIED" operation="dbus_method_call"  bus="system" path="/org/freedesktop/timedate1" interface="org.freedesktop.DBus.Properties" member="GetAll" mask="send" name=":1.108" pid=3781 label="snap.firefox.firefox" peer_pid=3937 peer_label="unconfined"
+                exe="/usr/bin/dbus-daemon" sauid=101 hostname=? addr=? terminal=?'
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
+
+
+
+
+
+
+
+
 dmesg | tail -n 20 
 
 
