@@ -1,8 +1,0 @@
-Получаем task_struct по pid.
-Из task_struct достаём files_struct (хранит таблицу файловых дескрипторов).
-Из files_struct достаём fdtable (таблица открытых файлов).
-Перебираем fdtable и ищем сетевой сокет.
-Если file->private_data – это socket, берём sock.
-Приводим sock к inet_sock, читаем inet_saddr и inet_sport.
-Выводим IP и порт.
-

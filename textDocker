@@ -1,2 +1,0 @@
-sudo systemctl stop docker.socket
-sudo systemctl disable docker.socket

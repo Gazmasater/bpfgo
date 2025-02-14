@@ -19,6 +19,13 @@ struct conn_info_t
     char comm[64];
 };
 
+struct event_t {
+    u32 pid;
+    u32 src_ip;
+    u16 sport;
+    char comm[64];
+};
+
 struct sys_enter_sendto_args
 {
     unsigned short common_type;
@@ -81,12 +88,12 @@ struct {
 
 
 
-// struct {
-//     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-//     __uint(key_size, sizeof(u32));
-//     __uint(value_size, sizeof(u32));
-//     __uint(max_entries, 128); 
-// } trace_events SEC(".maps");
+struct {
+    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+    __uint(key_size, sizeof(u32));
+    __uint(value_size, sizeof(u32));
+    __uint(max_entries, 128); 
+} trace_events SEC(".maps");
 
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
@@ -135,6 +142,17 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx)
             conn_info->sport = bpf_ntohs(addr.sin_port);
         }
     }
+
+    struct event_t event = {
+        .pid = conn_info->pid,
+        .src_ip = conn_info->src_ip,
+        .sport = conn_info->sport,
+    };
+
+    __builtin_memcpy(event.comm, conn_info->comm, sizeof(event.comm));
+
+
+
 
     bpf_printk("UDP sys_exit_sendto: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
         conn_info->pid, conn_info->comm,
