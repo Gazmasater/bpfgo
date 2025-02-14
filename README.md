@@ -1,10 +1,15 @@
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go trace bpf/trace.c -- -target bpf
-Compiled /home/gaz358/myprog/bpfgo/trace_bpfel.o
-Stripped /home/gaz358/myprog/bpfgo/trace_bpfel.o
-Error: can't write /home/gaz358/myprog/bpfgo/trace_bpfel.go: can't generate types: template: common:17:4: executing "common" at <$.TypeDeclaration>: error calling TypeDeclaration: Struct:"conn_info_t": field 0: type *btf.Pointer: not supported
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
-
-
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/bpf/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "167",
+	"severity": 8,
+	"message": "argument of type \"struct event_t\" is incompatible with parameter of type \"void *\"",
+	"source": "C/C++",
+	"startLineNumber": 163,
+	"startColumn": 66,
+	"endLineNumber": 163,
+	"endColumn": 71
+}]
 
 
 
