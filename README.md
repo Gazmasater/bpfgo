@@ -4,13 +4,11 @@ bpf2go -target native -pkg main trace bpf/trace.c -- -I/usr/include/
 GOPACKAGE=main bpf2go -target native -go-package main trace bpf/trace.c -- -I/usr/include/
 
 
-
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ GOPACKAGE=main bpf2go -target native -go-package main trace bpf/trace.c -- -I/usr/include/
 Compiled /home/gaz358/myprog/bpfgo/trace_x86_bpfel.o
 Stripped /home/gaz358/myprog/bpfgo/trace_x86_bpfel.o
 Error: can't write /home/gaz358/myprog/bpfgo/trace_x86_bpfel.go: can't generate types: template: common:17:4: executing "common" at <$.TypeDeclaration>: error calling TypeDeclaration: Struct:"conn_info_t": field 0: type *btf.Pointer: not supported
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -target native -pkg main trace bpf/trace.c -- -I/usr/include/^C
-
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
 
