@@ -21,9 +21,9 @@ type Event struct {
 	Comm  [16]byte
 }
 
-func loadTraceObjects(objs interface{}, opts *ebpf.CollectionOptions) error {
+func loadTraceObject(objs interface{}, opts *ebpf.CollectionOptions) error {
 	// Загружаем скомпилированную BPF-программу
-	spec, err := ebpf.LoadCollectionSpec("bpf-trace.o") // Используем ваш скомпилированный объект
+	spec, err := ebpf.LoadCollectionSpec("trace.bpf.o") // Используем ваш скомпилированный объект
 	if err != nil {
 		return fmt.Errorf("loading BPF program: %v", err)
 	}
@@ -54,7 +54,7 @@ func main() {
 	}{}
 
 	opts := &ebpf.CollectionOptions{}
-	if err := loadTraceObjects(&objs, opts); err != nil {
+	if err := loadTraceObject(&objs, opts); err != nil {
 		log.Fatalf("loading BPF objects: %v", err)
 	}
 	defer objs.TraceEvents.Close()
@@ -101,42 +101,28 @@ func main() {
 
 [{
 	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#2",
+	"owner": "_generated_diagnostic_collection_name_#0",
 	"code": {
-		"value": "DuplicateDecl",
+		"value": "unusedparams",
 		"target": {
 			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
+			"path": "/golang.org/x/tools/gopls/internal/analysis/unusedparams",
 			"scheme": "https",
 			"authority": "pkg.go.dev",
-			"fragment": "DuplicateDecl"
+			"fragment": "unusedparams"
 		}
 	},
-	"severity": 8,
-	"message": "loadTraceObjects redeclared in this block (see details)",
-	"source": "compiler",
+	"severity": 4,
+	"message": "unused parameter: opts",
+	"source": "unusedparams",
 	"startLineNumber": 24,
-	"startColumn": 6,
+	"startColumn": 40,
 	"endLineNumber": 24,
-	"endColumn": 22,
-	"relatedInformation": [
-		{
-			"startLineNumber": 49,
-			"startColumn": 6,
-			"endLineNumber": 49,
-			"endColumn": 22,
-			"message": "",
-			"resource": "/home/gaz358/myprog/bpfgo/trace_x86_bpfel.go"
-		}
-	]
+	"endColumn": 68
 }]
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go run .
-2025/02/14 14:45:36 loading BPF objects: nil pointer to struct { TraceEvents *ebpf.Map }
-exit status 1
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
 
