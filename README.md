@@ -99,6 +99,37 @@ func main() {
 	fmt.Println("\nExiting...")
 }
 
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#2",
+	"code": {
+		"value": "DuplicateDecl",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "DuplicateDecl"
+		}
+	},
+	"severity": 8,
+	"message": "loadTraceObjects redeclared in this block (see details)",
+	"source": "compiler",
+	"startLineNumber": 24,
+	"startColumn": 6,
+	"endLineNumber": 24,
+	"endColumn": 22,
+	"relatedInformation": [
+		{
+			"startLineNumber": 49,
+			"startColumn": 6,
+			"endLineNumber": 49,
+			"endColumn": 22,
+			"message": "",
+			"resource": "/home/gaz358/myprog/bpfgo/trace_x86_bpfel.go"
+		}
+	]
+}]
 
 
 
