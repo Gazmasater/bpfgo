@@ -23,6 +23,7 @@ struct event_t {
     u32 pid;
     u32 src_ip;
     u16 sport;
+    u16 pad;
     char comm[64];
 };
 
@@ -160,7 +161,7 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx)
         (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
 
 
-    //bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, conn_info, sizeof(*conn_info));
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &event, sizeof(event));
 
 
 
