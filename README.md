@@ -1,21 +1,6 @@
 clang -target bpf -O2 -c program.c -o program.o
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go run .
-# load
-./main.go:41:25: undefined: link.AttachTracepoint
-./main.go:42:3: unknown field Program in struct literal of type link.TracepointOptions
-./main.go:43:3: unknown field Category in struct literal of type link.TracepointOptions
-./main.go:44:3: unknown field Name in struct literal of type link.TracepointOptions
-./main.go:51:24: undefined: link.AttachTracepoint
-./main.go:52:3: unknown field Program in struct literal of type link.TracepointOptions
-./main.go:53:3: unknown field Category in struct literal of type link.TracepointOptions
-./main.go:54:3: unknown field Name in struct literal of type link.TracepointOptions
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
-
-
-
-
 package main
 
 import (
@@ -30,49 +15,55 @@ import (
 )
 
 func main() {
-    // Снимаем ограничения на использование памяти для eBPF
+    // Увеличиваем лимит на количество блокировок памяти для загрузки eBPF-программы
     if err := rlimit.RemoveMemlock(); err != nil {
-        log.Fatalf("не удалось снять ограничение на память: %v", err)
+        log.Fatalf("Не удалось снять ограничение на блокировку памяти: %v", err)
     }
 
-    // Загружаем eBPF-объект из файла
+    // Загружаем eBPF-объектный файл
     obj, err := ebpf.LoadCollection("trace.bpf.o")
     if err != nil {
-        log.Fatalf("ошибка при загрузке eBPF-объекта: %v", err)
+        log.Fatalf("Не удалось загрузить eBPF-коллекцию: %v", err)
     }
     defer obj.Close()
 
-    // Получаем eBPF-программы из загруженного объекта
-    progEnter := obj.Programs["trace_sendto_enter"]
-    if progEnter == nil {
-        log.Fatalf("программа trace_sendto_enter не найдена")
+    // Получаем eBPF-программы из загруженной коллекции
+    sendtoEnterProg := obj.Programs["trace_sendto_enter"]
+    if sendtoEnterProg == nil {
+        log.Fatalf("Программа trace_sendto_enter не найдена")
     }
 
-    progExit := obj.Programs["trace_sendto_exit"]
-    if progExit == nil {
-        log.Fatalf("программа trace_sendto_exit не найдена")
+    sendtoExitProg := obj.Programs["trace_sendto_exit"]
+    if sendtoExitProg == nil {
+        log.Fatalf("Программа trace_sendto_exit не найдена")
     }
 
-    // Привязываем программы к соответствующим tracepoint'ам
-    linkEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", progEnter, nil)
+    // Прикрепляем программы к соответствующим tracepoint'ам
+    sendtoEnterLink, err := link.Tracepoint("syscalls", "sys_enter_sendto", sendtoEnterProg, nil)
     if err != nil {
-        log.Fatalf("ошибка при привязке trace_sendto_enter: %v", err)
+        log.Fatalf("Не удалось прикрепить trace_sendto_enter: %v", err)
     }
-    defer linkEnter.Close()
+    defer sendtoEnterLink.Close()
 
-    linkExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", progExit, nil)
+    sendtoExitLink, err := link.Tracepoint("syscalls", "sys_exit_sendto", sendtoExitProg, nil)
     if err != nil {
-        log.Fatalf("ошибка при привязке trace_sendto_exit: %v", err)
+        log.Fatalf("Не удалось прикрепить trace_sendto_exit: %v", err)
     }
-    defer linkExit.Close()
+    defer sendtoExitLink.Close()
 
-    // Ожидаем сигнала завершения
-    sigs := make(chan os.Signal, 1)
-    signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
-    <-sigs
+    log.Println("eBPF-программы успешно загружены и прикреплены.")
 
-    log.Println("Завершение работы программы")
+    // Ожидаем сигнала завершения (Ctrl+C)
+    sig := make(chan os.Signal, 1)
+    signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+    <-sig
+
+    log.Println("Завершение работы.")
 }
+
+
+
+
 
 
 
