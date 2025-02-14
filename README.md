@@ -4,11 +4,64 @@ bpf2go -target native -pkg main trace bpf/trace.c -- -I/usr/include/
 GOPACKAGE=main bpf2go -target native -go-package main trace bpf/trace.c -- -I/usr/include/
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ GOPACKAGE=main bpf2go -target native -go-package main trace bpf/trace.c -- -I/usr/include/
-Compiled /home/gaz358/myprog/bpfgo/trace_x86_bpfel.o
-Stripped /home/gaz358/myprog/bpfgo/trace_x86_bpfel.o
-Error: can't write /home/gaz358/myprog/bpfgo/trace_x86_bpfel.go: can't generate types: template: common:17:4: executing "common" at <$.TypeDeclaration>: error calling TypeDeclaration: Struct:"conn_info_t": field 0: type *btf.Pointer: not supported
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
+SEC("tracepoint/syscalls/sys_enter_sendto")
+int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct conn_info_t conn_info = {};
+
+    conn_info.pid = pid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+    
+    if (ctx->addr) {
+        bpf_probe_read(&conn_info.sock_addr, sizeof(conn_info.sock_addr), ctx->addr);
+    }
+    
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_sendto")
+int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    long ret = ctx->ret;
+
+    if (ret < 0) {
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        return 0;
+    }
+
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
+    if (!conn_info) {
+        return 0;
+    }
+
+    struct sockaddr_in *addr = (struct sockaddr_in *)&conn_info->sock_addr;
+    if (addr->sin_family == AF_INET) {
+        conn_info->src_ip = bpf_ntohl(addr->sin_addr.s_addr);
+        conn_info->sport = bpf_ntohs(addr->sin_port);
+    }
+
+    struct event_t event = {
+        .pid = conn_info->pid,
+        .src_ip = conn_info->src_ip,
+        .sport = conn_info->sport,
+    };
+
+    __builtin_memcpy(event.comm, conn_info->comm, sizeof(event.comm));
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &event, sizeof(event));
+
+    bpf_map_delete_elem(&conn_info_map, &pid);
+    return 0;
+}
+
+
+
+
+
+
+
+
 
 
 
