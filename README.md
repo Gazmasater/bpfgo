@@ -71,6 +71,29 @@ func main() {
 }
 
 
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#3",
+	"code": {
+		"value": "WrongArgCount",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "WrongArgCount"
+		}
+	},
+	"severity": 8,
+	"message": "not enough arguments in call to loadTraceObjects\n\thave (*struct{TraceEvents *ebpf.Map})\n\twant (interface{}, *ebpf.CollectionOptions)",
+	"source": "compiler",
+	"startLineNumber": 28,
+	"startColumn": 34,
+	"endLineNumber": 28,
+	"endColumn": 34
+}]
+
+
 
 
 
