@@ -1,3 +1,12 @@
+struct bpf_map_def SEC("maps") trace_events = {
+    .type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
+    .max_entries = 128, // Укажите количество CPU на вашей системе
+};
+
+
+
+
+
 //go:build ignore
 
 #include "vmlinux.h"
