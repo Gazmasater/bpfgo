@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"reflect"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
@@ -20,14 +21,39 @@ type Event struct {
 	Comm  [16]byte
 }
 
+func loadTraceObject(objs interface{}) error {
+	// Загружаем скомпилированную BPF-программу
+	spec, err := ebpf.LoadCollectionSpec("trace_x86_bpfel.o")
+	if err != nil {
+		return fmt.Errorf("loading BPF program: %v", err)
+	}
+
+	// Создаем коллекцию объектов из BPF-спецификации
+	coll, err := ebpf.NewCollection(spec)
+	if err != nil {
+		return fmt.Errorf("creating BPF collection: %v", err)
+	}
+
+	// Привязываем карту trace_events
+	traceEventsMap, found := coll.Maps["trace_events"]
+	if !found {
+		return fmt.Errorf("trace_events map not found in BPF program")
+	}
+
+	// Записываем карту в структуру
+	v := reflect.ValueOf(objs).Elem()
+	v.FieldByName("TraceEvents").Set(reflect.ValueOf(traceEventsMap))
+
+	return nil
+}
+
 func main() {
 	// Загружаем скомпилированную BPF-программу
 	objs := struct {
 		TraceEvents *ebpf.Map
 	}{}
 
-	opts := &ebpf.CollectionOptions{}
-	if err := loadTraceObjects(&objs, opts); err != nil {
+	if err := loadTraceObject(&objs); err != nil {
 		log.Fatalf("loading BPF objects: %v", err)
 	}
 	defer objs.TraceEvents.Close()

@@ -149,7 +149,7 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     };
 
     __builtin_memcpy(event.comm, conn_info->comm, sizeof(event.comm));
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &event, sizeof(event));
+    //bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &event, sizeof(event));
 
 
     
