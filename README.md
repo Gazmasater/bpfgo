@@ -1,5 +1,8 @@
 clang -O2 -g -target bpf -c trace.bpf.c -o trace.bpf.o
 
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -tags linux tracepoint tracepoint.c
+
+
 
 package main
 
