@@ -116,14 +116,10 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx)
     }
 
     struct sockaddr_in *addr = bpf_map_lookup_elem(&addr_map, &pid);
-    //      ^^^^^^^^^^ в мапе же в sys_enter_sendto сохраняешь тип sockaddr, а тут используешь sockaddr_in
     if (addr && addr->sin_family == AF_INET)
     {
-        __be32 ip_addr = 0;
-        __be16 port;
-
-        ip_addr = BPF_CORE_READ(addr, sin_addr.s_addr); // TODO BPF_CORE_READ тут лишнее
-        port = BPF_CORE_READ(addr, sin_port);           // TODO BPF_CORE_READ тут лишнее
+        __be32 ip_addr = addr->sin_addr.s_addr;  
+        __be16 port = addr->sin_port;            
 
         conn_info->src_ip = bpf_ntohl(ip_addr);
         conn_info->sport = bpf_ntohs(port);
