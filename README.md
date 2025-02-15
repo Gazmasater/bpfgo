@@ -5,6 +5,18 @@ go get github.com/cilium/ebpf/cmd/bpf2go
 which bpf2go
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ go generate
+Compiled /home/gaz358/myprog/bpfgo/bpf/trace_bpfel.o
+Stripped /home/gaz358/myprog/bpfgo/bpf/trace_bpfel.o
+Error: can't write /home/gaz358/myprog/bpfgo/bpf/trace_bpfel.go: can't generate types: template: common:17:4: executing "common" at <$.TypeDeclaration>: error calling TypeDeclaration: Struct:"conn_info_t": field 0: type *btf.Pointer: not supported
+exit status 1
+gen.go:3: running "go": exit status 1
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ 
+
+
+
+
+
 package main
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -tags linux trace trace.c
