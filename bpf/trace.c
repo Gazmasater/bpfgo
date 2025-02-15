@@ -164,15 +164,6 @@ struct
 } conn_info_map SEC(".maps");
 
 
-// struct
-// {
-// 	__uint(type, BPF_MAP_TYPE_HASH);
-// 	__uint(max_entries, 1024);
-// 	__type(key, u32);
-// 	__type(value, struct conn_info_t);
-// } conn_info_map_ra SEC(".maps");
-
-
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
@@ -193,6 +184,7 @@ static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf
 
 static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *ctx)
 {
+	
     return init_conn_info((struct sockaddr *)ctx->addr, &conn_info_map, bpf_get_current_pid_tgid() >> 32);
 }
 
