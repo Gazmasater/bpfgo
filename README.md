@@ -1,5 +1,8 @@
 clang -target bpf -O2 -c program.c -o program.o
 
+clang -O2 -g -target bpf -c trace.bpf.c -o trace.bpf.o
+
+
 
 
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./load
