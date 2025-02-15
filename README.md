@@ -4,8 +4,15 @@ clang -O2 -g -target bpf -c trace.bpf.c -o trace.bpf.o
 package main
 
 import (
+	"bytes"
+	"context"
+	"encoding/binary"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/dropbox/goebpf"
 )
@@ -32,7 +39,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("Ошибка запуска чтения событий: %v", err)
 	}
-	defer events.Stop()
+	defer perfEvents.Stop()
+
+	// Создание канала для обработки сигналов
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
 
 	// Обработка событий
 	for {
@@ -45,7 +57,7 @@ func main() {
 				SrcIP uint32
 				Sport uint16
 			}
-			err := goebpf.Unmarshal(data, &event)
+			err := binary.Read(bytes.NewReader(data), binary.LittleEndian, &event)
 			if err != nil {
 				log.Printf("Ошибка распаковки данных события: %v", err)
 				continue
@@ -58,51 +70,10 @@ func main() {
 				(event.SrcIP>>24)&0xFF, (event.SrcIP>>16)&0xFF,
 				(event.SrcIP>>8)&0xFF, event.SrcIP&0xFF,
 				event.Sport)
+		case <-sigCh:
+			// Обработка сигнала завершения
+			fmt.Println("\nПолучен сигнал завершения. Завершение работы...")
+			return
 		}
 	}
 }
-
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/Perf/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingFieldOrMethod",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingFieldOrMethod"
-		}
-	},
-	"severity": 8,
-	"message": "events.Stop undefined (type <-chan []byte has no field or method Stop)",
-	"source": "compiler",
-	"startLineNumber": 32,
-	"startColumn": 15,
-	"endLineNumber": 32,
-	"endColumn": 19
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/Perf/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "UndeclaredImportedName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredImportedName"
-		}
-	},
-	"severity": 8,
-	"message": "undefined: goebpf.Unmarshal",
-	"source": "compiler",
-	"startLineNumber": 45,
-	"startColumn": 18,
-	"endLineNumber": 45,
-	"endColumn": 27
-}]
