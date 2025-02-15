@@ -164,13 +164,13 @@ struct
 } conn_info_map SEC(".maps");
 
 
-struct
-{
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 1024);
-	__type(key, u32);
-	__type(value, struct conn_info_t);
-} conn_info_map_ra SEC(".maps");
+// struct
+// {
+// 	__uint(type, BPF_MAP_TYPE_HASH);
+// 	__uint(max_entries, 1024);
+// 	__type(key, u32);
+// 	__type(value, struct conn_info_t);
+// } conn_info_map_ra SEC(".maps");
 
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
@@ -199,14 +199,14 @@ static __always_inline int init_conn_info_sendto(struct sys_enter_sendto_args *c
 
 static __always_inline int init_conn_info_recvfrom(struct sys_enter_recvfrom_args *ctx)
 {
-    return init_conn_info((struct sockaddr *)ctx->addr, &conn_info_map_ra, bpf_get_current_pid_tgid() >> 32);
+    return init_conn_info((struct sockaddr *)ctx->addr, &conn_info_map, bpf_get_current_pid_tgid() >> 32);
 }
 
 
 
 static __always_inline int init_conn_info_accept4(struct sys_enter_accept4_args *ctx)
 {
-    return init_conn_info((struct sockaddr *)ctx->upeer_sockaddr, &conn_info_map_ra, bpf_get_current_pid_tgid() >> 32);
+    return init_conn_info((struct sockaddr *)ctx->upeer_sockaddr, &conn_info_map, bpf_get_current_pid_tgid() >> 32);
 }
 
 
@@ -281,7 +281,7 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
 	u32 pid = bpf_get_current_pid_tgid() >> 32;
 	init_conn_info_recvfrom(ctx);
 
-	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ra, &pid);
+	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
 	if (conn_info)
 	{
 		
@@ -301,15 +301,15 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx){
 	if (ret < 0)
 	{
 		bpf_printk("RET UDP SYS_exit_recvfrom failed for PID=%d\n", pid);
-		bpf_map_delete_elem(&conn_info_map_ra, &pid);
+		bpf_map_delete_elem(&conn_info_map, &pid);
 		return 0;
 	}
 
-	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ra, &pid);
+	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
 	if (!conn_info)
 	{
 
-		bpf_map_delete_elem(&conn_info_map_ra, &pid);
+		bpf_map_delete_elem(&conn_info_map, &pid);
 
 		bpf_printk("UDP SYS_exit_recvfrom No connection info found for PID=%d\n", pid);
 		return 0;
@@ -321,7 +321,7 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx){
 	if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0)
 	{
 		bpf_printk("UDP SYS_exit_recvfrom Failed to read sockaddr for PID=%d\n", pid);
-		bpf_map_delete_elem(&conn_info_map_ra, &pid);
+		bpf_map_delete_elem(&conn_info_map, &pid);
 
 		return 0;
 	}
@@ -337,7 +337,7 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx){
 				   (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
 	}
 
-	    bpf_map_update_elem(&conn_info_map_ra, &pid, conn_info, BPF_ANY);
+	    bpf_map_update_elem(&conn_info_map, &pid, conn_info, BPF_ANY);
 
 
 	return 0;
@@ -348,7 +348,7 @@ int trace_bind_ret(struct sys_enter_accept4_args *ctx){
 	u32 pid = bpf_get_current_pid_tgid() >> 32;
 	init_conn_info_accept4(ctx);
 
-	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ra, &pid);
+	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
 	if (conn_info)
 	{
 		
@@ -368,11 +368,11 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx){
 	if (ret < 0)
 	{
 	    bpf_printk("EXIT_accept Accept4 failed for PID=%d\n", pid);
-		bpf_map_delete_elem(&conn_info_map_ra, &pid);
+		bpf_map_delete_elem(&conn_info_map, &pid);
 		return 0;
 	}
 
-	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ra, &pid);
+	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
 	if (!conn_info)
 	{
 		bpf_printk("EXIT_accept4 No connection info found for PID=%d\n", pid);
@@ -386,7 +386,7 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx){
 	if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0)
 	{
 		bpf_printk("EXIT_accept4 Failed to read sockaddr for PID=%d\n", pid);
-		bpf_map_delete_elem(&conn_info_map_ra, &pid);
+		bpf_map_delete_elem(&conn_info_map, &pid);
 
 		return 0;
 	}
@@ -402,7 +402,7 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx){
 				   (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
 	}
 
-	    bpf_map_update_elem(&conn_info_map_ra, &pid, conn_info, BPF_ANY);
+	    bpf_map_update_elem(&conn_info_map, &pid, conn_info, BPF_ANY);
 
 
 	return 0;
