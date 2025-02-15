@@ -9,7 +9,6 @@
 
 struct conn_info_t
 {
-  //  struct sockaddr *sock_addr;
     u32 pid;
     u32 src_ip;
     u32 dst_ip;
