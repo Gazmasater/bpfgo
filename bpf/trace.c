@@ -51,7 +51,6 @@ struct sys_exit_sendto_args
 };
 
 
-
 struct
 {
     __uint(type, BPF_MAP_TYPE_HASH);
@@ -117,20 +116,24 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx)
     }
 
     struct sockaddr_in *addr = bpf_map_lookup_elem(&addr_map, &pid);
+    //      ^^^^^^^^^^ в мапе же в sys_enter_sendto сохраняешь тип sockaddr, а тут используешь sockaddr_in
     if (addr && addr->sin_family == AF_INET)
     {
-        __be32 ip_addr = addr->sin_addr.s_addr;  
-        __be16 port = addr->sin_port;            
+        __be32 ip_addr = 0;
+        __be16 port=addr->sin_port;
 
-     //    conn_info->src_ip = bpf_ntohl(ip_addr);
-         conn_info->sport = bpf_ntohs(port);
+        ip_addr = BPF_CORE_READ(addr, sin_addr.s_addr); // TODO BPF_CORE_READ тут лишнее
+      //  port = BPF_CORE_READ(addr, sin_port);           // TODO BPF_CORE_READ тут лишнее
+
+        conn_info->src_ip = bpf_ntohl(ip_addr);
+        conn_info->sport = bpf_ntohs(port);
 
         bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
                    conn_info->pid, conn_info->comm,
                    (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
                    (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
 
-         bpf_map_update_elem(&conn_info_map, &pid, conn_info, BPF_ANY);
+        bpf_map_update_elem(&conn_info_map, &pid, conn_info, BPF_ANY);
     }
 
     // TODO вот тут должна быть отправка через perf_event_output conn_info в юзерспейс
