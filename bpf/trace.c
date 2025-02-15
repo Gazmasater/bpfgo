@@ -84,6 +84,16 @@ struct
     __type(value, struct conn_info_t);
 } conn_info_map SEC(".maps");
 
+
+struct
+{
+    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+    __uint(key_size, sizeof(u32));
+    __uint(value_size, sizeof(u32));
+    __uint(max_entries, 128); // number of CPUs
+} events SEC(".maps");
+
+
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 

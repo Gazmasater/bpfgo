@@ -1,99 +1,59 @@
 package main
 
 import (
-	"bytes"
-	"encoding/binary"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
-	"reflect"
+	"syscall"
 
 	"github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/perf"
+	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/rlimit"
 )
 
-// Event структура должна совпадать с event_t в BPF-коде
-type Event struct {
-	PID   uint32
-	SrcIP uint32
-	Sport uint16
-	Comm  [16]byte
-}
-
-func loadTraceObject(objs interface{}) error {
-	// Загружаем скомпилированную BPF-программу
-	spec, err := ebpf.LoadCollectionSpec("trace_x86_bpfel.o")
-	if err != nil {
-		return fmt.Errorf("loading BPF program: %v", err)
-	}
-
-	// Создаем коллекцию объектов из BPF-спецификации
-	coll, err := ebpf.NewCollection(spec)
-	if err != nil {
-		return fmt.Errorf("creating BPF collection: %v", err)
-	}
-
-	// Привязываем карту trace_events
-	traceEventsMap, found := coll.Maps["trace_events"]
-	if !found {
-		return fmt.Errorf("trace_events map not found in BPF program")
-	}
-
-	// Записываем карту в структуру
-	v := reflect.ValueOf(objs).Elem()
-	v.FieldByName("TraceEvents").Set(reflect.ValueOf(traceEventsMap))
-
-	return nil
-}
-
 func main() {
-	// Загружаем скомпилированную BPF-программу
-	objs := struct {
-		TraceEvents *ebpf.Map
-	}{}
-
-	if err := loadTraceObject(&objs); err != nil {
-		log.Fatalf("loading BPF objects: %v", err)
+	// Увеличиваем лимит на количество блокировок памяти для загрузки eBPF-программы
+	if err := rlimit.RemoveMemlock(); err != nil {
+		log.Fatalf("Не удалось снять ограничение на блокировку памяти: %v", err)
 	}
-	defer objs.TraceEvents.Close()
 
-	// Открываем канал для чтения perf-событий
-	reader, err := perf.NewReader(objs.TraceEvents, 4096)
+	// Загружаем eBPF-объектный файл
+	obj, err := ebpf.LoadCollection("trace.bpf.o")
 	if err != nil {
-		log.Fatalf("creating perf event reader: %v", err)
+		log.Fatalf("Не удалось загрузить eBPF-коллекцию: %v", err)
 	}
-	defer reader.Close()
+	defer obj.Close()
 
-	fmt.Println("Listening for UDP sys_exit_sendto events...")
+	// Получаем eBPF-программы из загруженной коллекции
+	sendtoEnterProg := obj.Programs["trace_sendto_enter"]
+	if sendtoEnterProg == nil {
+		log.Fatalf("Программа trace_sendto_enter не найдена")
+	}
 
-	// Обработка прерываний (Ctrl+C)
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt)
+	sendtoExitProg := obj.Programs["trace_sendto_exit"]
+	if sendtoExitProg == nil {
+		log.Fatalf("Программа trace_sendto_exit не найдена")
+	}
 
-	go func() {
-		for {
-			record, err := reader.Read()
-			if err != nil {
-				log.Printf("reading perf event: %v", err)
-				continue
-			}
+	// Прикрепляем программы к соответствующим tracepoint'ам
+	sendtoEnterLink, err := link.Tracepoint("syscalls", "sys_enter_sendto", sendtoEnterProg, nil)
+	if err != nil {
+		log.Fatalf("Не удалось прикрепить trace_sendto_enter: %v", err)
+	}
+	defer sendtoEnterLink.Close()
 
-			// Декодируем данные
-			var event Event
-			if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.LittleEndian, &event); err != nil {
-				log.Printf("parsing perf event: %v", err)
-				continue
-			}
+	sendtoExitLink, err := link.Tracepoint("syscalls", "sys_exit_sendto", sendtoExitProg, nil)
+	if err != nil {
+		log.Fatalf("Не удалось прикрепить trace_sendto_exit: %v", err)
+	}
+	defer sendtoExitLink.Close()
 
-			// Вывод в консоль
-			fmt.Printf("UDP sys_exit_sendto: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-				event.PID, bytes.Trim(event.Comm[:], "\x00"),
-				(event.SrcIP>>24)&0xFF, (event.SrcIP>>16)&0xFF, (event.SrcIP>>8)&0xFF, event.SrcIP&0xFF,
-				event.Sport)
-		}
-	}()
+	log.Println("eBPF-программы успешно загружены и прикреплены.")
 
-	<-sigChan
-	fmt.Println("\nExiting...")
+	// Ожидаем сигнала завершения (Ctrl+C)
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	<-sig
+
+	log.Println("Завершение работы.")
 }
