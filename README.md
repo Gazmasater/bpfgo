@@ -5,6 +5,16 @@ package main
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -tags linux trace trace.c
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ go generate
+no required module provides package github.com/cilium/ebpf/cmd/bpf2go; to add it:
+        go get github.com/cilium/ebpf/cmd/bpf2go
+gen.go:3: running "go": exit status 1
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ 
+
+
+
+
+
 
 package main
 
