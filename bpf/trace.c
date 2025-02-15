@@ -145,11 +145,6 @@ int ret;
 };
 
 
-// struct
-// {
-//     __uint(type, BPF_MAP_TYPE_RINGBUF);
-//     __uint(max_entries, 1 << 24);
-// } events SEC(".maps");
 
 struct
 {
@@ -177,16 +172,6 @@ struct
 	__type(value, struct conn_info_t);
 } conn_info_map_ra SEC(".maps");
 
-
-
-
-// struct
-// {
-// 	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
-// 	__uint(max_entries, 1024);
-// 	__type(key, u32);
-// 	__type(value, struct conn_info_t);
-// } conn_info_map_accept SEC(".maps");
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
@@ -216,12 +201,6 @@ static __always_inline int init_conn_info_recvfrom(struct sys_enter_recvfrom_arg
 {
     return init_conn_info((struct sockaddr *)ctx->addr, &conn_info_map_ra, bpf_get_current_pid_tgid() >> 32);
 }
-
-
-// static __always_inline int init_conn_info_accept(struct sys_enter_accept_args *ctx)
-// {
-//     return init_conn_info((struct sockaddr *)ctx->upeer_sockaddr, &conn_info_map_accept, bpf_get_current_pid_tgid() >> 32);
-// }
 
 
 
@@ -290,19 +269,6 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
                    (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
     }
 
-    // struct event_t {
-    //     u32 pid;
-    //     char comm[16];
-    //     u32 src_ip;
-    //     u16 sport;
-    // } event = {};
-
-    // event.pid = conn_info->pid;
-    // __builtin_memcpy(event.comm, conn_info->comm, sizeof(event.comm));
-    // event.src_ip = conn_info->src_ip;
-    // event.sport = conn_info->sport;
-
-   //bpf_ringbuf_output(&events, &event, sizeof(event), 0);
 
     bpf_map_update_elem(&conn_info_map, &pid, conn_info, BPF_ANY);
 
@@ -376,75 +342,6 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx){
 
 	return 0;
 }
-
-
-
-// SEC("tracepoint/syscalls/sys_enter_accept")
-// int trace_accept_enter(struct sys_enter_accept_args *ctx){
-// 	u32 pid = bpf_get_current_pid_tgid() >> 32;
-// 	init_conn_info_accept(ctx);
-
-// 	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept_four, &pid);
-// 	if (conn_info)
-// 	{
-		
-// 		bpf_printk("SERVER accept entry: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
-
-// 	}
-
-// 	return 0;
-// }
-
-// SEC("tracepoint/syscalls/sys_exit_accept")
-// int trace_accept_exit(struct sys_exit_accept4_args *ctx){
-// 	u32 pid = bpf_get_current_pid_tgid() >> 32;
-// 	long ret = ctx->ret;
-
-// 	if (ret < 0)
-// 	{
-// 		bpf_printk("EXIT_accept Accept failed for PID=%d\n", pid);
-// 		bpf_map_delete_elem(&conn_info_map_accept, &pid);
-// 		return 0;
-// 	}
-
-// 	struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_accept, &pid);
-// 	if (!conn_info)
-// 	{
-// 		bpf_printk("EXIT_accept No connection info found for PID=%d\n", pid);
-// 		return 0;
-// 	}
-
-// 	bpf_printk("EXIT sockaddr=%p",conn_info->sock_addr);
-
-
-// 	struct sockaddr_in addr;
-
-// 	if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0)
-// 	{
-// 		bpf_printk("EXIT_accept Failed to read sockaddr for PID=%d\n", pid);
-// 		bpf_map_delete_elem(&conn_info_map_accept, &pid);
-
-// 		return 0;
-// 	}
-
-// 	if (addr.sin_family == AF_INET)
-// 	{
-// 		conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
-// 		conn_info->sport = bpf_ntohs(addr.sin_port);
-
-// 		bpf_printk("EXIT_accept Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-// 				   conn_info->pid, conn_info->comm,
-// 				   (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
-// 				   (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
-// 	}
-
-//     bpf_map_update_elem(&conn_info_map_accept, &pid, conn_info, BPF_ANY);
-
-
-// 	return 0;
-// }
-
-
 
 SEC("tracepoint/syscalls/sys_enter_accept4")
 int trace_bind_ret(struct sys_enter_accept4_args *ctx){
