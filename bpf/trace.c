@@ -122,15 +122,15 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx)
         __be32 ip_addr = addr->sin_addr.s_addr;  
         __be16 port = addr->sin_port;            
 
-        conn_info->src_ip = bpf_ntohl(ip_addr);
-        conn_info->sport = bpf_ntohs(port);
+     //    conn_info->src_ip = bpf_ntohl(ip_addr);
+         conn_info->sport = bpf_ntohs(port);
 
         bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
                    conn_info->pid, conn_info->comm,
                    (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
                    (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
 
-        bpf_map_update_elem(&conn_info_map, &pid, conn_info, BPF_ANY);
+         bpf_map_update_elem(&conn_info_map, &pid, conn_info, BPF_ANY);
     }
 
     // TODO вот тут должна быть отправка через perf_event_output conn_info в юзерспейс
