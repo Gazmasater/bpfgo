@@ -71,65 +71,6 @@ struct sys_exit_recvfrom_args {
     int ret;
 };
 
-struct sys_enter_accept_args
-{
-    unsigned short common_type;
-    unsigned char common_flags;
-    unsigned char common_preempt_count;
-    int common_pid;
-    int __syscall_nr;
-    int fd;
-    int pad1;
-    struct sockaddr *upeer_sockaddr;
-    int *upeer_addrlen;
-};
-
-struct sys_enter_accept4_args
-{
-    unsigned short common_type;
-    unsigned char common_flags;
-    unsigned char common_preempt_count;
-    int common_pid;
-    int __syscall_nr;
-    int fd;
-    int pad1;
-    struct sockaddr *upeer_sockaddr;
-    int *upeer_addrlen;
-    int flags;
-};
-
-struct sys_exit_accept4_args
-{
-    unsigned short common_type; //2
-    unsigned char common_flags; //1
-    unsigned char common_preempt_count; //1
-    int common_pid; //4
-    int __syscall_nr; //4
-    int pad1;
-    long ret; //8
-};
-
-struct sys_enter_connect_args
-{
-    unsigned short common_type;
-    unsigned char common_flags;
-    unsigned char common_preempt_count;
-    int common_pid;
-    int __syscall_nr;
-    long fd;
-    struct sockaddr *uservaddr;
-    int addrlen;
-};
-
-struct sys_exit_connect_args
-{
-    unsigned short common_type;
-    unsigned char common_flags;
-    unsigned char common_preempt_count;
-    int common_pid;
-    int __syscall_nr;
-    int ret;
-};
 
 struct
 {
