@@ -1,6 +1,14 @@
 clang -target bpf -O2 -c program.c -o program.o
 
 
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./load
+[sudo] password for gaz358: 
+2025/02/15 03:02:20 Не удалось загрузить eBPF-коллекцию: file trace.bpf.o: load BTF maps: missing BTF
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
+
+
 package main
 
 import (
