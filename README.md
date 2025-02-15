@@ -5,107 +5,104 @@ go get github.com/cilium/ebpf/cmd/bpf2go
 which bpf2go
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ go generate
-Compiled /home/gaz358/myprog/bpfgo/bpf/trace_bpfel.o
-Stripped /home/gaz358/myprog/bpfgo/bpf/trace_bpfel.o
-Error: can't write /home/gaz358/myprog/bpfgo/bpf/trace_bpfel.go: can't generate types: template: common:17:4: executing "common" at <$.TypeDeclaration>: error calling TypeDeclaration: Struct:"conn_info_t": field 0: type *btf.Pointer: not supported
-exit status 1
-gen.go:3: running "go": exit status 1
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ 
-
-
-
-
-
 package main
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -tags linux trace trace.c
 
+struct sockaddr_storage {
+    union {
+        struct sockaddr_in  in;
+        struct sockaddr_in6 in6;
+        struct sockaddr_un  un;
+        // Добавьте другие типы адресов, если необходимо
+    };
+    unsigned short sa_family;
+};
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ go generate
-no required module provides package github.com/cilium/ebpf/cmd/bpf2go; to add it:
-        go get github.com/cilium/ebpf/cmd/bpf2go
-gen.go:3: running "go": exit status 1
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ 
 
+struct conn_info_t {
+    u32 pid;
+    u32 src_ip;
+    u32 dst_ip;
+    u32 addrlen;
+    u16 sport;
+    u16 dport;
+    char comm[64];
+    struct sockaddr_storage sock_addr;
+};
 
+SEC("tracepoint/syscalls/sys_enter_sendto")
+int trace_sendto_enter(struct sys_enter_sendto_args *ctx)
+{
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct conn_info_t conn_info = {};
 
+    conn_info.pid = pid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
+    // Копируем адрес сокета в структуру
+    if (ctx->addr) {
+        bpf_probe_read(&conn_info.sock_addr, sizeof(conn_info.sock_addr), ctx->addr);
+    }
 
-
-package main
-
-import (
-	"bytes"
-	"context"
-	"encoding/binary"
-	"fmt"
-	"log"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
-
-	"github.com/dropbox/goebpf"
-)
-
-func main() {
-	// Инициализация системы eBPF
-	bpf := goebpf.NewDefaultEbpfSystem()
-
-	// Получение карты perf по имени
-	perfMap := bpf.GetMapByName("events")
-	if perfMap == nil {
-		log.Fatal("Не удалось найти карту perf с именем 'events'")
-	}
-
-	// Создание perf-событий
-	perfEvents, err := goebpf.NewPerfEvents(perfMap)
-	if err != nil {
-		log.Fatalf("Ошибка создания perf-событий: %v", err)
-	}
-	defer perfEvents.Stop()
-
-	// Запуск чтения событий
-	events, err := perfEvents.StartForAllProcessesAndCPUs(4096)
-	if err != nil {
-		log.Fatalf("Ошибка запуска чтения событий: %v", err)
-	}
-	defer perfEvents.Stop()
-
-	// Создание канала для обработки сигналов
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	defer signal.Stop(sigCh)
-
-	// Обработка событий
-	for {
-		select {
-		case data := <-events:
-			// Преобразование данных в структуру event_t
-			var event struct {
-				Pid   uint32
-				Comm  [64]byte
-				SrcIP uint32
-				Sport uint16
-			}
-			err := binary.Read(bytes.NewReader(data), binary.LittleEndian, &event)
-			if err != nil {
-				log.Printf("Ошибка распаковки данных события: %v", err)
-				continue
-			}
-
-			// Вывод информации
-			fmt.Printf("PID: %d, Comm: %s, SrcIP: %d.%d.%d.%d, SrcPort: %d\n",
-				event.Pid,
-				string(event.Comm[:]),
-				(event.SrcIP>>24)&0xFF, (event.SrcIP>>16)&0xFF,
-				(event.SrcIP>>8)&0xFF, event.SrcIP&0xFF,
-				event.Sport)
-		case <-sigCh:
-			// Обработка сигнала завершения
-			fmt.Println("\nПолучен сигнал завершения. Завершение работы...")
-			return
-		}
-	}
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+    return 0;
 }
+
+
+SEC("tracepoint/syscalls/sys_exit_sendto")
+int trace_sendto_exit(struct sys_exit_sendto_args *ctx)
+{
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    long ret = ctx->ret;
+
+    if (ret < 0) {
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        return 0;
+    }
+
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
+    if (!conn_info) {
+        bpf_printk("UDP sys_exit_sendto: No connection info found for PID=%d\n", pid);
+        return 0;
+    }
+
+    // Обрабатываем адрес сокета
+    if (conn_info->sock_addr.sa_family == AF_INET) {
+        struct sockaddr_in *addr_in = (struct sockaddr_in *)&conn_info->sock_addr;
+        conn_info->src_ip = bpf_ntohl(addr_in->sin_addr.s_addr);
+        conn_info->sport = bpf_ntohs(addr_in->sin_port);
+    } else if (conn_info->sock_addr.sa_family == AF_INET6) {
+        struct sockaddr_in6 *addr_in6 = (struct sockaddr_in6 *)&conn_info->sock_addr;
+        // Обработка IPv6 адреса
+        // ...
+    } else if (conn_info->sock_addr.sa_family == AF_UNIX) {
+        struct sockaddr_un *addr_un = (struct sockaddr_un *)&conn_info->sock_addr;
+        // Обработка Unix-сокета
+        // ...
+    }
+
+    // Создаем и заполняем структуру события
+    struct event_t event = {};
+    event.pid = conn_info->pid;
+    event.src_ip = conn_info->src_ip;
+    event.sport = conn_info->sport;
+    __builtin_memcpy(&event.comm, conn_info->comm, sizeof(event.comm));
+
+    // Отправляем событие в пространство пользователя
+    bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, &event, sizeof(event));
+
+    bpf_map_delete_elem(&conn_info_map, &pid);
+    return 0;
+}
+
+
+
+
+
+
+
+
+
+
+
