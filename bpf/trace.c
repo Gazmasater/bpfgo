@@ -20,6 +20,14 @@ struct conn_info_t
     char comm[64];
 };
 
+struct event_t {
+    u32 pid;
+    u32 src_ip;
+    u16 sport;
+    char comm[64];
+};
+
+
 struct sys_enter_sendto_args
 {
 
@@ -90,7 +98,7 @@ struct
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
     __uint(key_size, sizeof(u32));
     __uint(value_size, sizeof(u32));
-    __uint(max_entries, 128); // number of CPUs
+    __uint(max_entries, 128);
 } events SEC(".maps");
 
 
@@ -119,22 +127,19 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx)
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
-    if (ret < 0)
-    {
+    if (ret < 0) {
         bpf_map_delete_elem(&conn_info_map, &pid);
         return 0;
     }
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
-    if (!conn_info)
-    {
+    if (!conn_info) {
         bpf_printk("UDP sys_exit_sendto: No connection info found for PID=%d\n", pid);
         return 0;
     }
 
-
     struct sockaddr_in addr = {};
-    if (conn_info->sock_addr) { 
+    if (conn_info->sock_addr) {
         bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr);
         if (addr.sin_family == AF_INET) {
             conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
@@ -142,15 +147,26 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx)
         }
     }
 
+    bpf_printk("UDP sys_exit_recvfrom: PID=%d, Comm=%s, Src_IP=%d.%d.%d.%d, Src_Port=%d\n",
+        conn_info->pid, conn_info->comm,
+        (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
+        (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
 
-    bpf_printk("UDP sys_exit_sendto: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-               conn_info->pid, conn_info->comm,
-               (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
-               (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
+
+    // Создаем и заполняем структуру события
+    struct event_t event = {};
+    event.pid = conn_info->pid;
+    event.src_ip = conn_info->src_ip;
+    event.sport = conn_info->sport;
+    __builtin_memcpy(&event.comm, conn_info->comm, sizeof(event.comm));
+
+    // Отправляем событие в пространство пользователя
+    bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, &event, sizeof(event));
 
     bpf_map_delete_elem(&conn_info_map, &pid);
     return 0;
 }
+
 
 
 SEC("tracepoint/syscalls/sys_enter_recvfrom")
