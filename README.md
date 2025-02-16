@@ -1,6 +1,9 @@
 export GOPACKAGE=your_package_name
 bpf2go -output-stem trace_bpf trace.c
 
+bpf2go trace_bpf trace.c
+
+
 
 
 
