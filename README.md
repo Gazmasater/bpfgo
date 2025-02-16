@@ -17,70 +17,42 @@ go get github.com/cilium/ebpf/cmd/bpf2go
 which bpf2go
 
 
-package main
+package nftrace
 
 import (
-	"log"
-	"os"
-	"time"
-	"unsafe"
-
+	"github.com/cilium/ebpf/perf"
 	"github.com/cilium/ebpf"
-	"github.com/pkg/errors"
+	"log"
 )
 
-// Пример структуры события, которая используется в вашей программе
-type bpfTraceInfo struct {
-	Counter uint64
-	EventID uint32
-	Timestamp uint64
-}
-
-func main() {
-	// Открываем ранее загруженную коллекцию eBPF (предположим, что она уже была загружена)
-	collection, err := ebpf.LoadCollectionFromReader(os.Stdin) // Замените на реальный источник
+func readPerfEvents(mapName string, buffLen int) error {
+	// Открываем карту
+	eventsMap, err := ebpf.NewMap(&ebpf.MapSpec{
+		Type:       ebpf.PerfEventArray,
+		Name:       mapName,
+		KeySize:    4,
+		ValueSize:  4,
+		MaxEntries: 8,
+	})
 	if err != nil {
-		log.Fatalf("failed to load BPF collection: %s", err)
+		return err
 	}
+	defer eventsMap.Close()
 
-	// Получаем карту типа PERF_EVENT_ARRAY
-	traceEventsMap := collection.Maps["trace_events"]
-	if traceEventsMap == nil {
-		log.Fatalf("trace_events map not found in BPF program")
-	}
-
-	// Создаем ридер для карты
-	perfReader, err := ebpf.NewPerfEventReader(traceEventsMap)
+	// Читаем события из карты
+	reader, err := perf.NewReader(eventsMap, buffLen)
 	if err != nil {
-		log.Fatalf("failed to create perf event reader: %s", err)
+		return err
 	}
-	defer perfReader.Close()
+	defer reader.Close()
 
-	// Чтение событий из карты
-	log.Println("Waiting for events...")
 	for {
-		// Устанавливаем тайм-аут на 1 секунду
-		perfReader.SetDeadline(time.Now().Add(time.Second))
-
-		record, err := perfReader.Read()
+		record, err := reader.Read()
 		if err != nil {
-			if err == os.ErrDeadlineExceeded {
-				// Если тайм-аут истек, продолжаем ждать событий
-				continue
-			}
-			log.Fatalf("failed to read perf event: %s", err)
+			log.Println("Ошибка чтения события:", err)
+			break
 		}
-
-		// Преобразуем байты события в нужную структуру
-		event := *(*bpfTraceInfo)(unsafe.Pointer(&record[0]))
-
-		// Обрабатываем событие
-		processEvent(event)
+		log.Printf("Получено событие: %+v", record)
 	}
-}
-
-// Обработчик для получения и вывода информации о событии
-func processEvent(event bpfTraceInfo) {
-	// Например, выводим информацию о событии
-	log.Printf("Received event: Counter=%d, EventID=%d, Timestamp=%d\n", event.Counter, event.EventID, event.Timestamp)
+	return nil
 }
