@@ -36,9 +36,9 @@ func main() {
 	bpf := goebpf.NewDefaultEbpfSystem()
 
 	// Получаем perf_event по его имени
-	perfEvent := bpf.GetPerfEventByName("trace_events")
-	if perfEvent == nil {
-		log.Fatal("Не удалось найти perf_event с именем 'trace_events'")
+	perfEvent, err := bpf.LoadPerfEvent("trace_events")
+	if err != nil {
+		log.Fatalf("Ошибка загрузки perf-события: %v", err)
 	}
 
 	// Создаем объект для работы с perf событиями
@@ -54,7 +54,7 @@ func main() {
 	defer signal.Stop(sigCh)
 
 	// Запускаем чтение всех событий для всех процессов и CPU
-	err = events.StartForAllProcessesAndCPUs(4096)
+	eventsChannel, err := events.StartForAllProcessesAndCPUs(4096)
 	if err != nil {
 		log.Fatalf("Ошибка запуска чтения событий: %v", err)
 	}
@@ -63,7 +63,7 @@ func main() {
 	// Основной цикл для обработки событий
 	for {
 		select {
-		case data := <-events:
+		case data := <-eventsChannel: // читаем события из канала
 			var event struct {
 				Pid   uint32
 				Comm  [64]byte
@@ -92,70 +92,4 @@ func main() {
 	}
 }
 
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/Perf/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingFieldOrMethod",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingFieldOrMethod"
-		}
-	},
-	"severity": 8,
-	"message": "bpf.GetPerfEventByName undefined (type goebpf.System has no field or method GetPerfEventByName)",
-	"source": "compiler",
-	"startLineNumber": 20,
-	"startColumn": 19,
-	"endLineNumber": 20,
-	"endColumn": 37
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/Perf/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "WrongAssignCount",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "WrongAssignCount"
-		}
-	},
-	"severity": 8,
-	"message": "assignment mismatch: 1 variable but events.StartForAllProcessesAndCPUs returns 2 values",
-	"source": "compiler",
-	"startLineNumber": 38,
-	"startColumn": 8,
-	"endLineNumber": 38,
-	"endColumn": 48
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/Perf/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "InvalidReceive",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "InvalidReceive"
-		}
-	},
-	"severity": 8,
-	"message": "invalid operation: cannot receive from non-channel events (variable of type *goebpf.PerfEvents)",
-	"source": "compiler",
-	"startLineNumber": 47,
-	"startColumn": 18,
-	"endLineNumber": 47,
-	"endColumn": 24
-}]
 
