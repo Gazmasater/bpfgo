@@ -20,72 +20,51 @@ which bpf2go
 package main
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
-	"log"
 	"os"
-	"os/signal"
-	"syscall"
+	"log"
 
-	"github.com/dropbox/goebpf"
+	"github.com/cilium/ebpf"
 )
 
 func main() {
-	// Создаем новый экземпляр eBPF-системы
-	bpf := goebpf.NewDefaultEbpfSystem()
-
-	// Загружаем eBPF-программу и загружаем карты
-	program, err := bpf.LoadAndAssignProgram("trace_events", goebpf.EbpfType("tracepoint"))
+	// Загружаем BPF-программу и карту
+	programPath := "./bpf_program.o"
+	spec, err := ebpf.LoadCollectionSpec(programPath)
 	if err != nil {
-		log.Fatalf("Ошибка загрузки программы: %v", err)
+		log.Fatalf("failed to load BPF program: %s", err)
 	}
 
-	// Получаем ссылку на карту, которая хранит perf_event
-	perfMap, err := program.GetPerfMapByName("trace_events")
+	// Загружаем коллекцию
+	collection, err := ebpf.NewCollection(spec)
 	if err != nil {
-		log.Fatalf("Не удалось получить карту по имени 'trace_events': %v", err)
+		log.Fatalf("failed to load BPF collection: %s", err)
 	}
 
-	// Ожидаем сигнала завершения
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	defer signal.Stop(sigCh)
+	// Получаем карту trace_events
+	traceEventsMap := collection.Maps["trace_events"]
+	if traceEventsMap == nil {
+		log.Fatalf("trace_events map not found in BPF program")
+	}
 
-	// Основной цикл для получения событий из карты
+	// Открываем перфоманс-событие для чтения
+	perfReader, err := ebpf.NewPerfEventReader(traceEventsMap)
+	if err != nil {
+		log.Fatalf("failed to create perf event reader: %s", err)
+	}
+	defer perfReader.Close()
+
+	// Чтение событий из карты
 	for {
-		select {
-		case data := <-perfMap:
-			// Данные события приходят как срез байтов, распаковываем их в структуру
-			var event struct {
-				Pid   uint32
-				Comm  [64]byte
-				SrcIP uint32
-				Sport uint16
+		record, err := perfReader.Read()
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
 			}
-
-			// Распаковываем данные события в структуру
-			err := binary.Read(bytes.NewReader(data), binary.LittleEndian, &event)
-			if err != nil {
-				log.Printf("Ошибка распаковки данных события: %v", err)
-				continue
-			}
-
-			// Выводим данные о событии
-			fmt.Printf("PID: %d, Comm: %s, SrcIP: %d.%d.%d.%d, SrcPort: %d\n",
-				event.Pid,
-				string(event.Comm[:]),
-				(event.SrcIP>>24)&0xFF, (event.SrcIP>>16)&0xFF,
-				(event.SrcIP>>8)&0xFF, event.SrcIP&0xFF,
-				event.Sport)
-		case <-sigCh:
-			// Обработка сигнала завершения
-			fmt.Println("\nПолучен сигнал завершения. Завершение работы...")
-			return
+			log.Fatalf("failed to read perf event: %s", err)
 		}
+
+		// Обработка прочитанного события
+		fmt.Printf("Received event: %v\n", record)
 	}
 }
-
-
-
-
