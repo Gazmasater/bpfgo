@@ -1,74 +1,53 @@
 package main
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
 	"log"
-	"os"
-	"os/signal"
-	"syscall"
 
-	"github.com/dropbox/goebpf"
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/perf"
 )
 
-func main() {
-	// Создаем новый экземпляр eBPF-системы
-	bpf := goebpf.NewDefaultEbpfSystem()
+// Размер буфера для чтения событий
+const bufferLen = 4096
 
-	// Получаем perf_event по его имени
-	perfEvent := bpf.GetPerfEventByName("trace_events")
-	if perfEvent == nil {
-		log.Fatal("Не удалось найти perf_event с именем 'trace_events'")
-	}
-
-	// Создаем объект для работы с perf событиями
-	events, err := goebpf.NewPerfEvents(perfEvent)
+// Функция для чтения событий из карты
+func readPerfEvents() error {
+	// Открытие карты, которая уже была загружена в ядро
+	eventsMap, err := ebpf.LoadPinnedMap("/sys/fs/bpf/trace_events", nil)
 	if err != nil {
-		log.Fatalf("Ошибка создания perf-событий: %v", err)
+		return fmt.Errorf("failed to open pinned map: %w", err)
 	}
-	defer events.Stop()
+	defer eventsMap.Close()
 
-	// Ожидаем сигнала завершения
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	defer signal.Stop(sigCh)
-
-	// Запускаем чтение всех событий для всех процессов и CPU
-	err = events.StartForAllProcessesAndCPUs(4096)
+	// Создаем perf.Reader для чтения событий из карты
+	reader, err := perf.NewReader(eventsMap, bufferLen)
 	if err != nil {
-		log.Fatalf("Ошибка запуска чтения событий: %v", err)
+		return fmt.Errorf("failed to create reader: %w", err)
 	}
-	defer events.Stop()
+	defer reader.Close()
 
-	// Основной цикл для обработки событий
+	// Чтение событий в бесконечном цикле
 	for {
-		select {
-		case data := <-events:
-			var event struct {
-				Pid   uint32
-				Comm  [64]byte
-				SrcIP uint32
-				Sport uint16
-			}
-
-			// Распаковываем данные события в структуру
-			err := binary.Read(bytes.NewReader(data), binary.LittleEndian, &event)
-			if err != nil {
-				log.Printf("Ошибка распаковки данных события: %v", err)
+		// Ожидаем событие
+		record, err := reader.Read()
+		if err != nil {
+			// Если произошла ошибка, выводим и завершаем
+			if err.Error() == "perf ring buffer timeout" {
+				// Ожидаем следующее событие
 				continue
 			}
-
-			// Выводим данные о событии
-			fmt.Printf("PID: %d, Comm: %s, SrcIP: %d.%d.%d.%d, SrcPort: %d\n",
-				event.Pid,
-				string(event.Comm[:]),
-				(event.SrcIP>>24)&0xFF, (event.SrcIP>>16)&0xFF,
-				(event.SrcIP>>8)&0xFF, event.SrcIP&0xFF,
-				event.Sport)
-		case <-sigCh:
-			fmt.Println("\nПолучен сигнал завершения. Завершение работы...")
-			return
+			return fmt.Errorf("failed to read event: %w", err)
 		}
+
+		// Обрабатываем событие
+		log.Printf("Received event: %+v\n", record)
+	}
+}
+
+func main() {
+	// Чтение событий из карты
+	if err := readPerfEvents(); err != nil {
+		log.Fatalf("Error reading perf events: %v", err)
 	}
 }
