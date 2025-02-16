@@ -92,4 +92,24 @@ func main() {
 	}
 }
 
-
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/Perf/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "bpf.LoadPerfEvent undefined (type goebpf.System has no field or method LoadPerfEvent)",
+	"source": "compiler",
+	"startLineNumber": 20,
+	"startColumn": 24,
+	"endLineNumber": 20,
+	"endColumn": 37
+}]
