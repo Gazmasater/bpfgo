@@ -18,7 +18,7 @@ func main() {
 	}
 
 	// Загружаем eBPF-объектный файл
-	obj, err := ebpf.LoadCollection("trace.bpf.o")
+	obj, err := ebpf.LoadCollection("trace_bpfel.o")
 	if err != nil {
 		log.Fatalf("Не удалось загрузить eBPF-коллекцию: %v", err)
 	}

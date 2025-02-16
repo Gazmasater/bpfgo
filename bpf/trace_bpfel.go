@@ -74,6 +74,7 @@ type traceProgramSpecs struct {
 type traceMapSpecs struct {
 	AddrMap     *ebpf.MapSpec `ebpf:"addr_map"`
 	ConnInfoMap *ebpf.MapSpec `ebpf:"conn_info_map"`
+	TraceEvents *ebpf.MapSpec `ebpf:"trace_events"`
 }
 
 // traceVariableSpecs contains global variables before they are loaded into the kernel.
@@ -104,12 +105,14 @@ func (o *traceObjects) Close() error {
 type traceMaps struct {
 	AddrMap     *ebpf.Map `ebpf:"addr_map"`
 	ConnInfoMap *ebpf.Map `ebpf:"conn_info_map"`
+	TraceEvents *ebpf.Map `ebpf:"trace_events"`
 }
 
 func (m *traceMaps) Close() error {
 	return _TraceClose(
 		m.AddrMap,
 		m.ConnInfoMap,
+		m.TraceEvents,
 	)
 }
 

@@ -87,6 +87,16 @@ struct
     __type(value, struct conn_info_t);
 } conn_info_map SEC(".maps");
 
+
+struct
+{
+    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+    __uint(key_size, sizeof(u32));
+    __uint(value_size, sizeof(u32));
+    __uint(max_entries, 128); // number of CPUs
+} trace_events SEC(".maps");
+
+
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
@@ -155,14 +165,16 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         return 0;
     }
 
-    // Print the details of the connection
+    // Log the connection details
     bpf_printk("Comm=%s FAMILY=%d", conn_info->comm, addr.sin_family);
 
     if (addr.sin_family == AF_INET) {
         conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
         conn_info->sport = bpf_ntohs(addr.sin_port);
 
-        // Log the connection information
+        // Send the connection info to user-space via perf_event
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, conn_info, sizeof(*conn_info));
+
         bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
                    conn_info->pid, conn_info->comm,
                    (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
