@@ -2,6 +2,10 @@
 
 bpftool map pin id <map_id> /sys/fs/bpf/trace_events
 
+11: perf_event_array  name trace_events  flags 0x0
+        key 4B  value 4B  max_entries 8  memlock 384B
+        pids Load(4849)
+
 
 export GOPACKAGE=your_package_name
 bpf2go -output-stem trace_bpf trace.c
