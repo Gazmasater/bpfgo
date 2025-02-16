@@ -15,9 +15,9 @@ import (
 func main() {
 	bpf := goebpf.NewDefaultEbpfSystem()
 
-	perfMap := bpf.GetMapByName("events")
+	perfMap := bpf.GetMapByName("trace_events")
 	if perfMap == nil {
-		log.Fatal("Не удалось найти карту perf с именем 'events'")
+		log.Fatal("Не удалось найти карту perf с именем 'trace_events'")
 	}
 
 	perfEvents, err := goebpf.NewPerfEvents(perfMap)

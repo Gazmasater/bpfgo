@@ -91,10 +91,10 @@ struct
 struct
 {
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-    __uint(key_size, sizeof(u32));
-    __uint(value_size, sizeof(u32));
-    __uint(max_entries, 128); // number of CPUs
-} events SEC(".maps");
+    __uint(key_size, sizeof(__u32));
+    __uint(value_size, sizeof(__u32));
+    __uint(max_entries, 128); 
+} trace_events SEC(".maps");
 
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
@@ -166,7 +166,7 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
         conn_info->sport = bpf_ntohs(addr.sin_port);
 
-        bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, conn_info, sizeof(*conn_info));
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, conn_info, sizeof(*conn_info));
 
         bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
                    conn_info->pid, conn_info->comm,

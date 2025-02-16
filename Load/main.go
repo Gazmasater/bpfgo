@@ -25,13 +25,13 @@ func main() {
 	defer obj.Close()
 
 	// Получаем eBPF-программы из загруженной коллекции
-	sendtoEnterProg := obj.Programs["trace_sendto_enter"]
-	if sendtoEnterProg == nil {
+	sendtoEnterProg, ok := obj.Programs["trace_sendto_enter"]
+	if !ok {
 		log.Fatalf("Программа trace_sendto_enter не найдена")
 	}
 
-	sendtoExitProg := obj.Programs["trace_sendto_exit"]
-	if sendtoExitProg == nil {
+	sendtoExitProg, ok := obj.Programs["trace_sendto_exit"]
+	if !ok {
 		log.Fatalf("Программа trace_sendto_exit не найдена")
 	}
 
