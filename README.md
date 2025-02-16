@@ -31,8 +31,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
-	"time"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
@@ -71,7 +69,24 @@ func readPerfEvents() error {
 		}
 
 		// Обрабатываем событие
-		log.Printf("Received event: %+v\n", record)
+		connInfo := struct {
+			PID   uint32
+			Comm  [16]byte
+			SrcIP uint32
+			Sport uint16
+		}{}
+
+		// Преобразуем данные из perf record в структуру connInfo
+		if err := record.UnmarshalBinary(&connInfo); err != nil {
+			return fmt.Errorf("failed to unmarshal event data: %w", err)
+		}
+
+		// Выводим данные события
+		log.Printf("Received event: PID=%d, Comm=%s, SrcIP=%d.%d.%d.%d, Sport=%d\n",
+			connInfo.PID,
+			connInfo.Comm,
+			(connInfo.SrcIP>>24)&0xFF, (connInfo.SrcIP>>16)&0xFF, (connInfo.SrcIP>>8)&0xFF, connInfo.SrcIP&0xFF,
+			connInfo.Sport)
 	}
 }
 
