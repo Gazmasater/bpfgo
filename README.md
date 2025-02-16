@@ -1,4 +1,6 @@
-bpftool map clear /sys/fs/bpf/trace_events
+
+
+bpftool map pin id <map_id> /sys/fs/bpf/trace_events
 
 
 export GOPACKAGE=your_package_name
