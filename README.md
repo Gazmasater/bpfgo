@@ -39,6 +39,14 @@ import (
 // Размер буфера для чтения событий
 const bufferLen = 4096
 
+// Структура, соответствующая данным из BPF события
+type ConnInfo struct {
+	PID   uint32
+	Comm  [16]byte
+	SrcIP uint32
+	Sport uint16
+}
+
 // Функция для чтения событий из карты
 func readPerfEvents() error {
 	// Открытие карты, которая уже была загружена в ядро
@@ -68,20 +76,15 @@ func readPerfEvents() error {
 			return fmt.Errorf("failed to read event: %w", err)
 		}
 
-		// Обрабатываем событие
-		connInfo := struct {
-			PID   uint32
-			Comm  [16]byte
-			SrcIP uint32
-			Sport uint16
-		}{}
+		// Преобразуем данные из perf record в структуру ConnInfo
+		connInfo := ConnInfo{}
+		// Чтение данных из record в connInfo
+		copy(connInfo.Comm[:], record.RawSample[0:16]) // Копируем имя процесса (Comm)
+		connInfo.PID = uint32(record.RawSample[16])   // PID
+		connInfo.SrcIP = uint32(record.RawSample[20]) // IP (предполагается, что IP записан с 20-го байта)
+		connInfo.Sport = uint16(record.RawSample[24]) // Порт (предполагается, что порт записан с 24-го байта)
 
-		// Преобразуем данные из perf record в структуру connInfo
-		if err := record.UnmarshalBinary(&connInfo); err != nil {
-			return fmt.Errorf("failed to unmarshal event data: %w", err)
-		}
-
-		// Выводим данные события
+		// Выводим полученные данные
 		log.Printf("Received event: PID=%d, Comm=%s, SrcIP=%d.%d.%d.%d, Sport=%d\n",
 			connInfo.PID,
 			connInfo.Comm,
@@ -96,26 +99,3 @@ func main() {
 		log.Fatalf("Error reading perf events: %v", err)
 	}
 }
-
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/Perf/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingFieldOrMethod",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingFieldOrMethod"
-		}
-	},
-	"severity": 8,
-	"message": "record.UnmarshalBinary undefined (type perf.Record has no field or method UnmarshalBinary)",
-	"source": "compiler",
-	"startLineNumber": 52,
-	"startColumn": 20,
-	"endLineNumber": 52,
-	"endColumn": 35
-}]
