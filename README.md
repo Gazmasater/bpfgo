@@ -13,13 +13,6 @@ go get github.com/cilium/ebpf/cmd/bpf2go
 
 which bpf2go
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ bpf2go trace_bpf trace.c
-Compiled /home/gaz358/myprog/bpfgo/bpf/trace_bpf_bpfel.o
-Stripped /home/gaz358/myprog/bpfgo/bpf/trace_bpf_bpfel.o
-Wrote /home/gaz358/myprog/bpfgo/bpf/trace_bpf_bpfel.go
-Compiled /home/gaz358/myprog/bpfgo/bpf/trace_bpf_bpfeb.o
-Stripped /home/gaz358/myprog/bpfgo/bpf/trace_bpf_bpfeb.o
-Wrote /home/gaz358/myprog/bpfgo/bpf/trace_bpf_bpfeb.go
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ 
-
-
+9: perf_event_array  name trace_events  flags 0x0
+        key 4B  value 4B  max_entries 8  memlock 384B
+        pids Load(3812)
