@@ -96,3 +96,26 @@ func main() {
 		log.Fatalf("Error reading perf events: %v", err)
 	}
 }
+
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/Perf/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "record.UnmarshalBinary undefined (type perf.Record has no field or method UnmarshalBinary)",
+	"source": "compiler",
+	"startLineNumber": 52,
+	"startColumn": 20,
+	"endLineNumber": 52,
+	"endColumn": 35
+}]
