@@ -29,73 +29,121 @@ which bpf2go
 package main
 
 import (
-	"fmt"
 	"log"
+	"os"
+	"unsafe"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
+	"github.com/pkg/errors"
+	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/rlimit"
 )
 
-// Размер буфера для чтения событий
-const bufferLen = 4096
-
-// Структура, соответствующая данным из BPF события
-type ConnInfo struct {
-	PID   uint32
-	Comm  [16]byte
-	SrcIP uint32
-	Sport uint16
+// Структура для хранения информации о событии
+type trace_info struct {
+	PID    uint32
+	SrcIP  uint32
+	DstIP  uint32
+	Sport  uint16
+	Dport  uint16
+	Comm   [16]byte
 }
 
-// Функция для чтения событий из карты
-func readPerfEvents() error {
-	// Открытие карты, которая уже была загружена в ядро
-	eventsMap, err := ebpf.LoadPinnedMap("/sys/fs/bpf/trace_events", nil)
+// Структура для хранения BPF объектов
+type bpfObjects struct {
+	SendToEnter *ebpf.Program
+	SendToExit  *ebpf.Program
+}
+
+func init() {
+	// Убираем ограничения на память
+	if err := rlimit.RemoveMemlock(); err != nil {
+		panic(errors.WithMessage(err, "failed to remove memory limit for process"))
+	}
+}
+
+// Загружаем BPF объекты
+func loadBpfObjects(objs *bpfObjects, loadOpts ebpf.LoadOptions) error {
+	// Открываем файл с BPF программой
+	prog, err := ebpf.NewProgram(&ebpf.ProgramSpec{
+		Type:       ebpf.TracePoint,
+		AttachType: ebpf.AttachTracepoint,
+	})
 	if err != nil {
-		return fmt.Errorf("failed to open pinned map: %w", err)
+		return errors.Wrap(err, "failed to create BPF program")
 	}
-	defer eventsMap.Close()
 
-	// Создаем perf.Reader для чтения событий из карты
-	reader, err := perf.NewReader(eventsMap, bufferLen)
+	// Загружаем BPF программы для sys_enter_sendto и sys_exit_sendto
+	objs.SendToEnter, err = prog.Load(loadOpts)
 	if err != nil {
-		return fmt.Errorf("failed to create reader: %w", err)
+		return errors.Wrap(err, "failed to load SendToEnter program")
 	}
-	defer reader.Close()
 
-	// Чтение событий в бесконечном цикле
-	for {
-		// Ожидаем событие
-		record, err := reader.Read()
-		if err != nil {
-			// Если произошла ошибка, выводим и завершаем
-			if err.Error() == "perf ring buffer timeout" {
-				// Ожидаем следующее событие
-				continue
-			}
-			return fmt.Errorf("failed to read event: %w", err)
-		}
-
-		// Преобразуем данные из perf record в структуру ConnInfo
-		connInfo := ConnInfo{}
-		// Чтение данных из record в connInfo
-		copy(connInfo.Comm[:], record.RawSample[0:16]) // Копируем имя процесса (Comm)
-		connInfo.PID = uint32(record.RawSample[16])   // PID
-		connInfo.SrcIP = uint32(record.RawSample[20]) // IP (предполагается, что IP записан с 20-го байта)
-		connInfo.Sport = uint16(record.RawSample[24]) // Порт (предполагается, что порт записан с 24-го байта)
-
-		// Выводим полученные данные
-		log.Printf("Received event: PID=%d, Comm=%s, SrcIP=%d.%d.%d.%d, Sport=%d\n",
-			connInfo.PID,
-			connInfo.Comm,
-			(connInfo.SrcIP>>24)&0xFF, (connInfo.SrcIP>>16)&0xFF, (connInfo.SrcIP>>8)&0xFF, connInfo.SrcIP&0xFF,
-			connInfo.Sport)
+	objs.SendToExit, err = prog.Load(loadOpts)
+	if err != nil {
+		return errors.Wrap(err, "failed to load SendToExit program")
 	}
+
+	return nil
 }
 
 func main() {
-	// Чтение событий из карты
-	if err := readPerfEvents(); err != nil {
-		log.Fatalf("Error reading perf events: %v", err)
+	// Инициализация BPF объектов
+	var objs bpfObjects
+	if err := loadBpfObjects(&objs, ebpf.LoadOptions{}); err != nil {
+		log.Fatalf("failed to load BPF objects: %v", err)
+	}
+	defer func() {
+		if err := objs.SendToEnter.Close(); err != nil {
+			log.Fatalf("failed to close SendToEnter: %v", err)
+		}
+		if err := objs.SendToExit.Close(); err != nil {
+			log.Fatalf("failed to close SendToExit: %v", err)
+		}
+	}()
+
+	// Линковка tracepoint для sys_enter_sendto
+	kp, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.SendToEnter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
+	}
+	defer kp.Close()
+
+	// Линковка tracepoint для sys_exit_sendto
+	kpExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.SendToExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_sendto: %s", err)
+	}
+	defer kpExit.Close()
+
+	// Создание perf reader для чтения событий
+	rd, err := perf.NewReader(objs.SendToEnter, 4096) // Размер буфера
+	if err != nil {
+		log.Fatalf("opening ringbuf reader: %s", err)
+	}
+	defer rd.Close()
+
+	// Прочитаем данные из perf событий
+	record := new(perf.Record)
+	for {
+		err := rd.ReadInto(record)
+		if err != nil {
+			if errors.Is(err, os.ErrDeadlineExceeded) {
+				continue
+			}
+			log.Fatalf("reading trace from reader: %s", err)
+		}
+
+		// Преобразуем прочитанное событие в нужный тип
+		var event trace_info
+		event = *(*trace_info)(unsafe.Pointer(&record.RawSample[0]))
+
+		// Обработка события
+		log.Printf("Received event: PID=%d, Comm=%s, SrcIP=%d.%d.%d.%d, Sport=%d\n",
+			event.PID,
+			string(event.Comm[:]),
+			(event.SrcIP>>24)&0xFF, (event.SrcIP>>16)&0xFF, (event.SrcIP>>8)&0xFF, event.SrcIP&0xFF,
+			event.Sport)
 	}
 }
