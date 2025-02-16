@@ -13,29 +13,35 @@ import (
 )
 
 func main() {
+	// Создаем новый экземпляр eBPF-системы
 	bpf := goebpf.NewDefaultEbpfSystem()
 
-	perfMap := bpf.GetMapByName("trace_events")
-	if perfMap == nil {
-		log.Fatal("Не удалось найти карту perf с именем 'trace_events'")
+	// Получаем perf_event по его имени
+	perfEvent := bpf.GetPerfEventByName("trace_events")
+	if perfEvent == nil {
+		log.Fatal("Не удалось найти perf_event с именем 'trace_events'")
 	}
 
-	perfEvents, err := goebpf.NewPerfEvents(perfMap)
+	// Создаем объект для работы с perf событиями
+	events, err := goebpf.NewPerfEvents(perfEvent)
 	if err != nil {
 		log.Fatalf("Ошибка создания perf-событий: %v", err)
 	}
-	defer perfEvents.Stop()
+	defer events.Stop()
 
-	events, err := perfEvents.StartForAllProcessesAndCPUs(4096)
-	if err != nil {
-		log.Fatalf("Ошибка запуска чтения событий: %v", err)
-	}
-	defer perfEvents.Stop()
-
+	// Ожидаем сигнала завершения
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigCh)
 
+	// Запускаем чтение всех событий для всех процессов и CPU
+	err = events.StartForAllProcessesAndCPUs(4096)
+	if err != nil {
+		log.Fatalf("Ошибка запуска чтения событий: %v", err)
+	}
+	defer events.Stop()
+
+	// Основной цикл для обработки событий
 	for {
 		select {
 		case data := <-events:
@@ -45,12 +51,15 @@ func main() {
 				SrcIP uint32
 				Sport uint16
 			}
+
+			// Распаковываем данные события в структуру
 			err := binary.Read(bytes.NewReader(data), binary.LittleEndian, &event)
 			if err != nil {
 				log.Printf("Ошибка распаковки данных события: %v", err)
 				continue
 			}
 
+			// Выводим данные о событии
 			fmt.Printf("PID: %d, Comm: %s, SrcIP: %d.%d.%d.%d, SrcPort: %d\n",
 				event.Pid,
 				string(event.Comm[:]),
