@@ -17,42 +17,58 @@ go get github.com/cilium/ebpf/cmd/bpf2go
 which bpf2go
 
 
-package nftrace
+package main
 
 import (
-	"github.com/cilium/ebpf/perf"
-	"github.com/cilium/ebpf"
+	"fmt"
 	"log"
+	"os"
+	"time"
+
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/perf"
 )
 
-func readPerfEvents(mapName string, buffLen int) error {
-	// Открываем карту
-	eventsMap, err := ebpf.NewMap(&ebpf.MapSpec{
-		Type:       ebpf.PerfEventArray,
-		Name:       mapName,
-		KeySize:    4,
-		ValueSize:  4,
-		MaxEntries: 8,
-	})
+// Размер буфера для чтения событий
+const bufferLen = 4096
+
+// Функция для чтения событий из карты
+func readPerfEvents() error {
+	// Открытие карты, которая уже была загружена в ядро
+	eventsMap, err := ebpf.LoadPinnedMap("/sys/fs/bpf/trace_events", nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open pinned map: %w", err)
 	}
 	defer eventsMap.Close()
 
-	// Читаем события из карты
-	reader, err := perf.NewReader(eventsMap, buffLen)
+	// Создаем perf.Reader для чтения событий из карты
+	reader, err := perf.NewReader(eventsMap, bufferLen)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create reader: %w", err)
 	}
 	defer reader.Close()
 
+	// Чтение событий в бесконечном цикле
 	for {
+		// Ожидаем событие
 		record, err := reader.Read()
 		if err != nil {
-			log.Println("Ошибка чтения события:", err)
-			break
+			// Если произошла ошибка, выводим и завершаем
+			if err.Error() == "perf ring buffer timeout" {
+				// Ожидаем следующее событие
+				continue
+			}
+			return fmt.Errorf("failed to read event: %w", err)
 		}
-		log.Printf("Получено событие: %+v", record)
+
+		// Обрабатываем событие
+		log.Printf("Received event: %+v\n", record)
 	}
-	return nil
+}
+
+func main() {
+	// Чтение событий из карты
+	if err := readPerfEvents(); err != nil {
+		log.Fatalf("Error reading perf events: %v", err)
+	}
 }
