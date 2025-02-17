@@ -35,6 +35,7 @@ import (
     "github.com/cilium/ebpf/perf"
     "github.com/pkg/errors"
     "os"
+    "github.com/your_project/load"  // Путь к вашему пакету, содержащему bpfObjects
 )
 
 type bpfTraceInfo struct {
@@ -47,8 +48,18 @@ type bpfTraceInfo struct {
 }
 
 func main() {
+    // Создаем и инициализируем объект bpfObjects
+    var objs load.bpfObjects
+
+    // Загружаем BPF объекты
+    err := load.LoadBpfObjects(&objs, nil)
+    if err != nil {
+        log.Fatalf("loading BPF objects: %s", err)
+    }
+
     // Инициализация perf ридера
-    rd, err := perf.NewReader(objs, buffLen)
+    buffLen := 4096 // Размер буфера, например 4096
+    rd, err := perf.NewReader(objs.bpfMaps.TraceEvents, buffLen)  // Используем bpfMaps.TraceEvents как источник для perf reader
     if err != nil {
         log.Fatalf("opening ringbuf reader: %s", err)
     }
@@ -57,7 +68,6 @@ func main() {
     record := new(perf.Record)
 
     // Цикл чтения событий
-Loop:
     for {
         err := rd.ReadInto(record)
         if err != nil {
@@ -77,70 +87,3 @@ Loop:
             event.PID, event.SrcIP, event.DstIP, event.Sport, event.Dport, string(event.Comm[:]))
     }
 }
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/Perf/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "UndeclaredName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredName"
-		}
-	},
-	"severity": 8,
-	"message": "undefined: objs",
-	"source": "compiler",
-	"startLineNumber": 23,
-	"startColumn": 28,
-	"endLineNumber": 23,
-	"endColumn": 32
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/Perf/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "UndeclaredName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredName"
-		}
-	},
-	"severity": 8,
-	"message": "undefined: buffLen",
-	"source": "compiler",
-	"startLineNumber": 23,
-	"startColumn": 34,
-	"endLineNumber": 23,
-	"endColumn": 41
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/Perf/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "UnusedLabel",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UnusedLabel"
-		}
-	},
-	"severity": 8,
-	"message": "label Loop declared and not used",
-	"source": "compiler",
-	"startLineNumber": 32,
-	"startColumn": 1,
-	"endLineNumber": 32,
-	"endColumn": 5
-}]
-
