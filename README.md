@@ -1,3 +1,4 @@
+bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=nftrace -target amd64 bpf $(pwd)/nftrace_perf.c -- -I$(pwd)
 
 
 bpftool map pin id <map_id> /sys/fs/bpf/trace_events
