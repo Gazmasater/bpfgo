@@ -30,60 +30,64 @@ which bpf2go
 package main
 
 import (
-    "log"
-    "unsafe"
-    "github.com/cilium/ebpf/perf"
-    "github.com/pkg/errors"
-    "os"
-    "github.com/your_project/load"  // Путь к вашему пакету, содержащему bpfObjects
+	"fmt"
+	"log"
+	"unsafe"
+
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/rlimit"
+	"golang.org/x/sys/unix"
 )
 
-type bpfTraceInfo struct {
-    PID    uint32
-    SrcIP  uint32
-    DstIP  uint32
-    Sport  uint16
-    Dport  uint16
-    Comm   [16]byte
+type TraceInfo struct {
+	Pid    uint32
+	SrcIP  uint32
+	DstIP  uint32
+	Sport  uint16
+	Dport  uint16
+	Comm   [16]byte
 }
 
 func main() {
-    // Создаем и инициализируем объект bpfObjects
-    var objs load.bpfObjects
+	// Поднимаем лимит на количество таблиц, которые можно открыть
+	if err := rlimit.RemoveMemlock(); err != nil {
+		log.Fatalf("failed to remove memlock: %v", err)
+	}
 
-    // Загружаем BPF объекты
-    err := load.LoadBpfObjects(&objs, nil)
-    if err != nil {
-        log.Fatalf("loading BPF objects: %s", err)
-    }
+	// Открываем eBPF объект, который уже загружен
+	// Предполагаем, что объект eBPF уже загружен и привязан
+	prog, err := ebpf.NewProgramFromReader("your_bpf_object.o") // если уже загружен, можно пропустить этот шаг
+	if err != nil {
+		log.Fatalf("failed to load eBPF program: %v", err)
+	}
+	defer prog.Close()
 
-    // Инициализация perf ридера
-    buffLen := 4096 // Размер буфера, например 4096
-    rd, err := perf.NewReader(objs.bpfMaps.TraceEvents, buffLen)  // Используем bpfMaps.TraceEvents как источник для perf reader
-    if err != nil {
-        log.Fatalf("opening ringbuf reader: %s", err)
-    }
-    defer rd.Close()
+	// Читаем данные через perf_event
+	// Создаем структуру для чтения данных
+	event := make([]byte, unsafe.Sizeof(TraceInfo{}))
 
-    record := new(perf.Record)
+	// Ожидаем и обрабатываем события
+	for {
+		// Ожидаем события от perf_event
+		// Здесь мы указываем PID или что-то другое для определения событий
+		// Ожидаем данные от программы через perf_event
+		err := unix.PerfRead(0, event) // Это заглушка для получения данных, замените на правильную логику для perf_event
+		if err != nil {
+			log.Fatalf("failed to read event: %v", err)
+		}
 
-    // Цикл чтения событий
-    for {
-        err := rd.ReadInto(record)
-        if err != nil {
-            if errors.Is(err, os.ErrDeadlineExceeded) {
-                continue
-            }
-            e := errors.WithMessage(err, "reading trace from reader")
-            log.Printf("%v", e)
-            break
-        }
+		// Преобразуем байты в структуру TraceInfo
+		var info TraceInfo
+		// Преобразуем байты в структуру
+		// Это важно, чтобы корректно обработать структуру и не потерять данные
+		copy(info.Comm[:], event[:16]) // Пример копирования в строку для comm, с учетом размера
+		info.Pid = uint32(event[16]) // Пример парсинга других данных, нужно указать правильный порядок байтов
 
-        // Преобразование сырых данных в структуру bpfTraceInfo
-        event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
-
-        // Обработка события (например, вывод на экран)
-        log.Printf("Event received: PID: %d, SrcIP: %d, DstIP: %d, Sport: %d, Dport: %d, Comm: %s",
-            event.PID, event.SrcIP, event.DstIP, event.Sport, event.Dport, string(event.Comm[:]))
-    }
+		// Печатаем информацию о событии
+		fmt.Printf("Received event: PID=%d, Comm=%s, SrcIP=%d.%d.%d.%d, Sport=%d\n",
+			info.Pid,
+			info.Comm,
+			(info.SrcIP>>24)&0xFF, (info.SrcIP>>16)&0xFF, (info.SrcIP>>8)&0xFF, info.SrcIP&0xFF,
+			info.Sport)
+	}
 }
