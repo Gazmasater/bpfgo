@@ -19,8 +19,18 @@ type bpfTraceInfo struct {
 }
 
 func main() {
+	// Создаем и инициализируем объект bpfObjects
+	var objs load.bpfObjects
+
+	// Загружаем BPF объекты
+	err := load.LoadBpfObjects(&objs, nil)
+	if err != nil {
+		log.Fatalf("loading BPF objects: %s", err)
+	}
+
 	// Инициализация perf ридера
-	rd, err := perf.NewReader(objs, buffLen)
+	buffLen := 4096                                              // Размер буфера, например 4096
+	rd, err := perf.NewReader(objs.bpfMaps.TraceEvents, buffLen) // Используем bpfMaps.TraceEvents как источник для perf reader
 	if err != nil {
 		log.Fatalf("opening ringbuf reader: %s", err)
 	}
@@ -29,7 +39,6 @@ func main() {
 	record := new(perf.Record)
 
 	// Цикл чтения событий
-Loop:
 	for {
 		err := rd.ReadInto(record)
 		if err != nil {
