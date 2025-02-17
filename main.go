@@ -4,64 +4,58 @@ import (
 	load "load/generated"
 	"log"
 	"os"
-	"os/signal"
-	"syscall"
+	"unsafe"
 
-	"github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/link"
-	"github.com/cilium/ebpf/rlimit"
+	"github.com/cilium/ebpf/perf"
+	"github.com/pkg/errors"
 )
 
-// Определяем структуру для хранения объектов
-type bpfObjects struct {
-	SendtoEnter *ebpf.Program `ebpf:"trace_sendto_enter"`
-	SendtoExit  *ebpf.Program `ebpf:"trace_sendto_exit"`
+type bpfTraceInfo struct {
+	PID   uint32
+	SrcIP uint32
+	DstIP uint32
+	Sport uint16
+	Dport uint16
+	Comm  [16]byte
 }
 
 func main() {
-	// Увеличиваем лимит на количество блокировок памяти для загрузки eBPF-программы
-	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatalf("Не удалось снять ограничение на блокировку памяти: %v", err)
-	}
-
-	// Загружаем eBPF-объектный файл в структуру bpfObjects
+	// Создаем и инициализируем объект bpfObjects
 	var objs bpfObjects
-	if err := load.LoadBpfObjects(&objs, nil); err != nil {
-		log.Fatalf("Не удалось загрузить eBPF-объекты: %v", err)
-	}
-	defer objs.Close()
 
-	// Прикрепляем программы к соответствующим tracepoint'ам
-	sendtoEnterLink, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.SendtoEnter, nil)
+	// Загружаем BPF объекты
+	err := load.LoadBpfObjects(&objs, nil)
 	if err != nil {
-		log.Fatalf("Не удалось прикрепить trace_sendto_enter: %v", err)
+		log.Fatalf("loading BPF objects: %s", err)
 	}
-	defer sendtoEnterLink.Close()
 
-	sendtoExitLink, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.SendtoExit, nil)
+	// Инициализация perf ридера
+	buffLen := 4096                                              // Размер буфера, например 4096
+	rd, err := perf.NewReader(objs.bpfMaps.TraceEvents, buffLen) // Используем bpfMaps.TraceEvents как источник для perf reader
 	if err != nil {
-		log.Fatalf("Не удалось прикрепить trace_sendto_exit: %v", err)
+		log.Fatalf("opening ringbuf reader: %s", err)
 	}
-	defer sendtoExitLink.Close()
+	defer rd.Close()
 
-	log.Println("eBPF-программы успешно загружены и прикреплены.")
+	record := new(perf.Record)
 
-	// Ожидаем сигнала завершения (Ctrl+C)
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	<-sig
+	// Цикл чтения событий
+	for {
+		err := rd.ReadInto(record)
+		if err != nil {
+			if errors.Is(err, os.ErrDeadlineExceeded) {
+				continue
+			}
+			e := errors.WithMessage(err, "reading trace from reader")
+			log.Printf("%v", e)
+			break
+		}
 
-	log.Println("Завершение работы.")
-}
+		// Преобразование сырых данных в структуру bpfTraceInfo
+		event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
 
-// loadBpfObjects загружает все объекты eBPF в переданную структуру
-
-// Close закрывает все ресурсы, связанные с объектами eBPF
-func (objs *bpfObjects) Close() {
-	if objs.SendtoEnter != nil {
-		objs.SendtoEnter.Close()
-	}
-	if objs.SendtoExit != nil {
-		objs.SendtoExit.Close()
+		// Обработка события (например, вывод на экран)
+		log.Printf("Event received: PID: %d, SrcIP: %d, DstIP: %d, Sport: %d, Dport: %d, Comm: %s",
+			event.PID, event.SrcIP, event.DstIP, event.Sport, event.Dport, string(event.Comm[:]))
 	}
 }
