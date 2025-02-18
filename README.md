@@ -130,3 +130,11 @@ func main() {
 			info.Sport, info.Dport)
 	}
 }
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./perf
+Loading eBPF object...
+eBPF object loaded successfully
+Map 'trace_events' found
+Start reading events from trace_events map
+
