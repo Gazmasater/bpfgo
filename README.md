@@ -31,3 +31,9 @@ sudo bpftool map dump pinned /sys/fs/bpf/trace_events
 ls /sys/fs/bpf
 
 sudo mount -t bpf bpf /sys/fs/bpf
+
+
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ls /sys/fs/bpf
+snap
