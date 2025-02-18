@@ -25,11 +25,11 @@ which bpf2go
 
 
 
-	// Получаем текущую рабочую директорию
-	wd, err := os.Getwd()
-	if err != nil {
-		log.Fatalf("failed to get current working directory: %v", err)
-	}
+// Получаем путь до корня проекта (можно использовать путь до Perf как базу)
+wd, err := os.Getwd()
+if err != nil {
+    log.Fatalf("failed to get current working directory: %v", err)
+}
 
-	// Строим путь к файлу eBPF объекта относительно текущей директории
-	eBpfFilePath := filepath.Join(wd, "generated", "bpf_x86_bpfel.o")
+// Строим путь к файлу eBPF объекта, начиная с корня проекта
+eBpfFilePath := filepath.Join(filepath.Dir(wd), "generated", "bpf_x86_bpfel.o")
