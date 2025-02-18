@@ -33,7 +33,7 @@ ls /sys/fs/bpf
 sudo mount -t bpf bpf /sys/fs/bpf
 
 
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ls /sys/fs/bpf
-snap
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo bpftool map dump pinned /sys/fs/bpf/trace_events
+Error: bpf obj get (/sys/fs/bpf/trace_events): No such file or directory
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ls /sys/fs/bpf
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
