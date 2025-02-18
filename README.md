@@ -73,6 +73,12 @@ func main() {
 	}
 	defer objs.Close()
 
+	fmt.Println("Loaded eBPF collection:")
+	for name, obj := range objs.Maps {
+		fmt.Printf("Map: %s\n", name)
+		fmt.Printf("Map type: %v\n", obj.Type())
+	}
+
 	// Получаем карту для перф событий
 	traceEventsMap, exists := objs.Maps["trace_events"]
 	if !exists {
@@ -81,7 +87,7 @@ func main() {
 	fmt.Println("Map 'trace_events' found")
 
 	// Создаем новый перф ридер для считывания событий
-	buffLen := 4096 // Размер буфера
+	buffLen := 40960 // Размер буфера
 	rd, err := perf.NewReader(traceEventsMap, buffLen)
 	if err != nil {
 		log.Fatalf("opening ringbuf reader: %s", err)
@@ -93,6 +99,7 @@ func main() {
 
 	// Цикл чтения перф событий
 	fmt.Println("Start reading events from trace_events map")
+Loop:
 	for {
 		// Отладочный вывод
 		fmt.Println("Waiting for event...")
@@ -103,9 +110,12 @@ func main() {
 				fmt.Println("Timeout, no data available")
 				continue
 			}
-			log.Printf("Error reading trace from reader: %v", err)
-			break
+			// Добавляем контекст к ошибке и переходим к следующей итерации
+			e := errors.WithMessage(err, "reading trace from reader")
+			log.Printf("Error: %v", e)
+			continue // Переходим к следующему циклу
 		}
+
 		// Успешно прочитано событие
 		fmt.Println("Event read successfully!")
 
@@ -128,28 +138,3 @@ func main() {
 			info.Sport, info.Dport)
 	}
 }
-
-
-
-// Загружаем коллекцию eBPF напрямую из файла
-fmt.Println("Loading eBPF object...")
-objs, err := ebpf.LoadCollection(eBpfFilePath)
-if err != nil {
-	log.Fatalf("failed to load eBPF collection: %v", err)
-}
-defer objs.Close()
-
-// Печатаем содержимое коллекции
-fmt.Println("Loaded eBPF collection:")
-for name, obj := range objs.Maps {
-	fmt.Printf("Map: %s\n", name)
-	fmt.Printf("Map type: %v\n", obj.Type())
-}
-
-// Получаем карту для перф событий
-traceEventsMap, exists := objs.Maps["trace_events"]
-if !exists {
-	log.Fatalf("map 'trace_events' not found in eBPF object")
-}
-fmt.Println("Map 'trace_events' found")
-
