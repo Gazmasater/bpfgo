@@ -4,6 +4,9 @@ bpftool map pin id <map_id> /sys/fs/bpf/trace_events
 
 bpftool map pin id 11 /sys/fs/bpf/trace_events
 
+bpftool map dump /sys/fs/bpf/trace_events
+
+
 
 11: perf_event_array  name trace_events  flags 0x0
         key 4B  value 4B  max_entries 8  memlock 384B
