@@ -3,6 +3,9 @@ bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=loa
 
 sudo bpftool map dump name trace_events
 
+sudo bpftool perf event open trace_events
+
+
 
 
 
