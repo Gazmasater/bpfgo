@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
@@ -26,15 +27,17 @@ func main() {
 		log.Fatalf("failed to remove memlock: %v", err)
 	}
 
-	// Открываем файл eBPF объекта
-	file, err := os.Open("bpf_x86_bpfel.o")
+	// Получаем текущую рабочую директорию
+	wd, err := os.Getwd()
 	if err != nil {
-		log.Fatalf("failed to open eBPF object file: %v", err)
+		log.Fatalf("failed to get current working directory: %v", err)
 	}
-	defer file.Close()
 
-	// Загружаем коллекцию eBPF из файла
-	objs, err := ebpf.LoadCollection("bpf_x86_bpfel.o")
+	// Строим путь к файлу eBPF объекта относительно текущей директории
+	eBpfFilePath := filepath.Join(wd, "generated", "bpf_x86_bpfel.o")
+
+	// Загружаем коллекцию eBPF напрямую из файла
+	objs, err := ebpf.LoadCollection(eBpfFilePath)
 	if err != nil {
 		log.Fatalf("failed to load eBPF collection: %v", err)
 	}
