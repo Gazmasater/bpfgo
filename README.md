@@ -31,10 +31,11 @@ import (
 	"os/signal"
 	"syscall"
 
+	"bpfgo/generated"
+
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/rlimit"
-	"github.com/generated"
 )
 
 // Определяем структуру для хранения объектов
@@ -95,22 +96,20 @@ func (objs *bpfObjects) Close() {
 	"resource": "/home/gaz358/myprog/bpfgo/main.go",
 	"owner": "_generated_diagnostic_collection_name_#0",
 	"code": {
-		"value": "BrokenImport",
+		"value": "UndeclaredImportedName",
 		"target": {
 			"$mid": 1,
 			"path": "/golang.org/x/tools/internal/typesinternal",
 			"scheme": "https",
 			"authority": "pkg.go.dev",
-			"fragment": "BrokenImport"
+			"fragment": "UndeclaredImportedName"
 		}
 	},
 	"severity": 8,
-	"message": "could not import github.com/generated (no required module provides package \"github.com/generated\")",
+	"message": "undefined: generated.LoadBpfObjects",
 	"source": "compiler",
-	"startLineNumber": 12,
-	"startColumn": 2,
-	"endLineNumber": 12,
-	"endColumn": 24
-}
-
-
+	"startLineNumber": 30,
+	"startColumn": 22,
+	"endLineNumber": 30,
+	"endColumn": 36
+}]
