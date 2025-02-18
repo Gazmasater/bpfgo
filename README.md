@@ -105,3 +105,9 @@ func main() {
 			info.Sport, info.Dport)
 	}
 }
+
+
+
+ebpf.LoadCollectionSpecFromReader()
+	ebpf.LoadCollection()
+	ebpf.LoadCollectionSpec()
