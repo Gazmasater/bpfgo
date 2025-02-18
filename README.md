@@ -69,15 +69,18 @@ func main() {
 	}
 
 	// Загружаем коллекцию eBPF
-	objs, err := ebpf.LoadCollection(spec)
+	objs, err := ebpf.LoadCollectionFromSpec(spec)
 	if err != nil {
 		log.Fatalf("failed to load eBPF collection: %v", err)
 	}
 	defer objs.Close()
 
+	// Получаем карту для перф событий
+	traceEventsMap := objs.Maps["trace_events"]
+
 	// Создаем новый перф ридер для считывания событий
 	buffLen := 4096 // Размер буфера
-	rd, err := perf.NewReader(objs, buffLen)
+	rd, err := perf.NewReader(traceEventsMap, buffLen)
 	if err != nil {
 		log.Fatalf("opening ringbuf reader: %s", err)
 	}
@@ -101,13 +104,13 @@ func main() {
 
 		// Преобразуем полученные байты в структуру TraceInfo
 		var info TraceInfo
-		// Чтение и копирование данных из record в структуру
-		copy(info.Comm[:], record.Raw[:16]) // Копируем имя процесса в структуру
-		info.Pid = uint32(record.Raw[16])   // Парсим PID
-		info.SrcIP = uint32(record.Raw[20]) // Парсим SrcIP
-		info.DstIP = uint32(record.Raw[24]) // Парсим DstIP
-		info.Sport = uint16(record.Raw[28]) // Парсим Source Port
-		info.Dport = uint16(record.Raw[30]) // Парсим Destination Port
+		data := record.Data() // Получаем данные из записи
+		copy(info.Comm[:], data[:16]) // Копируем имя процесса в структуру
+		info.Pid = uint32(data[16])   // Парсим PID
+		info.SrcIP = uint32(data[20]) // Парсим SrcIP
+		info.DstIP = uint32(data[24]) // Парсим DstIP
+		info.Sport = uint16(data[28]) // Парсим Source Port
+		info.Dport = uint16(data[30]) // Парсим Destination Port
 
 		// Выводим полученные данные
 		fmt.Printf("Received event: PID=%d, Comm=%s, SrcIP=%d.%d.%d.%d, DstIP=%d.%d.%d.%d, Sport=%d, Dport=%d\n",
@@ -118,71 +121,3 @@ func main() {
 			info.Sport, info.Dport)
 	}
 }
-
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "IncompatibleAssign",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "IncompatibleAssign"
-		}
-	},
-	"severity": 8,
-	"message": "cannot use spec (variable of type *ebpf.CollectionSpec) as string value in argument to ebpf.LoadCollection",
-	"source": "compiler",
-	"startLineNumber": 43,
-	"startColumn": 35,
-	"endLineNumber": 43,
-	"endColumn": 39
-}]
-
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "IncompatibleAssign",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "IncompatibleAssign"
-		}
-	},
-	"severity": 8,
-	"message": "cannot use objs (variable of type *ebpf.Collection) as *ebpf.Map value in argument to perf.NewReader",
-	"source": "compiler",
-	"startLineNumber": 51,
-	"startColumn": 28,
-	"endLineNumber": 51,
-	"endColumn": 32
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingFieldOrMethod",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingFieldOrMethod"
-		}
-	},
-	"severity": 8,
-	"message": "record.Raw undefined (type *perf.Record has no field or method Raw)",
-	"source": "compiler",
-	"startLineNumber": 76,
-	"startColumn": 29,
-	"endLineNumber": 76,
-	"endColumn": 32
-}]
