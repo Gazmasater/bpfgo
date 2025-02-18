@@ -118,3 +118,11 @@ func main() {
 			info.Sport, info.Dport)
 	}
 }
+
+
+
+traceEventsMap, exists := objs.Maps["trace_events"]
+	if !exists {
+		log.Fatalf("map 'trace_events' not found in eBPF object")
+	}
+
