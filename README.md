@@ -126,3 +126,15 @@ traceEventsMap, exists := objs.Maps["trace_events"]
 		log.Fatalf("map 'trace_events' not found in eBPF object")
 	}
 
+
+ err := rd.ReadInto(record)
+if err != nil {
+    if errors.Is(err, os.ErrDeadlineExceeded) {
+        fmt.Println("Timeout, no data available")
+        continue
+    }
+    log.Printf("Error reading trace from reader: %v", err)
+    break
+}
+
+
