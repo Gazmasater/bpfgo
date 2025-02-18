@@ -121,3 +121,49 @@ func main() {
 			info.Sport, info.Dport)
 	}
 }
+
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "UndeclaredImportedName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredImportedName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: ebpf.LoadCollectionFromSpec",
+	"source": "compiler",
+	"startLineNumber": 43,
+	"startColumn": 20,
+	"endLineNumber": 43,
+	"endColumn": 42
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "record.Data undefined (type *perf.Record has no field or method Data)",
+	"source": "compiler",
+	"startLineNumber": 78,
+	"startColumn": 18,
+	"endLineNumber": 78,
+	"endColumn": 22
+}]
+
