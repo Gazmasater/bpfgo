@@ -34,6 +34,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
@@ -55,15 +56,17 @@ func main() {
 		log.Fatalf("failed to remove memlock: %v", err)
 	}
 
-	// Открываем файл eBPF объекта
-	file, err := os.Open("your_bpf_object.o")
+	// Получаем текущую рабочую директорию
+	wd, err := os.Getwd()
 	if err != nil {
-		log.Fatalf("failed to open eBPF object file: %v", err)
+		log.Fatalf("failed to get current working directory: %v", err)
 	}
-	defer file.Close()
 
-	// Загружаем коллекцию eBPF из файла
-	objs, err := ebpf.LoadCollection("your_bpf_object.o")
+	// Строим путь к файлу eBPF объекта относительно текущей директории
+	eBpfFilePath := filepath.Join(wd, "generated", "bpf_x86_bpfel.o")
+
+	// Загружаем коллекцию eBPF напрямую из файла
+	objs, err := ebpf.LoadCollection(eBpfFilePath)
 	if err != nil {
 		log.Fatalf("failed to load eBPF collection: %v", err)
 	}
@@ -98,7 +101,7 @@ func main() {
 
 		// Преобразуем полученные байты в структуру TraceInfo
 		var info TraceInfo
-		data := record.RawSample // Получаем сырые данные из записи
+		data := record.RawSample      // Получаем сырые данные из записи
 		copy(info.Comm[:], data[:16]) // Копируем имя процесса в структуру
 		info.Pid = uint32(data[16])   // Парсим PID
 		info.SrcIP = uint32(data[20]) // Парсим SrcIP
