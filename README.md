@@ -30,60 +30,70 @@ which bpf2go
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
-	"unsafe"
+	"os"
 
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/perf"
 	"github.com/cilium/ebpf/rlimit"
 	"golang.org/x/sys/unix"
 )
 
 type TraceInfo struct {
-	Pid    uint32
-	SrcIP  uint32
-	DstIP  uint32
-	Sport  uint16
-	Dport  uint16
-	Comm   [16]byte
+	Pid   uint32
+	SrcIP uint32
+	Sport uint16
+	Comm  [16]byte
 }
 
 func main() {
-	// Поднимаем лимит на количество таблиц, которые можно открыть
+	// Убираем ограничения на количество таблиц, которые можно открыть
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.Fatalf("failed to remove memlock: %v", err)
 	}
 
-	// Открываем eBPF объект, который уже загружен
-	// Предполагаем, что объект eBPF уже загружен и привязан
-	prog, err := ebpf.NewProgramFromReader("your_bpf_object.o") // если уже загружен, можно пропустить этот шаг
+	// Загружаем eBPF объект (предположим, что он уже привязан)
+	objs, err := ebpf.NewObjectsFromReader("your_bpf_object.o")
 	if err != nil {
 		log.Fatalf("failed to load eBPF program: %v", err)
 	}
-	defer prog.Close()
+	defer objs.Close()
 
-	// Читаем данные через perf_event
-	// Создаем структуру для чтения данных
-	event := make([]byte, unsafe.Sizeof(TraceInfo{}))
+	// Создаем новый перф ридер для считывания событий
+	buffLen := 4096 // Размер буфера
+	rd, err := perf.NewReader(objs, buffLen)
+	if err != nil {
+		log.Fatalf("opening ringbuf reader: %s", err)
+	}
+	defer rd.Close()
 
-	// Ожидаем и обрабатываем события
+	// Создаем перф рекорд для чтения данных
+	record := new(perf.Record)
+
+	// Цикл чтения перф событий
 	for {
-		// Ожидаем события от perf_event
-		// Здесь мы указываем PID или что-то другое для определения событий
-		// Ожидаем данные от программы через perf_event
-		err := unix.PerfRead(0, event) // Это заглушка для получения данных, замените на правильную логику для perf_event
+		err := rd.ReadInto(record)
 		if err != nil {
-			log.Fatalf("failed to read event: %v", err)
+			if errors.Is(err, os.ErrDeadlineExceeded) {
+				// Пропускаем, если произошло превышение времени ожидания
+				continue
+			}
+			// Обработка ошибок чтения
+			e := errors.WithMessage(err, "reading trace from reader")
+			log.Println(e)
+			break
 		}
 
-		// Преобразуем байты в структуру TraceInfo
+		// Преобразуем полученные байты в структуру TraceInfo
 		var info TraceInfo
-		// Преобразуем байты в структуру
-		// Это важно, чтобы корректно обработать структуру и не потерять данные
-		copy(info.Comm[:], event[:16]) // Пример копирования в строку для comm, с учетом размера
-		info.Pid = uint32(event[16]) // Пример парсинга других данных, нужно указать правильный порядок байтов
+		copy(info.Comm[:], record.Raw[:16]) // Копируем имя процесса в структуру
+		info.Pid = uint32(record.Raw[16])   // Парсим PID
+		info.SrcIP = uint32(record.Raw[20]) // Парсим SrcIP
+		info.Sport = uint16(record.Raw[24]) // Парсим Source Port
 
-		// Печатаем информацию о событии
+		// Выводим полученные данные
 		fmt.Printf("Received event: PID=%d, Comm=%s, SrcIP=%d.%d.%d.%d, Sport=%d\n",
 			info.Pid,
 			info.Comm,
