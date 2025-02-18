@@ -38,13 +38,14 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
 	"github.com/cilium/ebpf/rlimit"
-	"golang.org/x/sys/unix"
 )
 
 type TraceInfo struct {
 	Pid   uint32
 	SrcIP uint32
+	DstIP uint32
 	Sport uint16
+	Dport uint16
 	Comm  [16]byte
 }
 
@@ -54,8 +55,8 @@ func main() {
 		log.Fatalf("failed to remove memlock: %v", err)
 	}
 
-	// Загружаем eBPF объект (предположим, что он уже привязан)
-	objs, err := ebpf.NewObjectsFromReader("your_bpf_object.o")
+	// Загружаем eBPF объект из файла (ваш .o файл)
+	objs, err := ebpf.LoadCollectionFromFile("your_bpf_object.o")
 	if err != nil {
 		log.Fatalf("failed to load eBPF program: %v", err)
 	}
@@ -81,23 +82,26 @@ func main() {
 				continue
 			}
 			// Обработка ошибок чтения
-			e := errors.WithMessage(err, "reading trace from reader")
-			log.Println(e)
+			log.Printf("Error reading trace from reader: %v", err)
 			break
 		}
 
 		// Преобразуем полученные байты в структуру TraceInfo
 		var info TraceInfo
+		// Чтение и копирование данных из record в структуру
 		copy(info.Comm[:], record.Raw[:16]) // Копируем имя процесса в структуру
 		info.Pid = uint32(record.Raw[16])   // Парсим PID
 		info.SrcIP = uint32(record.Raw[20]) // Парсим SrcIP
-		info.Sport = uint16(record.Raw[24]) // Парсим Source Port
+		info.DstIP = uint32(record.Raw[24]) // Парсим DstIP
+		info.Sport = uint16(record.Raw[28]) // Парсим Source Port
+		info.Dport = uint16(record.Raw[30]) // Парсим Destination Port
 
 		// Выводим полученные данные
-		fmt.Printf("Received event: PID=%d, Comm=%s, SrcIP=%d.%d.%d.%d, Sport=%d\n",
+		fmt.Printf("Received event: PID=%d, Comm=%s, SrcIP=%d.%d.%d.%d, DstIP=%d.%d.%d.%d, Sport=%d, Dport=%d\n",
 			info.Pid,
 			info.Comm,
 			(info.SrcIP>>24)&0xFF, (info.SrcIP>>16)&0xFF, (info.SrcIP>>8)&0xFF, info.SrcIP&0xFF,
-			info.Sport)
+			(info.DstIP>>24)&0xFF, (info.DstIP>>16)&0xFF, (info.DstIP>>8)&0xFF, info.DstIP&0xFF,
+			info.Sport, info.Dport)
 	}
 }
