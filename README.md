@@ -138,3 +138,21 @@ Loop:
 			info.Sport, info.Dport)
 	}
 }
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./perf
+[sudo] password for gaz358: 
+Loading eBPF object...
+Loaded eBPF collection:
+Map: conn_info_map
+Map type: Hash
+Map: trace_events
+Map type: PerfEventArray
+Map: .bss
+Map type: Array
+Map: .rodata
+Map type: Array
+Map: addr_map
+Map type: Hash
+Map 'trace_events' found
+Start reading events from trace_events map
+Waiting for event...
