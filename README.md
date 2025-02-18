@@ -128,3 +128,28 @@ func main() {
 			info.Sport, info.Dport)
 	}
 }
+
+
+
+// Загружаем коллекцию eBPF напрямую из файла
+fmt.Println("Loading eBPF object...")
+objs, err := ebpf.LoadCollection(eBpfFilePath)
+if err != nil {
+	log.Fatalf("failed to load eBPF collection: %v", err)
+}
+defer objs.Close()
+
+// Печатаем содержимое коллекции
+fmt.Println("Loaded eBPF collection:")
+for name, obj := range objs.Maps {
+	fmt.Printf("Map: %s\n", name)
+	fmt.Printf("Map type: %v\n", obj.Type())
+}
+
+// Получаем карту для перф событий
+traceEventsMap, exists := objs.Maps["trace_events"]
+if !exists {
+	log.Fatalf("map 'trace_events' not found in eBPF object")
+}
+fmt.Println("Map 'trace_events' found")
+
