@@ -1,106 +1,68 @@
 package main
 
 import (
-	"errors"
-	"fmt"
 	"log"
 	"os"
-	"path/filepath"
+	"os/signal"
+	"syscall"
+
+	"bpfgo/generated"
 
 	"github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/perf"
+	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/rlimit"
 )
 
-type TraceInfo struct {
-	Pid   uint32
-	SrcIP uint32
-	DstIP uint32
-	Sport uint16
-	Dport uint16
-	Comm  [16]byte
+// Определяем структуру для хранения объектов
+type bpfObjects struct {
+	SendtoEnter *ebpf.Program `ebpf:"trace_sendto_enter"`
+	SendtoExit  *ebpf.Program `ebpf:"trace_sendto_exit"`
 }
 
 func main() {
-	// Убираем ограничения на количество таблиц, которые можно открыть
+	// Увеличиваем лимит на количество блокировок памяти для загрузки eBPF-программы
 	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatalf("failed to remove memlock: %v", err)
+		log.Fatalf("Не удалось снять ограничение на блокировку памяти: %v", err)
 	}
 
-	// Получаем текущую рабочую директорию
-	wd, err := os.Getwd()
-	if err != nil {
-		log.Fatalf("failed to get current working directory: %v", err)
-	}
-
-	// Строим путь к файлу eBPF объекта относительно текущей директории
-	eBpfFilePath := filepath.Join(wd, "generated", "bpf_x86_bpfel.o")
-
-	// Загружаем коллекцию eBPF напрямую из файла
-	fmt.Println("Loading eBPF object...")
-	objs, err := ebpf.LoadCollection(eBpfFilePath)
-	if err != nil {
-		log.Fatalf("failed to load eBPF collection: %v", err)
+	// Загружаем eBPF-объектный файл в структуру bpfObjects
+	var objs bpfObjects
+	if err := generated.LoadBpfObjects(&objs, nil); err != nil {
+		log.Fatalf("Не удалось загрузить eBPF-объекты: %v", err)
 	}
 	defer objs.Close()
 
-	fmt.Println("Loaded eBPF collection:")
-	for name, obj := range objs.Maps {
-		fmt.Printf("Map: %s\n", name)
-		fmt.Printf("Map type: %v\n", obj.Type())
-	}
-
-	// Получаем карту для перф событий
-	traceEventsMap, exists := objs.Maps["trace_events"]
-	if !exists {
-		log.Fatalf("map 'trace_events' not found in eBPF object")
-	}
-	fmt.Println("Map 'trace_events' found")
-
-	// Создаем новый перф ридер для считывания событий
-	buffLen := 40960 // Размер буфера
-	rd, err := perf.NewReader(traceEventsMap, buffLen)
+	// Прикрепляем программы к соответствующим tracepoint'ам
+	sendtoEnterLink, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.SendtoEnter, nil)
 	if err != nil {
-		log.Fatalf("opening ringbuf reader: %s", err)
+		log.Fatalf("Не удалось прикрепить trace_sendto_enter: %v", err)
 	}
-	defer rd.Close()
-	// Создаем перф рекорд для чтения данных
-	record := new(perf.Record)
+	defer sendtoEnterLink.Close()
 
-	// Цикл чтения перф событий
-	fmt.Println("Start reading events from trace_events map")
-	for {
-		// Отладочный вывод
-		fmt.Println("Waiting for event...")
-		err := rd.ReadInto(record)
-		if err != nil {
-			if errors.Is(err, os.ErrDeadlineExceeded) {
-				// Время ожидания истекло
-				fmt.Println("Timeout, no data available")
-				continue
-			}
-			log.Printf("Error reading trace from reader: %v", err)
-			break
-		}
-		// Успешно прочитано событие
-		fmt.Println("Event read successfully!")
+	sendtoExitLink, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.SendtoExit, nil)
+	if err != nil {
+		log.Fatalf("Не удалось прикрепить trace_sendto_exit: %v", err)
+	}
+	defer sendtoExitLink.Close()
 
-		// Преобразуем полученные байты в структуру
-		var info TraceInfo
-		data := record.RawSample
-		copy(info.Comm[:], data[:16]) // Копируем имя процесса в структуру
-		info.Pid = uint32(data[16])   // Парсим PID
-		info.SrcIP = uint32(data[20]) // Парсим SrcIP
-		info.DstIP = uint32(data[24]) // Парсим DstIP
-		info.Sport = uint16(data[28]) // Парсим Source Port
-		info.Dport = uint16(data[30]) // Парсим Destination Port
+	log.Println("eBPF-программы успешно загружены и прикреплены.")
 
-		// Выводим полученные данные
-		fmt.Printf("Received event: PID=%d, Comm=%s, SrcIP=%d.%d.%d.%d, DstIP=%d.%d.%d.%d, Sport=%d, Dport=%d\n",
-			info.Pid,
-			info.Comm,
-			(info.SrcIP>>24)&0xFF, (info.SrcIP>>16)&0xFF, (info.SrcIP>>8)&0xFF, info.SrcIP&0xFF,
-			(info.DstIP>>24)&0xFF, (info.DstIP>>16)&0xFF, (info.DstIP>>8)&0xFF, info.DstIP&0xFF,
-			info.Sport, info.Dport)
+	// Ожидаем сигнала завершения (Ctrl+C)
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	<-sig
+
+	log.Println("Завершение работы.")
+}
+
+// loadBpfObjects загружает все объекты eBPF в переданную структуру
+
+// Close закрывает все ресурсы, связанные с объектами eBPF
+func (objs *bpfObjects) Close() {
+	if objs.SendtoEnter != nil {
+		objs.SendtoEnter.Close()
+	}
+	if objs.SendtoExit != nil {
+		objs.SendtoExit.Close()
 	}
 }

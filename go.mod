@@ -1,4 +1,4 @@
-module perf
+module BPFGO
 
 go 1.24.0
 
