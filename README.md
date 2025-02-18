@@ -23,133 +23,94 @@ go get github.com/cilium/ebpf/cmd/bpf2go
 
 which bpf2go
 
-
 package main
 
 import (
-	"errors"
-	"fmt"
 	"log"
 	"os"
-	"path/filepath"
+	"os/signal"
+	"syscall"
 
 	"github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/perf"
+	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/rlimit"
+	"github.com/generated"
 )
 
-type TraceInfo struct {
-	Pid   uint32
-	SrcIP uint32
-	DstIP uint32
-	Sport uint16
-	Dport uint16
-	Comm  [16]byte
+// Определяем структуру для хранения объектов
+type bpfObjects struct {
+	SendtoEnter *ebpf.Program `ebpf:"trace_sendto_enter"`
+	SendtoExit  *ebpf.Program `ebpf:"trace_sendto_exit"`
 }
 
 func main() {
-	// Убираем ограничения на количество таблиц, которые можно открыть
+	// Увеличиваем лимит на количество блокировок памяти для загрузки eBPF-программы
 	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatalf("failed to remove memlock: %v", err)
+		log.Fatalf("Не удалось снять ограничение на блокировку памяти: %v", err)
 	}
 
-	// Получаем текущую рабочую директорию
-	wd, err := os.Getwd()
-	if err != nil {
-		log.Fatalf("failed to get current working directory: %v", err)
-	}
-
-	// Строим путь к файлу eBPF объекта относительно текущей директории
-	eBpfFilePath := filepath.Join(wd, "generated", "bpf_x86_bpfel.o")
-
-	// Загружаем коллекцию eBPF напрямую из файла
-	fmt.Println("Loading eBPF object...")
-	objs, err := ebpf.LoadCollection(eBpfFilePath)
-	if err != nil {
-		log.Fatalf("failed to load eBPF collection: %v", err)
+	// Загружаем eBPF-объектный файл в структуру bpfObjects
+	var objs bpfObjects
+	if err := generated.LoadBpfObjects(&objs, nil); err != nil {
+		log.Fatalf("Не удалось загрузить eBPF-объекты: %v", err)
 	}
 	defer objs.Close()
 
-	fmt.Println("Loaded eBPF collection:")
-	for name, obj := range objs.Maps {
-		fmt.Printf("Map: %s\n", name)
-		fmt.Printf("Map type: %v\n", obj.Type())
-	}
-
-	// Получаем карту для перф событий
-	traceEventsMap, exists := objs.Maps["trace_events"]
-	if !exists {
-		log.Fatalf("map 'trace_events' not found in eBPF object")
-	}
-	fmt.Println("Map 'trace_events' found")
-
-	// Создаем новый перф ридер для считывания событий
-	buffLen := 40960 // Размер буфера
-	rd, err := perf.NewReader(traceEventsMap, buffLen)
+	// Прикрепляем программы к соответствующим tracepoint'ам
+	sendtoEnterLink, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.SendtoEnter, nil)
 	if err != nil {
-		log.Fatalf("opening ringbuf reader: %s", err)
+		log.Fatalf("Не удалось прикрепить trace_sendto_enter: %v", err)
 	}
-	defer rd.Close()
+	defer sendtoEnterLink.Close()
 
-	// Создаем перф рекорд для чтения данных
-	record := new(perf.Record)
+	sendtoExitLink, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.SendtoExit, nil)
+	if err != nil {
+		log.Fatalf("Не удалось прикрепить trace_sendto_exit: %v", err)
+	}
+	defer sendtoExitLink.Close()
 
-	// Цикл чтения перф событий
-	fmt.Println("Start reading events from trace_events map")
-Loop:
-	for {
-		// Отладочный вывод
-		fmt.Println("Waiting for event...")
-		err := rd.ReadInto(record)
-		if err != nil {
-			if errors.Is(err, os.ErrDeadlineExceeded) {
-				// Время ожидания истекло
-				fmt.Println("Timeout, no data available")
-				continue
-			}
-			// Добавляем контекст к ошибке и переходим к следующей итерации
-			e := errors.WithMessage(err, "reading trace from reader")
-			log.Printf("Error: %v", e)
-			continue // Переходим к следующему циклу
-		}
+	log.Println("eBPF-программы успешно загружены и прикреплены.")
 
-		// Успешно прочитано событие
-		fmt.Println("Event read successfully!")
+	// Ожидаем сигнала завершения (Ctrl+C)
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	<-sig
 
-		// Преобразуем полученные байты в структуру
-		var info TraceInfo
-		data := record.RawSample
-		copy(info.Comm[:], data[:16]) // Копируем имя процесса в структуру
-		info.Pid = uint32(data[16])   // Парсим PID
-		info.SrcIP = uint32(data[20]) // Парсим SrcIP
-		info.DstIP = uint32(data[24]) // Парсим DstIP
-		info.Sport = uint16(data[28]) // Парсим Source Port
-		info.Dport = uint16(data[30]) // Парсим Destination Port
+	log.Println("Завершение работы.")
+}
 
-		// Выводим полученные данные
-		fmt.Printf("Received event: PID=%d, Comm=%s, SrcIP=%d.%d.%d.%d, DstIP=%d.%d.%d.%d, Sport=%d, Dport=%d\n",
-			info.Pid,
-			info.Comm,
-			(info.SrcIP>>24)&0xFF, (info.SrcIP>>16)&0xFF, (info.SrcIP>>8)&0xFF, info.SrcIP&0xFF,
-			(info.DstIP>>24)&0xFF, (info.DstIP>>16)&0xFF, (info.DstIP>>8)&0xFF, info.DstIP&0xFF,
-			info.Sport, info.Dport)
+// loadBpfObjects загружает все объекты eBPF в переданную структуру
+
+// Close закрывает все ресурсы, связанные с объектами eBPF
+func (objs *bpfObjects) Close() {
+	if objs.SendtoEnter != nil {
+		objs.SendtoEnter.Close()
+	}
+	if objs.SendtoExit != nil {
+		objs.SendtoExit.Close()
 	}
 }
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./perf
-[sudo] password for gaz358: 
-Loading eBPF object...
-Loaded eBPF collection:
-Map: conn_info_map
-Map type: Hash
-Map: trace_events
-Map type: PerfEventArray
-Map: .bss
-Map type: Array
-Map: .rodata
-Map type: Array
-Map: addr_map
-Map type: Hash
-Map 'trace_events' found
-Start reading events from trace_events map
-Waiting for event...
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "BrokenImport",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "BrokenImport"
+		}
+	},
+	"severity": 8,
+	"message": "could not import github.com/generated (no required module provides package \"github.com/generated\")",
+	"source": "compiler",
+	"startLineNumber": 12,
+	"startColumn": 2,
+	"endLineNumber": 12,
+	"endColumn": 24
+}
+
+
