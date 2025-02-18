@@ -44,6 +44,12 @@ func main() {
 	}
 	defer objs.Close()
 
+	fmt.Println("Loaded eBPF collection:")
+	for name, obj := range objs.Maps {
+		fmt.Printf("Map: %s\n", name)
+		fmt.Printf("Map type: %v\n", obj.Type())
+	}
+
 	// Получаем карту для перф событий
 	traceEventsMap, exists := objs.Maps["trace_events"]
 	if !exists {
@@ -58,7 +64,6 @@ func main() {
 		log.Fatalf("opening ringbuf reader: %s", err)
 	}
 	defer rd.Close()
-
 	// Создаем перф рекорд для чтения данных
 	record := new(perf.Record)
 
