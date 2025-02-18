@@ -4,14 +4,7 @@ bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=loa
 sudo bpftool perf show  trace_events
 sudo bpftool perf list  trace_events
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo bpftool perf show  trace_events
-pid 3536  fd 3: prog_id 58  tracepoint  sys_enter_sendto
-pid 3536  fd 5: prog_id 59  tracepoint  sys_exit_sendto
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo bpftool perf list  trace_events
-pid 3536  fd 3: prog_id 58  tracepoint  sys_enter_sendto
-pid 3536  fd 5: prog_id 59  tracepoint  sys_exit_sendto
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
-
+sudo bpftool map dump id 11
 
 
 
