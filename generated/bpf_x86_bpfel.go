@@ -96,29 +96,29 @@ type bpfVariableSpecs struct {
 // bpfObjects contains all objects after they have been loaded into the kernel.
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
-type bpfObjects struct {
+type BpfObjects struct {
 	bpfPrograms
-	bpfMaps
+	BpfMaps
 	bpfVariables
 }
 
-func (o *bpfObjects) Close() error {
+func (o *BpfObjects) Close() error {
 	return _BpfClose(
 		&o.bpfPrograms,
-		&o.bpfMaps,
+		&o.BpfMaps,
 	)
 }
 
 // bpfMaps contains all maps after they have been loaded into the kernel.
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
-type bpfMaps struct {
+type BpfMaps struct {
 	AddrMap     *ebpf.Map `ebpf:"addr_map"`
 	ConnInfoMap *ebpf.Map `ebpf:"conn_info_map"`
 	TraceEvents *ebpf.Map `ebpf:"trace_events"`
 }
 
-func (m *bpfMaps) Close() error {
+func (m *BpfMaps) Close() error {
 	return _BpfClose(
 		m.AddrMap,
 		m.ConnInfoMap,
