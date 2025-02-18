@@ -62,14 +62,8 @@ func main() {
 	}
 	defer file.Close()
 
-	// Загружаем спецификацию eBPF коллекции из файла
-	spec, err := ebpf.LoadCollectionSpecFromReader(file)
-	if err != nil {
-		log.Fatalf("failed to load eBPF collection spec from reader: %v", err)
-	}
-
-	// Загружаем коллекцию eBPF
-	objs, err := ebpf.LoadCollectionFromSpec(spec)
+	// Загружаем коллекцию eBPF из файла
+	objs, err := ebpf.LoadCollection("your_bpf_object.o")
 	if err != nil {
 		log.Fatalf("failed to load eBPF collection: %v", err)
 	}
@@ -104,7 +98,7 @@ func main() {
 
 		// Преобразуем полученные байты в структуру TraceInfo
 		var info TraceInfo
-		data := record.Data() // Получаем данные из записи
+		data := record.RawSample // Получаем сырые данные из записи
 		copy(info.Comm[:], data[:16]) // Копируем имя процесса в структуру
 		info.Pid = uint32(data[16])   // Парсим PID
 		info.SrcIP = uint32(data[20]) // Парсим SrcIP
@@ -121,49 +115,3 @@ func main() {
 			info.Sport, info.Dport)
 	}
 }
-
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "UndeclaredImportedName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredImportedName"
-		}
-	},
-	"severity": 8,
-	"message": "undefined: ebpf.LoadCollectionFromSpec",
-	"source": "compiler",
-	"startLineNumber": 43,
-	"startColumn": 20,
-	"endLineNumber": 43,
-	"endColumn": 42
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingFieldOrMethod",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingFieldOrMethod"
-		}
-	},
-	"severity": 8,
-	"message": "record.Data undefined (type *perf.Record has no field or method Data)",
-	"source": "compiler",
-	"startLineNumber": 78,
-	"startColumn": 18,
-	"endLineNumber": 78,
-	"endColumn": 22
-}]
-
