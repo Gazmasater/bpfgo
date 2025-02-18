@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"bpfgo/generated"
+	"BPFGO/generated"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -24,7 +24,6 @@ func main() {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.Fatalf("Не удалось снять ограничение на блокировку памяти: %v", err)
 	}
-
 	// Загружаем eBPF-объектный файл в структуру bpfObjects
 	var objs bpfObjects
 	if err := generated.LoadBpfObjects(&objs, nil); err != nil {
