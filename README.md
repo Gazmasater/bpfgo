@@ -55,10 +55,23 @@ func main() {
 		log.Fatalf("failed to remove memlock: %v", err)
 	}
 
-	// Загружаем eBPF объект из файла (ваш .o файл)
-	objs, err := ebpf.LoadCollectionFromFile("your_bpf_object.o")
+	// Открываем файл eBPF объекта
+	file, err := os.Open("your_bpf_object.o")
 	if err != nil {
-		log.Fatalf("failed to load eBPF program: %v", err)
+		log.Fatalf("failed to open eBPF object file: %v", err)
+	}
+	defer file.Close()
+
+	// Загружаем спецификацию eBPF коллекции из файла
+	spec, err := ebpf.LoadCollectionSpecFromReader(file)
+	if err != nil {
+		log.Fatalf("failed to load eBPF collection spec from reader: %v", err)
+	}
+
+	// Загружаем коллекцию eBPF
+	objs, err := ebpf.LoadCollection(spec)
+	if err != nil {
+		log.Fatalf("failed to load eBPF collection: %v", err)
 	}
 	defer objs.Close()
 
@@ -105,9 +118,3 @@ func main() {
 			info.Sport, info.Dport)
 	}
 }
-
-
-
-ebpf.LoadCollectionSpecFromReader()
-	ebpf.LoadCollection()
-	ebpf.LoadCollectionSpec()
