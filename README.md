@@ -66,17 +66,25 @@ func main() {
 	eBpfFilePath := filepath.Join(wd, "generated", "bpf_x86_bpfel.o")
 
 	// Загружаем коллекцию eBPF напрямую из файла
+	fmt.Println("Loading eBPF object...")
 	objs, err := ebpf.LoadCollection(eBpfFilePath)
 	if err != nil {
 		log.Fatalf("failed to load eBPF collection: %v", err)
 	}
 	defer objs.Close()
 
+	fmt.Println("eBPF object loaded successfully")
+
 	// Получаем карту для перф событий
-	traceEventsMap := objs.Maps["trace_events"]
+	traceEventsMap, exists := objs.Maps["trace_events"]
+	if !exists {
+		log.Fatalf("map 'trace_events' not found in eBPF object")
+	} else {
+		fmt.Println("Map 'trace_events' found")
+	}
 
 	// Создаем новый перф ридер для считывания событий
-	buffLen := 4096 // Размер буфера
+	buffLen := 8192 // Увеличиваем размер буфера
 	rd, err := perf.NewReader(traceEventsMap, buffLen)
 	if err != nil {
 		log.Fatalf("opening ringbuf reader: %s", err)
@@ -86,22 +94,26 @@ func main() {
 	// Создаем перф рекорд для чтения данных
 	record := new(perf.Record)
 
+	fmt.Println("Start reading events from trace_events map")
+
 	// Цикл чтения перф событий
 	for {
 		err := rd.ReadInto(record)
 		if err != nil {
 			if errors.Is(err, os.ErrDeadlineExceeded) {
-				// Пропускаем, если произошло превышение времени ожидания
+				fmt.Println("Timeout, no data available")
 				continue
 			}
-			// Обработка ошибок чтения
 			log.Printf("Error reading trace from reader: %v", err)
 			break
 		}
 
+		// Логируем полученные сырые данные
+		data := record.RawSample
+		fmt.Printf("Raw event data: %v\n", data)
+
 		// Преобразуем полученные байты в структуру TraceInfo
 		var info TraceInfo
-		data := record.RawSample      // Получаем сырые данные из записи
 		copy(info.Comm[:], data[:16]) // Копируем имя процесса в структуру
 		info.Pid = uint32(data[16])   // Парсим PID
 		info.SrcIP = uint32(data[20]) // Парсим SrcIP
@@ -118,23 +130,3 @@ func main() {
 			info.Sport, info.Dport)
 	}
 }
-
-
-
-traceEventsMap, exists := objs.Maps["trace_events"]
-	if !exists {
-		log.Fatalf("map 'trace_events' not found in eBPF object")
-	}
-
-
- err := rd.ReadInto(record)
-if err != nil {
-    if errors.Is(err, os.ErrDeadlineExceeded) {
-        fmt.Println("Timeout, no data available")
-        continue
-    }
-    log.Printf("Error reading trace from reader: %v", err)
-    break
-}
-
-
