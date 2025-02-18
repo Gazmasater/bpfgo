@@ -190,9 +190,10 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
         bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-                   conn_info->pid, conn_info->comm,
-                   (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
-                   (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
+                   info.pid, info.comm,
+                   (info.src_ip >> 24) & 0xFF, (info.src_ip  >> 16) & 0xFF,
+                   (info.src_ip >> 8) & 0xFF, info.src_ip  & 0xFF, info.sport);
+
     }
 
     bpf_map_update_elem(&conn_info_map, &pid, conn_info, BPF_ANY);
