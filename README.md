@@ -23,93 +23,13 @@ go get github.com/cilium/ebpf/cmd/bpf2go
 
 which bpf2go
 
-package main
 
-import (
-	"log"
-	"os"
-	"os/signal"
-	"syscall"
 
-	"bpfgo/generated"
-
-	"github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/link"
-	"github.com/cilium/ebpf/rlimit"
-)
-
-// Определяем структуру для хранения объектов
-type bpfObjects struct {
-	SendtoEnter *ebpf.Program `ebpf:"trace_sendto_enter"`
-	SendtoExit  *ebpf.Program `ebpf:"trace_sendto_exit"`
-}
-
-func main() {
-	// Увеличиваем лимит на количество блокировок памяти для загрузки eBPF-программы
-	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatalf("Не удалось снять ограничение на блокировку памяти: %v", err)
-	}
-
-	// Загружаем eBPF-объектный файл в структуру bpfObjects
-	var objs bpfObjects
-	if err := generated.LoadBpfObjects(&objs, nil); err != nil {
-		log.Fatalf("Не удалось загрузить eBPF-объекты: %v", err)
-	}
-	defer objs.Close()
-
-	// Прикрепляем программы к соответствующим tracepoint'ам
-	sendtoEnterLink, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.SendtoEnter, nil)
+	// Получаем текущую рабочую директорию
+	wd, err := os.Getwd()
 	if err != nil {
-		log.Fatalf("Не удалось прикрепить trace_sendto_enter: %v", err)
+		log.Fatalf("failed to get current working directory: %v", err)
 	}
-	defer sendtoEnterLink.Close()
 
-	sendtoExitLink, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.SendtoExit, nil)
-	if err != nil {
-		log.Fatalf("Не удалось прикрепить trace_sendto_exit: %v", err)
-	}
-	defer sendtoExitLink.Close()
-
-	log.Println("eBPF-программы успешно загружены и прикреплены.")
-
-	// Ожидаем сигнала завершения (Ctrl+C)
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	<-sig
-
-	log.Println("Завершение работы.")
-}
-
-// loadBpfObjects загружает все объекты eBPF в переданную структуру
-
-// Close закрывает все ресурсы, связанные с объектами eBPF
-func (objs *bpfObjects) Close() {
-	if objs.SendtoEnter != nil {
-		objs.SendtoEnter.Close()
-	}
-	if objs.SendtoExit != nil {
-		objs.SendtoExit.Close()
-	}
-}
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "UndeclaredImportedName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredImportedName"
-		}
-	},
-	"severity": 8,
-	"message": "undefined: generated.LoadBpfObjects",
-	"source": "compiler",
-	"startLineNumber": 30,
-	"startColumn": 22,
-	"endLineNumber": 30,
-	"endColumn": 36
-}]
+	// Строим путь к файлу eBPF объекта относительно текущей директории
+	eBpfFilePath := filepath.Join(wd, "generated", "bpf_x86_bpfel.o")
