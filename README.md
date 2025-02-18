@@ -73,18 +73,15 @@ func main() {
 	}
 	defer objs.Close()
 
-	fmt.Println("eBPF object loaded successfully")
-
 	// Получаем карту для перф событий
 	traceEventsMap, exists := objs.Maps["trace_events"]
 	if !exists {
 		log.Fatalf("map 'trace_events' not found in eBPF object")
-	} else {
-		fmt.Println("Map 'trace_events' found")
 	}
+	fmt.Println("Map 'trace_events' found")
 
 	// Создаем новый перф ридер для считывания событий
-	buffLen := 8192 // Увеличиваем размер буфера
+	buffLen := 4096 // Размер буфера
 	rd, err := perf.NewReader(traceEventsMap, buffLen)
 	if err != nil {
 		log.Fatalf("opening ringbuf reader: %s", err)
@@ -94,26 +91,27 @@ func main() {
 	// Создаем перф рекорд для чтения данных
 	record := new(perf.Record)
 
-	fmt.Println("Start reading events from trace_events map")
-
 	// Цикл чтения перф событий
+	fmt.Println("Start reading events from trace_events map")
 	for {
+		// Отладочный вывод
+		fmt.Println("Waiting for event...")
 		err := rd.ReadInto(record)
 		if err != nil {
 			if errors.Is(err, os.ErrDeadlineExceeded) {
+				// Время ожидания истекло
 				fmt.Println("Timeout, no data available")
 				continue
 			}
 			log.Printf("Error reading trace from reader: %v", err)
 			break
 		}
+		// Успешно прочитано событие
+		fmt.Println("Event read successfully!")
 
-		// Логируем полученные сырые данные
-		data := record.RawSample
-		fmt.Printf("Raw event data: %v\n", data)
-
-		// Преобразуем полученные байты в структуру TraceInfo
+		// Преобразуем полученные байты в структуру
 		var info TraceInfo
+		data := record.RawSample
 		copy(info.Comm[:], data[:16]) // Копируем имя процесса в структуру
 		info.Pid = uint32(data[16])   // Парсим PID
 		info.SrcIP = uint32(data[20]) // Парсим SrcIP
@@ -130,11 +128,3 @@ func main() {
 			info.Sport, info.Dport)
 	}
 }
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./perf
-Loading eBPF object...
-eBPF object loaded successfully
-Map 'trace_events' found
-Start reading events from trace_events map
-
