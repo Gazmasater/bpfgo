@@ -44,7 +44,10 @@ func main() {
 	defer objs.Close()
 
 	// Получаем карту для перф событий
-	traceEventsMap := objs.Maps["trace_events"]
+	traceEventsMap, exists := objs.Maps["trace_events"]
+	if !exists {
+		log.Fatalf("map 'trace_events' not found in eBPF object")
+	}
 
 	// Создаем новый перф ридер для считывания событий
 	buffLen := 4096 // Размер буфера
@@ -62,14 +65,12 @@ func main() {
 		err := rd.ReadInto(record)
 		if err != nil {
 			if errors.Is(err, os.ErrDeadlineExceeded) {
-				// Пропускаем, если произошло превышение времени ожидания
+				fmt.Println("Timeout, no data available")
 				continue
 			}
-			// Обработка ошибок чтения
 			log.Printf("Error reading trace from reader: %v", err)
 			break
 		}
-
 		// Преобразуем полученные байты в структуру TraceInfo
 		var info TraceInfo
 		data := record.RawSample      // Получаем сырые данные из записи
