@@ -27,4 +27,8 @@ go get github.com/cilium/ebpf/cmd/bpf2go
 
 which bpf2go
 
-sudo bpftool prog show --json
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo bpftool link show
+[sudo] password for gaz358: 
+1: tracing  prog 2  
+        prog_type tracing  attach_type modify_return  
+        target_obj_id 1  target_btf_id 94901  
