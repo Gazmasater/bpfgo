@@ -27,94 +27,39 @@ go get github.com/cilium/ebpf/cmd/bpf2go
 
 which bpf2go
 
-
-
-package main
-
-import (
-	"fmt"
-	"log"
-	"github.com/pkg/errors"
-)
-
-type bpfObjects struct {
-	Programs map[string]*ebpf.Program
-	Maps     map[string]*ebpf.Map
-}
-
-func init() {
-	// Снимаем ограничение на память
-	if err := rlimit.RemoveMemlock(); err != nil {
-		panic(errors.WithMessage(err, "failed to remove memory limit for process"))
-	}
-
-	// Инициализируем объекты eBPF
-	objs := bpfObjects{}
-	if err := loadBpfObjects(&objs, loadOpts); err != nil {
-		panic(errors.WithMessage(err, "failed to load bpf objects"))
-	}
-
-	// Печатаем все программы из коллекции
-	fmt.Println("Loaded eBPF collection programs:")
-	for name, program := range objs.Programs {
-		fmt.Printf("Program: %s, Type: %v\n", name, program.Type())
-	}
-}
-
-func main() {
-	// Основная логика программы
-	// init() уже выполнена, и eBPF объекты были загружены и напечатаны.
-	fmt.Println("Main function started.")
-}
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/PerfEvents$ sudo ./PerfEvents
-[sudo] password for gaz358: 
-2025/02/19 19:56:48 opening tracepoint sys_enter_sendto: prog cannot be nil: invalid input
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/PerfEvents$ 
-
-
-func init() {
-	var loadOpts = &ebpf.CollectionOptions{}
-
-	// Снимаем ограничение на память
-	if err := rlimit.RemoveMemlock(); err != nil {
-		panic(errors.WithMessage(err, "failed to remove memory limit for process"))
-	}
-
-	// Инициализируем объекты eBPF
-	objs := bpfObjects{}
-	if err := gener.LoadBpfObjects(&objs, loadOpts); err != nil {
-		panic(errors.WithMessage(err, "failed to load bpf objects"))
-	}
-	defer objs.Close()
-
-	// Печатаем все программы из коллекции для диагностики
-	fmt.Println("Loaded eBPF collection programs:")
-	for name, program := range objs.Programs {
-		if program == nil {
-			fmt.Printf("Program %s is nil\n", name)
-		} else {
-			fmt.Printf("Program: %s, Type: %v\n", name, program.Type())
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/PerfEvents/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "UndeclaredName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredName"
 		}
-	}
+	},
+	"severity": 8,
+	"message": "undefined: program",
+	"source": "compiler",
+	"startLineNumber": 34,
+	"startColumn": 66,
+	"endLineNumber": 34,
+	"endColumn": 73
+}]
 
-	// Убедимся, что программа `trace_sendto_enter` загружена
-	program, exists := objs.Programs["trace_sendto_enter"]
-	if !exists {
-		log.Fatalf("Program trace_sendto_enter not found in collection")
-	}
-
-	// Привязываем программу к tracepoint
-	kpEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", program, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
-	}
-	defer kpEnter.Close()
-
-	// Печатаем сообщение о привязке
-	fmt.Println("Successfully attached to tracepoint sys_enter_sendto.")
-}
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/PerfEvents/main.go",
+	"owner": "go-staticcheck",
+	"severity": 4,
+	"message": "undefined: gener.BpfObjects",
+	"source": "go-staticcheck",
+	"startLineNumber": 28,
+	"startColumn": 16,
+	"endLineNumber": 28,
+	"endColumn": 28
+}]
 
 
 
