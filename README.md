@@ -27,14 +27,8 @@ go get github.com/cilium/ebpf/cmd/bpf2go
 
 which bpf2go
 
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/PerfEvents/main.go",
-	"owner": "go-staticcheck",
-	"severity": 4,
-	"message": "undefined: gener.BpfObjects (compile)",
-	"source": "go-staticcheck",
-	"startLineNumber": 28,
-	"startColumn": 16,
-	"endLineNumber": 28,
-	"endColumn": 28
-}]
+objs := gener.BpfObjects{
+    bpfPrograms: gener.bpfPrograms{},  // Инициализация пустой структуры
+    bpfMaps:     gener.bpfMaps{},      // Инициализация пустой структуры
+    bpfVariables: gener.bpfVariables{}, // Инициализация пустой структуры
+}
