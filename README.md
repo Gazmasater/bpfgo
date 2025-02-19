@@ -27,3 +27,12 @@ go get github.com/cilium/ebpf/cmd/bpf2go
 
 which bpf2go
 
+
+bpf2go -output-dir $(pwd) \
+  -tags linux \
+  -type trace_info \
+  -go-package main \
+  target_amd64_bpf \
+  $(pwd)/trace.c -- -I$(pwd)
+
+
