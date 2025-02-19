@@ -31,7 +31,7 @@ func init() {
 	}
 
 	// Привязываем программу к tracepoint
-	kpEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", program, nil)
+	kpEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
 	if err != nil {
 		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
 	}
