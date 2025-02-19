@@ -74,6 +74,8 @@ var loadOpts = &ebpf.CollectionOptions{
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/PerfEvents$ sudo ./PerfEvents
-Loaded eBPF collection programs:
-Main function started.
+kpEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.Programs["trace_sendto_enter"], nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
+	}
+	defer kpEnter.Close()
