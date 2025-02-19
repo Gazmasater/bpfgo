@@ -66,3 +66,26 @@ func main() {
 	// init() уже выполнена, и eBPF объекты были загружены и напечатаны.
 	fmt.Println("Main function started.")
 }
+
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/PerfEvents/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "UndeclaredName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: loadOpts",
+	"source": "compiler",
+	"startLineNumber": 25,
+	"startColumn": 40,
+	"endLineNumber": 25,
+	"endColumn": 48
+}]
