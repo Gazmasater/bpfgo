@@ -11,11 +11,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// type bpfObjects struct {
-// 	Programs map[string]*ebpf.Program
-// 	Maps     map[string]*ebpf.Map
-// }
-
 func init() {
 	var loadOpts = &ebpf.CollectionOptions{}
 
@@ -25,7 +20,9 @@ func init() {
 	}
 
 	// Инициализируем объекты eBPF
+
 	objs := gener.BpfObjects{}
+
 	if err := gener.LoadBpfObjects(&objs, loadOpts); err != nil {
 		panic(errors.WithMessage(err, "failed to load bpf objects"))
 	}
@@ -37,8 +34,14 @@ func init() {
 	}
 	defer kpEnter.Close()
 
+	kpExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
+	}
+	defer kpExit.Close()
+
 	// Печатаем сообщение о привязке
-	fmt.Println("Successfully attached to tracepoint sys_enter_sendto.")
+	fmt.Println("Successfully attached to tracepoint ")
 }
 
 func main() {
