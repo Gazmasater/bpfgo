@@ -14,7 +14,6 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 )
 
-// Структура события eBPF
 type bpfTraceInfo struct {
 	Pid  uint32
 	Tid  uint32
@@ -88,6 +87,7 @@ func main() {
 			// Приводим прочитанные данные к структуре bpfTraceInfo
 			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
 			fmt.Printf("PID: %d, TID: %d, Comm: %s\n", event.Pid, event.Tid, event.Comm)
+
 		}
 	}()
 
