@@ -74,3 +74,47 @@ gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/PerfEvents$ sudo ./PerfEvents
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/PerfEvents$ 
 
 
+func init() {
+	var loadOpts = &ebpf.CollectionOptions{}
+
+	// Снимаем ограничение на память
+	if err := rlimit.RemoveMemlock(); err != nil {
+		panic(errors.WithMessage(err, "failed to remove memory limit for process"))
+	}
+
+	// Инициализируем объекты eBPF
+	objs := bpfObjects{}
+	if err := gener.LoadBpfObjects(&objs, loadOpts); err != nil {
+		panic(errors.WithMessage(err, "failed to load bpf objects"))
+	}
+	defer objs.Close()
+
+	// Печатаем все программы из коллекции для диагностики
+	fmt.Println("Loaded eBPF collection programs:")
+	for name, program := range objs.Programs {
+		if program == nil {
+			fmt.Printf("Program %s is nil\n", name)
+		} else {
+			fmt.Printf("Program: %s, Type: %v\n", name, program.Type())
+		}
+	}
+
+	// Убедимся, что программа `trace_sendto_enter` загружена
+	program, exists := objs.Programs["trace_sendto_enter"]
+	if !exists {
+		log.Fatalf("Program trace_sendto_enter not found in collection")
+	}
+
+	// Привязываем программу к tracepoint
+	kpEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", program, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
+	}
+	defer kpEnter.Close()
+
+	// Печатаем сообщение о привязке
+	fmt.Println("Successfully attached to tracepoint sys_enter_sendto.")
+}
+
+
+
