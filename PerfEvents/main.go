@@ -34,14 +34,18 @@ func init() {
 	}
 	defer kpEnter.Close()
 
+	fmt.Println(" kpEnter", kpEnter)
+
 	kpExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
 	if err != nil {
 		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
 	}
 	defer kpExit.Close()
 
+	fmt.Println(" kpExit", kpExit)
+
 	// Печатаем сообщение о привязке
-	fmt.Println("Successfully attached to tracepoint ")
+	fmt.Println(" !!!!!")
 }
 
 func main() {
