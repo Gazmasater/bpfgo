@@ -19,7 +19,7 @@ type target_amd64_bpfConnInfoT struct {
 	Addrlen uint32
 	Sport   uint16
 	Dport   uint16
-	Comm    [16]int8
+	Comm    [128]int8
 }
 
 type target_amd64_bpfTraceInfo struct {
@@ -28,7 +28,7 @@ type target_amd64_bpfTraceInfo struct {
 	DstIp uint32
 	Sport uint16
 	Dport uint16
-	Comm  [16]int8
+	Comm  [128]int8
 }
 
 // loadTarget_amd64_bpf returns the embedded CollectionSpec for target_amd64_bpf.

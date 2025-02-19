@@ -15,7 +15,7 @@ struct conn_info_t
     u32 addrlen;
     u16 sport;
     u16 dport;
-    char comm[16];
+    char comm[128];
 };
 
 struct trace_info {
@@ -24,7 +24,7 @@ struct trace_info {
     u32 dst_ip;
     u16 sport;
     u16 dport;
-    char comm[16];
+    char comm[128];
 };
 
 // Размещение переменной с атрибутом unused
