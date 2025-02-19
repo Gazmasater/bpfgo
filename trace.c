@@ -93,7 +93,7 @@ struct
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
     __uint(key_size, sizeof(u32));
     __uint(value_size, sizeof(u32));
-    __uint(max_entries, 512); 
+    __uint(max_entries, 128); 
 } trace_events SEC(".maps");
 
 
@@ -173,7 +173,6 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         return 0;
     }
 
-    bpf_printk("Comm=%s FAMILY=%d", conn_info->comm, addr.sin_family);
 
     if (addr.sin_family == AF_INET) {
         conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);

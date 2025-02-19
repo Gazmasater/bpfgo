@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"bpfgo/generated"
+	gener "bpfgo/generated"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -25,7 +25,7 @@ func main() {
 	}
 
 	var objs bpfObjects
-	if err := generated.LoadBpfObjects(&objs, nil); err != nil {
+	if err := gener.LoadBpfObjects(&objs, nil); err != nil {
 		log.Fatalf("Не удалось загрузить eBPF-объекты: %v", err)
 	}
 	defer objs.Close()
