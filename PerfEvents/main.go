@@ -3,8 +3,10 @@ package main
 import (
 	gener "bpfgo/generated"
 	"fmt"
+	"log"
 
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/pkg/errors"
 )
@@ -15,6 +17,9 @@ type bpfObjects struct {
 }
 
 func init() {
+
+	var loadOpts = &ebpf.CollectionOptions{}
+
 	// Снимаем ограничение на память
 	if err := rlimit.RemoveMemlock(); err != nil {
 		panic(errors.WithMessage(err, "failed to remove memory limit for process"))
@@ -25,6 +30,13 @@ func init() {
 	if err := gener.LoadBpfObjects(&objs, loadOpts); err != nil {
 		panic(errors.WithMessage(err, "failed to load bpf objects"))
 	}
+	defer objs.Close()
+
+	kpEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.Programs["trace_sendto_enter"], nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
+	}
+	defer kpEnter.Close()
 
 	// Печатаем все программы из коллекции
 	fmt.Println("Loaded eBPF collection programs:")
@@ -34,7 +46,6 @@ func init() {
 }
 
 func main() {
-	// Основная логика программы
-	// init() уже выполнена, и eBPF объекты были загружены и напечатаны.
 	fmt.Println("Main function started.")
+
 }
