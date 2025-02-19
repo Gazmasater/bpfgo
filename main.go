@@ -3,6 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/rlimit"
@@ -39,5 +42,11 @@ func main() {
 
 	fmt.Println("kpExit:", kpExit)
 
-	// Оставляем программу запущенной, чтобы eBPF-программы продолжали работать
+	// Ждем SIGINT (Ctrl+C) или SIGTERM
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	fmt.Println("Press Ctrl+C to exit")
+	<-stop
+	fmt.Println("Exiting...")
 }
