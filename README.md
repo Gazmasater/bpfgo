@@ -50,9 +50,10 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 )
 
+// Глобальные объекты BPF
 var objs target_amd64_bpfObjects
 
-func main() {
+func init() {
 	// Снимаем ограничение на память
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.Fatalf("failed to remove memory limit for process: %v", err)
@@ -62,7 +63,10 @@ func main() {
 	if err := loadTarget_amd64_bpfObjects(&objs, nil); err != nil {
 		log.Fatalf("failed to load bpf objects: %v", err)
 	}
-	defer objs.Close()
+}
+
+func main() {
+	defer objs.Close() // Закроем объекты при выходе
 
 	// Привязываем eBPF-программу к tracepoint
 	kpEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
