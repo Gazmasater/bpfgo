@@ -77,12 +77,12 @@ func main() {
 
 		var info TraceInfo
 		data := record.RawSample
-		copy(info.Comm[:], data[:16]) // Копируем имя процесса в структуру
-		info.Pid = uint32(data[16])   // Парсим PID
-		info.SrcIP = uint32(data[20]) // Парсим SrcIP
-		info.DstIP = uint32(data[24]) // Парсим DstIP
-		info.Sport = uint16(data[28]) // Парсим Source Port
-		info.Dport = uint16(data[30]) // Парсим Destination Port
+		copy(info.Comm[:], data[:16])
+		info.Pid = uint32(data[16])
+		info.SrcIP = uint32(data[20])
+		info.DstIP = uint32(data[24])
+		info.Sport = uint16(data[28])
+		info.Dport = uint16(data[30])
 
 		fmt.Printf("Received event: PID=%d, Comm=%s, SrcIP=%d.%d.%d.%d, DstIP=%d.%d.%d.%d, Sport=%d, Dport=%d\n",
 			info.Pid,
