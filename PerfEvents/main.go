@@ -36,7 +36,7 @@ func main() {
 	fmt.Println("Loading eBPF object...")
 	objs, err := ebpf.LoadCollection(eBpfFilePath)
 	if err != nil {
-		log.Fatalf("failed to load eBPF collection: %v", err)
+		panic(fmt.Sprintf("failed to load eBPF collection: %v", err)) // Паника при ошибке загрузки eBPF объекта
 	}
 	defer objs.Close()
 
@@ -48,14 +48,14 @@ func main() {
 
 	traceEventsMap, exists := objs.Maps["trace_events"]
 	if !exists {
-		log.Fatalf("map 'trace_events' not found in eBPF object")
+		panic("map 'trace_events' not found in eBPF object") // Паника, если не найдена карта 'trace_events'
 	}
 	fmt.Println("Map 'trace_events' found")
 
 	buffLen := 40960
 	rd, err := perf.NewReader(traceEventsMap, buffLen)
 	if err != nil {
-		log.Fatalf("opening ringbuf reader: %s", err)
+		panic(fmt.Sprintf("opening ringbuf reader: %s", err)) // Паника при ошибке открытия reader
 	}
 	defer rd.Close()
 	record := new(perf.Record)
@@ -64,13 +64,13 @@ func main() {
 	for {
 		fmt.Println("Waiting for event...")
 		err := rd.ReadInto(record)
+		fmt.Println("!!!!!")
 		if err != nil {
 			if errors.Is(err, os.ErrDeadlineExceeded) {
 				fmt.Println("Timeout, no data available")
 				continue
 			}
-			log.Printf("Error reading trace from reader: %v", err)
-			break
+			panic(fmt.Sprintf("Error reading trace from reader: %v", err)) // Паника при ошибке чтения
 		}
 
 		fmt.Println("Event read successfully!")

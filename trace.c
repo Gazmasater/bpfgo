@@ -18,6 +18,19 @@ struct conn_info_t
     char comm[16];
 };
 
+struct trace_info {
+    u32 pid;
+    u32 src_ip;
+    u32 dst_ip;
+    u16 sport;
+    u16 dport;
+    char comm[16];
+};
+
+// Размещение переменной с атрибутом unused
+const struct trace_info *unused __attribute__((unused));
+
+
 struct sys_enter_sendto_args
 {
     unsigned short common_type;
@@ -96,20 +109,6 @@ struct
     __uint(max_entries, 128); 
 } trace_events SEC(".maps");
 
-
-struct trace_info {
-    u32 pid;
-    u32 src_ip;
-    u32 dst_ip;
-    u16 sport;
-    u16 dport;
-    char comm[16];
-};
-
-// Размещение переменной с атрибутом unused
-const struct trace_info *unused __attribute__((unused));
-
-
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
@@ -121,14 +120,12 @@ int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
-   // conn_info.sock_addr=ctx->addr;
-
    struct sockaddr_in addr;
    if (bpf_probe_read(&addr, sizeof(addr), ctx->addr) != 0) {
        return 0; 
    }
 
-   bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
+    bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
 
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
@@ -178,14 +175,12 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
         conn_info->sport = bpf_ntohs(addr.sin_port);
 
-        // Создаем структуру trace_info для передачи через perf_event_output
         struct trace_info info = {};
         info.pid = conn_info->pid;
         info.src_ip = conn_info->src_ip;
         info.sport = conn_info->sport;
         bpf_probe_read_str(&info.comm, sizeof(info.comm), conn_info->comm);
 
-        // Используем bpf_perf_event_output для отправки данных
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
         bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
