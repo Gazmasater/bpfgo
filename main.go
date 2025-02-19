@@ -10,6 +10,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+var objs = target_amd64_bpfObjects{}
+
 func init() {
 	var loadOpts = &ebpf.CollectionOptions{}
 
@@ -20,9 +22,7 @@ func init() {
 
 	// Инициализируем объекты eBPF
 
-	objs := bpfObjects{}
-
-	if err := loadBpfObjects(&objs, loadOpts); err != nil {
+	if err := loadTarget_amd64_bpfObjects(&objs, loadOpts); err != nil {
 		panic(errors.WithMessage(err, "failed to load bpf objects"))
 	}
 
