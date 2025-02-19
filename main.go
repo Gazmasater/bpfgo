@@ -1,7 +1,6 @@
 package main
 
 import (
-	gener "bpfgo/generated"
 	"fmt"
 	"log"
 
@@ -21,14 +20,18 @@ func init() {
 
 	// Инициализируем объекты eBPF
 
-	objs := gener.BpfObjects{}
+	objs := bpfObjects{}
 
-	if err := gener.LoadBpfObjects(&objs, loadOpts); err != nil {
+	if err := loadBpfObjects(&objs, loadOpts); err != nil {
 		panic(errors.WithMessage(err, "failed to load bpf objects"))
 	}
 
-	// Привязываем программу к tracepoint
+}
+
+func main() {
+
 	kpEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
+
 	if err != nil {
 		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
 	}
@@ -46,9 +49,5 @@ func init() {
 
 	// Печатаем сообщение о привязке
 	fmt.Println(" !!!!!")
-}
-
-func main() {
-	fmt.Println("Main function started.")
 
 }
