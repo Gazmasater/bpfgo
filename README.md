@@ -119,3 +119,18 @@ func main() {
 			event.Sport, event.Dport)
 	}
 }
+
+
+
+objs, err := ebpf.LoadCollection(eBpfFilePath)
+if err != nil {
+    log.Fatalf("failed to load eBPF collection: %v", err)
+}
+defer objs.Close()
+
+// Печатаем имена всех программ в коллекции для проверки
+fmt.Println("Loaded eBPF collection programs:")
+for name, program := range objs.Programs {
+    fmt.Printf("Program: %s, Type: %v\n", name, program.Type())
+}
+
