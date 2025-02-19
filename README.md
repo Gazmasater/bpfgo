@@ -37,118 +37,24 @@ bpf2go -output-dir $(pwd) \
 
 
 
-package main
-
-import (
-	"encoding/binary"
-	"errors"
-	"fmt"
-	"log"
-	"net"
-	"os"
-	"os/signal"
-	"syscall"
-	"unsafe"
-
-	"github.com/cilium/ebpf/link"
-	"github.com/cilium/ebpf/perf"
-	"github.com/cilium/ebpf/rlimit"
-)
-
-// Определяем структуру, соответствующую bpfTraceInfo
-type bpfTraceInfo struct {
-	Pid    uint32
-	SrcIP  uint32
-	DstIP  uint32
-	Sport  uint16
-	Dport  uint16
-	Comm   [128]byte
+SEC("tracepoint/syscalls/sys_enter_recvfrom")
+int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct conn_info_t conn_info = {};
+    conn_info.pid = pid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+    return 0;
 }
 
-// Преобразование IP-адреса из uint32 в строку
-func ipToStr(ip uint32) string {
-	ipBytes := make([]byte, 4)
-	binary.BigEndian.PutUint32(ipBytes, ip)
-	return net.IP(ipBytes).String()
-}
-
-// Глобальные объекты BPF
-var objs target_amd64_bpfObjects
-
-func init() {
-	// Снимаем ограничение на память
-	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatalf("failed to remove memory limit for process: %v", err)
-	}
-
-	// Загружаем eBPF-объекты
-	if err := loadTarget_amd64_bpfObjects(&objs, nil); err != nil {
-		log.Fatalf("failed to load bpf objects: %v", err)
-	}
-}
-
-func main() {
-	defer objs.Close() // Закроем объекты при выходе
-
-	// Привязываем eBPF-программу к tracepoint
-	kpEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
-	}
-	defer kpEnter.Close()
-
-	kpExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_sendto: %s", err)
-	}
-	defer kpExit.Close()
-
-	fmt.Println("kpEnter:", kpEnter)
-	fmt.Println("kpExit:", kpExit)
-
-	// Создаем perf.Reader для чтения событий eBPF
-	const buffLen = 4096
-	rd, err := perf.NewReader(objs.TraceEvents, buffLen)
-	if err != nil {
-		log.Fatalf("failed to create perf reader: %s", err)
-	}
-	defer rd.Close()
-
-	// Канал для завершения работы
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-
-	// Запускаем цикл чтения событий eBPF
-	go func() {
-		for {
-			record := new(perf.Record)
-			err := rd.ReadInto(record)
-			if err != nil {
-				if errors.Is(err, os.ErrDeadlineExceeded) {
-					continue
-				}
-				log.Printf("error reading from perf reader: %v", err)
-				return
-			}
-
-			if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
-				log.Println("invalid event size")
-				continue
-			}
-
-			// Приводим прочитанные данные к структуре bpfTraceInfo
-			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
-
-			// Преобразуем IP и порты
-			srcIP := ipToStr(event.SrcIP)
-			dstIP := ipToStr(event.DstIP)
-
-			fmt.Printf("PID: %d, Comm: %s, SrcIP: %s, SrcPort: %d, DstIP: %s, DstPort: %d\n",
-				event.Pid, event.Comm, srcIP, event.Sport, dstIP, event.Dport)
-		}
-	}()
-
-	fmt.Println("Press Ctrl+C to exit")
-	<-stop
-	fmt.Println("Exiting...")
+SEC("tracepoint/syscalls/sys_exit_recvfrom")
+int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
+    if (conn_info) {
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, conn_info, sizeof(*conn_info));
+        bpf_printk("UDP sys_exit_recvfrom: PID=%d, Comm=%s\n", conn_info->pid, conn_info->comm);
+    }
+    bpf_map_delete_elem(&conn_info_map, &pid);
+    return 0;
 }
