@@ -71,3 +71,9 @@ func main() {
 var loadOpts = &ebpf.CollectionOptions{
 	// По желанию, можно настроить параметры в зависимости от ваших требований
 }
+
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/PerfEvents$ sudo ./PerfEvents
+Loaded eBPF collection programs:
+Main function started.
