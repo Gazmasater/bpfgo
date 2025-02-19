@@ -27,8 +27,4 @@ go get github.com/cilium/ebpf/cmd/bpf2go
 
 which bpf2go
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/PerfEvents$ sudo ./PerfEvents
- kpEnter &{{0xc001ff4a48 } 0xc001744f20}
- kpExit &{{0xc001ff4a80 } 0xc001744f30}
- !!!!!
-Main function started.
+sudo bpftool prog show --json
