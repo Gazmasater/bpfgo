@@ -27,8 +27,46 @@ go get github.com/cilium/ebpf/cmd/bpf2go
 
 which bpf2go
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo bpftool link show
-[sudo] password for gaz358: 
-1: tracing  prog 2  
-        prog_type tracing  attach_type modify_return  
-        target_obj_id 1  target_btf_id 94901  
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "UndeclaredName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: objs",
+	"source": "compiler",
+	"startLineNumber": 33,
+	"startColumn": 66,
+	"endLineNumber": 33,
+	"endColumn": 70
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "UndeclaredName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: objs",
+	"source": "compiler",
+	"startLineNumber": 42,
+	"startColumn": 64,
+	"endLineNumber": 42,
+	"endColumn": 68
+}]
