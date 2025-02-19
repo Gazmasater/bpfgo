@@ -22,21 +22,17 @@ type TraceInfo struct {
 }
 
 func main() {
-	// Убираем ограничения на количество таблиц, которые можно открыть
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.Fatalf("failed to remove memlock: %v", err)
 	}
 
-	// Получаем путь до корня проекта (можно использовать путь до Perf как базу)
 	wd, err := os.Getwd()
 	if err != nil {
 		log.Fatalf("failed to get current working directory: %v", err)
 	}
 
-	// Строим путь к файлу eBPF объекта, начиная с корня проекта
 	eBpfFilePath := filepath.Join(filepath.Dir(wd), "generated", "bpf_x86_bpfel.o")
 
-	// Загружаем коллекцию eBPF напрямую из файла
 	fmt.Println("Loading eBPF object...")
 	objs, err := ebpf.LoadCollection(eBpfFilePath)
 	if err != nil {
@@ -50,42 +46,35 @@ func main() {
 		fmt.Printf("Map type: %v\n", obj.Type())
 	}
 
-	// Получаем карту для перф событий
 	traceEventsMap, exists := objs.Maps["trace_events"]
 	if !exists {
 		log.Fatalf("map 'trace_events' not found in eBPF object")
 	}
 	fmt.Println("Map 'trace_events' found")
 
-	// Создаем новый перф ридер для считывания событий
-	buffLen := 40960 // Размер буфера
+	buffLen := 40960
 	rd, err := perf.NewReader(traceEventsMap, buffLen)
 	if err != nil {
 		log.Fatalf("opening ringbuf reader: %s", err)
 	}
 	defer rd.Close()
-	// Создаем перф рекорд для чтения данных
 	record := new(perf.Record)
 
-	// Цикл чтения перф событий
 	fmt.Println("Start reading events from trace_events map")
 	for {
-		// Отладочный вывод
 		fmt.Println("Waiting for event...")
 		err := rd.ReadInto(record)
 		if err != nil {
 			if errors.Is(err, os.ErrDeadlineExceeded) {
-				// Время ожидания истекло
 				fmt.Println("Timeout, no data available")
 				continue
 			}
 			log.Printf("Error reading trace from reader: %v", err)
 			break
 		}
-		// Успешно прочитано событие
+
 		fmt.Println("Event read successfully!")
 
-		// Преобразуем полученные байты в структуру
 		var info TraceInfo
 		data := record.RawSample
 		copy(info.Comm[:], data[:16]) // Копируем имя процесса в структуру
@@ -95,7 +84,6 @@ func main() {
 		info.Sport = uint16(data[28]) // Парсим Source Port
 		info.Dport = uint16(data[30]) // Парсим Destination Port
 
-		// Выводим полученные данные
 		fmt.Printf("Received event: PID=%d, Comm=%s, SrcIP=%d.%d.%d.%d, DstIP=%d.%d.%d.%d, Sport=%d, Dport=%d\n",
 			info.Pid,
 			info.Comm,
