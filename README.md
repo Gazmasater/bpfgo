@@ -61,5 +61,8 @@ which bpf2go
 	"endColumn": 28
 }]
 
+kpEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
+
+
 
 
