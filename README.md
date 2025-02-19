@@ -29,40 +29,12 @@ which bpf2go
 
 [{
 	"resource": "/home/gaz358/myprog/bpfgo/PerfEvents/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "UndeclaredName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredName"
-		}
-	},
-	"severity": 8,
-	"message": "undefined: program",
-	"source": "compiler",
-	"startLineNumber": 34,
-	"startColumn": 66,
-	"endLineNumber": 34,
-	"endColumn": 73
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/PerfEvents/main.go",
 	"owner": "go-staticcheck",
 	"severity": 4,
-	"message": "undefined: gener.BpfObjects",
+	"message": "undefined: gener.BpfObjects (compile)",
 	"source": "go-staticcheck",
 	"startLineNumber": 28,
 	"startColumn": 16,
 	"endLineNumber": 28,
 	"endColumn": 28
 }]
-
-kpEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
-
-
-
-
