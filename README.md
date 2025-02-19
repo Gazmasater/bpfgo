@@ -37,17 +37,20 @@ bpf2go -output-dir $(pwd) \
 
 
 
-  package main
+package main
 
 import (
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/rlimit"
-	"github.com/pkg/errors"
 )
+
+var objs target_amd64_bpfObjects
 
 func main() {
 	// Снимаем ограничение на память
@@ -56,8 +59,7 @@ func main() {
 	}
 
 	// Загружаем eBPF-объекты
-	var objs bpfObjects
-	if err := loadBpfObjects(&objs, nil); err != nil {
+	if err := loadTarget_amd64_bpfObjects(&objs, nil); err != nil {
 		log.Fatalf("failed to load bpf objects: %v", err)
 	}
 	defer objs.Close()
@@ -79,9 +81,11 @@ func main() {
 
 	fmt.Println("kpExit:", kpExit)
 
-	// Оставляем программу запущенной, чтобы eBPF-программы продолжали работать
-	select {}
+	// Ждем SIGINT (Ctrl+C) или SIGTERM
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	fmt.Println("Press Ctrl+C to exit")
+	<-stop
+	fmt.Println("Exiting...")
 }
-
-
-
