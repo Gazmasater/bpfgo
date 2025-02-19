@@ -40,9 +40,11 @@ bpf2go -output-dir $(pwd) \
 package main
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -53,11 +55,21 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 )
 
-// Структура события eBPF
+// Определяем структуру, соответствующую bpfTraceInfo
 type bpfTraceInfo struct {
-	Pid  uint32
-	Tid  uint32
-	Comm [16]byte
+	Pid    uint32
+	SrcIP  uint32
+	DstIP  uint32
+	Sport  uint16
+	Dport  uint16
+	Comm   [128]byte
+}
+
+// Преобразование IP-адреса из uint32 в строку
+func ipToStr(ip uint32) string {
+	ipBytes := make([]byte, 4)
+	binary.BigEndian.PutUint32(ipBytes, ip)
+	return net.IP(ipBytes).String()
 }
 
 // Глобальные объекты BPF
@@ -96,7 +108,7 @@ func main() {
 
 	// Создаем perf.Reader для чтения событий eBPF
 	const buffLen = 4096
-	rd, err := perf.NewReader(objs.TraceSendtoEvents, buffLen)
+	rd, err := perf.NewReader(objs.TraceEvents, buffLen)
 	if err != nil {
 		log.Fatalf("failed to create perf reader: %s", err)
 	}
@@ -126,7 +138,13 @@ func main() {
 
 			// Приводим прочитанные данные к структуре bpfTraceInfo
 			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
-			fmt.Printf("PID: %d, TID: %d, Comm: %s\n", event.Pid, event.Tid, event.Comm)
+
+			// Преобразуем IP и порты
+			srcIP := ipToStr(event.SrcIP)
+			dstIP := ipToStr(event.DstIP)
+
+			fmt.Printf("PID: %d, Comm: %s, SrcIP: %s, SrcPort: %d, DstIP: %s, DstPort: %d\n",
+				event.Pid, event.Comm, srcIP, event.Sport, dstIP, event.Dport)
 		}
 	}()
 
