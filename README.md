@@ -68,14 +68,9 @@ func main() {
 }
 
 
-var loadOpts = &ebpf.CollectionOptions{
-	// По желанию, можно настроить параметры в зависимости от ваших требований
-}
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/PerfEvents$ sudo ./PerfEvents
+[sudo] password for gaz358: 
+2025/02/19 19:56:48 opening tracepoint sys_enter_sendto: prog cannot be nil: invalid input
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/PerfEvents$ 
 
 
-
-kpEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.Programs["trace_sendto_enter"], nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
-	}
-	defer kpEnter.Close()
