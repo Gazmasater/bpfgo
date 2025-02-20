@@ -225,6 +225,7 @@ SEC("tracepoint/syscalls/sys_enter_recvfrom")
 int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     struct conn_info_t conn_info = {};
+    conn_info.pid=pid;
 
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
     
