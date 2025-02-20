@@ -147,7 +147,6 @@ int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
     bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
-    // Выводим информацию в kernel log для отладки
     bpf_printk("SERVER sys_enter_sendto: PID=%d, Comm=%s\n", conn_info.pid, conn_info.comm);
 
     return 0;

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -99,8 +100,19 @@ func main() {
 			// Приводим прочитанные данные к структуре bpfTraceInfo
 			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
 
-			fmt.Printf("PID: %d, Comm: %s\n", event.Pid, event.Comm)
+			// Преобразуем IP-адреса в строковый формат
+			srcIP := fmt.Sprintf("%v", net.IPv4(byte(event.SrcIP>>24), byte(event.SrcIP>>16), byte(event.SrcIP>>8), byte(event.SrcIP)))
+			dstIP := fmt.Sprintf("%v", net.IPv4(byte(event.DstIP>>24), byte(event.DstIP>>16), byte(event.DstIP>>8), byte(event.DstIP)))
 
+			// Выводим все данные
+			fmt.Printf("PID: %d, Comm: %s, SrcIP: %s, SrcPort: %d, DstIP: %s, DstPort: %d\n",
+				event.Pid,
+				event.Comm,
+				srcIP,
+				event.SrcPort,
+				dstIP,
+				event.DstPort,
+			)
 		}
 	}()
 
