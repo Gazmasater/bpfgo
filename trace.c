@@ -272,19 +272,19 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
     struct sockaddr_in addr;
     bpf_probe_read(&addr, sizeof(addr), addr_ptr);
 
-    conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
-    conn_info->sport = bpf_ntohs(addr.sin_port);
+    conn_info->dst_ip = bpf_ntohl(addr.sin_addr.s_addr);
+    conn_info->dport = bpf_ntohs(addr.sin_port);
 
     struct trace_info info = {};
     info.pid = conn_info->pid;
-    info.src_ip = conn_info->src_ip;
-    info.sport = conn_info->sport;
+    info.dst_ip = conn_info->dst_ip;
+    info.dport = conn_info->dport;
     bpf_probe_read_str(&info.comm, sizeof(info.comm), conn_info->comm);
 
     bpf_printk("UDP sys_exit_recvfrom: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
                info.pid, info.comm,
-               (info.src_ip >> 24) & 0xFF, (info.src_ip  >> 16) & 0xFF,
-               (info.src_ip >> 8) & 0xFF, info.src_ip  & 0xFF, info.sport);
+               (info.dst_ip >> 24) & 0xFF, (info.dst_ip  >> 16) & 0xFF,
+               (info.dst_ip >> 8) & 0xFF, info.dst_ip  & 0xFF, info.dport);
 
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
