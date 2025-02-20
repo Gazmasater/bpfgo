@@ -114,3 +114,10 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
 
     return 0;
 }
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo cat /sys/kernel/debug/tracing/trace_pipe|grep "Comm=udp"
+      udp_server-5531    [005] ...21   262.815290: bpf_trace_printk: sys_enter_recvfrom: PID=5531, Comm=udp_server, Family=49725
+           <...>-5572    [007] ...21   267.985092: bpf_trace_printk: SERVER sys_enter_sendto: PID=5572, Comm=udp_client
+           <...>-5572    [007] ...21   267.985176: bpf_trace_printk: UDP sys_exit_sendto: Connection: PID=5572, Comm=udp_client, IP=0.0.0.0, Port=33333
+      udp_server-5531    [000] ...21   267.985218: bpf_trace_printk: sys_enter_recvfrom: PID=5531, Comm=udp_server, Family=2
