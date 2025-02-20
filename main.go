@@ -15,8 +15,12 @@ import (
 )
 
 type bpfTraceInfo struct {
-	Pid  uint32
-	Comm [128]byte
+	Pid     uint32
+	Comm    [128]byte
+	SrcIP   uint32
+	SrcPort uint16
+	DstIP   uint32
+	DstPort uint16
 }
 
 // Глобальные объекты BPF
@@ -94,6 +98,7 @@ func main() {
 
 			// Приводим прочитанные данные к структуре bpfTraceInfo
 			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
+
 			fmt.Printf("PID: %d, Comm: %s\n", event.Pid, event.Comm)
 
 		}
