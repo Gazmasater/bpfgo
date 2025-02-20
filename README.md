@@ -42,97 +42,133 @@ bpf2go -output-dir $(pwd) \
 
 
 
-SEC("tracepoint/syscalls/sys_enter_sendto")
-int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    struct conn_info_t conn_info = {};
-    conn_info.pid = pid;
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+package main
 
-    // Считываем информацию о sockaddr
-    struct sockaddr_in addr;
-    if (bpf_probe_read(&addr, sizeof(addr), ctx->addr) != 0) {
-        return 0; 
-    }
+import (
+	"errors"
+	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"unsafe"
 
-    // Добавляем статус в status_map
-    struct status_t new_status = {.in_progress = true};
-    bpf_map_update_elem(&status_map, &pid, &new_status, BPF_ANY);
+	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/perf"
+	"github.com/cilium/ebpf/rlimit"
+)
 
-    // Обновляем карты с адресом и информацией о соединении
-    bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
-    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
-
-    // Выводим информацию в kernel log для отладки
-    bpf_printk("SERVER sys_enter_sendto: PID=%d, Comm=%s\n", conn_info.pid, conn_info.comm);
-
-    return 0;
+type bpfTraceInfo struct {
+	Pid     uint32
+	Comm    [128]byte
+	SrcIP   uint32
+	SrcPort uint16
+	DstIP   uint32
+	DstPort uint16
 }
 
-SEC("tracepoint/syscalls/sys_exit_sendto")
-int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
+// Глобальные объекты BPF
+var objs target_amd64_bpfObjects
 
-    // Если операция завершена с ошибкой
-    if (ret < 0) {
-        bpf_map_delete_elem(&conn_info_map, &pid);
-        bpf_map_delete_elem(&addr_map, &pid);
-        return 0;
-    }
+// Инициализация, включая снятие ограничения по памяти и загрузку eBPF объектов
+func init() {
+	if err := rlimit.RemoveMemlock(); err != nil {
+		log.Fatalf("failed to remove memory limit for process: %v", err)
+	}
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
-    if (!conn_info) {
-        bpf_printk("UDP sys_exit_sendto: No connection info found for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map, &pid);
-        return 0;
-    }
+	if err := loadTarget_amd64_bpfObjects(&objs, nil); err != nil {
+		log.Fatalf("failed to load bpf objects: %v", err)
+	}
+}
 
-    // Получаем информацию об адресе
-    void *addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
-    if (!addr_ptr) {
-        bpf_printk("UDP sys_exit_sendto: No sockaddr found for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map, &pid);
-        bpf_map_delete_elem(&addr_map, &pid);
-        return 0;
-    }
+func main() {
+	defer objs.Close() // Закрытие объектов при завершении работы программы
 
-    struct sockaddr_in addr;
-    if (bpf_probe_read(&addr, sizeof(addr), addr_ptr) != 0) {
-        bpf_printk("UDP sys_exit_sendto: Failed to read sockaddr for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map, &pid);
-        bpf_map_delete_elem(&addr_map, &pid);
-        return 0;
-    }
+	// Привязка eBPF-программы к tracepoint'ам
+	if err := setupTracepoints(); err != nil {
+		log.Fatalf("failed to setup tracepoints: %v", err)
+	}
 
-    // Если это IPv4, обновляем информацию
-    if (addr.sin_family == AF_INET) {
-        conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
-        conn_info->sport = bpf_ntohs(addr.sin_port);
+	// Чтение событий eBPF через perf.Reader
+	rd, err := createPerfReader()
+	if err != nil {
+		log.Fatalf("failed to create perf reader: %s", err)
+	}
+	defer rd.Close()
 
-        struct trace_info info = {};
-        info.pid = conn_info->pid;
-        info.src_ip = conn_info->src_ip;
-        info.sport = conn_info->sport;
-        bpf_probe_read_str(&info.comm, sizeof(info.comm), conn_info->comm);
+	// Канал для обработки сигналов
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-        // Выводим информацию о соединении
-        bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-                   info.pid, info.comm,
-                   (info.src_ip >> 24) & 0xFF, (info.src_ip  >> 16) & 0xFF,
-                   (info.src_ip >> 8) & 0xFF, info.src_ip  & 0xFF, info.sport);
+	// Асинхронное чтение и обработка событий
+	go readPerfEvents(rd)
 
-        // Отправляем информацию в пользовательское пространство
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    }
+	// Ожидаем сигнала завершения
+	fmt.Println("Press Ctrl+C to exit")
+	<-stop
+	fmt.Println("Exiting...")
+}
 
-    // Обновляем статус на false (отсутствие активности)
-    struct status_t status = {.in_progress = false};
-    bpf_map_update_elem(&status_map, &pid, &status, BPF_ANY);
+// Настройка tracepoint'ов для отслеживания системных вызовов
+func setupTracepoints() error {
+	tracepoints := []struct {
+		name      string
+		prog      interface{}
+		tracepoint string
+	}{
+		{"sys_enter_sendto", objs.TraceSendtoEnter, "syscalls", "sys_enter_sendto"},
+		{"sys_exit_sendto", objs.TraceSendtoExit, "syscalls", "sys_exit_sendto"},
+		{"sys_enter_recvfrom", objs.TraceRecvfromEnter, "syscalls", "sys_enter_recvfrom"},
+		{"sys_exit_recvfrom", objs.TraceRecvfromExit, "syscalls", "sys_exit_recvfrom"},
+	}
 
-    // Очистка карт после завершения
-    bpf_map_delete_elem(&conn_info_map, &pid);
-    bpf_map_delete_elem(&addr_map, &pid);
+	for _, tp := range tracepoints {
+		if err := linkTracepoint(tp.name, tp.tracepoint, tp.prog); err != nil {
+			return err
+		}
+	}
 
-    return 0;
+	return nil
+}
+
+// Привязка eBPF-программы к tracepoint
+func linkTracepoint(name, tracepoint, prog string) error {
+	_, err := link.Tracepoint(tracepoint, prog, nil)
+	if err != nil {
+		return fmt.Errorf("opening tracepoint %s: %w", name, err)
+	}
+	return nil
+}
+
+// Создание perf.Reader для чтения событий из eBPF
+func createPerfReader() (*perf.Reader, error) {
+	const buffLen = 4096
+	return perf.NewReader(objs.TraceEvents, buffLen)
+}
+
+// Чтение и обработка событий из perf.Reader
+func readPerfEvents(rd *perf.Reader) {
+	for {
+		record := new(perf.Record)
+		if err := rd.ReadInto(record); err != nil {
+			if errors.Is(err, os.ErrDeadlineExceeded) {
+				continue
+			}
+			log.Printf("error reading from perf reader: %v", err)
+			return
+		}
+
+		if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
+			log.Println("invalid event size")
+			continue
+		}
+
+		// Приводим прочитанные данные к структуре bpfTraceInfo
+		event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
+
+		// Выводим информацию о событии
+		fmt.Printf("PID: %d, Comm: %s\n", event.Pid, event.Comm[:])
+		fmt.Printf("Src IP: %v, Src Port: %d\n", event.SrcIP, event.SrcPort)
+		fmt.Printf("Dst IP: %v, Dst Port: %d\n", event.DstIP, event.DstPort)
+	}
 }
