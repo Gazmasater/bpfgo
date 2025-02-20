@@ -145,21 +145,20 @@ func main() {
 			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
 
 			// Преобразуем IP-адреса в строковый формат
-			srcIP := fmt.Sprintf("%d.%d.%d.%d", byte(event.SrcIP>>24), byte(event.SrcIP>>16&0xFF), byte(event.SrcIP>>8&0xFF), byte(event.SrcIP&0xFF))
-			dstIP := fmt.Sprintf("%d.%d.%d.%d", byte(event.DstIP>>24), byte(event.DstIP>>16&0xFF), byte(event.DstIP>>8&0xFF), byte(event.DstIP&0xFF))
+			srcIP := fmt.Sprintf("%v", net.IPv4(byte(event.SrcIP>>24), byte(event.SrcIP>>16), byte(event.SrcIP>>8), byte(event.SrcIP)))
+			dstIP := fmt.Sprintf("%v", net.IPv4(byte(event.DstIP>>24), byte(event.DstIP>>16), byte(event.DstIP>>8), byte(event.DstIP)))
 
-			// Порты просто выводим как uint16
-			srcPort := event.SrcPort
-			dstPort := event.DstPort
+			// Печатаем значения портов, чтобы убедиться, что они правильно извлечены
+			fmt.Printf("SrcPort: %d, DstPort: %d\n", event.SrcPort, event.DstPort)
 
 			// Выводим все данные
 			fmt.Printf("PID: %d, Comm: %s, SrcIP: %s, SrcPort: %d, DstIP: %s, DstPort: %d\n",
 				event.Pid,
 				event.Comm,
 				srcIP,
-				srcPort,
+				event.SrcPort,
 				dstIP,
-				dstPort,
+				event.DstPort,
 			)
 		}
 	}()
