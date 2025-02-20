@@ -38,20 +38,29 @@ func main() {
 	defer objs.Close() // Закроем объекты при выходе
 
 	// Привязываем eBPF-программу к tracepoint
-	kpEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
+	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
 	if err != nil {
 		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
 	}
-	defer kpEnter.Close()
+	defer SEnter.Close()
 
-	kpExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
+	SExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
 	if err != nil {
 		log.Fatalf("opening tracepoint sys_exit_sendto: %s", err)
 	}
-	defer kpExit.Close()
+	defer SExit.Close()
 
-	fmt.Println("kpEnter:", kpEnter)
-	fmt.Println("kpExit:", kpExit)
+	REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
+	}
+	defer REnter.Close()
+
+	RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
+	}
+	defer RExit.Close()
 
 	// Создаем perf.Reader для чтения событий eBPF
 	const buffLen = 4096

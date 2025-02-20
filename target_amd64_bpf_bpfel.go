@@ -73,8 +73,10 @@ type target_amd64_bpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type target_amd64_bpfProgramSpecs struct {
-	TraceSendtoEnter *ebpf.ProgramSpec `ebpf:"trace_sendto_enter"`
-	TraceSendtoExit  *ebpf.ProgramSpec `ebpf:"trace_sendto_exit"`
+	TraceRecvfromEnter *ebpf.ProgramSpec `ebpf:"trace_recvfrom_enter"`
+	TraceRecvfromExit  *ebpf.ProgramSpec `ebpf:"trace_recvfrom_exit"`
+	TraceSendtoEnter   *ebpf.ProgramSpec `ebpf:"trace_sendto_enter"`
+	TraceSendtoExit    *ebpf.ProgramSpec `ebpf:"trace_sendto_exit"`
 }
 
 // target_amd64_bpfMapSpecs contains maps before they are loaded into the kernel.
@@ -137,12 +139,16 @@ type target_amd64_bpfVariables struct {
 //
 // It can be passed to loadTarget_amd64_bpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type target_amd64_bpfPrograms struct {
-	TraceSendtoEnter *ebpf.Program `ebpf:"trace_sendto_enter"`
-	TraceSendtoExit  *ebpf.Program `ebpf:"trace_sendto_exit"`
+	TraceRecvfromEnter *ebpf.Program `ebpf:"trace_recvfrom_enter"`
+	TraceRecvfromExit  *ebpf.Program `ebpf:"trace_recvfrom_exit"`
+	TraceSendtoEnter   *ebpf.Program `ebpf:"trace_sendto_enter"`
+	TraceSendtoExit    *ebpf.Program `ebpf:"trace_sendto_exit"`
 }
 
 func (p *target_amd64_bpfPrograms) Close() error {
 	return _Target_amd64_bpfClose(
+		p.TraceRecvfromEnter,
+		p.TraceRecvfromExit,
 		p.TraceSendtoEnter,
 		p.TraceSendtoExit,
 	)
