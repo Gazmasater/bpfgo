@@ -108,3 +108,10 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
 
     return 0;
 }
+
+
+udp_server-3905    [005] ...21   176.166480: bpf_trace_printk: SERVER sys_enter_recvfrom:FAMILY=49725 PID=3905, Comm=udp_server
+           <...>-4027    [000] ...21   191.574161: bpf_trace_printk: SERVER sys_enter_sendto: PID=4027, Comm=udp_client
+           <...>-4027    [000] ...21   191.574254: bpf_trace_printk: UDP sys_exit_sendto: Connection: PID=4027, Comm=udp_client, IP=0.0.0.0, Port=33333
+      udp_server-3905    [003] ...21   191.574295: bpf_trace_printk: SERVER sys_enter_recvfrom:FAMILY=2 PID=3905, Comm=udp_server
+
