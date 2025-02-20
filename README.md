@@ -48,6 +48,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -70,105 +71,96 @@ type bpfTraceInfo struct {
 // Глобальные объекты BPF
 var objs target_amd64_bpfObjects
 
-// Инициализация, включая снятие ограничения по памяти и загрузку eBPF объектов
 func init() {
+	// Снимаем ограничение на память
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.Fatalf("failed to remove memory limit for process: %v", err)
 	}
 
+	// Загружаем eBPF-объекты
 	if err := loadTarget_amd64_bpfObjects(&objs, nil); err != nil {
 		log.Fatalf("failed to load bpf objects: %v", err)
 	}
 }
 
 func main() {
-	defer objs.Close() // Закрытие объектов при завершении работы программы
+	defer objs.Close() // Закроем объекты при выходе
 
-	// Привязка eBPF-программы к tracepoint'ам
-	if err := setupTracepoints(); err != nil {
-		log.Fatalf("failed to setup tracepoints: %v", err)
+	// Привязываем eBPF-программу к tracepoint
+	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
 	}
+	defer SEnter.Close()
 
-	// Чтение событий eBPF через perf.Reader
-	rd, err := createPerfReader()
+	SExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_sendto: %s", err)
+	}
+	defer SExit.Close()
+
+	REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
+	}
+	defer REnter.Close()
+
+	RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
+	}
+	defer RExit.Close()
+
+	// Создаем perf.Reader для чтения событий eBPF
+	const buffLen = 4096
+	rd, err := perf.NewReader(objs.TraceEvents, buffLen)
 	if err != nil {
 		log.Fatalf("failed to create perf reader: %s", err)
 	}
 	defer rd.Close()
 
-	// Канал для обработки сигналов
+	// Канал для завершения работы
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	// Асинхронное чтение и обработка событий
-	go readPerfEvents(rd)
+	// Запускаем цикл чтения событий eBPF
+	go func() {
+		for {
+			record := new(perf.Record)
+			err := rd.ReadInto(record)
+			if err != nil {
+				if errors.Is(err, os.ErrDeadlineExceeded) {
+					continue
+				}
+				log.Printf("error reading from perf reader: %v", err)
+				return
+			}
 
-	// Ожидаем сигнала завершения
+			if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
+				log.Println("invalid event size")
+				continue
+			}
+
+			// Приводим прочитанные данные к структуре bpfTraceInfo
+			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
+
+			// Преобразуем IP-адреса в строковый формат
+			srcIP := fmt.Sprintf("%v", net.IPv4(byte(event.SrcIP>>24), byte(event.SrcIP>>16), byte(event.SrcIP>>8), byte(event.SrcIP)))
+			dstIP := fmt.Sprintf("%v", net.IPv4(byte(event.DstIP>>24), byte(event.DstIP>>16), byte(event.DstIP>>8), byte(event.DstIP)))
+
+			// Выводим все данные
+			fmt.Printf("PID: %d, Comm: %s, SrcIP: %s, SrcPort: %d, DstIP: %s, DstPort: %d\n",
+				event.Pid,
+				event.Comm,
+				srcIP,
+				event.SrcPort,
+				dstIP,
+				event.DstPort,
+			)
+		}
+	}()
+
 	fmt.Println("Press Ctrl+C to exit")
 	<-stop
 	fmt.Println("Exiting...")
-}
-
-// Настройка tracepoint'ов для отслеживания системных вызовов
-func setupTracepoints() error {
-	tracepoints := []struct {
-		name      string
-		prog      interface{}
-		tracepoint string
-	}{
-		{"sys_enter_sendto", objs.TraceSendtoEnter, "syscalls", "sys_enter_sendto"},
-		{"sys_exit_sendto", objs.TraceSendtoExit, "syscalls", "sys_exit_sendto"},
-		{"sys_enter_recvfrom", objs.TraceRecvfromEnter, "syscalls", "sys_enter_recvfrom"},
-		{"sys_exit_recvfrom", objs.TraceRecvfromExit, "syscalls", "sys_exit_recvfrom"},
-	}
-
-	for _, tp := range tracepoints {
-		if err := linkTracepoint(tp.name, tp.tracepoint, tp.prog); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// Привязка eBPF-программы к tracepoint
-func linkTracepoint(name, tracepoint, prog string) error {
-	_, err := link.Tracepoint(tracepoint, prog, nil)
-	if err != nil {
-		return fmt.Errorf("opening tracepoint %s: %w", name, err)
-	}
-	return nil
-}
-
-// Создание perf.Reader для чтения событий из eBPF
-func createPerfReader() (*perf.Reader, error) {
-	const buffLen = 4096
-	return perf.NewReader(objs.TraceEvents, buffLen)
-}
-
-// Чтение и обработка событий из perf.Reader
-func readPerfEvents(rd *perf.Reader) {
-	for {
-		record := new(perf.Record)
-		if err := rd.ReadInto(record); err != nil {
-			if errors.Is(err, os.ErrDeadlineExceeded) {
-				continue
-			}
-			log.Printf("error reading from perf reader: %v", err)
-			return
-		}
-
-		if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
-			log.Println("invalid event size")
-			continue
-		}
-
-		// Приводим прочитанные данные к структуре bpfTraceInfo
-		event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
-
-		// Выводим информацию о событии
-		fmt.Printf("PID: %d, Comm: %s\n", event.Pid, event.Comm[:])
-		fmt.Printf("Src IP: %v, Src Port: %d\n", event.SrcIP, event.SrcPort)
-		fmt.Printf("Dst IP: %v, Dst Port: %d\n", event.DstIP, event.DstPort)
-	}
 }
