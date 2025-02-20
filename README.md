@@ -45,12 +45,18 @@ int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx) {
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
-    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
-
-    struct conn_info_t *info = bpf_map_lookup_elem(&conn_info_map, &pid);
-    if (info) {
-        bpf_printk("SERVER sys_enter_recvfrom: PID=%d, Comm=%s\n", info->pid, info->comm);
+    struct sockaddr_in addr = {};
+    if (ctx->addr) {
+        if (bpf_probe_read(&addr, sizeof(addr), ctx->addr) != 0) {
+            bpf_printk("ENTER: Failed to read sockaddr for PID=%d\n", pid);
+            return 0;
+        }
     }
+
+    bpf_printk("ENTER: PID=%d, Comm=%s, Family=%d\n", pid, conn_info.comm, addr.sin_family);
+
+    bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
     return 0;
 }
@@ -67,24 +73,26 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
     if (!conn_info) {
-        bpf_printk("UDP sys_exit_recvfrom: No connection info found for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map, &pid);
+        bpf_printk("EXIT: No conn_info found for PID=%d\n", pid);
         return 0;
     }
 
-    void *addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
+    struct sockaddr_in *addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
     if (!addr_ptr) {
-        bpf_printk("UDP sys_exit_recvfrom: No sockaddr found for PID=%d\n", pid);
+        bpf_printk("EXIT: No addr_map found for PID=%d\n", pid);
         bpf_map_delete_elem(&conn_info_map, &pid);
         return 0;
     }
 
-    struct sockaddr_in addr;
+    struct sockaddr_in addr = {};
     if (bpf_probe_read(&addr, sizeof(addr), addr_ptr) != 0) {
-        bpf_printk("UDP sys_exit_recvfrom: Failed to read sockaddr for PID=%d\n", pid);
+        bpf_printk("EXIT: Failed to read sockaddr for PID=%d\n", pid);
         bpf_map_delete_elem(&conn_info_map, &pid);
+        bpf_map_delete_elem(&addr_map, &pid);
         return 0;
     }
+
+    bpf_printk("EXIT: PID=%d, Family=%d\n", pid, addr.sin_family);
 
     if (addr.sin_family == AF_INET) {
         conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
@@ -98,20 +106,11 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
 
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
-        bpf_printk("UDP sys_exit_recvfrom: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+        bpf_printk("EXIT: Connection PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
                    info.pid, info.comm,
-                   (info.src_ip >> 24) & 0xFF, (info.src_ip  >> 16) & 0xFF,
-                   (info.src_ip >> 8) & 0xFF, info.src_ip  & 0xFF, info.sport);
+                   (info.src_ip >> 24) & 0xFF, (info.src_ip >> 16) & 0xFF,
+                   (info.src_ip >> 8) & 0xFF, info.src_ip & 0xFF, info.sport);
     }
-
-    bpf_map_update_elem(&conn_info_map, &pid, conn_info, BPF_ANY);
 
     return 0;
 }
-
-
-udp_server-3905    [005] ...21   176.166480: bpf_trace_printk: SERVER sys_enter_recvfrom:FAMILY=49725 PID=3905, Comm=udp_server
-           <...>-4027    [000] ...21   191.574161: bpf_trace_printk: SERVER sys_enter_sendto: PID=4027, Comm=udp_client
-           <...>-4027    [000] ...21   191.574254: bpf_trace_printk: UDP sys_exit_sendto: Connection: PID=4027, Comm=udp_client, IP=0.0.0.0, Port=33333
-      udp_server-3905    [003] ...21   191.574295: bpf_trace_printk: SERVER sys_enter_recvfrom:FAMILY=2 PID=3905, Comm=udp_server
-
