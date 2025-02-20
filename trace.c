@@ -203,19 +203,23 @@ int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx) {
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
-   struct sockaddr_in addr;
-   if (bpf_probe_read(&addr, sizeof(addr), ctx->addr) != 0) {
-       return 0; 
-   }
+    struct sockaddr_in addr;
+    if (bpf_probe_read(&addr, sizeof(addr), ctx->addr) != 0) {
+        return 0; 
+    }
+
+    struct conn_info_t *info = bpf_map_lookup_elem(&conn_info_map, &pid);
+    if (info) {
+        bpf_printk("SERVER sys_enter_recvfrom:FAMILY=%d PID=%d, Comm=%s\n",addr.sin_family ,info->pid, info->comm);
+    }
+
+   
+ 
 
     bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
 
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
-    struct conn_info_t *info = bpf_map_lookup_elem(&conn_info_map, &pid);
-    if (info) {
-        bpf_printk("SERVER sys_enter_recvfrom: PID=%d, Comm=%s\n", info->pid, info->comm);
-    }
 
     return 0;
 }
@@ -237,6 +241,9 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
         return 0;
     }
 
+    struct sockaddr_in addr;
+
+
     void *addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
     if (!addr_ptr) {
         bpf_printk("UDP sys_exit_recvfrom: No sockaddr found for PID=%d\n", pid);
@@ -245,7 +252,6 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
         return 0;
     }
 
-    struct sockaddr_in addr;
     if (bpf_probe_read(&addr, sizeof(addr), addr_ptr) != 0) {
         bpf_printk("UDP sys_exit_recvfrom: Failed to read sockaddr for PID=%d\n", pid);
         bpf_map_delete_elem(&conn_info_map, &pid);
