@@ -85,6 +85,7 @@ type target_amd64_bpfProgramSpecs struct {
 type target_amd64_bpfMapSpecs struct {
 	AddrMap     *ebpf.MapSpec `ebpf:"addr_map"`
 	ConnInfoMap *ebpf.MapSpec `ebpf:"conn_info_map"`
+	StatusMap   *ebpf.MapSpec `ebpf:"status_map"`
 	TraceEvents *ebpf.MapSpec `ebpf:"trace_events"`
 }
 
@@ -117,6 +118,7 @@ func (o *target_amd64_bpfObjects) Close() error {
 type target_amd64_bpfMaps struct {
 	AddrMap     *ebpf.Map `ebpf:"addr_map"`
 	ConnInfoMap *ebpf.Map `ebpf:"conn_info_map"`
+	StatusMap   *ebpf.Map `ebpf:"status_map"`
 	TraceEvents *ebpf.Map `ebpf:"trace_events"`
 }
 
@@ -124,6 +126,7 @@ func (m *target_amd64_bpfMaps) Close() error {
 	return _Target_amd64_bpfClose(
 		m.AddrMap,
 		m.ConnInfoMap,
+		m.StatusMap,
 		m.TraceEvents,
 	)
 }
