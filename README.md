@@ -36,6 +36,12 @@ bpf2go -output-dir $(pwd) \
   $(pwd)/trace.c -- -I$(pwd)
 
 
+  struct status_t {
+    bool in_progress;
+};
+
+
+
 SEC("tracepoint/syscalls/sys_enter_recvfrom")
 int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
