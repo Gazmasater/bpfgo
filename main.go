@@ -17,11 +17,11 @@ import (
 
 type bpfTraceInfo struct {
 	Pid     uint32
-	Comm    [128]byte
 	SrcIP   uint32
-	SrcPort uint16
 	DstIP   uint32
+	SrcPort uint16
 	DstPort uint16
+	Comm    [128]byte
 }
 
 // Глобальные объекты BPF
@@ -101,16 +101,31 @@ func main() {
 			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
 
 			// Преобразуем IP-адреса в строковый формат
-			srcIP := fmt.Sprintf("%v", net.IPv4(byte(event.SrcIP>>24), byte(event.SrcIP>>16), byte(event.SrcIP>>8), byte(event.SrcIP)))
-			dstIP := fmt.Sprintf("%v", net.IPv4(byte(event.DstIP>>24), byte(event.DstIP>>16), byte(event.DstIP>>8), byte(event.DstIP)))
+			srcIP := net.IPv4(
+				byte(event.SrcIP),
+				byte(event.SrcIP>>8),
+				byte(event.SrcIP>>16),
+				byte(event.SrcIP>>24),
+			)
+
+			dstIP := net.IPv4(
+				byte(event.DstIP),
+				byte(event.DstIP>>8),
+				byte(event.DstIP>>16),
+				byte(event.DstIP>>24),
+			)
+
+			// Преобразуем команду в строку
+			comm := string(event.Comm[:])
+			comm = comm[:len(comm)-1] // Убираем лишний нулевой байт
 
 			// Выводим все данные
 			fmt.Printf("PID: %d, Comm: %s, SrcIP: %s, SrcPort: %d, DstIP: %s, DstPort: %d\n",
 				event.Pid,
-				event.Comm,
-				srcIP,
+				comm,
+				srcIP.String(),
 				event.SrcPort,
-				dstIP,
+				dstIP.String(),
 				event.DstPort,
 			)
 		}

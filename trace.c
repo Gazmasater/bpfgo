@@ -25,7 +25,7 @@ struct trace_info {
     u16 sport;
     u16 dport;
     char comm[128];
-};
+} ;  
 
 // Размещение переменной с атрибутом unused
 const struct trace_info *unused __attribute__((unused));
@@ -35,6 +35,43 @@ struct status_t {
 };
 
 
+struct sys_enter_accept4_args
+{
+	unsigned short common_type;
+	unsigned char common_flags;
+	unsigned char common_preempt_count;
+	int common_pid;
+	int __syscall_nr;
+	int fd;
+	int pad1;
+	struct sockaddr *upeer_sockaddr;
+	int *upeer_addrlen;
+	int flags;
+};
+
+struct sys_enter_accept_args
+{
+	unsigned short common_type;
+	unsigned char common_flags;
+	unsigned char common_preempt_count;
+	int common_pid;
+	int __syscall_nr;
+	int fd;
+	int pad1;
+	struct sockaddr *upeer_sockaddr;
+	int *upeer_addrlen;
+};
+
+struct sys_exit_accept4_args
+{
+	unsigned short common_type;//2
+	unsigned char common_flags;//1
+	unsigned char common_preempt_count;//1
+	int common_pid;//4
+	int __syscall_nr;//4
+	int pad1;
+	long ret;//8
+};
 
 struct sys_enter_sendto_args
 {
@@ -126,6 +163,74 @@ struct
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
+
+SEC("tracepoint/syscalls/sys_enter_accept4")
+int trace_accept4_enter(struct sys_enter_accept4_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct conn_info_t conn_info = {};
+    conn_info.pid = pid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
+    bpf_printk("!!!!!!!!!!!!!!!!!!Comm=%s",conn_info.comm);
+
+    // Считываем информацию о sockaddr
+    struct sockaddr_in addr;
+    if (bpf_probe_read(&addr, sizeof(addr), ctx->upeer_sockaddr) != 0) {
+        return 0; 
+    }
+
+    // Добавляем статус в status_map
+    struct status_t *status = bpf_map_lookup_elem(&status_map, &pid);
+    if (status && status->in_progress) {
+        return 0; 
+    }
+
+    struct status_t new_status = {.in_progress = true};
+    bpf_map_update_elem(&status_map, &pid, &new_status, BPF_ANY);
+
+    // Обновляем карты с адресом и информацией о соединении
+    bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+
+    bpf_printk("SERVER sys_enter_accept4: PID=%d, Comm=%s\n", conn_info.pid, conn_info.comm);
+
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_enter_accept")
+int trace_accept_enter(struct sys_enter_accept_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct conn_info_t conn_info = {};
+    conn_info.pid = pid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
+    // Считываем информацию о sockaddr
+    struct sockaddr_in addr;
+    if (bpf_probe_read(&addr, sizeof(addr), ctx->upeer_sockaddr) != 0) {
+        return 0; 
+    }
+
+    // Добавляем статус в status_map
+    struct status_t *status = bpf_map_lookup_elem(&status_map, &pid);
+    if (status && status->in_progress) {
+        return 0; 
+    }
+
+    struct status_t new_status = {.in_progress = true};
+    bpf_map_update_elem(&status_map, &pid, &new_status, BPF_ANY);
+
+    // Обновляем карты с адресом и информацией о соединении
+    bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+
+    bpf_printk("SERVER sys_enter_accept4: PID=%d, Comm=%s\n", conn_info.pid, conn_info.comm);
+
+    return 0;
+}
+
+
+
+
 SEC("tracepoint/syscalls/sys_enter_sendto")
 int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
@@ -140,6 +245,11 @@ int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
     }
 
     // Добавляем статус в status_map
+    struct status_t *status = bpf_map_lookup_elem(&status_map, &pid);
+    if (status && status->in_progress) {
+        return 0; 
+    }
+
     struct status_t new_status = {.in_progress = true};
     bpf_map_update_elem(&status_map, &pid, &new_status, BPF_ANY);
 
