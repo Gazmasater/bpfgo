@@ -115,7 +115,6 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
 }
 
 
-az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
-[sudo] password for gaz358: 
-2025/02/22 01:56:35 failed to load bpf objects: field TraceAccept4Exit: program trace_accept4_exit: load program: permission denied: 17: (69) r5 = *(u16 *)(r1 +782): R1 invalid mem access 'scalar' (17 line(s) omitted)
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
+2025/02/22 02:27:04 failed to load bpf objects: field TraceAccept4Exit: program trace_accept4_exit: load program: permission denied: 59: (61) r1 = *(u32 *)(r7 +776): R7 invalid mem access 'scalar' (62 line(s) omitted)
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ^C
