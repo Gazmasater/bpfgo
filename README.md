@@ -47,52 +47,27 @@ bpf2go -output-dir $(pwd) \
 };
 
 
-#include <linux/sock.h>
-#include <linux/net.h>
+#include <linux/bpf.h>
+#include <linux/ptrace.h>
+#include <net/sock.h>
 #include <linux/in.h>
+#include <bpf/bpf_helpers.h>
 
-SEC("tracepoint/syscalls/sys_exit_accept4")
-int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
+SEC("tracepoint/tcp/tcp_connect")
+int bpf_prog(struct trace_event_raw_tcp_connect *ctx) {
+    struct sock *sk = (struct sock *)ctx->sk;  // Получаем указатель на сокет
 
-    // Проверяем успешность вызова
-    if (ret < 0) {
-        return 0;
+    if (sk == NULL) {
+        return 0; // Проверка на null
     }
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
-    if (!conn_info) {
-        bpf_printk("No connection info found for PID=%d\n", pid);
-        return 0;
-    }
+    // Получаем IPv4 адрес и порт
+    struct inet_sock *inet = inet_sk(sk);
+    __be32 ip = inet->inet_daddr;  // Удалённый IP
+    __be16 port = inet->inet_dport; // Удалённый порт
 
-    // Используем файловый дескриптор для извлечения сокетной информации
-    struct sockaddr_in addr = {};
-    struct sock *sk = sock_from_file(ret);
-    if (!sk) {
-        bpf_printk("Failed to retrieve socket for PID=%d\n", pid);
-        return 0;
-    }
-
-    // Читаем IP и порт из сокета
-    bpf_probe_read_kernel(&addr, sizeof(addr), &sk->sk_daddr);
-    addr.sin_port = sk->sk_dport;
-
-    // Преобразуем IP и порт в читаемый вид
-    u32 src_ip = bpf_ntohl(addr.sin_addr.s_addr);
-    u16 src_port = bpf_ntohs(addr.sin_port);
-
-    bpf_printk("New Connection:\n");
-    bpf_printk("    PID: %d\n", pid);
-    bpf_printk("    Process: %s\n", conn_info->comm);
-    bpf_printk("    IP: %d.%d.%d.%d\n",
-               (src_ip >> 24) & 0xFF, (src_ip >> 16) & 0xFF,
-               (src_ip >> 8) & 0xFF, src_ip & 0xFF);
-    bpf_printk("    Port: %d\n", src_port);
-
-    // Удаляем данные из карты
-    bpf_map_delete_elem(&conn_info_map, &pid);
+    // Логирование IP и порта
+    bpf_printk("Remote IP: %pI4, Remote Port: %u\n", &ip, ntohs(port));
 
     return 0;
 }
