@@ -94,13 +94,11 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     // Преобразуем IP в строку вручную
     char ip_str[16];  // Строка для хранения IP
     u8 *ip_ptr = (u8 *)&ip;
-    bpf_snprintf(ip_str, sizeof(ip_str), "%u.%u.%u.%u", ip_ptr[0], ip_ptr[1], ip_ptr[2], ip_ptr[3]);
+   // bpf_snprintf(ip_str, sizeof(ip_str), "%u.%u.%u.%u", ip_ptr[0], ip_ptr[1], ip_ptr[2], ip_ptr[3]);
 
     // Преобразуем порт в хостовый порядок
     u16 port_host = bpf_ntohs(port);  // Преобразуем порт из сетевого порядка в хостовый
 
-    // Логируем информацию о соединении в формате IP:PORT
-    bpf_printk("UDP sys_exit_accept4: Src IP: %s, Src Port: %u\n", ip_str, port_host);
 
     // Сохраняем информацию о соединении в карте
     struct conn_info_t conn_info = {
@@ -108,7 +106,16 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
         .sport = port,
     };
 
-    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+    bpf_printk("UDP sys_exit_accept4: Comm=%s Src IP: %s  Port=%d\n",conn_info.comm, ip_str,port_host);
+
+
+     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
     return 0;
 }
+
+
+az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
+[sudo] password for gaz358: 
+2025/02/22 01:56:35 failed to load bpf objects: field TraceAccept4Exit: program trace_accept4_exit: load program: permission denied: 17: (69) r5 = *(u16 *)(r1 +782): R1 invalid mem access 'scalar' (17 line(s) omitted)
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
