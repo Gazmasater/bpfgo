@@ -74,6 +74,7 @@ type target_amd64_bpfSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type target_amd64_bpfProgramSpecs struct {
 	TraceAccept4Enter  *ebpf.ProgramSpec `ebpf:"trace_accept4_enter"`
+	TraceAccept4Exit   *ebpf.ProgramSpec `ebpf:"trace_accept4_exit"`
 	TraceAcceptEnter   *ebpf.ProgramSpec `ebpf:"trace_accept_enter"`
 	TraceRecvfromEnter *ebpf.ProgramSpec `ebpf:"trace_recvfrom_enter"`
 	TraceRecvfromExit  *ebpf.ProgramSpec `ebpf:"trace_recvfrom_exit"`
@@ -145,6 +146,7 @@ type target_amd64_bpfVariables struct {
 // It can be passed to loadTarget_amd64_bpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type target_amd64_bpfPrograms struct {
 	TraceAccept4Enter  *ebpf.Program `ebpf:"trace_accept4_enter"`
+	TraceAccept4Exit   *ebpf.Program `ebpf:"trace_accept4_exit"`
 	TraceAcceptEnter   *ebpf.Program `ebpf:"trace_accept_enter"`
 	TraceRecvfromEnter *ebpf.Program `ebpf:"trace_recvfrom_enter"`
 	TraceRecvfromExit  *ebpf.Program `ebpf:"trace_recvfrom_exit"`
@@ -155,6 +157,7 @@ type target_amd64_bpfPrograms struct {
 func (p *target_amd64_bpfPrograms) Close() error {
 	return _Target_amd64_bpfClose(
 		p.TraceAccept4Enter,
+		p.TraceAccept4Exit,
 		p.TraceAcceptEnter,
 		p.TraceRecvfromEnter,
 		p.TraceRecvfromExit,
