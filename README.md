@@ -49,7 +49,141 @@ struct trace_info {
     char comm[128];
 } __attribute__((packed));  // Убирает паддинги
 
-PID: 5040, Comm: �udp_server, SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 0.0.0.0, DstPort: 0
-RawSample: [8 20 0 0 0 0 0 0 0 0 0 0 53 130 0 0 117 100 112 95 99 108 105 101 110 116 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
-PID: 5128, Comm: 5�udp_client, SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 0.0.0.0, DstPort: 0
-RawSample: [253 2 0 0 0 0 0 0 0 0 0 0 123 0 0 0 115 121 115 116 101 109 100 45 116 105 109 101 115 121 110 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
+package main
+
+import (
+	"errors"
+	"fmt"
+	"log"
+	"net"
+	"os"
+	"os/signal"
+	"syscall"
+	"unsafe"
+
+	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/perf"
+	"github.com/cilium/ebpf/rlimit"
+)
+
+type bpfTraceInfo struct {
+	Pid     uint32
+	Comm    [128]byte
+	SrcIP   uint32
+	SrcPort uint16
+	DstIP   uint32
+	DstPort uint16
+	_       [2]byte // Padding для выравнивания
+}
+
+// Глобальные объекты BPF
+var objs target_amd64_bpfObjects
+
+func init() {
+	// Снимаем ограничение на память
+	if err := rlimit.RemoveMemlock(); err != nil {
+		log.Fatalf("failed to remove memory limit for process: %v", err)
+	}
+
+	// Загружаем eBPF-объекты
+	if err := loadTarget_amd64_bpfObjects(&objs, nil); err != nil {
+		log.Fatalf("failed to load bpf objects: %v", err)
+	}
+}
+
+func main() {
+	defer objs.Close() // Закроем объекты при выходе
+
+	// Привязываем eBPF-программу к tracepoint
+	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
+	}
+	defer SEnter.Close()
+
+	SExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_sendto: %s", err)
+	}
+	defer SExit.Close()
+
+	REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
+	}
+	defer REnter.Close()
+
+	RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
+	}
+	defer RExit.Close()
+
+	// Создаем perf.Reader для чтения событий eBPF
+	const buffLen = 4096
+	rd, err := perf.NewReader(objs.TraceEvents, buffLen)
+	if err != nil {
+		log.Fatalf("failed to create perf reader: %s", err)
+	}
+	defer rd.Close()
+
+	// Канал для завершения работы
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	// Запускаем цикл чтения событий eBPF
+	go func() {
+		for {
+			record := new(perf.Record)
+			err := rd.ReadInto(record)
+			if err != nil {
+				if errors.Is(err, os.ErrDeadlineExceeded) {
+					continue
+				}
+				log.Printf("error reading from perf reader: %v", err)
+				return
+			}
+
+			if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
+				log.Println("invalid event size")
+				continue
+			}
+
+			// Приводим прочитанные данные к структуре bpfTraceInfo
+			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
+
+			// Преобразуем IP-адреса в строковый формат
+			srcIP := net.IPv4(
+				byte(event.SrcIP),
+				byte(event.SrcIP>>8),
+				byte(event.SrcIP>>16),
+				byte(event.SrcIP>>24),
+			)
+
+			dstIP := net.IPv4(
+				byte(event.DstIP),
+				byte(event.DstIP>>8),
+				byte(event.DstIP>>16),
+				byte(event.DstIP>>24),
+			)
+
+			// Преобразуем команду в строку
+			comm := string(event.Comm[:])
+			comm = comm[:len(comm)-1] // Убираем лишний нулевой байт
+
+			// Выводим все данные
+			fmt.Printf("PID: %d, Comm: %s, SrcIP: %s, SrcPort: %d, DstIP: %s, DstPort: %d\n",
+				event.Pid,
+				comm,
+				srcIP.String(),
+				event.SrcPort,
+				dstIP.String(),
+				event.DstPort,
+			)
+		}
+	}()
+
+	fmt.Println("Press Ctrl+C to exit")
+	<-stop
+	fmt.Println("Exiting...")
+}
