@@ -206,13 +206,18 @@ int trace_accept4_enter(struct sys_enter_accept4_args *ctx) {
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
+
     // Сохраняем sockaddr сразу в карту
     if (ctx->upeer_sockaddr) {
-        struct sockaddr_any addr = {};
+
+        struct sockaddr_in addr = {};
+
         if (bpf_probe_read_user(&addr, sizeof(addr), ctx->upeer_sockaddr) == 0) {
+            bpf_printk("!!!!SERVER sys_enter_accept4: ADDR=%p, Comm=%s\n", addr, conn_info.comm);
+
             bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
         } else {
-            bpf_printk("UDP sys_enter_accept4: Failed to read sockaddr for PID=%d\n", pid);
+            bpf_printk("UDP sys_enter_accept4: Failed to read sockaddr for PID=%d Comm=%s\n", pid,conn_info.comm);
         }
     }
 
@@ -255,13 +260,13 @@ int trace_accept4_enter(struct sys_enter_accept4_args *ctx) {
 
 
     // Извлекаем сохранённый sockaddr из карты
-    struct sockaddr_any *addr = bpf_map_lookup_elem(&addr_map, &pid);
+    struct sockaddr_in *addr = bpf_map_lookup_elem(&addr_map, &pid);
     if (!addr) {
         bpf_printk("UDP sys_exit_accept4: No sockaddr found for PID=%d\n", pid);
         return 0;
     }
 
-    bpf_printk("4444444444444444444 Comm=%s FAMILY=%d", conn_info->comm, addr->family);
+    bpf_printk("4444444444444444444 Comm=%s FAMILY=%d", conn_info->comm, addr->sin_family);
 
 //     // Если это IPv4, обновляем информацию
 //     if (addr->sin_family == AF_INET) {
