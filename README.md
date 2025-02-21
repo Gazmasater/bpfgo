@@ -54,15 +54,29 @@ struct conn_info_t {
 
 
 
+#include <linux/bpf.h>
+#include <linux/ptrace.h>
+#include <net/sock.h>
+#include <linux/in.h>
+#include <bpf/bpf_helpers.h>
+
+struct conn_info_t {
+    u32 pid;           // ID процесса
+    char comm[16];     // Имя процесса (не более 16 символов)
+    u32 src_ip;        // Исходный IP-адрес
+    u16 sport;         // Исходный порт
+};
+
 SEC("tracepoint/syscalls/sys_exit_accept4")
 int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;  // Дескриптор сокета
+
     struct conn_info_t conn_info = {};
     conn_info.pid = pid;
+
+    // Получаем имя текущего процесса
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-
-
 
     if (ret < 0) {
         bpf_printk("UDP sys_exit_accept4: Accept failed\n");
@@ -90,25 +104,16 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     // Преобразуем IP в строку вручную
     char ip_str[16];  // Строка для хранения IP
     u8 *ip_ptr = (u8 *)&ip;
-   // bpf_snprintf(ip_str, sizeof(ip_str), "%u.%u.%u.%u", ip_ptr[0], ip_ptr[1], ip_ptr[2], ip_ptr[3]);
+    bpf_snprintf(ip_str, sizeof(ip_str), "%u.%u.%u.%u", ip_ptr[0], ip_ptr[1], ip_ptr[2], ip_ptr[3]);
 
     // Преобразуем порт в хостовый порядок
     u16 port_host = bpf_ntohs(port);  // Преобразуем порт из сетевого порядка в хостовый
 
-    conn_info.src_ip=ip;
-    conn_info.sport=port;
+    // Логируем информацию о соединении в формате IP:PORT
+    bpf_printk("TCP sys_exit_accept4: Comm=%s Src IP: %s, Src Port: %u\n", conn_info.comm, ip_str, port_host);
 
-    
-  //   bpf_printk("UDP sys_exit_accept4: Comm=%s Src IP: %s  Port=%d\n",conn_info.comm, ip_str,port_host);
-     bpf_printk("TCP sys_exit_accept4: Comm=%s \n",conn_info.comm);
-
-
-   //   bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+    // Сохраняем информацию о соединении в карте
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
     return 0;
 }
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
-[sudo] password for gaz358: 
-2025/02/22 02:31:47 failed to load bpf objects: field TraceAccept4Exit: program trace_accept4_exit: load program: permission denied: 59: (61) r1 = *(u32 *)(r7 +776): R7 invalid mem access 'scalar' (62 line(s) omitted)
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
