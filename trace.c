@@ -241,7 +241,6 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;  // Дескриптор сокета
 
-
     if (ret < 0) {
         bpf_printk("UDP sys_exit_accept4: Accept failed\n");
         return 0;
@@ -262,27 +261,28 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
         return 0;
     }
 
-    u32 ip = inet->inet_saddr;  // Удалённый IP-адрес
-    u16 port = inet->inet_sport;  // Удалённый порт
+    u32 ip = inet->inet_saddr;  // Исходный IP-адрес
+    u16 port = inet->inet_sport;  // Исходный порт
 
-    // Преобразуем IP в строковый формат
+    // Преобразуем IP в строку вручную
     char ip_str[16];  // Строка для хранения IP
-    bpf_probe_read_str(ip_str, sizeof(ip_str), &ip);  // Преобразуем IP в строку
+    u8 *ip_ptr = (u8 *)&ip;
+   // bpf_snprintf(ip_str, sizeof(ip_str), "%u.%u.%u.%u", ip_ptr[0], ip_ptr[1], ip_ptr[2], ip_ptr[3]);
 
-    // // Преобразуем порт в строковый формат
-    // u16 port_host = bpf_ntohs(port);  // Преобразуем порт из сетевого порядка в хостовый
-
-
-    // // Сохраняем информацию о соединении в карте
-    // struct conn_info_t conn_info = {
-    //     .src_ip = ip,
-    //     .sport = port,
-    // };
-
-    // bpf_printk("UDP sys_exit_accept4: Comm=%s Remote IP: %s, Remote Port: %d\n", conn_info.comm, ip_str, port_host);
+    // Преобразуем порт в хостовый порядок
+    u16 port_host = bpf_ntohs(port);  // Преобразуем порт из сетевого порядка в хостовый
 
 
-    // bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+    // Сохраняем информацию о соединении в карте
+    struct conn_info_t conn_info = {
+        .src_ip = ip,
+        .sport = port,
+    };
+
+    bpf_printk("UDP sys_exit_accept4: Comm=%s Src IP: %s  Port=%d\n",conn_info.comm, ip_str,port_host);
+
+
+     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
     return 0;
 }
