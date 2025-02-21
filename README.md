@@ -47,70 +47,52 @@ bpf2go -output-dir $(pwd) \
 };
 
 
+#include <linux/sock.h>
+#include <linux/net.h>
+#include <linux/in.h>
+
 SEC("tracepoint/syscalls/sys_exit_accept4")
 int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
-    // Проверяем успешность соединения
+    // Проверяем успешность вызова
     if (ret < 0) {
         return 0;
     }
 
-    // Получаем информацию о соединении
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
     if (!conn_info) {
-        bpf_printk("UDP sys_exit_accept4: No connection info found for PID=%d\n", pid);
+        bpf_printk("No connection info found for PID=%d\n", pid);
         return 0;
     }
 
-    // Получаем указатель на структуру сокета
-    struct sock *sk = sockfd_lookup(ret, NULL);
+    // Используем файловый дескриптор для извлечения сокетной информации
+    struct sockaddr_in addr = {};
+    struct sock *sk = sock_from_file(ret);
     if (!sk) {
-        bpf_printk("Failed to lookup sock for FD=%ld\n", ret);
+        bpf_printk("Failed to retrieve socket for PID=%d\n", pid);
         return 0;
     }
 
-    // Заполняем информацию о соединении
-    bpf_probe_read_kernel(&conn_info->src_ip, sizeof(conn_info->src_ip), &sk->__sk_common.skc_rcv_saddr);
-    bpf_probe_read_kernel(&conn_info->dst_ip, sizeof(conn_info->dst_ip), &sk->__sk_common.skc_daddr);
-    bpf_probe_read_kernel(&conn_info->src_port, sizeof(conn_info->src_port), &sk->__sk_common.skc_num);
-    bpf_probe_read_kernel(&conn_info->dst_port, sizeof(conn_info->dst_port), &sk->__sk_common.skc_dport);
+    // Читаем IP и порт из сокета
+    bpf_probe_read_kernel(&addr, sizeof(addr), &sk->sk_daddr);
+    addr.sin_port = sk->sk_dport;
 
-    // Преобразуем IP и порты в читаемый формат
-    u32 src_ip = bpf_ntohl(conn_info->src_ip);
-    u32 dst_ip = bpf_ntohl(conn_info->dst_ip);
-    u16 src_port = bpf_ntohs(conn_info->src_port);
-    u16 dst_port = bpf_ntohs(conn_info->dst_port);
+    // Преобразуем IP и порт в читаемый вид
+    u32 src_ip = bpf_ntohl(addr.sin_addr.s_addr);
+    u16 src_port = bpf_ntohs(addr.sin_port);
 
-    // Вывод в читаемом формате
-    bpf_printk("Connection Established:\n");
+    bpf_printk("New Connection:\n");
     bpf_printk("    PID: %d\n", pid);
     bpf_printk("    Process: %s\n", conn_info->comm);
-    bpf_printk("    Source IP: %d.%d.%d.%d\n",
+    bpf_printk("    IP: %d.%d.%d.%d\n",
                (src_ip >> 24) & 0xFF, (src_ip >> 16) & 0xFF,
                (src_ip >> 8) & 0xFF, src_ip & 0xFF);
-    bpf_printk("    Destination IP: %d.%d.%d.%d\n",
-               (dst_ip >> 24) & 0xFF, (dst_ip >> 16) & 0xFF,
-               (dst_ip >> 8) & 0xFF, dst_ip & 0xFF);
-    bpf_printk("    Source Port: %d\n", src_port);
-    bpf_printk("    Destination Port: %d\n", dst_port);
+    bpf_printk("    Port: %d\n", src_port);
 
-    // Удаляем элемент из карты после обработки
+    // Удаляем данные из карты
     bpf_map_delete_elem(&conn_info_map, &pid);
 
     return 0;
 }
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir $(pwd)   -tags linux   -type trace_info   -go-package main   target_amd64_bpf   $(pwd)/trace.c -- -I$(pwd)
-/home/gaz358/myprog/bpfgo/trace.c:257:24: error: call to undeclared function 'sockfd_lookup'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
-  257 |      struct sock *sk = sockfd_lookup(ret, NULL);
-      |                        ^
-/home/gaz358/myprog/bpfgo/trace.c:257:19: error: incompatible integer to pointer conversion initializing 'struct sock *' with an expression of type 'int' [-Wint-conversion]
-  257 |      struct sock *sk = sockfd_lookup(ret, NULL);
-      |                   ^    ~~~~~~~~~~~~~~~~~~~~~~~~
-2 errors generated.
-Error: compile: exit status 1
-
-
-
