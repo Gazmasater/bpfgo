@@ -78,3 +78,68 @@ int trace_accept4_enter(struct sys_enter_accept4_args *ctx) {
 
     return 0;
 }
+
+
+
+SEC("tracepoint/syscalls/sys_exit_accept4")
+int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    long ret = ctx->ret;  // Дескриптор нового соединения
+
+    // Если произошла ошибка при вызове accept4()
+    if (ret < 0) {
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        bpf_map_delete_elem(&addr_map, &pid);
+        bpf_map_delete_elem(&status_map, &pid);
+        return 0;
+    }
+
+    // Извлекаем информацию о соединении
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
+    if (!conn_info) {
+        bpf_printk("UDP sys_exit_accept4: No connection info found for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        return 0;
+    }
+
+    bpf_printk("Comm=%s", conn_info->comm);
+
+    // Извлекаем указатель на sockaddr
+    struct sockaddr_in **addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
+    if (!addr_ptr || !*addr_ptr) {
+        bpf_printk("UDP sys_exit_accept4: No sockaddr found for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        bpf_map_delete_elem(&addr_map, &pid);
+        return 0;
+    }
+
+    // Считываем данные о клиенте
+    struct sockaddr_in addr = {};
+    if (bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr) != 0) {
+        bpf_printk("UDP sys_exit_accept4: Failed to read sockaddr for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        bpf_map_delete_elem(&addr_map, &pid);
+        return 0;
+    }
+
+    // Проверяем, что это IPv4
+    if (addr.sin_family == AF_INET) {
+        u32 src_ip = bpf_ntohl(addr.sin_addr.s_addr);
+        u16 src_port = bpf_ntohs(addr.sin_port);
+
+        bpf_printk("Accepted connection from %d.%d.%d.%d:%d (PID=%d)\n",
+                   (src_ip >> 24) & 0xFF, (src_ip >> 16) & 0xFF,
+                   (src_ip >> 8) & 0xFF, src_ip & 0xFF, src_port, pid);
+    }
+
+    // Обновляем статус на false (отсутствие активности)
+    struct status_t status = {.in_progress = false};
+    bpf_map_update_elem(&status_map, &pid, &status, BPF_ANY);
+
+    // Удаляем временные данные из карт
+    bpf_map_delete_elem(&conn_info_map, &pid);
+    bpf_map_delete_elem(&addr_map, &pid);
+
+    return 0;
+}
+
