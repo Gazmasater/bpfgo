@@ -117,3 +117,17 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
 
     return 0;
 }
+
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "140",
+	"severity": 8,
+	"message": "too many arguments in function call",
+	"source": "C/C++",
+	"startLineNumber": 276,
+	"startColumn": 79,
+	"endLineNumber": 276,
+	"endColumn": 85
+}]
