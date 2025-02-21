@@ -42,31 +42,6 @@ bpf2go -output-dir $(pwd) \
   $(pwd)/trace.c -- -I$(pwd)
 
 
-  struct status_t {
-    bool in_progress;
-};
-
-
-struct conn_info_t {
-    __be32 ip;  // IPv4 address
-    __be16 port;  // Port
-};
-
-
-
-#include <linux/bpf.h>
-#include <linux/ptrace.h>
-#include <net/sock.h>
-#include <linux/in.h>
-#include <bpf/bpf_helpers.h>
-
-struct conn_info_t {
-    u32 pid;           // ID процесса
-    char comm[16];     // Имя процесса (не более 16 символов)
-    u32 src_ip;        // Исходный IP-адрес
-    u16 sport;         // Исходный порт
-};
-
 SEC("tracepoint/syscalls/sys_exit_accept4")
 int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
@@ -119,15 +94,6 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
 }
 
 
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
-	"owner": "C/C++: IntelliSense",
-	"code": "140",
-	"severity": 8,
-	"message": "too many arguments in function call",
-	"source": "C/C++",
-	"startLineNumber": 276,
-	"startColumn": 79,
-	"endLineNumber": 276,
-	"endColumn": 85
-}]
+
+
+
