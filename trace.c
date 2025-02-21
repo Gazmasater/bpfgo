@@ -34,6 +34,13 @@ struct status_t {
     bool in_progress;
 };
 
+struct sockaddr_any {
+    __u16 family;
+    __u32 src_ip[4];  // Подходит и для IPv4, и для IPv6
+    __u16 port;
+};
+
+
 
 struct sys_enter_accept4_args
 {
@@ -189,6 +196,8 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
 
+
+
 SEC("tracepoint/syscalls/sys_enter_accept4")
 int trace_accept4_enter(struct sys_enter_accept4_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
@@ -199,7 +208,7 @@ int trace_accept4_enter(struct sys_enter_accept4_args *ctx) {
 
     // Сохраняем sockaddr сразу в карту
     if (ctx->upeer_sockaddr) {
-        struct sockaddr_in addr = {};
+        struct sockaddr_any addr = {};
         if (bpf_probe_read_user(&addr, sizeof(addr), ctx->upeer_sockaddr) == 0) {
             bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
         } else {
@@ -246,13 +255,13 @@ int trace_accept4_enter(struct sys_enter_accept4_args *ctx) {
 
 
     // Извлекаем сохранённый sockaddr из карты
-    struct sockaddr_in *addr = bpf_map_lookup_elem(&addr_map, &pid);
+    struct sockaddr_any *addr = bpf_map_lookup_elem(&addr_map, &pid);
     if (!addr) {
         bpf_printk("UDP sys_exit_accept4: No sockaddr found for PID=%d\n", pid);
         return 0;
     }
 
-    bpf_printk("4444444444444444444 Comm=%s FAMILY=%d", conn_info->comm, addr->sin_family);
+    bpf_printk("4444444444444444444 Comm=%s FAMILY=%d", conn_info->comm, addr->family);
 
 //     // Если это IPv4, обновляем информацию
 //     if (addr->sin_family == AF_INET) {
