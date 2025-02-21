@@ -63,12 +63,11 @@ type bpfTraceInfo struct {
 	Pid     uint32
 	Comm    [128]byte
 	SrcIP   uint32
-	SrcPort uint16
 	DstIP   uint32
+	SrcPort uint16
 	DstPort uint16
 }
 
-// Глобальные объекты BPF
 var objs target_amd64_bpfObjects
 
 func init() {
@@ -136,6 +135,9 @@ func main() {
 				return
 			}
 
+			// Выводим сырые данные RawSample для диагностики
+			fmt.Printf("RawSample: %v\n", record.RawSample)
+
 			if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
 				log.Println("invalid event size")
 				continue
@@ -147,9 +149,6 @@ func main() {
 			// Преобразуем IP-адреса в строковый формат
 			srcIP := fmt.Sprintf("%v", net.IPv4(byte(event.SrcIP>>24), byte(event.SrcIP>>16), byte(event.SrcIP>>8), byte(event.SrcIP)))
 			dstIP := fmt.Sprintf("%v", net.IPv4(byte(event.DstIP>>24), byte(event.DstIP>>16), byte(event.DstIP>>8), byte(event.DstIP)))
-
-			// Печатаем значения портов, чтобы убедиться, что они правильно извлечены
-			fmt.Printf("SrcPort: %d, DstPort: %d\n", event.SrcPort, event.DstPort)
 
 			// Выводим все данные
 			fmt.Printf("PID: %d, Comm: %s, SrcIP: %s, SrcPort: %d, DstIP: %s, DstPort: %d\n",
