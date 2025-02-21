@@ -241,6 +241,7 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;  // Дескриптор сокета
 
+
     if (ret < 0) {
         bpf_printk("UDP sys_exit_accept4: Accept failed\n");
         return 0;
@@ -253,36 +254,39 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
         return 0;
     }
 
-    // Получаем информацию о соединении
-    struct inet_sock *inet = inet_sk(sk);
+    // Используем BPF-хелперы для получения информации о сокете
+    struct inet_sock *inet = (struct inet_sock *)sk;  // Преобразуем сокет в inet_sock (IPv4)
+
     if (inet == NULL) {
         bpf_printk("UDP sys_exit_accept4: No inet_sock found\n");
         return 0;
     }
 
-    __be32 ip = inet->inet_saddr;  // Удалённый IP-адрес
-    __be16 port = inet->inet_sport;  // Удалённый порт
+    u32 ip = inet->inet_saddr;  // Удалённый IP-адрес
+    u16 port = inet->inet_sport;  // Удалённый порт
 
     // Преобразуем IP в строковый формат
     char ip_str[16];  // Строка для хранения IP
     bpf_probe_read_str(ip_str, sizeof(ip_str), &ip);  // Преобразуем IP в строку
 
-    // Преобразуем порт в строковый формат
-    u16 port_host = bpf_ntohs(port);  // Преобразуем порт из сетевого порядка в хостовый
+    // // Преобразуем порт в строковый формат
+    // u16 port_host = bpf_ntohs(port);  // Преобразуем порт из сетевого порядка в хостовый
 
-    // Логируем информацию о соединении в формате IP:PORT
-    bpf_printk("UDP sys_exit_accept4: Remote IP: %s, Remote Port: %u\n", ip_str, port_host);
 
-    // Сохраняем информацию о соединении в карте
-    struct conn_info_t conn_info = {
-        .src_ip = ip,
-        .sport = port,
-    };
+    // // Сохраняем информацию о соединении в карте
+    // struct conn_info_t conn_info = {
+    //     .src_ip = ip,
+    //     .sport = port,
+    // };
 
-    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+    // bpf_printk("UDP sys_exit_accept4: Comm=%s Remote IP: %s, Remote Port: %d\n", conn_info.comm, ip_str, port_host);
+
+
+    // bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
     return 0;
 }
+
 
 
 
