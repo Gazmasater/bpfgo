@@ -188,6 +188,113 @@ struct
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
+
+SEC("tracepoint/syscalls/sys_enter_accept4")
+int trace_accept4_enter(struct sys_enter_accept4_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct conn_info_t conn_info = {};
+    conn_info.pid = pid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
+    // Считываем информацию о sockaddr
+    struct sockaddr addr;
+    if (bpf_probe_read(&addr, sizeof(addr), ctx->upeer_sockaddr) != 0) {
+        return 0; 
+    }
+
+    // Добавляем статус в status_map
+    struct status_t *status = bpf_map_lookup_elem(&status_map, &pid);
+    if (status && status->in_progress) {
+        return 0; 
+    }
+
+    struct status_t new_status = {.in_progress = true};
+    bpf_map_update_elem(&status_map, &pid, &new_status, BPF_ANY);
+
+    // Обновляем карты с адресом и информацией о соединении
+    bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+
+    bpf_printk("SERVER sys_enter_accept: PID=%d, Comm=%s\n", conn_info.pid, conn_info.comm);
+
+    return 0;
+}
+
+
+SEC("tracepoint/syscalls/sys_exit_accept4")
+int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    long ret = ctx->ret;
+
+    // Если операция завершена с ошибкой
+    if (ret < 0) {
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        bpf_map_delete_elem(&addr_map, &pid);
+        return 0;
+    }
+
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
+    if (!conn_info) {
+        bpf_printk("UDP sys_exit_accept4: No connection info found for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        return 0;
+    }
+
+    // Получаем информацию об адресе
+    void *addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
+    if (!addr_ptr) {
+        bpf_printk("UDP sys_exit_accept4: No sockaddr found for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        bpf_map_delete_elem(&addr_map, &pid);
+        return 0;
+    }
+
+    bpf_printk("!!!!!!!!!!!!!!!!!!!!1");
+
+    struct sockaddr_in addr;
+    if (bpf_probe_read(&addr, sizeof(addr), addr_ptr) != 0) {
+        bpf_printk("UDP sys_exit_accept4: Failed to read sockaddr for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        bpf_map_delete_elem(&addr_map, &pid);
+        return 0;
+    }
+
+    // Если это IPv4, обновляем информацию
+    if (addr.sin_family == AF_INET) {
+        conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
+        conn_info->sport = bpf_ntohs(addr.sin_port);
+
+        struct trace_info info = {};
+        info.pid = conn_info->pid;
+        info.src_ip = conn_info->src_ip;
+        info.sport = conn_info->sport;
+        bpf_probe_read_str(&info.comm, sizeof(info.comm), conn_info->comm);
+
+        // Выводим информацию о соединении
+        bpf_printk("UDP sys_exit_accept4: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+                   info.pid, info.comm,
+                   (info.src_ip >> 24) & 0xFF, (info.src_ip  >> 16) & 0xFF,
+                   (info.src_ip >> 8) & 0xFF, info.src_ip  & 0xFF, info.sport);
+
+        // Отправляем информацию в пользовательское пространство
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    }
+
+    // Обновляем статус на false (отсутствие активности)
+    struct status_t status = {.in_progress = false};
+    bpf_map_update_elem(&status_map, &pid, &status, BPF_ANY);
+
+    // Очистка карт после завершения
+    bpf_map_delete_elem(&conn_info_map, &pid);
+    bpf_map_delete_elem(&addr_map, &pid);
+
+    return 0;
+}
+
+
+
+
+
 SEC("tracepoint/syscalls/sys_enter_sendto")
 int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
