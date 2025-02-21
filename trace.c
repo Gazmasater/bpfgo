@@ -200,94 +200,31 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 
 
-SEC("tracepoint/syscalls/sys_enter_accept4")
-int trace_accept4_enter(struct sys_enter_accept4_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
 
+
+SEC("tracepoint/syscalls/sys_exit_accept4")
+int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
+
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
     struct conn_info_t conn_info = {};
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
 
-    if (ctx->upeer_sockaddr) {
+    long ret = ctx->ret;
 
-        struct sockaddr_in addr = {};
-
-
-
-        if (bpf_probe_read_user(&addr, sizeof(addr), ctx->upeer_sockaddr) == 0) {
-
-            bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
-        } else {
-            bpf_printk("UDP sys_enter_accept4: Failed to read sockaddr for  Comm=%s\n", conn_info.comm);
-        }
-    }
-
-    // Сохраняем conn_info
-    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
-
-    // Добавляем статус соединения
-    struct status_t new_status = {.in_progress = true};
-    bpf_map_update_elem(&status_map, &pid, &new_status, BPF_ANY);
-
-    bpf_printk("SERVER sys_enter_accept4: PID=%d, Comm=%s\n", conn_info.pid, conn_info.comm);
-
-    return 0;
-}
-
-
-SEC("tracepoint/syscalls/sys_exit_accept4")
-int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;  // Дескриптор сокета
-
+    // Если операция завершена с ошибкой
     if (ret < 0) {
-        bpf_printk("UDP sys_exit_accept4: Accept failed\n");
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        bpf_map_delete_elem(&addr_map, &pid);
         return 0;
     }
 
-    struct sock *sk = (struct sock *)ret;  // Преобразуем дескриптор сокета в указатель на сокет
+    bpf_printk("sys_exit_accept4 Comm=%s",conn_info.comm);
 
-    if (sk == NULL) {
-        bpf_printk("UDP sys_exit_accept4: Invalid socket\n");
-        return 0;
-    }
-
-    // Используем BPF-хелперы для получения информации о сокете
-    struct inet_sock *inet = (struct inet_sock *)sk;  // Преобразуем сокет в inet_sock (IPv4)
-
-    if (inet == NULL) {
-        bpf_printk("UDP sys_exit_accept4: No inet_sock found\n");
-        return 0;
-    }
-
-    u32 ip = inet->inet_saddr;  // Исходный IP-адрес
-    u16 port = inet->inet_sport;  // Исходный порт
-
-    // Преобразуем IP в строку вручную
-    char ip_str[16];  // Строка для хранения IP
-    u8 *ip_ptr = (u8 *)&ip;
-   // bpf_snprintf(ip_str, sizeof(ip_str), "%u.%u.%u.%u", ip_ptr[0], ip_ptr[1], ip_ptr[2], ip_ptr[3]);
-
-    // Преобразуем порт в хостовый порядок
-    u16 port_host = bpf_ntohs(port);  // Преобразуем порт из сетевого порядка в хостовый
-
-
-    // Сохраняем информацию о соединении в карте
-    struct conn_info_t conn_info = {
-        .src_ip = ip,
-        .sport = port,
-    };
-
-    bpf_printk("UDP sys_exit_accept4: Comm=%s Src IP: %s  Port=%d\n",conn_info.comm, ip_str,port_host);
-
-
-     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
     return 0;
 }
-
-
 
 
 
