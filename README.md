@@ -99,3 +99,14 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
 
     return 0;
 }
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir $(pwd)   -tags linux   -type trace_info   -go-package main   target_amd64_bpf   $(pwd)/trace.c -- -I$(pwd)
+/home/gaz358/myprog/bpfgo/trace.c:257:30: error: call to undeclared function 'inet_sk'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  257 |     struct inet_sock *inet = inet_sk(sk);
+      |                              ^
+/home/gaz358/myprog/bpfgo/trace.c:257:23: error: incompatible integer to pointer conversion initializing 'struct inet_sock *' with an expression of type 'int' [-Wint-conversion]
+  257 |     struct inet_sock *inet = inet_sk(sk);
+      |                       ^      ~~~~~~~~~~~
+2 errors generated.
+Error: compile: exit status 1
