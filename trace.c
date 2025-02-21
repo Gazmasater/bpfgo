@@ -202,18 +202,22 @@ int trace_accept4_enter(struct sys_enter_accept4_args *ctx) {
         return 0; 
     }
 
+    bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+
+
     // Добавляем статус в status_map
     struct status_t *status = bpf_map_lookup_elem(&status_map, &pid);
     if (status && status->in_progress) {
         return 0; 
     }
 
+
+
     struct status_t new_status = {.in_progress = true};
     bpf_map_update_elem(&status_map, &pid, &new_status, BPF_ANY);
 
     // Обновляем карты с адресом и информацией о соединении
-    bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
-    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
     bpf_printk("SERVER sys_enter_accept: PID=%d, Comm=%s\n", conn_info.pid, conn_info.comm);
 
