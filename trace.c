@@ -197,10 +197,13 @@ int trace_accept4_enter(struct sys_enter_accept4_args *ctx) {
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
     // Считываем информацию о sockaddr
-    struct sockaddr addr;
+    struct sockaddr_in addr;
     if (bpf_probe_read(&addr, sizeof(addr), ctx->upeer_sockaddr) != 0) {
         return 0; 
     }
+
+    bpf_printk("sys_enter_accept4Comm=%s   FAMILY=%d",conn_info.comm,addr.sin_family);
+
 
     bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
@@ -230,6 +233,8 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
+
+
     // Если операция завершена с ошибкой
     if (ret < 0) {
         bpf_map_delete_elem(&conn_info_map, &pid);
@@ -237,12 +242,17 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
         return 0;
     }
 
+
+
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
     if (!conn_info) {
         bpf_printk("UDP sys_exit_accept4: No connection info found for PID=%d\n", pid);
         bpf_map_delete_elem(&conn_info_map, &pid);
         return 0;
     }
+
+    bpf_printk("222222222222222222Comm=%s",conn_info->comm);
+
 
     // Получаем информацию об адресе
     void *addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
@@ -253,7 +263,7 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
         return 0;
     }
 
-    bpf_printk("!!!!!!!!!!!!!!!!!!!!1");
+    bpf_printk("3333333333333333333333Comm=%s",conn_info->comm);
 
     struct sockaddr_in addr;
     if (bpf_probe_read(&addr, sizeof(addr), addr_ptr) != 0) {
@@ -262,6 +272,9 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
         bpf_map_delete_elem(&addr_map, &pid);
         return 0;
     }
+
+    bpf_printk("4444444444444444444Comm=%s  FAMILY=%d",conn_info->comm,addr.sin_family);
+
 
     // Если это IPv4, обновляем информацию
     if (addr.sin_family == AF_INET) {
