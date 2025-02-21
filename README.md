@@ -46,150 +46,35 @@ bpf2go -output-dir $(pwd) \
     bool in_progress;
 };
 
-struct trace_info {
-    u32 pid;
-    u32 src_ip;
-    u32 dst_ip;
-    u16 sport;
-    u16 dport;
-    char comm[128];
-} __attribute__((packed));  // Убирает паддинги
+SEC("tracepoint/syscalls/sys_enter_accept4")
+int trace_accept4_enter(struct sys_enter_accept4_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct conn_info_t conn_info = {};
+    conn_info.pid = pid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
-package main
+    // Сохраняем указатель на структуру sockaddr
+    struct sockaddr_in *addr_ptr = (struct sockaddr_in *)ctx->upeer_sockaddr;
+    if (!addr_ptr) {
+        return 0;
+    }
 
-import (
-	"errors"
-	"fmt"
-	"log"
-	"net"
-	"os"
-	"os/signal"
-	"syscall"
-	"unsafe"
+    // Добавляем статус в status_map
+    struct status_t *status = bpf_map_lookup_elem(&status_map, &pid);
+    if (status && status->in_progress) {
+        return 0;  // Если соединение уже в процессе, ничего не делаем
+    }
 
-	"github.com/cilium/ebpf/link"
-	"github.com/cilium/ebpf/perf"
-	"github.com/cilium/ebpf/rlimit"
-)
+    struct status_t new_status = {.in_progress = true};
+    bpf_map_update_elem(&status_map, &pid, &new_status, BPF_ANY);
 
-type bpfTraceInfo struct {
-	Pid     uint32
-	Comm    [128]byte
-	SrcIP   uint32
-	SrcPort uint16
-	DstIP   uint32
-	DstPort uint16
-	_       [2]byte // Padding для выравнивания
-}
+    // Сохраняем указатель на sockaddr в карту
+    bpf_map_update_elem(&addr_map, &pid, &addr_ptr, BPF_ANY);
 
-// Глобальные объекты BPF
-var objs target_amd64_bpfObjects
+    // Сохраняем информацию о соединении
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
-func init() {
-	// Снимаем ограничение на память
-	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatalf("failed to remove memory limit for process: %v", err)
-	}
+    bpf_printk("SERVER sys_enter_accept4: PID=%d, Comm=%s\n", conn_info.pid, conn_info.comm);
 
-	// Загружаем eBPF-объекты
-	if err := loadTarget_amd64_bpfObjects(&objs, nil); err != nil {
-		log.Fatalf("failed to load bpf objects: %v", err)
-	}
-}
-
-func main() {
-	defer objs.Close() // Закроем объекты при выходе
-
-	// Привязываем eBPF-программу к tracepoint
-	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
-	}
-	defer SEnter.Close()
-
-	SExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_sendto: %s", err)
-	}
-	defer SExit.Close()
-
-	REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
-	}
-	defer REnter.Close()
-
-	RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
-	}
-	defer RExit.Close()
-
-	// Создаем perf.Reader для чтения событий eBPF
-	const buffLen = 4096
-	rd, err := perf.NewReader(objs.TraceEvents, buffLen)
-	if err != nil {
-		log.Fatalf("failed to create perf reader: %s", err)
-	}
-	defer rd.Close()
-
-	// Канал для завершения работы
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-
-	// Запускаем цикл чтения событий eBPF
-	go func() {
-		for {
-			record := new(perf.Record)
-			err := rd.ReadInto(record)
-			if err != nil {
-				if errors.Is(err, os.ErrDeadlineExceeded) {
-					continue
-				}
-				log.Printf("error reading from perf reader: %v", err)
-				return
-			}
-
-			if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
-				log.Println("invalid event size")
-				continue
-			}
-
-			// Приводим прочитанные данные к структуре bpfTraceInfo
-			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
-
-			// Преобразуем IP-адреса в строковый формат
-			srcIP := net.IPv4(
-				byte(event.SrcIP),
-				byte(event.SrcIP>>8),
-				byte(event.SrcIP>>16),
-				byte(event.SrcIP>>24),
-			)
-
-			dstIP := net.IPv4(
-				byte(event.DstIP),
-				byte(event.DstIP>>8),
-				byte(event.DstIP>>16),
-				byte(event.DstIP>>24),
-			)
-
-			// Преобразуем команду в строку
-			comm := string(event.Comm[:])
-			comm = comm[:len(comm)-1] // Убираем лишний нулевой байт
-
-			// Выводим все данные
-			fmt.Printf("PID: %d, Comm: %s, SrcIP: %s, SrcPort: %d, DstIP: %s, DstPort: %d\n",
-				event.Pid,
-				comm,
-				srcIP.String(),
-				event.SrcPort,
-				dstIP.String(),
-				event.DstPort,
-			)
-		}
-	}()
-
-	fmt.Println("Press Ctrl+C to exit")
-	<-stop
-	fmt.Println("Exiting...")
+    return 0;
 }
