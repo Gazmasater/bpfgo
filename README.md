@@ -52,6 +52,17 @@ struct conn_info_t {
     __be16 port;  // Port
 };
 
+#include <linux/bpf.h>
+#include <linux/ptrace.h>
+#include <net/sock.h>
+#include <linux/in.h>
+#include <bpf/bpf_helpers.h>
+
+struct conn_info_t {
+    __be32 ip;  // IPv4 address
+    __be16 port;  // Port
+};
+
 SEC("tracepoint/syscalls/sys_exit_accept4")
 int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
@@ -69,8 +80,9 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
         return 0;
     }
 
-    // Получаем информацию о соединении
-    struct inet_sock *inet = inet_sk(sk);
+    // Используем BPF-хелперы для получения информации о сокете
+    struct inet_sock *inet = (struct inet_sock *)sk;  // Преобразуем сокет в inet_sock (IPv4)
+
     if (inet == NULL) {
         bpf_printk("UDP sys_exit_accept4: No inet_sock found\n");
         return 0;
@@ -100,13 +112,3 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     return 0;
 }
 
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir $(pwd)   -tags linux   -type trace_info   -go-package main   target_amd64_bpf   $(pwd)/trace.c -- -I$(pwd)
-/home/gaz358/myprog/bpfgo/trace.c:257:30: error: call to undeclared function 'inet_sk'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
-  257 |     struct inet_sock *inet = inet_sk(sk);
-      |                              ^
-/home/gaz358/myprog/bpfgo/trace.c:257:23: error: incompatible integer to pointer conversion initializing 'struct inet_sock *' with an expression of type 'int' [-Wint-conversion]
-  257 |     struct inet_sock *inet = inet_sk(sk);
-      |                       ^      ~~~~~~~~~~~
-2 errors generated.
-Error: compile: exit status 1
