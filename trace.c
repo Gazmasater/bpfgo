@@ -9,6 +9,8 @@
 
 struct conn_info_t
 {
+   
+    
     u32 pid;
     u32 src_ip;
     u32 dst_ip;
@@ -207,17 +209,17 @@ int trace_accept4_enter(struct sys_enter_accept4_args *ctx) {
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
 
-    // Сохраняем sockaddr сразу в карту
     if (ctx->upeer_sockaddr) {
 
         struct sockaddr_in addr = {};
 
+
+
         if (bpf_probe_read_user(&addr, sizeof(addr), ctx->upeer_sockaddr) == 0) {
-            bpf_printk("!!!!SERVER sys_enter_accept4: ADDR=%p, Comm=%s\n", addr, conn_info.comm);
 
             bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
         } else {
-            bpf_printk("UDP sys_enter_accept4: Failed to read sockaddr for PID=%d Comm=%s\n", pid,conn_info.comm);
+            bpf_printk("UDP sys_enter_accept4: Failed to read sockaddr for  Comm=%s\n", conn_info.comm);
         }
     }
 
@@ -234,72 +236,53 @@ int trace_accept4_enter(struct sys_enter_accept4_args *ctx) {
 }
 
 
- SEC("tracepoint/syscalls/sys_exit_accept4")
- int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
+SEC("tracepoint/syscalls/sys_exit_accept4")
+int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
-
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
-    if (!conn_info) {
-        bpf_printk("UDP sys_exit_accept4: No connection info found for PID=%d\n", pid);
-        return 0;
-    }
-
-    bpf_printk("11111111111111111 Comm=%s ", conn_info->comm);
-
-
+    long ret = ctx->ret;  // Дескриптор сокета
 
     if (ret < 0) {
-        bpf_map_delete_elem(&conn_info_map, &pid);
-        bpf_map_delete_elem(&addr_map, &pid);
+        bpf_printk("UDP sys_exit_accept4: Accept failed\n");
         return 0;
     }
 
-    bpf_printk("2222222222222222222 Comm=%s ", conn_info->comm);
+    struct sock *sk = (struct sock *)ret;  // Преобразуем дескриптор сокета в указатель на сокет
 
-
-
-    // Извлекаем сохранённый sockaddr из карты
-    struct sockaddr_in *addr = bpf_map_lookup_elem(&addr_map, &pid);
-    if (!addr) {
-        bpf_printk("UDP sys_exit_accept4: No sockaddr found for PID=%d\n", pid);
+    if (sk == NULL) {
+        bpf_printk("UDP sys_exit_accept4: Invalid socket\n");
         return 0;
     }
 
-    bpf_printk("4444444444444444444 Comm=%s FAMILY=%d", conn_info->comm, addr->sin_family);
+    // Получаем информацию о соединении
+    struct inet_sock *inet = inet_sk(sk);
+    if (inet == NULL) {
+        bpf_printk("UDP sys_exit_accept4: No inet_sock found\n");
+        return 0;
+    }
 
-//     // Если это IPv4, обновляем информацию
-//     if (addr->sin_family == AF_INET) {
-//         conn_info->src_ip = bpf_ntohl(addr->sin_addr.s_addr);
-//         conn_info->sport = bpf_ntohs(addr->sin_port);
+    __be32 ip = inet->inet_saddr;  // Удалённый IP-адрес
+    __be16 port = inet->inet_sport;  // Удалённый порт
 
-//         struct trace_info info = {};
-//         info.pid = conn_info->pid;
-//         info.src_ip = conn_info->src_ip;
-//         info.sport = conn_info->sport;
-//         bpf_probe_read_str(&info.comm, sizeof(info.comm), conn_info->comm);
+    // Преобразуем IP в строковый формат
+    char ip_str[16];  // Строка для хранения IP
+    bpf_probe_read_str(ip_str, sizeof(ip_str), &ip);  // Преобразуем IP в строку
 
-//         // Логирование соединения
-//         bpf_printk("UDP sys_exit_accept4: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-//                    info.pid, info.comm,
-//                    (info.src_ip >> 24) & 0xFF, (info.src_ip >> 16) & 0xFF,
-//                    (info.src_ip >> 8) & 0xFF, info.src_ip & 0xFF, info.sport);
+    // Преобразуем порт в строковый формат
+    u16 port_host = bpf_ntohs(port);  // Преобразуем порт из сетевого порядка в хостовый
 
-//         // Отправляем информацию в пользовательское пространство
-//         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-//     }
+    // Логируем информацию о соединении в формате IP:PORT
+    bpf_printk("UDP sys_exit_accept4: Remote IP: %s, Remote Port: %u\n", ip_str, port_host);
 
-//     // Обновляем статус
-//     struct status_t status = {.in_progress = false};
-//     bpf_map_update_elem(&status_map, &pid, &status, BPF_ANY);
+    // Сохраняем информацию о соединении в карте
+    struct conn_info_t conn_info = {
+        .src_ip = ip,
+        .sport = port,
+    };
 
-//     // Очистка данных
-//     bpf_map_delete_elem(&conn_info_map, &pid);
-//     bpf_map_delete_elem(&addr_map, &pid);
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
     return 0;
 }
-
 
 
 
