@@ -44,6 +44,9 @@ bpf2go -output-dir $(pwd) \
 
 #include <linux/inet_sock.h>
 
+#include <linux/inet_sock.h>
+#include <linux/net.h>
+
 SEC("tracepoint/syscalls/sys_exit_accept4")
 int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
@@ -55,22 +58,25 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
 
     // Если операция завершена с ошибкой
     if (ret < 0) {
-        bpf_map_delete_elem(&conn_info_map, &pid);
         return 0;
     }
 
-    // Преобразуем дескриптор сокета в указатель на сокет
-    struct sock *sk = (struct sock *)ret;
+    // Дескриптор сокета
+    int fd = ret;
 
-    // Проверяем валидность сокета
-    if (!sk) {
-        bpf_printk("Invalid socket descriptor\n");
+    // Получаем указатель на сокет из файлового дескриптора
+    struct socket *sock;
+    bpf_probe_read(&sock, sizeof(sock), &fd);
+
+    if (!sock || !sock->sk) {
+        bpf_printk("Failed to get socket from fd\n");
         return 0;
     }
 
-    // Читаем порт из структуры inet_sock
+    // Доступ к структуре inet_sock
+    struct inet_sock *inet = (struct inet_sock *)sock->sk;
     u16 sport = 0;
-    bpf_probe_read(&sport, sizeof(sport), &((struct inet_sock *)sk)->inet_sport);
+    bpf_probe_read(&sport, sizeof(sport), &inet->inet_sport);
 
     // Преобразуем порт в хостовый порядок
     u16 port_host = bpf_ntohs(sport);
