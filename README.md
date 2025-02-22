@@ -86,3 +86,16 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
 
     return 0;
 }
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir $(pwd)   -tags linux   -type trace_info   -go-package main   target_amd64_bpf   $(pwd)/trace.c -- -I$(pwd)
+/home/gaz358/myprog/bpfgo/trace.c:206:5: error: Looks like the BPF stack limit is exceeded. Please move large on stack variables into BPF per-cpu array map. For non-kernel uses, the stack can be increased using -mllvm -bpf-stack-size.
+
+  206 | int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
+      |     ^
+/home/gaz358/myprog/bpfgo/trace.c:206:5: note: could not determine the original source location for ./trace.c:0:0
+/home/gaz358/myprog/bpfgo/trace.c:238:21: error: Looks like the BPF stack limit is exceeded. Please move large on stack variables into BPF per-cpu array map. For non-kernel uses, the stack can be increased using -mllvm -bpf-stack-size.
+
+  238 |     u16 port = inet.inet_sport;
+      |                     ^
+2 errors generated.
+Error: compile: exit status 1
