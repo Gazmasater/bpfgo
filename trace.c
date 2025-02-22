@@ -228,28 +228,24 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     }
 
     // Преобразуем сокет в структуру inet_sock для получения информации о порте
-    struct inet_sock *inet = (struct inet_sock *)sk;
-
-    // Если сокет не является inet_sock (IPv4)
-    if (inet == NULL) {
-        bpf_printk("No inet_sock found\n");
+    struct inet_sock inet;
+    if (bpf_probe_read(&inet, sizeof(inet), sk)) {
+        bpf_printk("Failed to read inet_sock\n");
         return 0;
     }
 
-    // Получаем порт
-    u16 port = inet->inet_sport;
+    // Получаем исходный порт
+    u16 port = inet.inet_sport;
 
     // Преобразуем порт в хостовый порядок
     u16 port_host = bpf_ntohs(port);
-    conn_info.sport=port_host;
+    conn_info.sport = port_host;
 
     // Логируем информацию о процессе и порте
-    bpf_printk("sys_exit_accept4: Comm=%s, Src Port=%d\n", conn_info.comm, conn_info.sport);
-
+    bpf_printk("sys_exit_accept4: Comm=%s, Src Port=%u\n", conn_info.comm, conn_info.sport);
 
     return 0;
 }
-
 
 
 SEC("tracepoint/syscalls/sys_enter_sendto")
