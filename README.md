@@ -104,4 +104,19 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     return 0;
 }
 
-char LICENSE[] SEC("license") = "GPL";
+az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir $(pwd)   -tags linux   -type trace_info   -go-package main   target_amd64_bpf   $(pwd)/trace.c -- -I$(pwd)
+/home/gaz358/myprog/bpfgo/trace.c:225:44: warning: cast to 'void *' from smaller integer type 'int' [-Wint-to-void-pointer-cast]
+  225 |     bpf_probe_read_kernel(&sk, sizeof(sk), (void *)fd);
+      |                                            ^~~~~~~~~~
+1 warning generated.
+Compiled /home/gaz358/myprog/bpfgo/target_amd64_bpf_bpfel.o
+Stripped /home/gaz358/myprog/bpfgo/target_amd64_bpf_bpfel.o
+Wrote /home/gaz358/myprog/bpfgo/target_amd64_bpf_bpfel.go
+/home/gaz358/myprog/bpfgo/trace.c:225:44: warning: cast to 'void *' from smaller integer type 'int' [-Wint-to-void-pointer-cast]
+  225 |     bpf_probe_read_kernel(&sk, sizeof(sk), (void *)fd);
+      |                                            ^~~~~~~~~~
+1 warning generated.
+Compiled /home/gaz358/myprog/bpfgo/target_amd64_bpf_bpfeb.o
+Stripped /home/gaz358/myprog/bpfgo/target_amd64_bpf_bpfeb.o
+Wrote /home/gaz358/myprog/bpfgo/target_amd64_bpf_bpfeb.go
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
