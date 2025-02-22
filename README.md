@@ -42,44 +42,47 @@ bpf2go -output-dir $(pwd) \
   $(pwd)/trace.c -- -I$(pwd)
 
 
-SEC("tracepoint/syscalls/sys_enter_sendto")
-int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
+SEC("tracepoint/syscalls/sys_enter_accept4")
+int trace_accept4_entry(struct sys_enter_accept4_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
 
     // Инициализация структуры conn_info_t напрямую
     struct conn_info_t conn_info = {};
     conn_info.pid = pid;
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+    conn_info.call = 1; // call=1 для accept4
+    conn_info.protocol = 1; // Протокол для accept4
 
-    struct conn_info_t *existing_conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid);
-    if (!existing_conn_info) {
-        bpf_map_update_elem(&conn_info_map_sc, &pid, &conn_info, BPF_ANY);
-    }
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+    conn_info.sock_addr = (struct sockaddr *)ctx->upeer_sockaddr;
+
+    bpf_map_update_elem(&conn_info_map_ra, &pid, &conn_info, BPF_ANY);
+
+    bpf_printk("SERVER accept4 entry: PID=%d, Comm=%s\n", conn_info.pid, conn_info.comm);
 
     return 0;
 }
 
-SEC("tracepoint/syscalls/sys_exit_sendto")
-int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
+SEC("tracepoint/syscalls/sys_exit_accept4")
+int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
-    // Если произошла ошибка, удаляем элемент из карты
     if (ret < 0) {
-        bpf_map_delete_elem(&conn_info_map_sc, &pid);
+        bpf_printk("EXIT_accept4 Accept4 failed for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map_ra, &pid);
         return 0;
     }
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_sc, &pid);
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map_ra, &pid);
     if (!conn_info) {
-        bpf_printk("UDP sys_exit_sendto: No connection info found for PID=%d\n", pid);
+        bpf_printk("EXIT_accept4 No connection info found for PID=%d\n", pid);
         return 0;
     }
 
     struct sockaddr_in addr;
     if (bpf_probe_read(&addr, sizeof(addr), conn_info->sock_addr) != 0) {
-        bpf_printk("UDP sys_exit_sendto: Failed to read sockaddr for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map_sc, &pid);
+        bpf_printk("EXIT_accept4 Failed to read sockaddr for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map_ra, &pid);
         return 0;
     }
 
@@ -87,14 +90,13 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
         conn_info->sport = bpf_ntohs(addr.sin_port);
 
-        bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+        bpf_printk("EXIT_accept4 Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
                    conn_info->pid, conn_info->comm,
                    (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
                    (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
     }
 
-    // Обновляем информацию о соединении
-    bpf_map_update_elem(&conn_info_map_sc, &pid, conn_info, BPF_ANY);
+    bpf_map_update_elem(&conn_info_map_ra, &pid, conn_info, BPF_ANY);
 
     return 0;
 }
