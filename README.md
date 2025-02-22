@@ -42,11 +42,25 @@ bpf2go -output-dir $(pwd) \
   $(pwd)/trace.c -- -I$(pwd)
 
 
-#include <linux/inet_sock.h>
+#include <vmlinux.h>
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_tracing.h>
+#include <bpf/bpf_core_read.h>
 
-#include <linux/inet_sock.h>
-#include <linux/net.h>
+struct conn_info_t {
+    u32 pid;
+    u16 sport;
+    char comm[16];
+};
 
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, u32);
+    __type(value, struct conn_info_t);
+} conn_info_map SEC(".maps");
+
+// Трейспоинт для sys_exit_accept4
 SEC("tracepoint/syscalls/sys_exit_accept4")
 int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
@@ -56,27 +70,21 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
 
     long ret = ctx->ret;
 
-    // Если операция завершена с ошибкой
+    // Проверка на ошибку
     if (ret < 0) {
         return 0;
     }
 
-    // Дескриптор сокета
-    int fd = ret;
-
-    // Получаем указатель на сокет из файлового дескриптора
-    struct socket *sock;
-    bpf_probe_read(&sock, sizeof(sock), &fd);
-
-    if (!sock || !sock->sk) {
-        bpf_printk("Failed to get socket from fd\n");
+    // Преобразуем файловый дескриптор в указатель на сокет
+    struct sock *sk = bpf_sock_from_fd(ret);
+    if (!sk) {
+        bpf_printk("Failed to get sock from fd\n");
         return 0;
     }
 
-    // Доступ к структуре inet_sock
-    struct inet_sock *inet = (struct inet_sock *)sock->sk;
+    // Считываем порт с помощью BPF-helpers
     u16 sport = 0;
-    bpf_probe_read(&sport, sizeof(sport), &inet->inet_sport);
+    bpf_probe_read_kernel(&sport, sizeof(sport), &sk->__sk_common.skc_num);
 
     // Преобразуем порт в хостовый порядок
     u16 port_host = bpf_ntohs(sport);
@@ -90,3 +98,5 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
 
     return 0;
 }
+
+char LICENSE[] SEC("license") = "GPL";
