@@ -1,6 +1,7 @@
 //go:build ignore
 
 #include "vmlinux.h"
+
 #include "bpf/bpf_tracing.h"
 #include "bpf/bpf_endian.h"
 #include "bpf/bpf_core_read.h"
@@ -211,23 +212,26 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
 
     long ret = ctx->ret;
 
-    // Если операция завершена с ошибкой
+    // Проверка на ошибку
     if (ret < 0) {
         return 0;
     }
 
-    // Преобразуем дескриптор сокета в указатель на сокет
-    struct sock *sk = (struct sock *)ret;
+    // Получаем файловый дескриптор
+    int fd = (int)ret;
 
-    // Проверяем валидность сокета
+    // Читаем сокет с помощью bpf_map_lookup_elem (альтернативный способ)
+    struct sock *sk = NULL;
+    bpf_probe_read_kernel(&sk, sizeof(sk), &fd);
+        
     if (!sk) {
-        bpf_printk("Invalid socket descriptor\n");
+        bpf_printk("Failed to retrieve socket from fd: %d\n", fd);
         return 0;
     }
 
-    // Читаем порт из структуры inet_sock
+    // Читаем порт
     u16 sport = 0;
-    bpf_probe_read(&sport, sizeof(sport), &((struct inet_sock *)sk)->inet_sport);
+    bpf_probe_read_kernel(&sport, sizeof(sport), &sk->__sk_common.skc_num);
 
     // Преобразуем порт в хостовый порядок
     u16 port_host = bpf_ntohs(sport);
@@ -236,11 +240,12 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     // Логируем информацию о процессе и порте
     bpf_printk("sys_exit_accept4: Comm=%s, Src Port=%u\n", conn_info.comm, conn_info.sport);
 
-    // Сохраняем информацию о соединении в карте
+    // Сохраняем информацию о соединении в карту
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
     return 0;
 }
+
 
 
 
