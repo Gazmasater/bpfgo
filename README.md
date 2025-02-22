@@ -45,53 +45,23 @@ bpf2go -output-dir $(pwd) \
 SEC("tracepoint/syscalls/sys_enter_accept4")
 int trace_accept4_entry(struct sys_enter_accept4_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct conn_info_t conn_info = {};
+    conn_info.pid = pid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
-    // Сохраняем sockaddr в карту
-    bpf_map_update_elem(&sockaddr_map, &pid, ctx->upeer_sockaddr, BPF_ANY);
+    // Создаём структуру sockaddr_in для хранения данных
+    struct sockaddr_in addr;
+    
+    // Копируем данные из указателя в структуру
+    if (bpf_probe_read(&addr, sizeof(addr), ctx->upeer_sockaddr) != 0) {
+        bpf_printk("Failed to read sockaddr for PID=%d\n", pid);
+        return 0;
+    }
+
+    // Сохраняем sockaddr в карту, вместо указателя на структуру
+    bpf_map_update_elem(&sockaddr_map, &pid, &addr, BPF_ANY);
 
     bpf_printk("SERVER accept4 entry: PID=%d\n", pid);
 
     return 0;
 }
-
-// Обработчик выхода из sys_exit_accept4
-SEC("tracepoint/syscalls/sys_exit_accept4")
-int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
-
-    if (ret < 0) {
-        bpf_printk("EXIT_accept4 Accept4 failed for PID=%d\n", pid);
-        bpf_map_delete_elem(&sockaddr_map, &pid);
-        return 0;
-    }
-
-    // Извлекаем sockaddr из карты
-    struct sockaddr *sock_addr = bpf_map_lookup_elem(&sockaddr_map, &pid);
-    if (!sock_addr) {
-        bpf_printk("EXIT_accept4 No sockaddr found for PID=%d\n", pid);
-        return 0;
-    }
-
-    struct sockaddr_in addr;
-    if (bpf_probe_read(&addr, sizeof(addr), sock_addr) != 0) {
-        bpf_printk("EXIT_accept4 Failed to read sockaddr for PID=%d\n", pid);
-        bpf_map_delete_elem(&sockaddr_map, &pid);
-        return 0;
-    }
-
-    if (addr.sin_family == AF_INET) {
-        u32 src_ip = bpf_ntohl(addr.sin_addr.s_addr);
-        u16 sport = bpf_ntohs(addr.sin_port);
-
-        bpf_printk("EXIT_accept4 Accepted connection: PID=%d, IP=%d.%d.%d.%d, Port=%d\n",
-                   pid,
-                   (src_ip >> 24) & 0xFF, (src_ip >> 16) & 0xFF,
-                   (src_ip >> 8) & 0xFF, src_ip & 0xFF, sport);
-    }
-
-    bpf_map_delete_elem(&sockaddr_map, &pid);
-
-    return 0;
-}
-
