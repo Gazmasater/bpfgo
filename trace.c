@@ -204,12 +204,10 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 SEC("tracepoint/syscalls/sys_exit_accept4")
 int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
-
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     struct conn_info_t conn_info = {};
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-
 
     long ret = ctx->ret;
 
@@ -220,7 +218,33 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
         return 0;
     }
 
-    bpf_printk("sys_exit_accept4 Comm=%s",conn_info.comm);
+    // Преобразуем дескриптор сокета в указатель на сокет
+    struct sock *sk = (struct sock *)ret;
+
+    // Если сокет не существует
+    if (sk == NULL) {
+        bpf_printk("Invalid socket descriptor\n");
+        return 0;
+    }
+
+    // Преобразуем сокет в структуру inet_sock для получения информации о порте
+    struct inet_sock *inet = (struct inet_sock *)sk;
+
+    // Если сокет не является inet_sock (IPv4)
+    if (inet == NULL) {
+        bpf_printk("No inet_sock found\n");
+        return 0;
+    }
+
+    // Получаем порт
+    u16 port = inet->inet_sport;
+
+    // Преобразуем порт в хостовый порядок
+    u16 port_host = bpf_ntohs(port);
+    conn_info.sport=port_host;
+
+    // Логируем информацию о процессе и порте
+    bpf_printk("sys_exit_accept4: Comm=%s, Src Port=%d\n", conn_info.comm, conn_info.sport);
 
 
     return 0;
