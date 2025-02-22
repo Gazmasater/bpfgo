@@ -42,62 +42,41 @@ bpf2go -output-dir $(pwd) \
   $(pwd)/trace.c -- -I$(pwd)
 
 
-#include <linux/tcp.h>
-#include <linux/sched.h>
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __type(key, u32);
-    __type(value, struct conn_info_t);
-    __uint(max_entries, 1024);
-} conn_info_map SEC(".maps");
-
-struct conn_info_t {
-    u32 pid;
-    char comm[16];
-    u16 port;
-};
-
-SEC("tracepoint/tcp/tcp_set_state")
-int trace_tcp_listen(struct trace_event_raw_tcp_event_sk *ctx) {
+SEC("tracepoint/syscalls/sys_exit_accept4")
+int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    struct sock *sk = (struct sock *)ctx->sk;
+    long ret = ctx->ret;
+    struct conn_info_t conn_info = {};
 
-    // Проверяем, что новое состояние - это TCP_LISTEN
-    if (ctx->state != TCP_LISTEN) {
+    // Проверка на ошибку
+    if (ret < 0) {
+        bpf_printk("EXIT_accept Accept4 failed for PID=%d\n", pid);
         return 0;
     }
 
-    // Читаем порт из структуры сокета
-    u16 port = 0;
-    bpf_probe_read_kernel(&port, sizeof(port), &sk->__sk_common.skc_num);
+    // Используем bpf_probe_read для безопасного чтения структуры sockaddr_in
+    struct sockaddr_in client_addr;
+    if (ctx->addr) {
+        bpf_probe_read(&client_addr, sizeof(client_addr), (void *)ctx->addr);
+        conn_info.client_ip = client_addr.sin_addr.s_addr;
+        conn_info.client_port = ntohs(client_addr.sin_port);
+    }
 
-    // Преобразуем порт в хостовый порядок
-    u16 port_host = bpf_ntohs(port);
-
-    // Заполняем информацию о соединении
-    struct conn_info_t conn_info = {};
-    conn_info.pid = pid;
-    conn_info.port = port_host;
+    // Получаем имя процесса
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
-    // Сохраняем информацию о слушающем сокете
-    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+    // Логируем информацию о процессе и соединении
+    bpf_printk("Accept4: PID=%d, Comm=%s, Client IP=%u.%u.%u.%u, Client Port=%d\n",
+               pid,
+               conn_info.comm,
+               (conn_info.client_ip >> 24) & 0xFF, 
+               (conn_info.client_ip >> 16) & 0xFF, 
+               (conn_info.client_ip >> 8) & 0xFF, 
+               conn_info.client_ip & 0xFF,
+               conn_info.client_port);
 
-    // Логируем событие
-    bpf_printk("Process %s (PID: %d) is listening on port %d\n", conn_info.comm, pid, port_host);
+    // Сохраняем информацию в карту
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
     return 0;
 }
-
-int type;
-socklen_t len = sizeof(type);
-if (getsockopt(sock_fd, SOL_SOCKET, SO_TYPE, &type, &len) == 0) {
-    if (type == SOCK_STREAM) {
-        // Это TCP-сокет
-    } else if (type == SOCK_DGRAM) {
-        // Это UDP-сокет
-    }
-}
-
-
