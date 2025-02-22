@@ -50,39 +50,22 @@ struct {
 } sockaddr_map SEC(".maps");
 
 
-static __always_inline int init_conn_info(struct sockaddr *sock_addr, u32 pid)
+static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf_map_def *map, u32 pid)
 {
-    struct sockaddr_in addr = {};
-    bpf_probe_read(&addr, sizeof(addr), sock_addr);
-
-    // Сохраняем sockaddr в новую карту
-    bpf_map_update_elem(&sockaddr_map, &pid, &addr, BPF_ANY);
-
     struct conn_info_t conn_info = {};
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+
+    // Копируем данные сокета в локальную структуру
+    struct sockaddr_in addr = {};
+    if (bpf_probe_read(&addr, sizeof(addr), sock_addr) != 0) {
+        bpf_printk("Failed to read sockaddr for PID=%d\n", pid);
+        return -1;
+    }
+
+    // Сохраняем скопированные данные в отдельную карту
+    bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
+
+    bpf_map_update_elem(map, &pid, &conn_info, BPF_ANY);
     return 0;
 }
-
-struct sockaddr_in *addr = bpf_map_lookup_elem(&sockaddr_map, &pid);
-if (!addr)
-{
-    bpf_printk("EXIT_accept4 No sockaddr found for PID=%d\n", pid);
-    bpf_map_delete_elem(&conn_info_map, &pid);
-    return 0;
-}
-
-if (addr->sin_family == AF_INET)
-{
-    conn_info->src_ip = bpf_ntohl(addr->sin_addr.s_addr);
-    conn_info->sport = bpf_ntohs(addr->sin_port);
-
-    bpf_printk("EXIT_accept4 Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-               conn_info->pid, conn_info->comm,
-               (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
-               (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
-}
-
-// Удаляем sockaddr после использования
-bpf_map_delete_elem(&sockaddr_map, &pid);
