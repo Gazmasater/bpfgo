@@ -213,39 +213,35 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
 
     // Если операция завершена с ошибкой
     if (ret < 0) {
-        bpf_map_delete_elem(&conn_info_map, &pid);
-        bpf_map_delete_elem(&addr_map, &pid);
         return 0;
     }
 
     // Преобразуем дескриптор сокета в указатель на сокет
     struct sock *sk = (struct sock *)ret;
 
-    // Если сокет не существует
-    if (sk == NULL) {
+    // Проверяем валидность сокета
+    if (!sk) {
         bpf_printk("Invalid socket descriptor\n");
         return 0;
     }
 
-    // Преобразуем сокет в структуру inet_sock для получения информации о порте
-    struct inet_sock inet;
-    if (bpf_probe_read(&inet, sizeof(inet), sk)) {
-        bpf_printk("Failed to read inet_sock\n");
-        return 0;
-    }
-
-    // Получаем исходный порт
-    u16 port = inet.inet_sport;
+    // Читаем порт из структуры inet_sock
+    u16 sport = 0;
+    bpf_probe_read(&sport, sizeof(sport), &((struct inet_sock *)sk)->inet_sport);
 
     // Преобразуем порт в хостовый порядок
-    u16 port_host = bpf_ntohs(port);
+    u16 port_host = bpf_ntohs(sport);
     conn_info.sport = port_host;
 
     // Логируем информацию о процессе и порте
     bpf_printk("sys_exit_accept4: Comm=%s, Src Port=%u\n", conn_info.comm, conn_info.sport);
 
+    // Сохраняем информацию о соединении в карте
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+
     return 0;
 }
+
 
 
 SEC("tracepoint/syscalls/sys_enter_sendto")
