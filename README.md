@@ -60,7 +60,7 @@ struct {
     __type(value, struct conn_info_t);
 } conn_info_map SEC(".maps");
 
-// Трейспоинт для sys_exit_accept4
+// Трейспоинт для выхода из sys_accept4
 SEC("tracepoint/syscalls/sys_exit_accept4")
 int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
@@ -75,14 +75,19 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
         return 0;
     }
 
-    // Преобразуем файловый дескриптор в указатель на сокет
-    struct sock *sk = bpf_sock_from_fd(ret);
+    // Получаем файловый дескриптор
+    int fd = (int)ret;
+
+    // Читаем сокет с помощью bpf_map_lookup_elem (альтернативный способ)
+    struct sock *sk = NULL;
+    bpf_probe_read_kernel(&sk, sizeof(sk), (void *)fd);
+    
     if (!sk) {
-        bpf_printk("Failed to get sock from fd\n");
+        bpf_printk("Failed to retrieve socket from fd: %d\n", fd);
         return 0;
     }
 
-    // Считываем порт с помощью BPF-helpers
+    // Читаем порт
     u16 sport = 0;
     bpf_probe_read_kernel(&sport, sizeof(sport), &sk->__sk_common.skc_num);
 
@@ -93,17 +98,10 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     // Логируем информацию о процессе и порте
     bpf_printk("sys_exit_accept4: Comm=%s, Src Port=%u\n", conn_info.comm, conn_info.sport);
 
-    // Сохраняем информацию о соединении в карте
+    // Сохраняем информацию о соединении в карту
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
     return 0;
 }
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir $(pwd)   -tags linux   -type trace_info   -go-package main   target_amd64_bpf   $(pwd)/trace.c -- -I$(pwd)
-/home/gaz358/myprog/bpfgo/trace.c:221:23: error: call to undeclared function 'bpf_sock_from_fd'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
-  221 |     struct sock *sk = bpf_sock_from_fd(ret);
-      |                       ^
-/home/gaz358/myprog/bpfgo/trace.c:221:18: error: incompatible integer to pointer conversion initializing 'struct sock *' with an expression of type 'int' [-Wint-conversion]
-  221 |     struct sock *sk = bpf_sock_from_fd(ret);
-      |                  ^    ~~~~~~~~~~~~~~~~~~~~~
-2 errors generated.
+char LICENSE[] SEC("license") = "GPL";
