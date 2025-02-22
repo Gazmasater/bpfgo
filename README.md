@@ -99,4 +99,11 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     return 0;
 }
 
-char LICENSE[] SEC("license") = "GPL";
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir $(pwd)   -tags linux   -type trace_info   -go-package main   target_amd64_bpf   $(pwd)/trace.c -- -I$(pwd)
+/home/gaz358/myprog/bpfgo/trace.c:221:23: error: call to undeclared function 'bpf_sock_from_fd'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  221 |     struct sock *sk = bpf_sock_from_fd(ret);
+      |                       ^
+/home/gaz358/myprog/bpfgo/trace.c:221:18: error: incompatible integer to pointer conversion initializing 'struct sock *' with an expression of type 'int' [-Wint-conversion]
+  221 |     struct sock *sk = bpf_sock_from_fd(ret);
+      |                  ^    ~~~~~~~~~~~~~~~~~~~~~
+2 errors generated.
