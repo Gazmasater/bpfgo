@@ -42,45 +42,51 @@ bpf2go -output-dir $(pwd) \
   $(pwd)/trace.c -- -I$(pwd)
 
 
-SEC("tracepoint/syscalls/sys_exit_accept4")
-int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
+#include <linux/tcp.h>
+#include <linux/sched.h>
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, u32);
+    __type(value, struct conn_info_t);
+    __uint(max_entries, 1024);
+} conn_info_map SEC(".maps");
+
+struct conn_info_t {
+    u32 pid;
+    char comm[16];
+    u16 port;
+};
+
+SEC("tracepoint/tcp/tcp_set_state")
+int trace_tcp_listen(struct trace_event_raw_tcp_event_sk *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    struct conn_info_t conn_info = {};
-    conn_info.pid = pid;
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+    struct sock *sk = (struct sock *)ctx->sk;
 
-    long ret = ctx->ret;
-
-    // Проверка на ошибку
-    if (ret < 0) {
+    // Проверяем, что новое состояние - это TCP_LISTEN
+    if (ctx->state != TCP_LISTEN) {
         return 0;
     }
 
-    // Получаем файловый дескриптор
-    int fd = (int)ret;
-
-    // Читаем сокет с помощью bpf_map_lookup_elem (альтернативный способ)
-    struct sock *sk = NULL;
-    bpf_probe_read_kernel(&sk, sizeof(sk), &fd);
-        
-    if (!sk) {
-        bpf_printk("Failed to retrieve socket from fd: %d\n", fd);
-        return 0;
-    }
-
-    // Читаем порт
-    u16 sport = 0;
-    bpf_probe_read_kernel(&sport, sizeof(sport), &sk->__sk_common.skc_num);
+    // Читаем порт из структуры сокета
+    u16 port = 0;
+    bpf_probe_read_kernel(&port, sizeof(port), &sk->__sk_common.skc_num);
 
     // Преобразуем порт в хостовый порядок
-    u16 port_host = bpf_ntohs(sport);
-    conn_info.sport = port_host;
+    u16 port_host = bpf_ntohs(port);
 
-    // Логируем информацию о процессе и порте
-    bpf_printk("sys_exit_accept4: Comm=%s, Src Port=%u\n", conn_info.comm, conn_info.sport);
+    // Заполняем информацию о соединении
+    struct conn_info_t conn_info = {};
+    conn_info.pid = pid;
+    conn_info.port = port_host;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
-    // Сохраняем информацию о соединении в карту
+    // Сохраняем информацию о слушающем сокете
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+
+    // Логируем событие
+    bpf_printk("Process %s (PID: %d) is listening on port %d\n", conn_info.comm, pid, port_host);
 
     return 0;
 }
+
