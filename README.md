@@ -90,3 +90,14 @@ int trace_tcp_listen(struct trace_event_raw_tcp_event_sk *ctx) {
     return 0;
 }
 
+int type;
+socklen_t len = sizeof(type);
+if (getsockopt(sock_fd, SOL_SOCKET, SO_TYPE, &type, &len) == 0) {
+    if (type == SOCK_STREAM) {
+        // Это TCP-сокет
+    } else if (type == SOCK_DGRAM) {
+        // Это UDP-сокет
+    }
+}
+
+
