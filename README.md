@@ -42,32 +42,7 @@ bpf2go -output-dir $(pwd) \
   $(pwd)/trace.c -- -I$(pwd)
 
 
-#include <linux/bpf.h>
-#include <linux/inet.h>
-#include <linux/if_ether.h>
-#include <linux/net.h>
-#include <linux/socket.h>
-#include <linux/ipv6.h>
-
-#define MAX_COMM_LEN 128
-
-struct conn_info_t {
-    u32 pid;
-    u32 src_ip;
-    u32 dst_ip;
-    u32 addrlen;
-    u16 sport;
-    u16 dport;
-    char comm[MAX_COMM_LEN];
-};
-
-// Определяем карту для хранения информации о соединении
-struct bpf_map_def SEC("maps") conn_info_map = {
-    .type = BPF_MAP_TYPE_HASH,
-    .key_size = sizeof(u32),  // Ключ - PID процесса
-    .value_size = sizeof(struct conn_info_t),  // Значение - информация о соединении
-    .max_entries = 1024,
-};
+#include <linux/inet_sock.h>
 
 SEC("tracepoint/syscalls/sys_exit_accept4")
 int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
@@ -87,29 +62,25 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     // Преобразуем дескриптор сокета в указатель на сокет
     struct sock *sk = (struct sock *)ret;
 
-    // Если сокет не существует
-    if (sk == NULL) {
+    // Проверяем валидность сокета
+    if (!sk) {
         bpf_printk("Invalid socket descriptor\n");
         return 0;
     }
 
-    // Читаем только необходимые данные из inet_sock
-    u16 port = 0;
-    if (bpf_probe_read(&port, sizeof(port), &sk->sk_num)) {
-        bpf_printk("Failed to read port\n");
-        return 0;
-    }
+    // Читаем порт из структуры inet_sock
+    u16 sport = 0;
+    bpf_probe_read(&sport, sizeof(sport), &((struct inet_sock *)sk)->inet_sport);
 
     // Преобразуем порт в хостовый порядок
-    u16 port_host = bpf_ntohs(port);
+    u16 port_host = bpf_ntohs(sport);
     conn_info.sport = port_host;
 
     // Логируем информацию о процессе и порте
     bpf_printk("sys_exit_accept4: Comm=%s, Src Port=%u\n", conn_info.comm, conn_info.sport);
 
-    // Сохраняем информацию о соединении в карту
+    // Сохраняем информацию о соединении в карте
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
     return 0;
 }
-
