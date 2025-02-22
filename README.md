@@ -42,37 +42,47 @@ bpf2go -output-dir $(pwd) \
   $(pwd)/trace.c -- -I$(pwd)
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ./ecc tracepoint.c
-INFO [ecc_rs::bpf_compiler] Compiling bpf object...
-INFO [ecc_rs::bpf_compiler] $ "clang" CommandArgs { inner: ["-g", "-O2", "-target", "bpf", "-Wno-unknown-attributes", "-D__TARGET_ARCH_x86", "-idirafter", "/usr/lib/llvm-18/lib/clang/18/include", "-idirafter", "/usr/local/include", "-idirafter", "/usr/include/x86_64-linux-gnu", "-idirafter", "/usr/include", "-I/tmp/.tmpCocf9h/include", "-I/tmp/.tmpCocf9h/include/vmlinux/x86", "-I/home/gaz358/myprog/bpfgo", "-c", "tracepoint.c", "-o", "tracepoint.bpf.o"] }
-INFO [ecc_rs::bpf_compiler] 
-ERROR [ecc_rs::bpf_compiler] tracepoint.c:101:78: warning: declaration of 'struct bpf_map_def' will not be visible outside of this function [-Wvisibility]
-  101 | static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf_map_def *map, u32 pid) {
-      |                                                                              ^
-tracepoint.c:106:2: error: call to undeclared function 'save_sockaddr'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
-  106 |         save_sockaddr(sock_addr, pid);
-      |         ^
-tracepoint.c:110:28: error: static declaration of 'save_sockaddr' follows non-static declaration
-  110 | static __always_inline int save_sockaddr(struct sockaddr *sock_addr, u32 pid) {
-      |                            ^
-tracepoint.c:106:2: note: previous implicit declaration is here
-  106 |         save_sockaddr(sock_addr, pid);
-      |         ^
-tracepoint.c:121:67: warning: incompatible pointer types passing 'struct (unnamed struct at tracepoint.c:80:1) *' to parameter of type 'struct bpf_map_def *' [-Wincompatible-pointer-types]
-  121 |     return init_conn_info((struct sockaddr *)ctx->upeer_sockaddr, &conn_info_map, bpf_get_current_pid_tgid() >> 32);
-      |                                                                   ^~~~~~~~~~~~~~
-tracepoint.c:101:91: note: passing argument to parameter 'map' here
-  101 | static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf_map_def *map, u32 pid) {
-      |                                                                                           ^
-tracepoint.c:127:62: warning: incompatible pointer types passing 'struct (unnamed struct at tracepoint.c:80:1) *' to parameter of type 'struct bpf_map_def *' [-Wincompatible-pointer-types]
-  127 |     return init_conn_info((struct sockaddr *)ctx->uservaddr, &conn_info_map, bpf_get_current_pid_tgid() >> 32);
-      |                                                              ^~~~~~~~~~~~~~
-tracepoint.c:101:91: note: passing argument to parameter 'map' here
-  101 | static __always_inline int init_conn_info(struct sockaddr *sock_addr, struct bpf_map_def *map, u32 pid) {
-      |                                                                                           ^
-3 warnings and 2 errors generated.
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, u32);  // PID в качестве ключа
+    __type(value, struct sockaddr_in); // Хранение копии sockaddr
+} sockaddr_map SEC(".maps");
 
-Error: Failed to compile
 
-Caused by:
-    Failed to run clang(exit code = Some(1))
+static __always_inline int init_conn_info(struct sockaddr *sock_addr, u32 pid)
+{
+    struct sockaddr_in addr = {};
+    bpf_probe_read(&addr, sizeof(addr), sock_addr);
+
+    // Сохраняем sockaddr в новую карту
+    bpf_map_update_elem(&sockaddr_map, &pid, &addr, BPF_ANY);
+
+    struct conn_info_t conn_info = {};
+    conn_info.pid = pid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+    return 0;
+}
+
+struct sockaddr_in *addr = bpf_map_lookup_elem(&sockaddr_map, &pid);
+if (!addr)
+{
+    bpf_printk("EXIT_accept4 No sockaddr found for PID=%d\n", pid);
+    bpf_map_delete_elem(&conn_info_map, &pid);
+    return 0;
+}
+
+if (addr->sin_family == AF_INET)
+{
+    conn_info->src_ip = bpf_ntohl(addr->sin_addr.s_addr);
+    conn_info->sport = bpf_ntohs(addr->sin_port);
+
+    bpf_printk("EXIT_accept4 Accepted connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
+               conn_info->pid, conn_info->comm,
+               (conn_info->src_ip >> 24) & 0xFF, (conn_info->src_ip >> 16) & 0xFF,
+               (conn_info->src_ip >> 8) & 0xFF, conn_info->src_ip & 0xFF, conn_info->sport);
+}
+
+// Удаляем sockaddr после использования
+bpf_map_delete_elem(&sockaddr_map, &pid);
