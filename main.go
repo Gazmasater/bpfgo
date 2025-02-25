@@ -15,15 +15,6 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 )
 
-type bpfTraceInfo struct {
-	Pid     uint32
-	SrcIP   uint32
-	DstIP   uint32
-	SrcPort uint16
-	DstPort uint16
-	Comm    [128]byte
-}
-
 // Глобальные объекты BPF
 var objs bpfObjects
 
