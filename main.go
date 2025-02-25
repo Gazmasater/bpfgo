@@ -25,7 +25,7 @@ type bpfTraceInfo struct {
 }
 
 // Глобальные объекты BPF
-var objs target_amd64_bpfObjects
+var objs bpfObjects
 
 func init() {
 	// Снимаем ограничение на память
@@ -34,7 +34,7 @@ func init() {
 	}
 
 	// Загружаем eBPF-объекты
-	if err := loadTarget_amd64_bpfObjects(&objs, nil); err != nil {
+	if err := loadBpfObjects(&objs, nil); err != nil {
 		log.Fatalf("failed to load bpf objects: %v", err)
 	}
 }
@@ -42,30 +42,30 @@ func init() {
 func main() {
 	defer objs.Close() // Закроем объекты при выходе
 
-	// Привязываем eBPF-программу к tracepoint
-	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
-	}
-	defer SEnter.Close()
+	// // Привязываем eBPF-программу к tracepoint
+	// SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
+	// }
+	// defer SEnter.Close()
 
-	SExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_sendto: %s", err)
-	}
-	defer SExit.Close()
+	// SExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_exit_sendto: %s", err)
+	// }
+	// defer SExit.Close()
 
-	REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
-	}
-	defer REnter.Close()
+	// REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
+	// }
+	// defer REnter.Close()
 
-	RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
-	}
-	defer RExit.Close()
+	// RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
+	// }
+	// defer RExit.Close()
 
 	Accept4Exit, err := link.Tracepoint("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit, nil)
 	if err != nil {
@@ -108,17 +108,17 @@ func main() {
 
 			// Преобразуем IP-адреса в строковый формат
 			srcIP := net.IPv4(
-				byte(event.SrcIP),
-				byte(event.SrcIP>>8),
-				byte(event.SrcIP>>16),
-				byte(event.SrcIP>>24),
+				byte(event.SrcIp),
+				byte(event.SrcIp>>8),
+				byte(event.SrcIp>>16),
+				byte(event.SrcIp>>24),
 			)
 
 			dstIP := net.IPv4(
-				byte(event.DstIP),
-				byte(event.DstIP>>8),
-				byte(event.DstIP>>16),
-				byte(event.DstIP>>24),
+				byte(event.DstIp),
+				byte(event.DstIp>>8),
+				byte(event.DstIp>>16),
+				byte(event.DstIp>>24),
 			)
 
 			// Преобразуем команду в строку
@@ -130,9 +130,9 @@ func main() {
 				event.Pid,
 				comm,
 				srcIP.String(),
-				event.SrcPort,
+				event.Sport,
 				dstIP.String(),
-				event.DstPort,
+				event.Dport,
 			)
 		}
 	}()
