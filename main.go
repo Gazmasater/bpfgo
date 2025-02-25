@@ -33,18 +33,18 @@ func init() {
 func main() {
 	defer objs.Close() // Закроем объекты при выходе
 
-	// // Привязываем eBPF-программу к tracepoint
-	// SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
-	// if err != nil {
-	// 	log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
-	// }
-	// defer SEnter.Close()
+	// Привязываем eBPF-программу к tracepoint
+	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
+	}
+	defer SEnter.Close()
 
-	// SExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
-	// if err != nil {
-	// 	log.Fatalf("opening tracepoint sys_exit_sendto: %s", err)
-	// }
-	// defer SExit.Close()
+	SExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_sendto: %s", err)
+	}
+	defer SExit.Close()
 
 	// REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
 	// if err != nil {
@@ -58,11 +58,11 @@ func main() {
 	// }
 	// defer RExit.Close()
 
-	Accept4Exit, err := link.Tracepoint("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
-	}
-	defer Accept4Exit.Close()
+	// Accept4Exit, err := link.Tracepoint("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
+	// }
+	// defer Accept4Exit.Close()
 
 	// Создаем perf.Reader для чтения событий eBPF
 	const buffLen = 4096
@@ -113,13 +113,12 @@ func main() {
 			)
 
 			// Преобразуем команду в строку
-			comm := string(event.Comm[:])
-			comm = comm[:len(comm)-1] // Убираем лишний нулевой байт
+			// comm := string(event.Comm[:])
+			// comm = comm[:len(comm)-1] // Убираем лишний нулевой байт
 
 			// Выводим все данные
-			fmt.Printf("PID: %d, Comm: %s, SrcIP: %s, SrcPort: %d, DstIP: %s, DstPort: %d\n",
+			fmt.Printf("PID: %d, SrcIP: %s, SrcPort: %d, DstIP: %s, DstPort: %d\n",
 				event.Pid,
-				comm,
 				srcIP.String(),
 				event.Sport,
 				dstIP.String(),

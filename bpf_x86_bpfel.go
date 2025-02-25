@@ -13,19 +13,13 @@ import (
 )
 
 type bpfConnInfoT struct {
-	Addr struct {
-		SinFamily uint16
-		SinPort   uint16
-		SinAddr   struct{ S_addr uint32 }
-		Pad       [8]uint8
-	}
 	Pid     uint32
 	SrcIp   uint32
 	DstIp   uint32
 	Addrlen uint32
 	Sport   uint16
 	Dport   uint16
-	Comm    [128]int8
+	Comm    [16]int8
 }
 
 type bpfTraceInfo struct {
@@ -34,7 +28,7 @@ type bpfTraceInfo struct {
 	DstIp uint32
 	Sport uint16
 	Dport uint16
-	Comm  [128]int8
+	Comm  [16]int8
 }
 
 // loadBpf returns the embedded CollectionSpec for bpf.
@@ -79,18 +73,16 @@ type bpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfProgramSpecs struct {
-	TraceAccept4Enter *ebpf.ProgramSpec `ebpf:"trace_accept4_enter"`
-	TraceAccept4Exit  *ebpf.ProgramSpec `ebpf:"trace_accept4_exit"`
-	TraceConnectEnter *ebpf.ProgramSpec `ebpf:"trace_connect_enter"`
-	TraceConnectExit  *ebpf.ProgramSpec `ebpf:"trace_connect_exit"`
+	TraceSendtoEnter *ebpf.ProgramSpec `ebpf:"trace_sendto_enter"`
+	TraceSendtoExit  *ebpf.ProgramSpec `ebpf:"trace_sendto_exit"`
 }
 
 // bpfMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
+	AddrMap     *ebpf.MapSpec `ebpf:"addr_map"`
 	ConnInfoMap *ebpf.MapSpec `ebpf:"conn_info_map"`
-	SockaddrMap *ebpf.MapSpec `ebpf:"sockaddr_map"`
 	TraceEvents *ebpf.MapSpec `ebpf:"trace_events"`
 }
 
@@ -121,15 +113,15 @@ func (o *bpfObjects) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
+	AddrMap     *ebpf.Map `ebpf:"addr_map"`
 	ConnInfoMap *ebpf.Map `ebpf:"conn_info_map"`
-	SockaddrMap *ebpf.Map `ebpf:"sockaddr_map"`
 	TraceEvents *ebpf.Map `ebpf:"trace_events"`
 }
 
 func (m *bpfMaps) Close() error {
 	return _BpfClose(
+		m.AddrMap,
 		m.ConnInfoMap,
-		m.SockaddrMap,
 		m.TraceEvents,
 	)
 }
@@ -145,18 +137,14 @@ type bpfVariables struct {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfPrograms struct {
-	TraceAccept4Enter *ebpf.Program `ebpf:"trace_accept4_enter"`
-	TraceAccept4Exit  *ebpf.Program `ebpf:"trace_accept4_exit"`
-	TraceConnectEnter *ebpf.Program `ebpf:"trace_connect_enter"`
-	TraceConnectExit  *ebpf.Program `ebpf:"trace_connect_exit"`
+	TraceSendtoEnter *ebpf.Program `ebpf:"trace_sendto_enter"`
+	TraceSendtoExit  *ebpf.Program `ebpf:"trace_sendto_exit"`
 }
 
 func (p *bpfPrograms) Close() error {
 	return _BpfClose(
-		p.TraceAccept4Enter,
-		p.TraceAccept4Exit,
-		p.TraceConnectEnter,
-		p.TraceConnectExit,
+		p.TraceSendtoEnter,
+		p.TraceSendtoExit,
 	)
 }
 
