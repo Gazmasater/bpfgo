@@ -19,12 +19,16 @@ import (
 // Глобальные объекты BPF
 var objs bpfObjects
 
-func int8ToString(arr []int8) string {
+func int8ToString(arr [64]int8) string {
 	// Преобразуем []int8 в []byte
-	byteArr := unsafe.Slice((*byte)(unsafe.Pointer(&arr[0])), len(arr))
-	return string(bytes.Trim(byteArr, "\x00")) // Убираем NULL-байты
-}
+	byteArr := make([]byte, len(arr))
+	for i, v := range arr {
+		byteArr[i] = byte(v)
+	}
 
+	// Убираем NULL-байты в конце и преобразуем в строку
+	return string(bytes.Trim(byteArr, "\x00"))
+}
 func init() {
 	// Снимаем ограничение на память
 	if err := rlimit.RemoveMemlock(); err != nil {
@@ -140,7 +144,7 @@ func main() {
 			// Выводим все данные
 			fmt.Printf("PID: %d, Comm=%s ,SrcIP: %s, SrcPort: %d, DstIP: %s, DstPort: %d\n",
 				event.Pid,
-				int8ToString(event.Comm[:]),
+				int8ToString(event.Comm), // Используем библиотечную функцию
 				srcIP.String(),
 				event.Sport,
 				dstIP.String(),

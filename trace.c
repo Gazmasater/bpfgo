@@ -294,6 +294,8 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
 
         struct trace_info info = {};
         info.pid = pid;
+        __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+
         info.src_ip=ip;
         info.sport = port;
 
@@ -362,6 +364,8 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
 
         struct trace_info info = {};
         info.pid = pid;
+        __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+
         info.src_ip=ip;
         info.sport = port;
 
@@ -430,6 +434,8 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
 
         struct trace_info info = {};
         info.pid = pid;
+        __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+
         info.src_ip=ip;
         info.sport = port;
 
