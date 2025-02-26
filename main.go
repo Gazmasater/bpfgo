@@ -46,23 +46,41 @@ func main() {
 	}
 	defer SExit.Close()
 
-	// REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
-	// if err != nil {
-	// 	log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
-	// }
-	// defer REnter.Close()
+	REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
+	}
+	defer REnter.Close()
 
-	// RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
-	// if err != nil {
-	// 	log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
-	// }
-	// defer RExit.Close()
+	RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
+	}
+	defer RExit.Close()
 
-	// Accept4Exit, err := link.Tracepoint("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit, nil)
-	// if err != nil {
-	// 	log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
-	// }
-	// defer Accept4Exit.Close()
+	Accept4Enter, err := link.Tracepoint("syscalls", "sys_enter_accept4", objs.TraceAccept4Enter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_accept4: %s", err)
+	}
+	defer Accept4Enter.Close()
+
+	Accept4Exit, err := link.Tracepoint("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_accept4: %s", err)
+	}
+	defer Accept4Exit.Close()
+
+	ConnectEnter, err := link.Tracepoint("syscalls", "sys_enter_connect", objs.TraceConnectEnter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_connect: %s", err)
+	}
+	defer ConnectEnter.Close()
+
+	ConnectExit, err := link.Tracepoint("syscalls", "sys_exit_connect", objs.TraceConnectExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_connect: %s", err)
+	}
+	defer ConnectExit.Close()
 
 	// Создаем perf.Reader для чтения событий eBPF
 	const buffLen = 4096
@@ -99,10 +117,10 @@ func main() {
 
 			// Преобразуем IP-адреса в строковый формат
 			srcIP := net.IPv4(
-				byte(event.SrcIp),
-				byte(event.SrcIp>>8),
-				byte(event.SrcIp>>16),
 				byte(event.SrcIp>>24),
+				byte(event.SrcIp>>16),
+				byte(event.SrcIp>>8),
+				byte(event.SrcIp),
 			)
 
 			dstIP := net.IPv4(

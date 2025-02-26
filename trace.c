@@ -22,6 +22,56 @@ struct status_t {
     bool in_progress;
 };
 
+struct sys_enter_accept4_args
+{
+	unsigned short common_type;
+	unsigned char common_flags;
+	unsigned char common_preempt_count;
+	int common_pid;
+	int __syscall_nr;
+	int fd;
+	int pad1;
+	struct sockaddr *upeer_sockaddr;
+	int *upeer_addrlen;
+	int flags;
+};
+
+struct sys_exit_accept4_args
+{
+	unsigned short common_type;//2
+	unsigned char common_flags;//1
+	unsigned char common_preempt_count;//1
+	int common_pid;//4
+	int __syscall_nr;//4
+	int pad1;
+	long ret;//8
+};
+
+struct sys_enter_connect_args
+{
+
+	unsigned short common_type;
+	unsigned char common_flags;
+	unsigned char common_preempt_count;
+	int common_pid;
+	int __syscall_nr;
+	long fd;
+	struct sockaddr *uservaddr;
+	int addrlen;
+};
+
+struct sys_exit_connect_args
+{
+
+unsigned short common_type;      
+unsigned char common_flags;      
+unsigned char common_preempt_count;    
+int common_pid; 
+int __syscall_nr; 
+int ret; 
+
+};
+
 
 struct sys_enter_sendto_args
 {
@@ -81,7 +131,7 @@ struct
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 1024);
     __type(key, u32);
-    __type(value, int);
+    __type(value, struct sockaddr *);
 } addr_map SEC(".maps");
 
 struct
@@ -92,23 +142,22 @@ struct
     __type(value, struct conn_info_t);
 } conn_info_map SEC(".maps");
 
-struct
-{
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 1024);
-    __type(key, u32);
-    __type(value, struct conn_info_t);
-} status_map SEC(".maps");
-
-
+// struct
+// {
+//     __uint(type, BPF_MAP_TYPE_HASH);
+//     __uint(max_entries, 1024);
+//     __type(key, u32);
+//     __type(value, struct conn_info_t);
+// } status_map SEC(".maps");
 
 struct
 {
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-    __uint(key_size, sizeof(__u32));
-    __uint(value_size, sizeof(__u32));
+    __uint(key_size, sizeof(u32));
+    __uint(value_size, sizeof(u32));
     __uint(max_entries, 128); 
 } trace_events SEC(".maps");
+
 
 
 struct trace_info {
@@ -127,101 +176,276 @@ const struct trace_info *unused __attribute__((unused));
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
 
+SEC("tracepoint/syscalls/sys_enter_accept4")
+int trace_accept4_enter(struct sys_enter_accept4_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct conn_info_t conn_info = {};
+
+    conn_info.pid = pid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+
+    struct sockaddr *addr = (struct sockaddr *)ctx->upeer_sockaddr;  
+
+    bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
+
+
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_accept4")
+int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    long ret = ctx->ret;
+
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
+    if (!conn_info) return 0;
+
+    if (ret < 0) {
+        bpf_printk("EXIT_accept Accept4 failed for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        return 0;
+    }
+
+    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
+    if (!addr_ptr) {
+        return 0;
+    }
+
+    struct sockaddr addr = {};
+    bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
+
+    bpf_printk("sys_exit_accept4 FAMILY=%d Comm=%s",addr.sa_family,conn_info->comm);
+
+    if (addr.sa_family == AF_INET) {
+        struct sockaddr_in addr_in = {};
+        bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
+
+        u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
+
+        u16 port = bpf_ntohs(addr_in.sin_port);
+
+        bpf_printk("sys_exit_accept4 FAMILY=%d PORT=%d Comm=%s",addr.sa_family,port,conn_info->comm);
+
+        struct trace_info info = {};
+        info.pid = pid;
+        info.src_ip=ip;
+        info.sport = port;
+
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+        
+    }
+
+    bpf_map_delete_elem(&addr_map, &pid);  
+    return 0;
+
+}
+
+SEC("tracepoint/syscalls/sys_enter_connect")
+int trace_connect_enter(struct sys_enter_connect_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct conn_info_t conn_info = {};
+
+    conn_info.pid = pid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+
+    struct sockaddr *addr = (struct sockaddr *)ctx->uservaddr;  
+
+    bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
+
+
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_connect")
+int trace_connect_exit(struct sys_exit_connect_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    long ret = ctx->ret;
+
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
+    if (!conn_info) return 0;
+
+    if (ret < 0) {
+        bpf_printk("sys_exit_connect failed for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        return 0;
+    }
+
+    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
+    if (!addr_ptr) {
+        return 0;
+    }
+
+    struct sockaddr addr = {};
+    bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
+
+    bpf_printk("sys_exit_connect FAMILY=%d Comm=%s",addr.sa_family,conn_info->comm);
+
+    if (addr.sa_family == AF_INET) {
+        struct sockaddr_in addr_in = {};
+        bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
+
+        u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
+
+        u16 port = bpf_ntohs(addr_in.sin_port);
+
+        bpf_printk("sys_exit_connect FAMILY=%d PORT=%d Comm=%s",addr.sa_family,port,conn_info->comm);
+
+        struct trace_info info = {};
+        info.pid = pid;
+        info.src_ip=ip;
+        info.sport = port;
+
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+        
+    }
+
+    bpf_map_delete_elem(&addr_map, &pid);  
+    return 0;
+
+}
+
 SEC("tracepoint/syscalls/sys_enter_sendto")
 int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     struct conn_info_t conn_info = {};
+
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
-    // Считываем информацию о sockaddr
-    struct sockaddr_in addr;
-    if (bpf_probe_read(&addr, sizeof(addr), ctx->addr) != 0) {
-        return 0; 
-    }
-
-    // Добавляем статус в status_map
-    struct status_t *status = bpf_map_lookup_elem(&status_map, &pid);
-    if (status && status->in_progress) {
-        return 0; 
-    }
-
-    struct status_t new_status = {.in_progress = true};
-    bpf_map_update_elem(&status_map, &pid, &new_status, BPF_ANY);
-
-    // Обновляем карты с адресом и информацией о соединении
-    bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
-    bpf_printk("SERVER sys_enter_sendto: PID=%d, Comm=%s\n", conn_info.pid, conn_info.comm);
+    struct sockaddr *addr = (struct sockaddr *)ctx->addr;  
+
+    bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
+
 
     return 0;
 }
+
 
 SEC("tracepoint/syscalls/sys_exit_sendto")
 int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
-    // Если операция завершена с ошибкой
-    if (ret < 0) {
-        bpf_map_delete_elem(&conn_info_map, &pid);
-        bpf_map_delete_elem(&addr_map, &pid);
-        return 0;
-    }
-
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
-    if (!conn_info) {
-        bpf_printk("UDP sys_exit_sendto: No connection info found for PID=%d\n", pid);
+    if (!conn_info) return 0;
+
+    if (ret < 0) {
+        bpf_printk("sys_exit_sendto failed for PID=%d\n", pid);
         bpf_map_delete_elem(&conn_info_map, &pid);
         return 0;
     }
 
-    // Получаем информацию об адресе
-    void *addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
+    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
     if (!addr_ptr) {
-        bpf_printk("UDP sys_exit_sendto: No sockaddr found for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map, &pid);
-        bpf_map_delete_elem(&addr_map, &pid);
         return 0;
     }
 
-    struct sockaddr_in addr;
-    if (bpf_probe_read(&addr, sizeof(addr), addr_ptr) != 0) {
-        bpf_printk("UDP sys_exit_sendto: Failed to read sockaddr for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map, &pid);
-        bpf_map_delete_elem(&addr_map, &pid);
-        return 0;
-    }
+    struct sockaddr addr = {};
+    bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
 
-    // Если это IPv4, обновляем информацию
-    if (addr.sin_family == AF_INET) {
-        conn_info->src_ip = bpf_ntohl(addr.sin_addr.s_addr);
-        conn_info->sport = bpf_ntohs(addr.sin_port);
+    bpf_printk("sys_exit_sendto FAMILY=%d Comm=%s",addr.sa_family,conn_info->comm);
+
+    if (addr.sa_family == AF_INET) {
+        struct sockaddr_in addr_in = {};
+        bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
+
+        u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
+
+        u16 port = bpf_ntohs(addr_in.sin_port);
+
+        bpf_printk("sys_exit_sendto FAMILY=%d PORT=%d Comm=%s",addr.sa_family,port,conn_info->comm);
 
         struct trace_info info = {};
-        info.pid = conn_info->pid;
-        info.src_ip = conn_info->src_ip;
-        info.sport = conn_info->sport;
-        bpf_probe_read_str(&info.comm, sizeof(info.comm), conn_info->comm);
+        info.pid = pid;
+        info.src_ip=ip;
+        info.sport = port;
 
-        // Выводим информацию о соединении
-        bpf_printk("UDP sys_exit_sendto: Connection: PID=%d, Comm=%s, IP=%d.%d.%d.%d, Port=%d\n",
-                   info.pid, info.comm,
-                   (info.src_ip >> 24) & 0xFF, (info.src_ip  >> 16) & 0xFF,
-                   (info.src_ip >> 8) & 0xFF, info.src_ip  & 0xFF, info.sport);
-
-        // Отправляем информацию в пользовательское пространство
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+        
     }
 
-    // Обновляем статус на false (отсутствие активности)
-    struct status_t status = {.in_progress = false};
-    bpf_map_update_elem(&status_map, &pid, &status, BPF_ANY);
+    bpf_map_delete_elem(&addr_map, &pid);  
+    return 0;
 
-    // Очистка карт после завершения
-    bpf_map_delete_elem(&conn_info_map, &pid);
-    bpf_map_delete_elem(&addr_map, &pid);
+}
+
+SEC("tracepoint/syscalls/sys_enter_recvfrom")
+int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct conn_info_t conn_info = {};
+
+    conn_info.pid = pid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+
+    struct sockaddr *addr = (struct sockaddr *)ctx->addr;  
+
+    bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
+
 
     return 0;
 }
+
+
+SEC("tracepoint/syscalls/sys_exit_recvfrom")
+int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    long ret = ctx->ret;
+
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
+    if (!conn_info) return 0;
+
+    if (ret < 0) {
+        bpf_printk("sys_exit_recvfrom failed for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        return 0;
+    }
+
+    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
+    if (!addr_ptr) {
+        return 0;
+    }
+
+    struct sockaddr addr = {};
+    bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
+
+    bpf_printk("sys_exit_recvfrom FAMILY=%d Comm=%s",addr.sa_family,conn_info->comm);
+
+    if (addr.sa_family == AF_INET) {
+        struct sockaddr_in addr_in = {};
+        bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
+
+        u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
+
+        u16 port = bpf_ntohs(addr_in.sin_port);
+
+        bpf_printk("sys_exit_recvfrom FAMILY=%d PORT=%d Comm=%s",addr.sa_family,port,conn_info->comm);
+
+        struct trace_info info = {};
+        info.pid = pid;
+        info.src_ip=ip;
+        info.sport = port;
+
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+        
+    }
+
+    bpf_map_delete_elem(&addr_map, &pid);  
+    return 0;
+
+}
+
+
+
+
