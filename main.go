@@ -142,13 +142,14 @@ func main() {
 			)
 
 			// Выводим все данные
-			fmt.Printf("PID: %d, Comm=%s ,SrcIP: %s, SrcPort: %d, DstIP: %s, DstPort: %d\n",
+			fmt.Printf("PID: %d, Comm=%s ,SrcIP: %s, SrcPort: %d, DstIP: %s, DstPort: %d PROTOCOL=%d\n",
 				event.Pid,
-				int8ToString(event.Comm), // Используем библиотечную функцию
+				int8ToString(event.Comm),
 				srcIP.String(),
 				event.Sport,
 				dstIP.String(),
 				event.Dport,
+				event.Protocol,
 			)
 		}
 	}()

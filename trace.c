@@ -159,7 +159,9 @@ struct trace_info {
     u32 dst_ip;
     u16 sport;
     u16 dport;
+    u8 protocol;
     char comm[64];
+
 };
 
 // Размещение переменной с атрибутом unused
@@ -219,7 +221,12 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
 
         u16 port = bpf_ntohs(addr_in.sin_port);
 
-        bpf_printk("sys_exit_accept4 FAMILY=%d PORT=%d Comm=%s",addr.sa_family,port,conn_info->comm);
+
+        u8 protocol = bpf_ntohs(addr_in.sin_family);
+
+        bpf_printk("sys_exit_accept4 PROTO=%d FAMILY=%d PORT=%d Comm=%s",protocol,addr.sa_family,port,conn_info->comm);
+
+
 
 
 
@@ -229,6 +236,7 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
         info.pid = pid;
         info.src_ip=ip;
         info.sport = port;
+        info.protocol=protocol;
 
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
@@ -236,6 +244,8 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
     }
 
     bpf_map_delete_elem(&addr_map, &pid);  
+    bpf_map_delete_elem(&conn_info_map, &pid);
+
     return 0;
 
 }
@@ -305,6 +315,8 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
     }
 
     bpf_map_delete_elem(&addr_map, &pid);  
+    bpf_map_delete_elem(&conn_info_map, &pid);
+
     return 0;
 
 }
@@ -375,6 +387,8 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     }
 
     bpf_map_delete_elem(&addr_map, &pid);  
+    bpf_map_delete_elem(&conn_info_map, &pid);
+
     return 0;
 
 }
@@ -444,7 +458,9 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
         
     }
 
-    bpf_map_delete_elem(&addr_map, &pid);  
+    bpf_map_delete_elem(&addr_map, &pid);
+    bpf_map_delete_elem(&conn_info_map, &pid);
+ 
     return 0;
 
 }

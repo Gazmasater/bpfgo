@@ -23,12 +23,14 @@ type bpfConnInfoT struct {
 }
 
 type bpfTraceInfo struct {
-	Pid   uint32
-	SrcIp uint32
-	DstIp uint32
-	Sport uint16
-	Dport uint16
-	Comm  [64]int8
+	Pid      uint32
+	SrcIp    uint32
+	DstIp    uint32
+	Sport    uint16
+	Dport    uint16
+	Protocol uint8
+	Comm     [64]int8
+	_        [3]byte
 }
 
 // loadBpf returns the embedded CollectionSpec for bpf.
