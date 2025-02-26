@@ -19,7 +19,7 @@ type bpfConnInfoT struct {
 	Addrlen uint32
 	Sport   uint16
 	Dport   uint16
-	Comm    [16]int8
+	Comm    [64]int8
 }
 
 type bpfTraceInfo struct {
@@ -28,7 +28,7 @@ type bpfTraceInfo struct {
 	DstIp uint32
 	Sport uint16
 	Dport uint16
-	Comm  [16]int8
+	Comm  [64]int8
 }
 
 // loadBpf returns the embedded CollectionSpec for bpf.

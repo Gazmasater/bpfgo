@@ -15,7 +15,7 @@ struct conn_info_t
     u32 addrlen;
     u16 sport;
     u16 dport;
-    char comm[16];
+    char comm[64];
 };
 
 struct status_t {
@@ -142,13 +142,6 @@ struct
     __type(value, struct conn_info_t);
 } conn_info_map SEC(".maps");
 
-// struct
-// {
-//     __uint(type, BPF_MAP_TYPE_HASH);
-//     __uint(max_entries, 1024);
-//     __type(key, u32);
-//     __type(value, struct conn_info_t);
-// } status_map SEC(".maps");
 
 struct
 {
@@ -166,7 +159,7 @@ struct trace_info {
     u32 dst_ip;
     u16 sport;
     u16 dport;
-    char comm[16];
+    char comm[64];
 };
 
 // Размещение переменной с атрибутом unused
@@ -228,7 +221,11 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
 
         bpf_printk("sys_exit_accept4 FAMILY=%d PORT=%d Comm=%s",addr.sa_family,port,conn_info->comm);
 
+
+
         struct trace_info info = {};
+        __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+
         info.pid = pid;
         info.src_ip=ip;
         info.sport = port;

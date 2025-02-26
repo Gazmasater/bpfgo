@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"log"
@@ -17,6 +18,12 @@ import (
 
 // Глобальные объекты BPF
 var objs bpfObjects
+
+func int8ToString(arr []int8) string {
+	// Преобразуем []int8 в []byte
+	byteArr := unsafe.Slice((*byte)(unsafe.Pointer(&arr[0])), len(arr))
+	return string(bytes.Trim(byteArr, "\x00")) // Убираем NULL-байты
+}
 
 func init() {
 	// Снимаем ограничение на память
@@ -130,13 +137,10 @@ func main() {
 				byte(event.DstIp>>24),
 			)
 
-			// Преобразуем команду в строку
-			// comm := string(event.Comm[:])
-			// comm = comm[:len(comm)-1] // Убираем лишний нулевой байт
-
 			// Выводим все данные
-			fmt.Printf("PID: %d, SrcIP: %s, SrcPort: %d, DstIP: %s, DstPort: %d\n",
+			fmt.Printf("PID: %d, Comm=%s ,SrcIP: %s, SrcPort: %d, DstIP: %s, DstPort: %d\n",
 				event.Pid,
+				int8ToString(event.Comm[:]),
 				srcIP.String(),
 				event.Sport,
 				dstIP.String(),
