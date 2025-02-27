@@ -170,3 +170,48 @@ func main() {
 }
 
 
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#2",
+	"code": {
+		"value": "IncompatibleAssign",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "IncompatibleAssign"
+		}
+	},
+	"severity": 8,
+	"message": "cannot use event.Pid (variable of type uint32) as int value in map index",
+	"source": "compiler",
+	"startLineNumber": 149,
+	"startColumn": 13,
+	"endLineNumber": 149,
+	"endColumn": 22
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#2",
+	"code": {
+		"value": "IncompatibleAssign",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "IncompatibleAssign"
+		}
+	},
+	"severity": 8,
+	"message": "cannot use event.Pid (variable of type uint32) as int value in argument to delete",
+	"source": "compiler",
+	"startLineNumber": 162,
+	"startColumn": 22,
+	"endLineNumber": 162,
+	"endColumn": 31
+}]
+
+
