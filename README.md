@@ -1,2 +1,42 @@
-ss -tuln sport = :53
-
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
+[sudo] password for gaz358: 
+Press Ctrl+C to exit
+PID: 4245, Comm=code ,SrcIP: 127.0.0.53, SrcPort: 53, DstIP: 0.0.0.0, DstPort: 0
+PID: 763, Comm=systemd-resolve ,SrcIP: 192.168.1.1, SrcPort: 53, DstIP: 0.0.0.0, DstPort: 0
+PID: 763, Comm=systemd-resolve ,SrcIP: 192.168.1.1, SrcPort: 53, DstIP: 0.0.0.0, DstPort: 0
+PID: 4245, Comm=code ,SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 127.0.0.53, DstPort: 53
+PID: 4245, Comm=code ,SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 127.0.0.53, DstPort: 53
+PID: 4245, Comm=code ,SrcIP: 13.107.5.93, SrcPort: 443, DstIP: 0.0.0.0, DstPort: 0
+PID: 3982, Comm=Chrome_ChildIOT ,SrcIP: 127.0.0.53, SrcPort: 53, DstIP: 0.0.0.0, DstPort: 0
+PID: 3982, Comm=Chrome_ChildIOT ,SrcIP: 127.0.0.53, SrcPort: 53, DstIP: 0.0.0.0, DstPort: 0
+PID: 763, Comm=systemd-resolve ,SrcIP: 192.168.1.1, SrcPort: 53, DstIP: 0.0.0.0, DstPort: 0
+PID: 763, Comm=systemd-resolve ,SrcIP: 192.168.1.1, SrcPort: 53, DstIP: 0.0.0.0, DstPort: 0
+PID: 4245, Comm=code ,SrcIP: 127.0.0.53, SrcPort: 53, DstIP: 0.0.0.0, DstPort: 0
+PID: 4245, Comm=code ,SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 127.0.0.53, DstPort: 53
+PID: 763, Comm=systemd-resolve ,SrcIP: 192.168.1.1, SrcPort: 53, DstIP: 0.0.0.0, DstPort: 0
+PID: 4245, Comm=code ,SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 127.0.0.53, DstPort: 53
+PID: 4245, Comm=code ,SrcIP: 52.168.117.174, SrcPort: 443, DstIP: 0.0.0.0, DstPort: 0
+PID: 764, Comm=systemd-timesyn ,SrcIP: 185.125.190.57, SrcPort: 123, DstIP: 0.0.0.0, DstPort: 0
+PID: 4245, Comm=code ,SrcIP: 127.0.0.53, SrcPort: 53, DstIP: 0.0.0.0, DstPort: 0
+PID: 4245, Comm=code ,SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 127.0.0.53, DstPort: 53
+PID: 763, Comm=systemd-resolve ,SrcIP: 192.168.1.1, SrcPort: 53, DstIP: 0.0.0.0, DstPort: 0
+PID: 4245, Comm=code ,SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 127.0.0.53, DstPort: 53
+PID: 4245, Comm=code ,SrcIP: 52.168.117.174, SrcPort: 443, DstIP: 0.0.0.0, DstPort: 0
+PID: 763, Comm=systemd-resolve ,SrcIP: 192.168.1.1, SrcPort: 53, DstIP: 0.0.0.0, DstPort: 0
+PID: 763, Comm=systemd-resolve ,SrcIP: 192.168.1.1, SrcPort: 53, DstIP: 0.0.0.0, DstPort: 0
+PID: 950, Comm=NetworkManager ,SrcIP: 185.125.190.17, SrcPort: 80, DstIP: 0.0.0.0, DstPort: 0
+PID: 2826, Comm=Socket Thread ,SrcIP: 34.117.188.166, SrcPort: 443, DstIP: 0.0.0.0, DstPort: 0
+PID: 2826, Comm=Socket Thread ,SrcIP: 34.117.188.166, SrcPort: 443, DstIP: 0.0.0.0, DstPort: 0
+PID: 2826, Comm=Socket Thread ,SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 34.117.188.166, DstPort: 443
+PID: 2826, Comm=Socket Thread ,SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 34.117.188.166, DstPort: 443
+PID: 2826, Comm=Socket Thread ,SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 34.117.188.166, DstPort: 443
+PID: 2826, Comm=Socket Thread ,SrcIP: 34.117.188.166, SrcPort: 443, DstIP: 0.0.0.0, DstPort: 0
+PID: 2826, Comm=Socket Thread ,SrcIP: 34.117.188.166, SrcPort: 443, DstIP: 0.0.0.0, DstPort: 0
+PID: 2826, Comm=Socket Thread ,SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 34.117.188.166, DstPort: 443
+PID: 2826, Comm=Socket Thread ,SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 34.117.188.166, DstPort: 443
+PID: 2826, Comm=Socket Thread ,SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 34.117.188.166, DstPort: 443
+PID: 2826, Comm=Socket Thread ,SrcIP: 34.117.188.166, SrcPort: 443, DstIP: 0.0.0.0, DstPort: 0
+PID: 2826, Comm=Socket Thread ,SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 34.117.188.166, DstPort: 443
+PID: 2826, Comm=Socket Thread ,SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 34.117.188.166, DstPort: 443
+PID: 2826, Comm=Socket Thread ,SrcIP: 34.117.188.166, SrcPort: 443, DstIP: 0.0.0.0, DstPort: 0
+PID: 2826, Comm=Socket Thread ,SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 34.117.188.166, DstPort: 443s
