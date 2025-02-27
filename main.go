@@ -135,10 +135,10 @@ func main() {
 			)
 
 			dstIP := net.IPv4(
-				byte(event.DstIp),
-				byte(event.DstIp>>8),
-				byte(event.DstIp>>16),
 				byte(event.DstIp>>24),
+				byte(event.DstIp>>16),
+				byte(event.DstIp>>8),
+				byte(event.DstIp),
 			)
 
 			// Выводим все данные

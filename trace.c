@@ -222,20 +222,15 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
         u16 port = bpf_ntohs(addr_in.sin_port);
 
 
-        u8 protocol = bpf_ntohs(addr_in.sin_family);
-
+        u8 protocol = 6;
         bpf_printk("sys_exit_accept4 PROTO=%d FAMILY=%d PORT=%d Comm=%s",protocol,addr.sa_family,port,conn_info->comm);
-
-
-
-
 
         struct trace_info info = {};
         __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
 
         info.pid = pid;
-        info.src_ip=ip;
-        info.sport = port;
+        info.dst_ip=ip;
+        info.dport = port;
         info.protocol=protocol;
 
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
@@ -299,6 +294,8 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
         u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
 
         u16 port = bpf_ntohs(addr_in.sin_port);
+        u8 protocol = 6;
+
 
         bpf_printk("sys_exit_connect FAMILY=%d PORT=%d Comm=%s",addr.sa_family,port,conn_info->comm);
 
@@ -308,6 +305,8 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
 
         info.src_ip=ip;
         info.sport = port;
+        info.protocol=protocol;
+
 
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
@@ -371,6 +370,8 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
 
         u16 port = bpf_ntohs(addr_in.sin_port);
+        u8 protocol = 17;
+
 
         bpf_printk("sys_exit_sendto FAMILY=%d PORT=%d Comm=%s",addr.sa_family,port,conn_info->comm);
 
@@ -380,6 +381,8 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
 
         info.src_ip=ip;
         info.sport = port;
+        info.protocol=protocol;
+
 
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
@@ -443,6 +446,8 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
         u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
 
         u16 port = bpf_ntohs(addr_in.sin_port);
+        u8 protocol = 17;
+
 
         bpf_printk("sys_exit_recvfrom FAMILY=%d PORT=%d Comm=%s",addr.sa_family,port,conn_info->comm);
 
@@ -450,8 +455,10 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
         info.pid = pid;
         __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
 
-        info.src_ip=ip;
-        info.sport = port;
+
+        info.dst_ip=ip;
+        info.dport = port;
+        info.protocol=protocol;
 
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
