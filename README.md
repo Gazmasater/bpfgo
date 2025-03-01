@@ -1,1 +1,1 @@
-strace -e sendto ./udp_client
+gcc program.c -o program
