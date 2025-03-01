@@ -1,1 +1,1 @@
-gcc program.c -o program
+gcc udp_server.c -o udp_server
