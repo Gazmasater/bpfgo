@@ -20,3 +20,25 @@ func main() {
 	fmt.Println(str) // Выведет "udp_server"
 }
 
+[{
+	"resource": "/home/gaz358/myprog/test/main.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"code": {
+		"value": "InvalidConversion",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "InvalidConversion"
+		}
+	},
+	"severity": 8,
+	"message": "cannot convert eventComm[:] (value of type []int8) to type string",
+	"source": "compiler",
+	"startLineNumber": 13,
+	"startColumn": 34,
+	"endLineNumber": 13,
+	"endColumn": 46
+}]
+
