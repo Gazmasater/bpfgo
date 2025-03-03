@@ -175,7 +175,6 @@ int trace_accept4_enter(struct sys_enter_accept4_args *ctx) {
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
-    bpf_printk("sys_enter_accept4 Comm=%s  PID=%d\n",conn_info.comm,conn_info.pid);
 
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
@@ -248,6 +247,7 @@ int trace_connect_enter(struct sys_enter_connect_args *ctx) {
 
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
 
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 

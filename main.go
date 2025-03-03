@@ -151,6 +151,13 @@ func main() {
 				pkg.ResolveIP(dstIP),
 				event.Dport,
 			)
+
+			// fmt.Printf("!!!!!PID: %d, SrcIP: %s, SrcPort: %d -> DstIP: %s, DstPort: %d\n",
+			// 	event.Pid, srcIP.String(), event.Sport, dstIP.String(), event.Dport)
+
+			// fmt.Printf("!!!!!!PID: %d, DstIP: %s, DstPort: %d <- SrcIP: %s, SrcPort: %d\n",
+			// 	event.Pid, dstIP.String(), event.Dport, srcIP.String(), event.Sport)
+
 		}
 
 	}()
