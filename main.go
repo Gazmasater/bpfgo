@@ -19,24 +19,6 @@ import (
 // Глобальные объекты BPF
 var objs bpfObjects
 
-// func resolveIP(ip net.IP) string {
-// 	names, err := net.LookupAddr(ip.String())
-// 	if err != nil || len(names) == 0 {
-// 		return "Unknown"
-// 	}
-// 	return names[0] // Берем первый найденный домен
-// }
-
-// func int8ToString(arr [64]int8) string {
-// 	// Преобразуем []int8 в []byte
-// 	byteArr := make([]byte, len(arr))
-// 	for i, v := range arr {
-// 		byteArr[i] = byte(v)
-// 	}
-
-//		// Убираем NULL-байты в конце и преобразуем в строку
-//		return string(bytes.Trim(byteArr, "\x00"))
-//	}
 func init() {
 	// Снимаем ограничение на память
 	if err := rlimit.RemoveMemlock(); err != nil {
