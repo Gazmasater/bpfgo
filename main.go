@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bytes"
+	"bpfgo/pkg"
 	"errors"
 	"fmt"
 	"log"
@@ -19,16 +19,24 @@ import (
 // Глобальные объекты BPF
 var objs bpfObjects
 
-func int8ToString(arr [64]int8) string {
-	// Преобразуем []int8 в []byte
-	byteArr := make([]byte, len(arr))
-	for i, v := range arr {
-		byteArr[i] = byte(v)
-	}
+// func resolveIP(ip net.IP) string {
+// 	names, err := net.LookupAddr(ip.String())
+// 	if err != nil || len(names) == 0 {
+// 		return "Unknown"
+// 	}
+// 	return names[0] // Берем первый найденный домен
+// }
 
-	// Убираем NULL-байты в конце и преобразуем в строку
-	return string(bytes.Trim(byteArr, "\x00"))
-}
+// func int8ToString(arr [64]int8) string {
+// 	// Преобразуем []int8 в []byte
+// 	byteArr := make([]byte, len(arr))
+// 	for i, v := range arr {
+// 		byteArr[i] = byte(v)
+// 	}
+
+//		// Убираем NULL-байты в конце и преобразуем в строку
+//		return string(bytes.Trim(byteArr, "\x00"))
+//	}
 func init() {
 	// Снимаем ограничение на память
 	if err := rlimit.RemoveMemlock(); err != nil {
@@ -107,6 +115,12 @@ func main() {
 
 	// Запускаем цикл чтения событий eBPF
 	go func() {
+
+		executableName := os.Args[0]
+		if len(executableName) > 2 {
+			executableName = executableName[2:]
+		}
+
 		for {
 			record := new(perf.Record)
 			err := rd.ReadInto(record)
@@ -141,17 +155,22 @@ func main() {
 				byte(event.DstIp),
 			)
 
+			if pkg.Int8ToString(event.Comm) == executableName {
+				continue
+			}
+
 			// Выводим все данные
-			fmt.Printf("PID: %d, Comm=%s ,SrcIP: %s, SrcPort: %d, DstIP: %s, DstPort: %d PROTOCOL=%d\n",
+			fmt.Printf("PID: %d, Comm=%s ,SrcIP: %s, SrcPort: %d, DstIP: %s(%s), DstPort: %d \n",
 				event.Pid,
-				int8ToString(event.Comm),
+				pkg.Int8ToString(event.Comm),
 				srcIP.String(),
 				event.Sport,
 				dstIP.String(),
+				pkg.ResolveIP(dstIP),
 				event.Dport,
-				event.Protocol,
 			)
 		}
+
 	}()
 
 	fmt.Println("Press Ctrl+C to exit")
