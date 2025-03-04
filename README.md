@@ -3,6 +3,15 @@ gcc udp_server.c -o udp_server
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo cat /sys/kernel/debug/tracing/events/syscalls/sys_enter_accept/format
 sudo cat /sys/kernel/debug/tracing/events/syscalls/sys_enter_bind/format
 
+// Объявление карты BPF для хранения информации о сокетах
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);  // Тип карты: хеш-таблица
+    __uint(max_entries, 1024);  // Максимальное количество записей
+    __type(key, int);  // Тип ключа: дескриптор сокета (fd)
+    __type(value, struct bind_info);  // Тип значения: структура bind_info
+} bind_map SEC(".maps");
+
+
 struct bind_info {
     int fd;  // Дескриптор сокета
     u16 port;  // Порт, на который привязан сокет
