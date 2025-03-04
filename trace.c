@@ -25,7 +25,7 @@ struct dst_info_t {
 };
 
 struct bind_info {
-    int fd;  // Дескриптор сокета
+    uint fd;  // Дескриптор сокета
     u16 port;  // Порт, на который привязан сокет
 };
 
@@ -135,18 +135,17 @@ struct sys_exit_recvfrom_args {
     int ret;
 };
 
-struct sys_enter_bind_args{
 
-    unsigned short common_type;      
-    unsigned char common_flags;      
-    unsigned char common_preempt_count;  
+struct  sys_enter_bind_args {
+    unsigned short common_type;
+    unsigned char common_flags;
+    unsigned char common_preempt_count;
     char pad1[1];
-    int common_pid; 
-    int __syscall_nr; 
-    int fd;  
-    struct sockaddr * umyaddr;    
-    int addrlen;     
-
+    int common_pid;
+    int __syscall_nr;
+    int fd;
+    int addrlen;
+    struct sockaddr *umyaddr;
 };
 
 
@@ -179,7 +178,7 @@ struct {
 struct {
     __uint(type, BPF_MAP_TYPE_HASH); 
     __uint(max_entries, 1024);  
-    __type(key, int);  
+    __type(key, u16);  
     __type(value, struct bind_info);  
 } bind_map SEC(".maps");
 
@@ -534,19 +533,28 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
 
 
 SEC("tracepoint/syscalls/sys_enter_bind")
-int trace_bind(struct sys_enter_bind_args *ctx) {
+int trace_bind_enter(struct sys_enter_bind_args *ctx) {
     int fd = ctx->fd;
+
+
+    struct conn_info_t conn_info = {};
+
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
+
+
     struct sockaddr_in *addr = (struct sockaddr_in *)ctx->umyaddr;
-    
     u16 port = bpf_ntohs(addr->sin_port);
     u32 pid = bpf_get_current_pid_tgid() >> 32;
+    conn_info.pid=pid;
+    bpf_printk("FD=%d Comm=%s  PORT=%d",fd,conn_info.comm,port);   
 
-    // Сохраняем информацию о сокете и порте в карту
-    struct bind_info bind_b = {};
+
+    struct bind_info bind_b={} ;
     bind_b.fd = fd;
     bind_b.port = port;
 
-   // bpf_map_update_elem(&bind_map, &fd, &bind_b, BPF_ANY);
+    //bpf_map_update_elem(&bind_map, &fd, &bind_b, BPF_ANY);
     
     return 0;
 }

@@ -13,7 +13,7 @@ import (
 )
 
 type bpfBindInfo struct {
-	Fd   int32
+	Fd   uint32
 	Port uint16
 	_    [2]byte
 }
