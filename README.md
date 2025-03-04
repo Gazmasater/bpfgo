@@ -1,6 +1,7 @@
 gcc udp_server.c -o udp_server
 
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo cat /sys/kernel/debug/tracing/events/syscalls/sys_enter_accept/format
+sudo cat /sys/kernel/debug/tracing/events/syscalls/sys_enter_bind/format
 
 
 SEC("tracepoint/syscalls/sys_enter_bind")
