@@ -6,6 +6,12 @@
 
 #include <bpf/bpf_helpers.h>
 
+struct dst_info_t {
+    u32 dst_ip;
+    u16 dport;
+    char comm[64];  // Это поле будет хранить имя процесса
+};
+
 struct conn_info_t
 {
     u32 pid;
@@ -142,6 +148,13 @@ struct
     __type(value, struct conn_info_t);
 } conn_info_map SEC(".maps");
 
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, char[64]);  
+    __type(value, struct dst_info_t); 
+} dst_info_map SEC(".maps");
+
 
 struct
 {
@@ -253,6 +266,8 @@ int trace_connect_enter(struct sys_enter_connect_args *ctx) {
     struct sockaddr *addr = (struct sockaddr *)ctx->uservaddr;  
     bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+    bpf_map_update_elem(&conn_info_map, &conn_info.comm, &conn_info, BPF_ANY);
+
 
     return 0;
 }
@@ -289,6 +304,13 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
         u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
 
         u16 port = bpf_ntohs(addr_in.sin_port);
+
+        struct dst_info_t info_d = {};
+        info_d.dst_ip = ip;
+        info_d.dport = port;
+        __builtin_memcpy(info_d.comm, conn_info->comm, sizeof(info_d.comm));
+
+        bpf_map_update_elem(&dst_info_map, &conn_info->comm, &info_d, BPF_ANY);
 
        // bpf_printk("sys_exit_connect FAMILY=%d PORT=%d Comm=%s",addr.sa_family,port,conn_info->comm);
 

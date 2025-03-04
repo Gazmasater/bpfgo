@@ -23,6 +23,13 @@ type bpfConnInfoT struct {
 	Comm     [64]int8
 }
 
+type bpfDstInfoT struct {
+	DstIp uint32
+	Dport uint16
+	Comm  [64]int8
+	_     [2]byte
+}
+
 type bpfTraceInfo struct {
 	Pid   uint32
 	SrcIp uint32
@@ -90,6 +97,7 @@ type bpfProgramSpecs struct {
 type bpfMapSpecs struct {
 	AddrMap     *ebpf.MapSpec `ebpf:"addr_map"`
 	ConnInfoMap *ebpf.MapSpec `ebpf:"conn_info_map"`
+	DstInfoMap  *ebpf.MapSpec `ebpf:"dst_info_map"`
 	TraceEvents *ebpf.MapSpec `ebpf:"trace_events"`
 }
 
@@ -122,6 +130,7 @@ func (o *bpfObjects) Close() error {
 type bpfMaps struct {
 	AddrMap     *ebpf.Map `ebpf:"addr_map"`
 	ConnInfoMap *ebpf.Map `ebpf:"conn_info_map"`
+	DstInfoMap  *ebpf.Map `ebpf:"dst_info_map"`
 	TraceEvents *ebpf.Map `ebpf:"trace_events"`
 }
 
@@ -129,6 +138,7 @@ func (m *bpfMaps) Close() error {
 	return _BpfClose(
 		m.AddrMap,
 		m.ConnInfoMap,
+		m.DstInfoMap,
 		m.TraceEvents,
 	)
 }
