@@ -22,5 +22,25 @@ int trace_bind(struct sys_enter_bind_args *ctx) {
     return 0;
 }
 
+struct sys_enter_bind_args{
+
+
+    unsigned short common_type;       offset:0;       size:2; signed:0;
+    unsigned char common_flags;       offset:2;       size:1; signed:0;
+    unsigned char common_preempt_count;       offset:3;       size:1; signed:0;
+    int common_pid;   offset:4;       size:4; signed:1;
+
+    int __syscall_nr; offset:8;       size:4; signed:1;
+
+    int fd;   offset:16;      size:8; signed:0;
+    struct sockaddr * umyaddr;        offset:24;      size:8; signed:0;
+    int addrlen;      offset:32;      size:8; signed:0;
+
+
+
+
+};
+
+
 
 
