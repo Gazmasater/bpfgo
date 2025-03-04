@@ -3,6 +3,10 @@ gcc udp_server.c -o udp_server
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo cat /sys/kernel/debug/tracing/events/syscalls/sys_enter_accept/format
 sudo cat /sys/kernel/debug/tracing/events/syscalls/sys_enter_bind/format
 
+struct bind_info {
+    int fd;  // Дескриптор сокета
+    u16 port;  // Порт, на который привязан сокет
+};
 
 SEC("tracepoint/syscalls/sys_enter_bind")
 int trace_bind(struct sys_enter_bind_args *ctx) {
@@ -21,6 +25,26 @@ int trace_bind(struct sys_enter_bind_args *ctx) {
     
     return 0;
 }
+
+SEC("tracepoint/syscalls/sys_enter_accept4")
+int trace_accept4_enter(struct sys_enter_accept4_args *ctx) {
+    int fd = ctx->fd;
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+
+    // Получаем информацию о сокете из карты
+    struct bind_info *bind = bpf_map_lookup_elem(&bind_map, &fd);
+    if (bind == NULL) {
+        return 0; // Нет информации о сокете
+    }
+
+    u16 bind_port = bind->port;
+    bpf_printk("accept4 called on socket %d, port=%d\n", fd, bind_port);
+
+    // Логика для работы с принятым соединением
+
+    return 0;
+}
+
 
 struct sys_enter_bind_args{
 
