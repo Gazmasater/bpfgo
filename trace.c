@@ -15,6 +15,7 @@ struct conn_info_t
     u32 addrlen;
     u16 sport;
     u16 dport;
+
     u64 sock_inode;  // Для хранения sock_inode
 
     char comm[64];
@@ -133,6 +134,9 @@ struct
     __type(value, struct sockaddr *);
 } addr_map SEC(".maps");
 
+
+
+
 struct
 {
     __uint(type, BPF_MAP_TYPE_HASH);
@@ -246,70 +250,15 @@ SEC("tracepoint/syscalls/sys_enter_connect")
 int trace_connect_enter(struct sys_enter_connect_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     struct conn_info_t conn_info = {};
+    
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
     struct sockaddr *addr = (struct sockaddr *)ctx->uservaddr;  
     bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+
     return 0;
 }
-
-// SEC("tracepoint/syscalls/sys_exit_connect")
-// int trace_connect_exit(struct sys_exit_connect_args *ctx) {
-//     u32 pid = bpf_get_current_pid_tgid() >> 32;
-//     long ret = ctx->ret;
-
-//     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
-//     if (!conn_info) return 0;
-
-//     if (ret < 0) {
-//         bpf_printk("sys_exit_connect failed for PID=%d\n", pid);
-//         bpf_map_delete_elem(&conn_info_map, &pid);
-//         return 0;
-//     }
-
-//     struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
-//     if (!addr_ptr) {
-//         return 0;
-//     }
-
-//     struct sockaddr addr = {};
-//     bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
-
-//     bpf_printk("sys_exit_connect Sock_inode=%d FAMILY=%d Comm=%s",conn_info->sock_inode,addr.sa_family,conn_info->comm);
-
-//     if (addr.sa_family == AF_INET) {
-//         struct sockaddr_in addr_in = {};
-
-//         bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
-
-//         u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
-
-//         u16 port = bpf_ntohs(addr_in.sin_port);
-
-
-//        // bpf_printk("sys_exit_connect FAMILY=%d PORT=%d Comm=%s",addr.sa_family,port,conn_info->comm);
-
-//         struct trace_info info = {};
-//         info.pid = pid;
-//         __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
-
-//         info.dst_ip=ip;
-//         info.dport = port;
-
-
-//         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-        
-//     }
-
-//     bpf_map_delete_elem(&addr_map, &pid);  
-//     bpf_map_delete_elem(&conn_info_map, &pid);
-
-//     return 0;
-
-// }
-
 
 SEC("tracepoint/syscalls/sys_exit_connect")
 int trace_connect_exit(struct sys_exit_connect_args *ctx) {
@@ -333,45 +282,36 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
     struct sockaddr addr = {};
     bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
 
-    bpf_printk("sys_exit_connect FAMILY=%d Comm=%s", addr.sa_family, conn_info->comm);
+    bpf_printk("sys_exit_connect Sock_inode=%llu, Comm=%s", conn_info->sock_inode, conn_info->comm);
 
     if (addr.sa_family == AF_INET) {
         struct sockaddr_in addr_in = {};
+
         bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
 
-        // Локальный IP
-        u32 src_ip = bpf_ntohl(addr_in.sin_addr.s_addr);
-        // Локальный порт
-        u16 src_port = bpf_ntohs(addr_in.sin_port);
+        u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
 
-        bpf_printk("Local Address: src_ip=%x, src_port=%d", src_ip, src_port);
+        u16 port = bpf_ntohs(addr_in.sin_port);
 
-        struct sockaddr_in *addr_in_ptr = (struct sockaddr_in *)addr_ptr;
-        u32 dst_ip = bpf_ntohl(addr_in_ptr->sin_addr.s_addr);
-        u16 dst_port = bpf_ntohs(addr_in_ptr->sin_port);
+       // bpf_printk("sys_exit_connect FAMILY=%d PORT=%d Comm=%s",addr.sa_family,port,conn_info->comm);
 
         struct trace_info info = {};
         info.pid = pid;
         __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
 
-        info.src_ip = src_ip;   // Локальный IP
-        info.sport = src_port; // Локальный порт
-        info.dst_ip = dst_ip;   // Удаленный IP
-        info.dport = dst_port;  // Удаленный порт
-
-        bpf_printk("sys_exit_connect SPORT=%d DPORT=%d FAMILY=%d Comm=%s",info.sport, info.dport,addr.sa_family, conn_info->comm);
-
+        info.dst_ip=ip;
+        info.dport = port;
 
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+       
     }
 
     bpf_map_delete_elem(&addr_map, &pid);  
     bpf_map_delete_elem(&conn_info_map, &pid);
 
     return 0;
+
 }
-
-
 
 
 SEC("tracepoint/syscalls/sys_enter_sendto")
