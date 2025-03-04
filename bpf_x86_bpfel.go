@@ -12,12 +12,6 @@ import (
 	"github.com/cilium/ebpf"
 )
 
-type bpfBindInfo struct {
-	Pid  uint32
-	Port uint16
-	_    [2]byte
-}
-
 type bpfConnInfoT struct {
 	Pid      uint32
 	SrcIp    uint32
@@ -27,13 +21,6 @@ type bpfConnInfoT struct {
 	Sport    uint16
 	Dport    uint16
 	Comm     [64]int8
-}
-
-type bpfDstInfoT struct {
-	DstIp uint32
-	Dport uint16
-	Comm  [64]int8
-	_     [2]byte
 }
 
 type bpfTraceInfo struct {
@@ -89,7 +76,6 @@ type bpfSpecs struct {
 type bpfProgramSpecs struct {
 	TraceAccept4Enter  *ebpf.ProgramSpec `ebpf:"trace_accept4_enter"`
 	TraceAccept4Exit   *ebpf.ProgramSpec `ebpf:"trace_accept4_exit"`
-	TraceBindEnter     *ebpf.ProgramSpec `ebpf:"trace_bind_enter"`
 	TraceConnectEnter  *ebpf.ProgramSpec `ebpf:"trace_connect_enter"`
 	TraceConnectExit   *ebpf.ProgramSpec `ebpf:"trace_connect_exit"`
 	TraceRecvfromEnter *ebpf.ProgramSpec `ebpf:"trace_recvfrom_enter"`
@@ -103,9 +89,7 @@ type bpfProgramSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
 	AddrMap     *ebpf.MapSpec `ebpf:"addr_map"`
-	BindMap     *ebpf.MapSpec `ebpf:"bind_map"`
 	ConnInfoMap *ebpf.MapSpec `ebpf:"conn_info_map"`
-	DstInfoMap  *ebpf.MapSpec `ebpf:"dst_info_map"`
 	TraceEvents *ebpf.MapSpec `ebpf:"trace_events"`
 }
 
@@ -137,18 +121,14 @@ func (o *bpfObjects) Close() error {
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
 	AddrMap     *ebpf.Map `ebpf:"addr_map"`
-	BindMap     *ebpf.Map `ebpf:"bind_map"`
 	ConnInfoMap *ebpf.Map `ebpf:"conn_info_map"`
-	DstInfoMap  *ebpf.Map `ebpf:"dst_info_map"`
 	TraceEvents *ebpf.Map `ebpf:"trace_events"`
 }
 
 func (m *bpfMaps) Close() error {
 	return _BpfClose(
 		m.AddrMap,
-		m.BindMap,
 		m.ConnInfoMap,
-		m.DstInfoMap,
 		m.TraceEvents,
 	)
 }
@@ -166,7 +146,6 @@ type bpfVariables struct {
 type bpfPrograms struct {
 	TraceAccept4Enter  *ebpf.Program `ebpf:"trace_accept4_enter"`
 	TraceAccept4Exit   *ebpf.Program `ebpf:"trace_accept4_exit"`
-	TraceBindEnter     *ebpf.Program `ebpf:"trace_bind_enter"`
 	TraceConnectEnter  *ebpf.Program `ebpf:"trace_connect_enter"`
 	TraceConnectExit   *ebpf.Program `ebpf:"trace_connect_exit"`
 	TraceRecvfromEnter *ebpf.Program `ebpf:"trace_recvfrom_enter"`
@@ -179,7 +158,6 @@ func (p *bpfPrograms) Close() error {
 	return _BpfClose(
 		p.TraceAccept4Enter,
 		p.TraceAccept4Exit,
-		p.TraceBindEnter,
 		p.TraceConnectEnter,
 		p.TraceConnectExit,
 		p.TraceRecvfromEnter,
