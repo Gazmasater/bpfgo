@@ -1,14 +1,24 @@
 gcc udp_server.c -o udp_server
 
-event.Comm= [117 100 112 95 115 101 114 118 101 114 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
+struct dst_info_t {
+    u32 dst_ip;
+    u16 dport;
+    char comm[64];  // Это поле будет хранить имя процесса
+};
 
 
-PID: 2843, Comm=DNS Resolver #5 ,SrcIP: 127.0.0.53, SrcPort: 53, DstIP: 0.0.0.0, DstPort: 0 
-PID: 2843, Comm=DNS Resolver #5 ,SrcIP: 127.0.0.53, SrcPort: 53, DstIP: 0.0.0.0, DstPort: 0 
-PID: 2843, Comm=Socket Thread ,SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 34.117.188.166, DstPort: 443 
-PID: 2843, Comm=Socket Thread ,SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 34.117.188.166, DstPort: 443 
-PID: 2843, Comm=Socket Thread ,SrcIP: 34.117.188.166, SrcPort: 443, DstIP: 0.0.0.0, DstPort: 0 
-PID: 2843, Comm=Socket Thread ,SrcIP: 34.117.188.166, SrcPort: 443, DstIP: 0.0.0.0, DstPort: 0 
-PID: 2843, Comm=Socket Thread ,SrcIP: 34.117.188.166, SrcPort: 443, DstIP: 0.0.0.0, DstPort: 0 
-PID: 2843, Comm=Socket Thread ,SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 34.117.188.166, DstPort: 443 
-PID: 2843, Comm=Socket Thread ,SrcIP: 0.0.0.0, SrcPort: 0, DstIP: 34.117.188.166, DstPort: 443 
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, u32);  // Используем хеш имени процесса или PID как ключ
+    __type(value, struct dst_info_t);  // Структура для хранения IP, порта и имени процесса
+} dst_info_map SEC(".maps");
+
+struct dst_info_t info = {};
+info.dst_ip = ip;
+info.dport = port;
+__builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+
+bpf_map_update_elem(&dst_info_map, &pid, &info, BPF_ANY);
+
+
