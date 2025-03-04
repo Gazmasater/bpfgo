@@ -1,5 +1,8 @@
 gcc udp_server.c -o udp_server
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo cat /sys/kernel/debug/tracing/events/syscalls/sys_enter_accept/format
+
+
 SEC("tracepoint/syscalls/sys_enter_bind")
 int trace_bind(struct sys_enter_bind_args *ctx) {
     int fd = ctx->fd;
