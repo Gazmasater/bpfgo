@@ -83,7 +83,7 @@ func main() {
 	}
 	defer ConnectExit.Close()
 
-	BindEnter, err := link.Tracepoint("syscalls", "sys_exit_connect", objs.TraceBind, nil)
+	BindEnter, err := link.Tracepoint("syscalls", "sys_exit_connect", objs.TraceBindEnter, nil)
 	if err != nil {
 		log.Fatalf("opening tracepoint sys_exit_connect: %s", err)
 	}

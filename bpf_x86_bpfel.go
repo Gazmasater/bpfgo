@@ -13,7 +13,7 @@ import (
 )
 
 type bpfBindInfo struct {
-	Fd   uint32
+	Pid  uint32
 	Port uint16
 	_    [2]byte
 }
@@ -89,7 +89,7 @@ type bpfSpecs struct {
 type bpfProgramSpecs struct {
 	TraceAccept4Enter  *ebpf.ProgramSpec `ebpf:"trace_accept4_enter"`
 	TraceAccept4Exit   *ebpf.ProgramSpec `ebpf:"trace_accept4_exit"`
-	TraceBind          *ebpf.ProgramSpec `ebpf:"trace_bind"`
+	TraceBindEnter     *ebpf.ProgramSpec `ebpf:"trace_bind_enter"`
 	TraceConnectEnter  *ebpf.ProgramSpec `ebpf:"trace_connect_enter"`
 	TraceConnectExit   *ebpf.ProgramSpec `ebpf:"trace_connect_exit"`
 	TraceRecvfromEnter *ebpf.ProgramSpec `ebpf:"trace_recvfrom_enter"`
@@ -166,7 +166,7 @@ type bpfVariables struct {
 type bpfPrograms struct {
 	TraceAccept4Enter  *ebpf.Program `ebpf:"trace_accept4_enter"`
 	TraceAccept4Exit   *ebpf.Program `ebpf:"trace_accept4_exit"`
-	TraceBind          *ebpf.Program `ebpf:"trace_bind"`
+	TraceBindEnter     *ebpf.Program `ebpf:"trace_bind_enter"`
 	TraceConnectEnter  *ebpf.Program `ebpf:"trace_connect_enter"`
 	TraceConnectExit   *ebpf.Program `ebpf:"trace_connect_exit"`
 	TraceRecvfromEnter *ebpf.Program `ebpf:"trace_recvfrom_enter"`
@@ -179,7 +179,7 @@ func (p *bpfPrograms) Close() error {
 	return _BpfClose(
 		p.TraceAccept4Enter,
 		p.TraceAccept4Exit,
-		p.TraceBind,
+		p.TraceBindEnter,
 		p.TraceConnectEnter,
 		p.TraceConnectExit,
 		p.TraceRecvfromEnter,
