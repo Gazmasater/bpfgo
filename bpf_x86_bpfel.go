@@ -76,6 +76,8 @@ type bpfSpecs struct {
 type bpfProgramSpecs struct {
 	TraceAccept4Enter  *ebpf.ProgramSpec `ebpf:"trace_accept4_enter"`
 	TraceAccept4Exit   *ebpf.ProgramSpec `ebpf:"trace_accept4_exit"`
+	TraceBindEnter     *ebpf.ProgramSpec `ebpf:"trace_bind_enter"`
+	TraceBindExit      *ebpf.ProgramSpec `ebpf:"trace_bind_exit"`
 	TraceConnectEnter  *ebpf.ProgramSpec `ebpf:"trace_connect_enter"`
 	TraceConnectExit   *ebpf.ProgramSpec `ebpf:"trace_connect_exit"`
 	TraceRecvfromEnter *ebpf.ProgramSpec `ebpf:"trace_recvfrom_enter"`
@@ -146,6 +148,8 @@ type bpfVariables struct {
 type bpfPrograms struct {
 	TraceAccept4Enter  *ebpf.Program `ebpf:"trace_accept4_enter"`
 	TraceAccept4Exit   *ebpf.Program `ebpf:"trace_accept4_exit"`
+	TraceBindEnter     *ebpf.Program `ebpf:"trace_bind_enter"`
+	TraceBindExit      *ebpf.Program `ebpf:"trace_bind_exit"`
 	TraceConnectEnter  *ebpf.Program `ebpf:"trace_connect_enter"`
 	TraceConnectExit   *ebpf.Program `ebpf:"trace_connect_exit"`
 	TraceRecvfromEnter *ebpf.Program `ebpf:"trace_recvfrom_enter"`
@@ -158,6 +162,8 @@ func (p *bpfPrograms) Close() error {
 	return _BpfClose(
 		p.TraceAccept4Enter,
 		p.TraceAccept4Exit,
+		p.TraceBindEnter,
+		p.TraceBindExit,
 		p.TraceConnectEnter,
 		p.TraceConnectExit,
 		p.TraceRecvfromEnter,

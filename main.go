@@ -83,11 +83,17 @@ func main() {
 	}
 	defer ConnectExit.Close()
 
-	BindEnter, err := link.Tracepoint("syscalls", "sys_exit_connect", objs.TraceBindEnter, nil)
+	BindEnter, err := link.Tracepoint("syscalls", "sys_enter_bind", objs.TraceBindEnter, nil)
 	if err != nil {
 		log.Fatalf("opening tracepoint sys_exit_connect: %s", err)
 	}
 	defer BindEnter.Close()
+
+	BindExit, err := link.Tracepoint("syscalls", "sys_enter_bind", objs.TraceBindExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_connect: %s", err)
+	}
+	defer BindExit.Close()
 
 	// Создаем perf.Reader для чтения событий eBPF
 	const buffLen = 4096
