@@ -1,5 +1,4 @@
 //go:build ignore
-
 #include "vmlinux.h"
 #include "bpf/bpf_tracing.h"
 #include "bpf/bpf_endian.h"
@@ -13,11 +12,9 @@ struct conn_info_t
     u32 src_ip;
     u32 dst_ip;
     u32 addrlen;
+    u32 comm_hash;
     u16 sport;
     u16 dport;
-
-    u64 sock_inode;  // Для хранения sock_inode
-
     char comm[64];
 };
 
@@ -224,7 +221,6 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
 
         u16 port = bpf_ntohs(addr_in.sin_port);
 
-
         bpf_printk("sys_exit_accept4  FAMILY=%d PORT=%d Comm=%s",addr.sa_family,port,conn_info->comm);
 
         struct trace_info info = {};
@@ -253,6 +249,7 @@ int trace_connect_enter(struct sys_enter_connect_args *ctx) {
     
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
     struct sockaddr *addr = (struct sockaddr *)ctx->uservaddr;  
     bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
@@ -282,7 +279,7 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
     struct sockaddr addr = {};
     bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
 
-    bpf_printk("sys_exit_connect Sock_inode=%llu, Comm=%s", conn_info->sock_inode, conn_info->comm);
+    bpf_printk("sys_exit_connect  Comm=%s", conn_info->comm);
 
     if (addr.sa_family == AF_INET) {
         struct sockaddr_in addr_in = {};

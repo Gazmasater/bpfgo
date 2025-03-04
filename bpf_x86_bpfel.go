@@ -13,15 +13,14 @@ import (
 )
 
 type bpfConnInfoT struct {
-	Pid       uint32
-	SrcIp     uint32
-	DstIp     uint32
-	Addrlen   uint32
-	Sport     uint16
-	Dport     uint16
-	_         [4]byte
-	SockInode uint64
-	Comm      [64]int8
+	Pid      uint32
+	SrcIp    uint32
+	DstIp    uint32
+	Addrlen  uint32
+	CommHash uint32
+	Sport    uint16
+	Dport    uint16
+	Comm     [64]int8
 }
 
 type bpfTraceInfo struct {
