@@ -24,3 +24,18 @@ bpf_printk("IPv6 detected: port %d, address %02x:%02x:%02x:%02x:%02x:%02x:%02x:%
     port,
     ip6[0], ip6[1], ip6[2], ip6[3], ip6[4], ip6[5], ip6[6], ip6[7],
     ip6[8], ip6[9], ip6[10], ip6[11], ip6[12], ip6[13], ip6[14], ip6[15]);
+
+
+            u8 *ip6 = (u8 *) addr_in6.sin6_addr.in6_u;
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "171",
+	"severity": 8,
+	"message": "invalid type conversion",
+	"source": "C/C++",
+	"startLineNumber": 431,
+	"startColumn": 19,
+	"endLineNumber": 431,
+	"endColumn": 20
+}]
