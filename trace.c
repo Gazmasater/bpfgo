@@ -201,6 +201,7 @@ const struct trace_info *unused __attribute__((unused));
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 #define AF_INET 2
+#define AF_INET6 10
 
 SEC("tracepoint/syscalls/sys_enter_accept4")
 int trace_accept4_enter(struct sys_enter_accept4_args *ctx) {
@@ -243,6 +244,9 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
 
     struct sockaddr addr = {};
     bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
+
+    bpf_printk("sys_exit_accept4 PID=%d  FAMILY=%d ",conn_info->pid,addr.sa_family);
+
 
 
     if (addr.sa_family == AF_INET) {
@@ -327,6 +331,9 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
     struct sockaddr addr = {};
     bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
 
+    bpf_printk("sys_exit_connect PID=%d  FAMILY=%d ",conn_info->pid,addr.sa_family);
+
+
     if (addr.sa_family == AF_INET) {
         struct sockaddr_in addr_in = {};
 
@@ -339,16 +346,16 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
 
        // bpf_printk("sys_exit_connect FAMILY=%d PORT=%d Comm=%s",addr.sa_family,port,conn_info->comm);
 
-        struct trace_info info = {};
-        info.pid = pid;
-        __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+        // struct trace_info info = {};
+        // info.pid = pid;
+        // __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
 
-        info.pid=conn_info->pid;
-        info.dst_ip=ip;
-        info.dport = port;
+        // info.pid=conn_info->pid;
+        // info.dst_ip=ip;
+        // info.dport = port;
        
 
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+      //  bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
        
     }
 
@@ -399,42 +406,55 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     }
 
     struct sockaddr addr = {};
-    bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
+    bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);
 
-    bpf_printk("sys_exit_sendto FAMILY=%d Comm=%s",addr.sa_family,conn_info->comm);
+    bpf_printk("sys_exit_sendto FAMILY=%d Comm=%s", addr.sa_family, conn_info->comm);
 
     if (addr.sa_family == AF_INET) {
         struct sockaddr_in addr_in = {};
         bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
 
         u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
-
         u16 port = bpf_ntohs(addr_in.sin_port);
 
+        struct trace_info info = {};
+        info.pid = pid;
+        __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
 
-      //  bpf_printk("sys_exit_sendto FAMILY=%d PORT=%d Comm=%s",addr.sa_family,port,conn_info->comm);
+        info.pid = conn_info->pid;
+        info.dst_ip = ip;
+        info.dport = port;
 
-        // struct trace_info info = {};
-        // info.pid = pid;
-        // __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
-        // info.pid=conn_info->pid;
+    } else if (addr.sa_family == AF_INET6) {
+        struct sockaddr_in6 addr_in6 = {};
+        bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr);
 
-        // info.dst_ip=ip;
-        // info.dport = port;
+        u8 *ip6 = (u8 *) addr_in6.sin6_addr.in6_u.u6_addr32;
+        u16 port = bpf_ntohs(addr_in6.sin6_port);
 
+        struct trace_info info = {};
+        info.pid = pid;
+        __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
 
-        // bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+        info.pid = conn_info->pid;
+        // Для IPv6 записываем в info.dst_ip первые 4 байта IPv6 (например, для логирования)
+        info.dst_ip = *(u32 *)ip6;  // Можно сделать и более детальное представление IP
+        info.dport = port;
 
-        
+       // bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+        // Логирование для IPv6
+        bpf_printk("IPv6 detected: port %d, address %x:%x:%x:%x:%x:%x:%x:%x\n",
+            port,
+            ip6[0], ip6[1], ip6[2], ip6[3], ip6[4], ip6[5], ip6[6], ip6[7]
+        );
     }
 
-    // bpf_map_delete_elem(&addr_map, &pid);  
-    // bpf_map_delete_elem(&conn_info_map, &pid);
-
     return 0;
-
 }
+
 
 SEC("tracepoint/syscalls/sys_enter_recvfrom")
 int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx) {
@@ -585,15 +605,15 @@ int trace_bind_exit(struct sys_exit_bind_args *ctx) {
     return 0;
 }
 
-SEC("sockops")
-int bpf_sockops_prog(struct bpf_sock_ops *skops) {
-    // Проверяем, что соединение установлено
-    if (skops->op == BPF_SOCK_OPS_STATE_CB && skops->args[1] == BPF_TCP_ESTABLISHED) {
-        bpf_printk("TCP connection established: local port=%d, remote port=%d\n",
-                   skops->local_port, skops->remote_port);
-    }
-    return 0;
-}
+// SEC("sockops")
+// int bpf_sockops_prog(struct bpf_sock_ops *skops) {
+//     // Проверяем, что соединение установлено
+//     if (skops->op == BPF_SOCK_OPS_STATE_CB && skops->args[1] == BPF_TCP_ESTABLISHED) {
+//         bpf_printk("TCP connection established: local port=%d, remote port=%d\n",
+//                    skops->local_port, skops->remote_port);
+//     }
+//     return 0;
+// }
 
 
 
