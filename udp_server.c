@@ -24,7 +24,7 @@ int main() {
     // Задаем параметры адреса сервера
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
+    inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr);
     server_addr.sin_port = htons(PORT);
 
     // Привязываем сокет
@@ -34,7 +34,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    printf("UDP-сервер запущен и слушает порт %d...\n", PORT);
+    printf("UDP-сервер запущен и слушает 127.0.0.1:%d...\n", PORT);
 
     // Принимаем сообщения
     while (1) {
@@ -51,5 +51,3 @@ int main() {
     close(sockfd);
     return 0;
 }
-
-

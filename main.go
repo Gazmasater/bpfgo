@@ -95,6 +95,12 @@ func main() {
 	}
 	defer BindExit.Close()
 
+	Sockops, err := link.AttachCgroup()
+	if err != nil {
+		log.Fatalf("opening tracepoint sockops: %s", err)
+	}
+	defer Sockops.Close()
+
 	// Создаем perf.Reader для чтения событий eBPF
 	const buffLen = 4096
 	rd, err := perf.NewReader(objs.TraceEvents, buffLen)
@@ -154,9 +160,11 @@ func main() {
 			}
 
 			// Выводим все данные
-			fmt.Printf("Comm=%s ,SrcIP: %s, SrcPort: %d, DstIP: %s(%s), DstPort: %d \n",
+			fmt.Printf("PID=%d Comm=%s ,SrcIP: %s(%s), SrcPort: %d -> DstIP: %s(%s), DstPort: %d \n",
+				event.Pid,
 				pkg.Int8ToString(event.Comm),
 				srcIP.String(),
+				pkg.ResolveIP(srcIP),
 				event.Sport,
 				dstIP.String(),
 				pkg.ResolveIP(dstIP),

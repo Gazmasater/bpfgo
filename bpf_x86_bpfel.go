@@ -23,6 +23,13 @@ type bpfConnInfoT struct {
 	Comm     [64]int8
 }
 
+type bpfSockaddrIn struct {
+	SinFamily uint16
+	SinPort   uint16
+	SinAddr   struct{ S_addr uint32 }
+	Pad       [8]uint8
+}
+
 type bpfTraceInfo struct {
 	Pid   uint32
 	SrcIp uint32
@@ -74,6 +81,7 @@ type bpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfProgramSpecs struct {
+	BpfSockopsProg     *ebpf.ProgramSpec `ebpf:"bpf_sockops_prog"`
 	TraceAccept4Enter  *ebpf.ProgramSpec `ebpf:"trace_accept4_enter"`
 	TraceAccept4Exit   *ebpf.ProgramSpec `ebpf:"trace_accept4_exit"`
 	TraceBindEnter     *ebpf.ProgramSpec `ebpf:"trace_bind_enter"`
@@ -91,6 +99,7 @@ type bpfProgramSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
 	AddrMap     *ebpf.MapSpec `ebpf:"addr_map"`
+	BindMap     *ebpf.MapSpec `ebpf:"bind_map"`
 	ConnInfoMap *ebpf.MapSpec `ebpf:"conn_info_map"`
 	TraceEvents *ebpf.MapSpec `ebpf:"trace_events"`
 }
@@ -123,6 +132,7 @@ func (o *bpfObjects) Close() error {
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
 	AddrMap     *ebpf.Map `ebpf:"addr_map"`
+	BindMap     *ebpf.Map `ebpf:"bind_map"`
 	ConnInfoMap *ebpf.Map `ebpf:"conn_info_map"`
 	TraceEvents *ebpf.Map `ebpf:"trace_events"`
 }
@@ -130,6 +140,7 @@ type bpfMaps struct {
 func (m *bpfMaps) Close() error {
 	return _BpfClose(
 		m.AddrMap,
+		m.BindMap,
 		m.ConnInfoMap,
 		m.TraceEvents,
 	)
@@ -146,6 +157,7 @@ type bpfVariables struct {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfPrograms struct {
+	BpfSockopsProg     *ebpf.Program `ebpf:"bpf_sockops_prog"`
 	TraceAccept4Enter  *ebpf.Program `ebpf:"trace_accept4_enter"`
 	TraceAccept4Exit   *ebpf.Program `ebpf:"trace_accept4_exit"`
 	TraceBindEnter     *ebpf.Program `ebpf:"trace_bind_enter"`
@@ -160,6 +172,7 @@ type bpfPrograms struct {
 
 func (p *bpfPrograms) Close() error {
 	return _BpfClose(
+		p.BpfSockopsProg,
 		p.TraceAccept4Enter,
 		p.TraceAccept4Exit,
 		p.TraceBindEnter,
