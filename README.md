@@ -69,3 +69,16 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     return 0;
 }
 
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "144",
+	"severity": 8,
+	"message": "a value of type \"union <unnamed>\" cannot be used to initialize an entity of type \"u8 *\" (aka \"unsigned char *\")",
+	"source": "C/C++",
+	"startLineNumber": 431,
+	"startColumn": 19,
+	"endLineNumber": 431,
+	"endColumn": 27
+}]
+
