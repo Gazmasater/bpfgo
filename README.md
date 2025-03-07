@@ -1,28 +1,16 @@
 gcc udp_server.c -o udp_server
 
-Sockops, err := link.AttachCgroup(link.CgroupOptions{
-    Path: "/sys/fs/cgroup",
-})
-if err != nil {
-    log.Fatalf("opening tracepoint sockops: %s", err)
-}
-defer Sockops.Close()
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
-[sudo] password for gaz358: 
-panic: runtime error: invalid memory address or nil pointer dereference
-[signal SIGSEGV: segmentation violation code=0x1 addr=0x10 pc=0x59136e]
-
-goroutine 1 [running]:
-github.com/cilium/ebpf.(*Program).FD(...)
-        /home/gaz358/go/pkg/mod/github.com/cilium/ebpf@v0.17.3/prog.go:593
-github.com/cilium/ebpf/link.AttachRawLink({0x28, 0x0, 0x0, 0x0, 0x0})
-        /home/gaz358/go/pkg/mod/github.com/cilium/ebpf@v0.17.3/link/link.go:334 +0x6e
-github.com/cilium/ebpf/link.newLinkCgroup(0x61a2de?, 0xe?, 0x0?)
-        /home/gaz358/go/pkg/mod/github.com/cilium/ebpf@v0.17.3/link/cgroup.go:180 +0x88
-github.com/cilium/ebpf/link.AttachCgroup({{0x61a2de?, 0x0?}, 0x61a2d0?, 0x0?})
-        /home/gaz358/go/pkg/mod/github.com/cilium/ebpf@v0.17.3/link/cgroup.go:57 +0x119
-main.main()
-        /home/gaz358/myprog/bpfgo/main.go:98 +0x8a5
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
-
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ss -tulpn
+Netid State   Recv-Q  Send-Q   Local Address:Port    Peer Address:Port Process                               
+udp   UNCONN  0       0           127.0.0.54:53           0.0.0.0:*                                          
+udp   UNCONN  0       0        127.0.0.53%lo:53           0.0.0.0:*                                          
+udp   UNCONN  0       0            127.0.0.1:33333        0.0.0.0:*     users:(("udp_server",pid=5072,fd=3)) 
+udp   UNCONN  0       0              0.0.0.0:58765        0.0.0.0:*                                          
+udp   UNCONN  0       0              0.0.0.0:5353         0.0.0.0:*                                          
+udp   UNCONN  0       0                 [::]:52277           [::]:*                                          
+udp   UNCONN  0       0                 [::]:5353            [::]:*                                          
+tcp   LISTEN  0       4096     127.0.0.53%lo:53           0.0.0.0:*                                          
+tcp   LISTEN  0       1            127.0.0.1:12345        0.0.0.0:*     users:(("nc",pid=4897,fd=3))         
+tcp   LISTEN  0       4096         127.0.0.1:631          0.0.0.0:*                                          
+tcp   LISTEN  0       4096        127.0.0.54:53           0.0.0.0:*                                          
+tcp   LISTEN  0       4096             [::1]:631             [::]:*     
