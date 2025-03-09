@@ -85,13 +85,13 @@ func main() {
 
 	BindEnter, err := link.Tracepoint("syscalls", "sys_enter_bind", objs.TraceBindEnter, nil)
 	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_connect: %s", err)
+		log.Fatalf("opening tracepoint sys_enter_bind: %s", err)
 	}
 	defer BindEnter.Close()
 
-	BindExit, err := link.Tracepoint("syscalls", "sys_enter_bind", objs.TraceBindExit, nil)
+	BindExit, err := link.Tracepoint("syscalls", "sys_exit_bind", objs.TraceBindExit, nil)
 	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_connect: %s", err)
+		log.Fatalf("opening tracepoint sys_exit_bind: %s", err)
 	}
 	defer BindExit.Close()
 

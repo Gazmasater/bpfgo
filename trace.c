@@ -12,7 +12,7 @@ struct conn_info_t
     u32 src_ip;
     u32 dst_ip;
     u32 addrlen;
-    u32 comm_hash;
+    u32 fd;
     u16 sport;
     u16 dport;
     char comm[64];
@@ -299,6 +299,7 @@ int trace_connect_enter(struct sys_enter_connect_args *ctx) {
     int fd=ctx->fd;
 
     conn_info.pid = pid;
+    conn_info.fd=fd;
 
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
     
@@ -322,6 +323,9 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
         bpf_map_delete_elem(&conn_info_map, &pid);
         return 0;
     }
+
+
+
 
     struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
     if (!addr_ptr) {
@@ -605,18 +609,18 @@ int trace_bind_exit(struct sys_exit_bind_args *ctx) {
     return 0;
 }
 
-// SEC("sockops")
-// int bpf_sockops_prog(struct bpf_sock_ops *skops) {
-//     // Проверяем, что соединение установлено
-//     if (skops->op == BPF_SOCK_OPS_STATE_CB && skops->args[1] == BPF_TCP_ESTABLISHED) {
-//         bpf_printk("TCP connection established: local port=%d, remote port=%d\n",
-//                    skops->local_port, skops->remote_port);
-//     }
-//     return 0;
-// }
+SEC("cgroup/connect4")
+int trace_connect_cgroup(struct bpf_sock_addr *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct conn_info_t conn_info = {};
 
+    // Сохраняем PID, IP и порт в карту
+    conn_info.src_ip = bpf_ntohl(ctx->sk->src_ip4);
+    conn_info.sport = bpf_ntohs(ctx->sk->src_port);
 
+    bpf_printk("cgroup/connect4  CGPORT=d",conn_info.sport);
+    
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
-
-
-
+    return 0;
+}

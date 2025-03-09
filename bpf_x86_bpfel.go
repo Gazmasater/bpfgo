@@ -13,14 +13,14 @@ import (
 )
 
 type bpfConnInfoT struct {
-	Pid      uint32
-	SrcIp    uint32
-	DstIp    uint32
-	Addrlen  uint32
-	CommHash uint32
-	Sport    uint16
-	Dport    uint16
-	Comm     [64]int8
+	Pid     uint32
+	SrcIp   uint32
+	DstIp   uint32
+	Addrlen uint32
+	Fd      uint32
+	Sport   uint16
+	Dport   uint16
+	Comm    [64]int8
 }
 
 type bpfSockaddrIn struct {
@@ -85,6 +85,7 @@ type bpfProgramSpecs struct {
 	TraceAccept4Exit   *ebpf.ProgramSpec `ebpf:"trace_accept4_exit"`
 	TraceBindEnter     *ebpf.ProgramSpec `ebpf:"trace_bind_enter"`
 	TraceBindExit      *ebpf.ProgramSpec `ebpf:"trace_bind_exit"`
+	TraceConnectCgroup *ebpf.ProgramSpec `ebpf:"trace_connect_cgroup"`
 	TraceConnectEnter  *ebpf.ProgramSpec `ebpf:"trace_connect_enter"`
 	TraceConnectExit   *ebpf.ProgramSpec `ebpf:"trace_connect_exit"`
 	TraceRecvfromEnter *ebpf.ProgramSpec `ebpf:"trace_recvfrom_enter"`
@@ -160,6 +161,7 @@ type bpfPrograms struct {
 	TraceAccept4Exit   *ebpf.Program `ebpf:"trace_accept4_exit"`
 	TraceBindEnter     *ebpf.Program `ebpf:"trace_bind_enter"`
 	TraceBindExit      *ebpf.Program `ebpf:"trace_bind_exit"`
+	TraceConnectCgroup *ebpf.Program `ebpf:"trace_connect_cgroup"`
 	TraceConnectEnter  *ebpf.Program `ebpf:"trace_connect_enter"`
 	TraceConnectExit   *ebpf.Program `ebpf:"trace_connect_exit"`
 	TraceRecvfromEnter *ebpf.Program `ebpf:"trace_recvfrom_enter"`
@@ -174,6 +176,7 @@ func (p *bpfPrograms) Close() error {
 		p.TraceAccept4Exit,
 		p.TraceBindEnter,
 		p.TraceBindExit,
+		p.TraceConnectCgroup,
 		p.TraceConnectEnter,
 		p.TraceConnectExit,
 		p.TraceRecvfromEnter,
