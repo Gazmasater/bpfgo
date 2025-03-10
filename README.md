@@ -6,84 +6,78 @@ nc 127.0.0.1 12345
 
 bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=load -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
 
+#include <linux/bpf.h>
+#include <linux/in.h>
+#include <linux/ptrace.h>
+#include <linux/socket.h>
+#include <linux/tcp.h>
+#include <linux/udp.h>
+#include <bpf/bpf_helpers.h>
+
+struct sock_info_t {
+    __be32 local_ip;
+    __be16 local_port;
+    __be32 remote_ip;
+    __be16 remote_port;
+};
+
+// Мапа для хранения данных о соединениях по PID процесса
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, u32);
+    __type(value, struct sock_info_t);
+} sock_map SEC(".maps");
+
+// Перехватываем вход в sys_connect (fix: не используем user-space адрес напрямую)
+SEC("tracepoint/syscalls/sys_enter_connect")
+int trace_connect(struct trace_event_raw_sys_enter *ctx) {
+    int sockfd = ctx->args[0];  
+    struct sockaddr *addr_ptr;
+    bpf_probe_read_user(&addr_ptr, sizeof(addr_ptr), (void *)ctx->args[1]);
+    
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct sock_info_t info = {};
+
+    struct sockaddr_in addr;
+    bpf_probe_read_user(&addr, sizeof(addr), addr_ptr);
+
+    if (addr.sin_family == AF_INET) {
+        info.remote_ip = addr.sin_addr.s_addr;
+        info.remote_port = addr.sin_port;
+        bpf_map_update_elem(&sock_map, &pid, &info, BPF_ANY);
+    }
+
+    return 0;
+}
+
+// Перехватываем выход из sys_connect
 SEC("tracepoint/syscalls/sys_exit_connect")
-int trace_connect_exit(struct sys_exit_connect_args *ctx) {
+int trace_connect_exit(struct trace_event_raw_sys_exit *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
+    struct sock_info_t *info = bpf_map_lookup_elem(&sock_map, &pid);
+    if (!info) return 0;
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
-    if (!conn_info) return 0;
+    // Получаем локальный IP и порт
+    struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+    struct file *file = bpf_task_fd_get(task, ctx->ret);  
+    if (!file) return 0;
 
-    if (ret < 0) {
-        bpf_printk("sys_exit_connect failed for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map, &pid);
-        return 0;
-    }
+    struct socket *sock = (struct socket *)file->private_data;
+    if (!sock) return 0;
 
-    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
-    if (!addr_ptr) {
-        return 0;
-    }
+    struct sock *sk = sock->sk;
+    if (!sk) return 0;
 
-    struct sockaddr addr = {};
-    bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
+    info->local_ip = sk->sk_rcv_saddr;
+    info->local_port = sk->sk_num;
 
-    bpf_printk("sys_exit_connect PID=%d  FAMILY=%d ", conn_info->pid, addr.sa_family);
+    // Вывод через bpf_printk()
+    bpf_printk("Local IP: %pI4, Local Port: %d", &info->local_ip, bpf_ntohs(info->local_port));
 
-    // Формируем tuple для поиска сокета
-    if (addr.sa_family == AF_INET) {
-        struct sockaddr_in addr_in = {};
-        bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
-
-        u32 remote_ip = bpf_ntohl(addr_in.sin_addr.s_addr);
-        u16 remote_port = bpf_ntohs(addr_in.sin_port);
-
-        struct bpf_sock_tuple tuple = {};
-        tuple.ipv4.saddr = conn_info->local_ip;   // Локальный IP
-        tuple.ipv4.daddr = remote_ip;             // Удалённый IP
-        tuple.ipv4.sport = bpf_htons(conn_info->local_port);  // Локальный порт
-        tuple.ipv4.dport = bpf_htons(remote_port); // Удалённый порт
-
-        // Получаем сокет
-        struct bpf_sock *sk = bpf_sk_lookup_tcp(ctx, &tuple, sizeof(tuple.ipv4), BPF_F_CURRENT_NETNS, 0);
-        if (sk) {
-            // Извлекаем локальный IP и порт
-            u32 local_ip = sk->src_ip4;
-            u16 local_port = bpf_ntohs(sk->src_port);
-            bpf_printk("Local IP: %u, Local Port: %d\n", local_ip, local_port);
-
-            bpf_sk_release(sk); // Освобождаем ресурс
-        }
-    }
-
-    bpf_map_delete_elem(&addr_map, &pid);  
-    bpf_map_delete_elem(&conn_info_map, &pid);
-
+    // Удаляем запись из мапы
+    bpf_map_delete_elem(&sock_map, &pid);
     return 0;
 }
 
-
-SEC("tracepoint/syscalls/sys_enter_bind")
-int trace_bind_enter(struct sys_enter_bind_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    int fd = ctx->fd;
-    struct sockaddr *addr = (struct sockaddr *)ctx->uservaddr;
-    u32 addr_len = ctx->addrlen;
-
-    if (addr->sa_family == AF_INET) {
-        struct sockaddr_in *addr_in = (struct sockaddr_in *)addr;
-        u32 local_ip = bpf_ntohl(addr_in->sin_addr.s_addr);
-        u16 local_port = bpf_ntohs(addr_in->sin_port);
-
-        bpf_printk("PID=%d Local IP: %u, Local Port: %d, FD: %d", pid, local_ip, local_port, fd);
-    }
-
-    return 0;
-}
-
-
-
-
-
-
-
+char LICENSE[] SEC("license") = "GPL";
