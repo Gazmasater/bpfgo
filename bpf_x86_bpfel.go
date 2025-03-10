@@ -12,6 +12,14 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type bpfConnInfoBind struct {
+	Pid        uint32
+	Fd         uint32
+	LocalAddr  bpfSockaddrIn
+	RemoteAddr bpfSockaddrIn
+	Comm       [64]int8
+}
+
 type bpfConnInfoT struct {
 	Pid     uint32
 	SrcIp   uint32
@@ -102,10 +110,12 @@ type bpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
-	AddrMap     *ebpf.MapSpec `ebpf:"addr_map"`
-	BindMap     *ebpf.MapSpec `ebpf:"bind_map"`
-	ConnInfoMap *ebpf.MapSpec `ebpf:"conn_info_map"`
-	TraceEvents *ebpf.MapSpec `ebpf:"trace_events"`
+	AddrMap         *ebpf.MapSpec `ebpf:"addr_map"`
+	AddrdstMap      *ebpf.MapSpec `ebpf:"addrdst_map"`
+	BindMap         *ebpf.MapSpec `ebpf:"bind_map"`
+	ConnInfoMap     *ebpf.MapSpec `ebpf:"conn_info_map"`
+	ConnInfobindMap *ebpf.MapSpec `ebpf:"conn_infobind_map"`
+	TraceEvents     *ebpf.MapSpec `ebpf:"trace_events"`
 }
 
 // bpfVariableSpecs contains global variables before they are loaded into the kernel.
@@ -135,17 +145,21 @@ func (o *bpfObjects) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
-	AddrMap     *ebpf.Map `ebpf:"addr_map"`
-	BindMap     *ebpf.Map `ebpf:"bind_map"`
-	ConnInfoMap *ebpf.Map `ebpf:"conn_info_map"`
-	TraceEvents *ebpf.Map `ebpf:"trace_events"`
+	AddrMap         *ebpf.Map `ebpf:"addr_map"`
+	AddrdstMap      *ebpf.Map `ebpf:"addrdst_map"`
+	BindMap         *ebpf.Map `ebpf:"bind_map"`
+	ConnInfoMap     *ebpf.Map `ebpf:"conn_info_map"`
+	ConnInfobindMap *ebpf.Map `ebpf:"conn_infobind_map"`
+	TraceEvents     *ebpf.Map `ebpf:"trace_events"`
 }
 
 func (m *bpfMaps) Close() error {
 	return _BpfClose(
 		m.AddrMap,
+		m.AddrdstMap,
 		m.BindMap,
 		m.ConnInfoMap,
+		m.ConnInfobindMap,
 		m.TraceEvents,
 	)
 }
