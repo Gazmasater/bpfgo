@@ -1,0 +1,91 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+
+int main() {
+    int sock = 5; // Подставьте реальный файловый дескриптор уже подключенного сокета
+
+    struct sockaddr_in local_addr;
+    socklen_t addr_len = sizeof(local_addr);
+
+    // Получаем локальный IP-адрес и порт для уже установленного соединения
+    if (getsockname(sock, (struct sockaddr *)&local_addr, &addr_len) == -1) {
+        perror("getsockname failed");
+        return -1;
+    }
+
+    // Преобразуем IP-адрес в строковый формат
+    char local_ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &local_addr.sin_addr, local_ip, sizeof(local_ip));
+
+    // Выводим локальный IP-адрес и порт
+    printf("Local IP address: %s\n", local_ip);
+    printf("Local port: %d\n", ntohs(local_addr.sin_port));
+
+    return 0;
+}
+
+
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+
+int main() {
+    int sock;
+    struct sockaddr_in remote_addr, local_addr;
+    socklen_t addr_len = sizeof(local_addr);
+
+    // Создаем сокет
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) {
+        perror("Socket creation failed");
+        return -1;
+    }
+
+    // Настроим структуру sockaddr_in для удаленного адреса
+    memset(&remote_addr, 0, sizeof(remote_addr));
+    remote_addr.sin_family = AF_INET;
+    remote_addr.sin_port = htons(80);  // Порт 80 для HTTP
+
+    // Преобразуем строковый IP-адрес в бинарный формат
+    if (inet_pton(AF_INET, "8.8.8.8", &remote_addr.sin_addr) <= 0) {
+        perror("Invalid remote address");
+        return -1;
+    }
+
+    // Подключаемся к удаленному серверу
+    if (connect(sock, (struct sockaddr *)&remote_addr, sizeof(remote_addr)) < 0) {
+        perror("Connect failed");
+        return -1;
+    }
+
+    printf("Connected to 8.8.8.8 on port 80\n");
+
+    // Получаем локальный адрес, к которому был привязан сокет
+    if (getsockname(sock, (struct sockaddr *)&local_addr, &addr_len) == -1) {
+        perror("getsockname failed");
+        return -1;
+    }
+
+    // Преобразуем локальный IP-адрес в строковый формат
+    char local_ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &local_addr.sin_addr, local_ip, sizeof(local_ip));
+
+    // Выводим локальный IP-адрес и порт
+    printf("Local IP address: %s\n", local_ip);
+    printf("Local port: %d\n", ntohs(local_addr.sin_port));
+
+    // Закрытие сокета
+    close(sock);
+    return 0;
+}
