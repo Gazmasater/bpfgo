@@ -63,6 +63,11 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
 }
 
 
+az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
+[sudo] password for gaz358: 
+2025/03/10 22:44:38 failed to load bpf objects: field TraceConnectExit: program trace_connect_exit: load program: invalid argument: unknown func bpf_sk_lookup_tcp#84 (106 line(s) omitted)
+
+
 
 
 
