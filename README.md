@@ -63,9 +63,24 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
 }
 
 
-az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
-[sudo] password for gaz358: 
-2025/03/10 22:44:38 failed to load bpf objects: field TraceConnectExit: program trace_connect_exit: load program: invalid argument: unknown func bpf_sk_lookup_tcp#84 (106 line(s) omitted)
+SEC("tracepoint/syscalls/sys_enter_bind")
+int trace_bind_enter(struct sys_enter_bind_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    int fd = ctx->fd;
+    struct sockaddr *addr = (struct sockaddr *)ctx->uservaddr;
+    u32 addr_len = ctx->addrlen;
+
+    if (addr->sa_family == AF_INET) {
+        struct sockaddr_in *addr_in = (struct sockaddr_in *)addr;
+        u32 local_ip = bpf_ntohl(addr_in->sin_addr.s_addr);
+        u16 local_port = bpf_ntohs(addr_in->sin_port);
+
+        bpf_printk("PID=%d Local IP: %u, Local Port: %d, FD: %d", pid, local_ip, local_port, fd);
+    }
+
+    return 0;
+}
+
 
 
 
