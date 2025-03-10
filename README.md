@@ -7,90 +7,54 @@ nc 127.0.0.1 12345
 bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=load -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
 
 #include <linux/bpf.h>
-#include <linux/in.h>
-#include <linux/ptrace.h>
-#include <linux/socket.h>
+#include <linux/if_ether.h>
+#include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
-#include <bpf/bpf_helpers.h>
 
-struct sock_info_t {
-    __be32 local_ip;
-    __be16 local_port;
-    __be32 remote_ip;
-    __be16 remote_port;
-};
-
-// Мапа для хранения данных о соединениях по PID процесса
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 1024);
-    __type(key, u32);
-    __type(value, struct sock_info_t);
-} sock_map SEC(".maps");
-
-// Перехватываем вход в sys_connect (fix: не используем user-space адрес напрямую)
-SEC("tracepoint/syscalls/sys_enter_connect")
-int trace_connect(struct trace_event_raw_sys_enter *ctx) {
-    int sockfd = ctx->args[0];  
-    struct sockaddr *addr_ptr;
-    bpf_probe_read_user(&addr_ptr, sizeof(addr_ptr), (void *)ctx->args[1]);
+SEC("xdp_prog")
+int xdp_monitor(struct __sk_buff *skb) {
+    // Указатель на Ethernet-заголовок
+    struct ethhdr *eth = bpf_hdr_pointer(skb, 0);
     
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    struct sock_info_t info = {};
+    // Проверяем, что это IP-пакет
+    if (eth->h_proto == htons(ETH_P_IP)) {
+        struct iphdr *ip = (struct iphdr *)(eth + 1);
 
-    struct sockaddr_in addr;
-    bpf_probe_read_user(&addr, sizeof(addr), addr_ptr);
+        // Если это TCP или UDP, то извлекаем нужную информацию
+        if (ip->protocol == IPPROTO_TCP) {
+            struct tcphdr *tcp = (struct tcphdr *)(ip + 1);
 
-    if (addr.sin_family == AF_INET) {
-        info.remote_ip = addr.sin_addr.s_addr;
-        info.remote_port = addr.sin_port;
-        bpf_map_update_elem(&sock_map, &pid, &info, BPF_ANY);
+            // Локальный IP и порт
+            __be32 local_ip = ip->saddr;
+            __be16 local_port = tcp->source;
+
+            // Удалённый IP и порт
+            __be32 remote_ip = ip->daddr;
+            __be16 remote_port = tcp->dest;
+
+            // Логирование или другой механизм мониторинга
+            bpf_printk("TCP Monitor: Local IP: %pI4, Local Port: %u, Remote IP: %pI4, Remote Port: %u\n",
+                &local_ip, ntohs(local_port), &remote_ip, ntohs(remote_port));
+        } 
+        else if (ip->protocol == IPPROTO_UDP) {
+            struct udphdr *udp = (struct udphdr *)(ip + 1);
+
+            // Локальный IP и порт
+            __be32 local_ip = ip->saddr;
+            __be16 local_port = udp->source;
+
+            // Удалённый IP и порт
+            __be32 remote_ip = ip->daddr;
+            __be16 remote_port = udp->dest;
+
+            // Логирование или другой механизм мониторинга
+            bpf_printk("UDP Monitor: Local IP: %pI4, Local Port: %u, Remote IP: %pI4, Remote Port: %u\n",
+                &local_ip, ntohs(local_port), &remote_ip, ntohs(remote_port));
+        }
     }
-
-    return 0;
+    return XDP_PASS;
 }
 
-// Перехватываем выход из sys_connect
-SEC("tracepoint/syscalls/sys_exit_connect")
-int trace_connect_exit(struct trace_event_raw_sys_exit *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    struct sock_info_t *info = bpf_map_lookup_elem(&sock_map, &pid);
-    if (!info) return 0;
+char _license[] SEC("license") = "GPL";
 
-    // Получаем локальный IP и порт
-    struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-    struct file *file = bpf_task_fd_get(task, ctx->ret);  
-    if (!file) return 0;
-
-    struct socket *sock = (struct socket *)file->private_data;
-    if (!sock) return 0;
-
-    struct sock *sk = sock->sk;
-    if (!sk) return 0;
-
-    info->local_ip = sk->sk_rcv_saddr;
-    info->local_port = sk->sk_num;
-
-    // Вывод через bpf_printk()
-    bpf_printk("Local IP: %pI4, Local Port: %d", &info->local_ip, bpf_ntohs(info->local_port));
-
-    // Удаляем запись из мапы
-    bpf_map_delete_elem(&sock_map, &pid);
-    return 0;
-}
-
-char LICENSE[] SEC("license") = "GPL";
-
-#include <vmlinux.h>
-#include <bpf/bpf_helpers.h>
-#include <bpf/bpf_tracing.h>
-#include <linux/fdtable.h>
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir "$(pwd)" -tags linux -type trace_info -go-package=main -target amd64 bpf "$(pwd)/trace.c" -- -I"$(pwd)"
-/home/gaz358/myprog/bpfgo/trace.c:331:22: error: call to undeclared function 'bpf_task_fd_get'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
-  331 |  struct file *file = bpf_task_fd_get(task, ctx->ret);  
-      |                      ^
-/home/gaz358/myprog/bpfgo/trace.c:331:15: error: incompatible integer to pointer conversion initializing 'struct file *' with an expression of type 'int' [-Wint-conversion]
-  331 |  struct file *file = bpf_task_fd_get(task, ctx->ret); 
