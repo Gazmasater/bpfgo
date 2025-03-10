@@ -7,7 +7,14 @@
 #include <unistd.h>
 
 int main() {
-    int sock = 5; // Подставьте реальный файловый дескриптор уже подключенного сокета
+    int sock = 27; // Подставьте реальный файловый дескриптор уже подключенного сокета
+
+    int type;
+socklen_t len = sizeof(type);
+if (getsockopt(sock, SOL_SOCKET, SO_TYPE, &type, &len) == -1) {
+    perror("FD is not a socket");
+    return -1;
+}
 
     struct sockaddr_in local_addr;
     socklen_t addr_len = sizeof(local_addr);
