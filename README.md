@@ -9,73 +9,59 @@ bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=loa
 SEC("tracepoint/syscalls/sys_exit_connect")
 int trace_connect_exit(struct sys_exit_connect_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    int fd = ctx->args[0];
     long ret = ctx->ret;
 
-    if (ret < 0) return 0;  // Ошибка соединения, ничего не делаем
-
-    struct socket *sock = sockfd_lookup(fd, NULL); // Получаем socket по fd
-    if (!sock) return 0;
-
-    struct sock *sk = sock->sk;  // Получаем struct sock
-    if (!sk) return 0;
-
-    u32 local_ip = sk->__sk_common.skc_rcv_saddr;  // Локальный IP
-    u16 local_port = sk->__sk_common.skc_num;  // Локальный порт
-
-    bpf_printk("PID=%d Local IP=%pI4 Port=%d\n", pid, &local_ip, ntohs(local_port));
-
-    return 0;
-}
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 1024);
-    __type(key, u32);
-    __type(value, int);
-} fd_map SEC(".maps");
-
-SEC("tracepoint/syscalls/sys_enter_connect")
-int trace_connect_enter(struct sys_enter_connect_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;  // Получаем PID
-    int fd = ctx->fd;
-
-    bpf_map_update_elem(&fd_map, &pid, &fd, BPF_ANY);
-    
-    bpf_printk("Saved FD=%d for PID=%d\n", fd, pid);
-    return 0;
-}
-
-SEC("tracepoint/syscalls/sys_exit_connect")
-int trace_connect_exit(struct sys_exit_connect_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
+    if (!conn_info) return 0;
 
     if (ret < 0) {
-        bpf_map_delete_elem(&fd_map, &pid);
+        bpf_printk("sys_exit_connect failed for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map, &pid);
         return 0;
     }
 
-    int *fd_ptr = bpf_map_lookup_elem(&fd_map, &pid);
-    if (!fd_ptr) return 0;
+    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
+    if (!addr_ptr) {
+        return 0;
+    }
 
-    int fd = *fd_ptr;  // Получили fd
+    struct sockaddr addr = {};
+    bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
 
-    bpf_printk("FD=%d used by PID=%d\n", fd, pid);
+    bpf_printk("sys_exit_connect PID=%d  FAMILY=%d ", conn_info->pid, addr.sa_family);
 
-    bpf_map_delete_elem(&fd_map, &pid);  // Удаляем fd после использования
+    // Формируем tuple для поиска сокета
+    if (addr.sa_family == AF_INET) {
+        struct sockaddr_in addr_in = {};
+        bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
+
+        u32 remote_ip = bpf_ntohl(addr_in.sin_addr.s_addr);
+        u16 remote_port = bpf_ntohs(addr_in.sin_port);
+
+        struct bpf_sock_tuple tuple = {};
+        tuple.ipv4.saddr = conn_info->local_ip;   // Локальный IP
+        tuple.ipv4.daddr = remote_ip;             // Удалённый IP
+        tuple.ipv4.sport = bpf_htons(conn_info->local_port);  // Локальный порт
+        tuple.ipv4.dport = bpf_htons(remote_port); // Удалённый порт
+
+        // Получаем сокет
+        struct bpf_sock *sk = bpf_sk_lookup_tcp(ctx, &tuple, sizeof(tuple.ipv4), BPF_F_CURRENT_NETNS, 0);
+        if (sk) {
+            // Извлекаем локальный IP и порт
+            u32 local_ip = sk->src_ip4;
+            u16 local_port = bpf_ntohs(sk->src_port);
+            bpf_printk("Local IP: %u, Local Port: %d\n", local_ip, local_port);
+
+            bpf_sk_release(sk); // Освобождаем ресурс
+        }
+    }
+
+    bpf_map_delete_elem(&addr_map, &pid);  
+    bpf_map_delete_elem(&conn_info_map, &pid);
+
     return 0;
 }
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir "$(pwd)" -tags linux -type trace_info -go-package=main -target amd64 bpf "$(pwd)/trace.c" -- -I"$(pwd)"
-/home/gaz358/myprog/bpfgo/trace.c:397:27: error: call to undeclared function 'sockfd_lookup'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
-  397 |     struct socket *sock = sockfd_lookup(fd, NULL); // Получаем socket по fd
-      |                           ^
-/home/gaz358/myprog/bpfgo/trace.c:397:20: error: incompatible integer to pointer conversion initializing 'struct socket *' with an expression of type 'int' [-Wint-conversion]
-  397 |     struct socket *sock = sockfd_lookup(fd, NULL); // Получаем socket по fd
-      |                    ^      ~~~~~~~~~~~~~~~~~~~~~~~
-2 errors generated.
-Error: compile: exit status 1
 
 
 
