@@ -156,7 +156,7 @@ struct
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 1024);
     __type(key, u32);
-    __type(value, struct sockaddr *);
+    __type(value, struct sockaddr );
 } addr_map SEC(".maps");
 
 
@@ -211,14 +211,34 @@ int trace_accept4_enter(struct sys_enter_accept4_args *ctx) {
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
-    struct sockaddr *addr = (struct sockaddr *)ctx->upeer_sockaddr;  
 
+    struct sockaddr_in *addr_in_b = bpf_map_lookup_elem(&bind_map, &pid);
+    if (!addr_in_b) {
+        bpf_printk("PID=%d not found in bind_map\n", pid);
+        return 0;
+    }
+
+    u32 ip_b = bpf_ntohl(addr_in_b->sin_addr.s_addr);
+    u16 port_b = bpf_ntohs(addr_in_b->sin_port);
+
+    bpf_printk("sys_enter_accept4 IP=%d.%d.%d.%d:%d",
+        ip_b>>24&0xFF,
+        ip_b>>16&0xFF,
+        ip_b>>8&0xFF,
+        ip_b&0xFF,
+        port_b
     
+    
+    );
+
+
+
+
+    struct sockaddr *addr = (struct sockaddr *)ctx->upeer_sockaddr;  
 
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
     bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
-
 
     return 0;
 }
@@ -268,16 +288,16 @@ int trace_accept4_exit(struct sys_exit_accept4_args *ctx) {
         u32 ip_b = bpf_ntohl(addr_in_b->sin_addr.s_addr);
         u16 port_b = bpf_ntohs(addr_in_b->sin_port);
     
-        struct trace_info info = {};
-        __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+        // struct trace_info info = {};
+        // __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
 
-        info.pid = pid;
-        info.src_ip=ip;
-        info.sport = port;
-        info.dst_ip=ip_b;
-        info.dport=port_b;
+        // info.pid = pid;
+        // info.src_ip=ip;
+        // info.sport = port;
+        // info.dst_ip=ip_b;
+        // info.dport=port_b;
 
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+        // bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
         
     }
@@ -297,6 +317,8 @@ int trace_connect_enter(struct sys_enter_connect_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     struct conn_info_t conn_info = {};
     int fd=ctx->fd;
+
+    bpf_printk("sys_enter_connect FD=%d   PID=%d", fd,pid);
 
     conn_info.pid = pid;
     conn_info.fd=fd;
@@ -350,16 +372,16 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
 
        // bpf_printk("sys_exit_connect FAMILY=%d PORT=%d Comm=%s",addr.sa_family,port,conn_info->comm);
 
-        // struct trace_info info = {};
-        // info.pid = pid;
-        // __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+        struct trace_info info = {};
+        info.pid = pid;
+        __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
 
-        // info.pid=conn_info->pid;
-        // info.dst_ip=ip;
-        // info.dport = port;
+        info.pid=conn_info->pid;
+        info.dst_ip=ip;
+        info.dport = port;
        
 
-      //  bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+       bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
        
     }
 
@@ -529,10 +551,10 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
         __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
 
 
-        info.src_ip=ip;
-        info.sport = port;
-        info.dst_ip=ip_b;
-        info.dport=port_b;
+        // info.src_ip=ip_b;
+        // info.sport = port_b;
+        info.dst_ip=ip;
+        info.dport=port;
 
 
          bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
@@ -609,18 +631,4 @@ int trace_bind_exit(struct sys_exit_bind_args *ctx) {
     return 0;
 }
 
-SEC("cgroup/connect4")
-int trace_connect_cgroup(struct bpf_sock_addr *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    struct conn_info_t conn_info = {};
 
-    // Сохраняем PID, IP и порт в карту
-    conn_info.src_ip = bpf_ntohl(ctx->sk->src_ip4);
-    conn_info.sport = bpf_ntohs(ctx->sk->src_port);
-
-    bpf_printk("cgroup/connect4  CGPORT=d",conn_info.sport);
-    
-    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
-
-    return 0;
-}

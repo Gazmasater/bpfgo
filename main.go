@@ -95,14 +95,6 @@ func main() {
 	}
 	defer BindExit.Close()
 
-	// Sockops, err := link.AttachCgroup(link.CgroupOptions{
-	// 	Path: "/sys/fs/cgroup",
-	// })
-	// if err != nil {
-	// 	log.Fatalf("opening tracepoint sockops: %s", err)
-	// }
-	// defer Sockops.Close()
-
 	// Создаем perf.Reader для чтения событий eBPF
 	const buffLen = 4096
 	rd, err := perf.NewReader(objs.TraceEvents, buffLen)

@@ -23,6 +23,11 @@ type bpfConnInfoT struct {
 	Comm    [64]int8
 }
 
+type bpfSockaddr struct {
+	SaFamily  uint16
+	SaDataMin [14]int8
+}
+
 type bpfSockaddrIn struct {
 	SinFamily uint16
 	SinPort   uint16
@@ -85,7 +90,6 @@ type bpfProgramSpecs struct {
 	TraceAccept4Exit   *ebpf.ProgramSpec `ebpf:"trace_accept4_exit"`
 	TraceBindEnter     *ebpf.ProgramSpec `ebpf:"trace_bind_enter"`
 	TraceBindExit      *ebpf.ProgramSpec `ebpf:"trace_bind_exit"`
-	TraceConnectCgroup *ebpf.ProgramSpec `ebpf:"trace_connect_cgroup"`
 	TraceConnectEnter  *ebpf.ProgramSpec `ebpf:"trace_connect_enter"`
 	TraceConnectExit   *ebpf.ProgramSpec `ebpf:"trace_connect_exit"`
 	TraceRecvfromEnter *ebpf.ProgramSpec `ebpf:"trace_recvfrom_enter"`
@@ -161,7 +165,6 @@ type bpfPrograms struct {
 	TraceAccept4Exit   *ebpf.Program `ebpf:"trace_accept4_exit"`
 	TraceBindEnter     *ebpf.Program `ebpf:"trace_bind_enter"`
 	TraceBindExit      *ebpf.Program `ebpf:"trace_bind_exit"`
-	TraceConnectCgroup *ebpf.Program `ebpf:"trace_connect_cgroup"`
 	TraceConnectEnter  *ebpf.Program `ebpf:"trace_connect_enter"`
 	TraceConnectExit   *ebpf.Program `ebpf:"trace_connect_exit"`
 	TraceRecvfromEnter *ebpf.Program `ebpf:"trace_recvfrom_enter"`
@@ -176,7 +179,6 @@ func (p *bpfPrograms) Close() error {
 		p.TraceAccept4Exit,
 		p.TraceBindEnter,
 		p.TraceBindExit,
-		p.TraceConnectCgroup,
 		p.TraceConnectEnter,
 		p.TraceConnectExit,
 		p.TraceRecvfromEnter,
