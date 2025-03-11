@@ -58,7 +58,58 @@ int xdp_monitor(struct __sk_buff *skb) {
 
 char _license[] SEC("license") = "GPL";
 
-/home/gaz358/myprog/bpfgo/trace.c:598:20: error: incompatible integer to pointer conversion initializing 'struct ethhdr *' with an expression of type 'int' [-Wint-conversion]
-  598 |     struct ethhdr *eth = bpf_hdr_pointer(skb, 0);
+
+
+
+SEC("xdp_prog")
+int xdp_monitor(struct __sk_buff *skb) {
+    // Получаем указатель на Ethernet заголовок
+    struct ethhdr *eth = (struct ethhdr *)bpf_ringbuf_reserve(skb, sizeof(struct ethhdr), 0);
+
+    if (!eth) {
+        return XDP_PASS;
+    }
+
+    // Проверяем, что это IP пакет
+    if (eth->h_proto == htons(ETH_P_IP)) {
+        struct iphdr *ip = (struct iphdr *)(eth + 1);
+
+        // Если это TCP или UDP, то извлекаем нужную информацию
+        if (ip->protocol == IPPROTO_TCP) {
+            struct tcphdr *tcp = (struct tcphdr *)(ip + 1);
+
+            // Локальный IP и порт
+            __be32 local_ip = ip->saddr;
+            __be16 local_port = tcp->source;
+
+            // Удалённый IP и порт
+            __be32 remote_ip = ip->daddr;
+            __be16 remote_port = tcp->dest;
+
+            // Логирование или другой механизм мониторинга
+            bpf_printk("TCP Monitor: Local IP: %pI4, Local Port: %u, Remote IP: %pI4, Remote Port: %u\n",
+                &local_ip, ntohs(local_port), &remote_ip, ntohs(remote_port));
+        } 
+        else if (ip->protocol == IPPROTO_UDP) {
+            struct udphdr *udp = (struct udphdr *)(ip + 1);
+
+            // Локальный IP и порт
+            __be32 local_ip = ip->saddr;
+            __be16 local_port = udp->source;
+
+            // Удалённый IP и порт
+            __be32 remote_ip = ip->daddr;
+            __be16 remote_port = udp->dest;
+
+            // Логирование или другой механизм мониторинга
+            bpf_printk("UDP Monitor: Local IP: %pI4, Local Port: %u, Remote IP: %pI4, Remote Port: %u\n",
+                &local_ip, ntohs(local_port), &remote_ip, ntohs(remote_port));
+        }
+    }
+    return XDP_PASS;
+}
+
+
+
       |                    ^     ~~~~~~~~~~~~~~~~~~~~~~~
 
