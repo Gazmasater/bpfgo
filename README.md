@@ -11,7 +11,7 @@ int trace_bind_enter(struct sys_enter_bind_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;  
 
     struct conn_info_t conn_info = {};
-    conn_info.pid=pid;
+    conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
     struct sockaddr *addr = (struct sockaddr *)ctx->umyaddr;  
@@ -27,9 +27,8 @@ int trace_bind_exit(struct sys_exit_bind_args *ctx) {
     long ret = ctx->ret;
 
     struct conn_info_t conn_info = {};
-    conn_info.pid=pid;
+    conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-
 
     if (ret < 0) {
         bpf_printk("sys_exit_bind failed for PID=%d\n", pid);
@@ -45,26 +44,44 @@ int trace_bind_exit(struct sys_exit_bind_args *ctx) {
     struct sockaddr addr = {};
     bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
 
-    struct sockaddr_in addr_in = {};
-    bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
+    if (addr.sa_family == AF_INET) {
+        struct sockaddr_in addr_in = {};
+        bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
 
-    u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
+        u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
+        u16 port = bpf_ntohs(addr_in.sin_port);
 
-    u16 port = bpf_ntohs(addr_in.sin_port);
+        bpf_map_update_elem(&bind_map, &pid, &addr_in, BPF_ANY);
 
-    bpf_map_update_elem(&bind_map, &pid, &addr_in, BPF_ANY);
+        bpf_printk("sys_exit_bind  FAMILY=AF_INET PID=%d Comm=%s IP=%d.%d.%d.%d PORT=%d\n",
+            conn_info.pid,
+            conn_info.comm,
+            (ip >> 24) & 0xff,
+            (ip >> 16) & 0xff,
+            (ip >> 8) & 0xff,
+            (ip) & 0xff,
+            port);  
+    } else if (addr.sa_family == AF_INET6) {
+        struct sockaddr_in6 addr_in6 = {};
+        bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr);
 
+        u8 ip[16];
+        bpf_probe_read_user(&ip, sizeof(ip), addr_in6.sin6_addr.s6_addr);
 
-    bpf_printk("sys_exit_bind  FAMILY=%d  PID=%d Comm=%s IP=%d.%d.%d.%d PORT=%d ",
-        addr.sa_family,
-        conn_info.pid,
-        conn_info.comm,
-        (ip>>24)&0xff,
-        (ip>>16)&0xff,
-        (ip>>8)&0xff,
-        (ip)&0xff,
-         port);  
-   
+        u16 port = bpf_ntohs(addr_in6.sin6_port);
+
+        bpf_map_update_elem(&bind_map, &pid, &addr_in6, BPF_ANY);
+
+        bpf_printk("sys_exit_bind  FAMILY=AF_INET6 PID=%d Comm=%s IP=[%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x] PORT=%d\n",
+            conn_info.pid,
+            conn_info.comm,
+            ip[0], ip[1], ip[2], ip[3],
+            ip[4], ip[5], ip[6], ip[7],
+            ip[8], ip[9], ip[10], ip[11],
+            ip[12], ip[13], ip[14], ip[15],
+            port);  
+    }
   
     return 0;
 }
+
