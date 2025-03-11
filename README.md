@@ -58,3 +58,7 @@ int xdp_monitor(struct __sk_buff *skb) {
 
 char _license[] SEC("license") = "GPL";
 
+/home/gaz358/myprog/bpfgo/trace.c:598:20: error: incompatible integer to pointer conversion initializing 'struct ethhdr *' with an expression of type 'int' [-Wint-conversion]
+  598 |     struct ethhdr *eth = bpf_hdr_pointer(skb, 0);
+      |                    ^     ~~~~~~~~~~~~~~~~~~~~~~~
+
