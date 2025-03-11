@@ -1,3 +1,12 @@
+   <...>-11485   [000] ...21  3041.586192: bpf_trace_printk: sys_exit_bind  FAMILY=16 PID=2937 Comm=DNS Res~ver #14  PORT=0
+   Socket Thread-3056    [003] ...21  3041.599778: bpf_trace_printk: sys_exit_bind  FAMILY=2 PID=2937 Comm=Socket Thread IP=0.0.0.0 PORT=0
+
+
+
+
+
+
+
 nc -l 12345
 
 nc 127.0.0.1 12345
