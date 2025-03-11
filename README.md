@@ -6,42 +6,65 @@ nc 127.0.0.1 12345
 
 bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=load -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
 
-SEC("xdp")
-int xdp_prog(struct __sk_buff *skb) {
-    void *data_end = (void *)(long)skb->data_end;
-    void *data = (void *)(long)skb->data;
-    
-    struct ethhdr *eth = data;
-    if ((void *)(eth + 1) > data_end)
-        return XDP_PASS;
+struct sys_enter_socket_args {
 
-    if (eth->h_proto != __constant_htons(ETH_P_IP))
-        return XDP_PASS;
 
-    struct iphdr *ip = (struct iphdr *)(eth + 1);
-    if ((void *)(ip + 1) > data_end)
-        return XDP_PASS;
+    unsigned short common_type;    
+    unsigned char common_flags;       
+    unsigned char common_preempt_count;    
+    int common_pid;  
+    int __syscall_nr;
+    int family;     
+    int type;
+    int protocol;    
 
-    if (ip->protocol == IPPROTO_TCP) {
-        struct tcphdr *tcp = (struct tcphdr *)(ip + 1);
-        if ((void *)(tcp + 1) > data_end)
-            return XDP_PASS;
 
-        bpf_printk("TCP: Src IP=%x, Src Port=%d, Dst IP=%x, Dst Port=%d\n",
-            ip->saddr, ntohs(tcp->source), ip->daddr, ntohs(tcp->dest));
-    }
+};
 
-    if (ip->protocol == IPPROTO_UDP) {
-        struct udphdr *udp = (struct udphdr *)(ip + 1);
-        if ((void *)(udp + 1) > data_end)
-            return XDP_PASS;
+struct sys_exit_socket_args {
 
-        bpf_printk("UDP: Src IP=%x, Src Port=%d, Dst IP=%x, Dst Port=%d\n",
-            ip->saddr, ntohs(udp->source), ip->daddr, ntohs(udp->dest));
-    }
 
-    return XDP_PASS;
+    unsigned short common_type;       
+    unsigned char common_flags;    
+    unsigned char common_preempt_count; 
+    int common_pid;   
+    int __syscall_nr;
+    int pad;
+    long ret; 
+
+};
+
+SEC("tracepoint/syscalls/sys_enter_socket")
+int trace_socket_enter(struct sys_enter_socket_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct conn_info_t conn_info = {};
+
+    bpf_printk("sys_enter_socket sys_exit_bind PID=%d",pid);
+
+
+
+
+
+    return 0;
 }
+
+
+SEC("tracepoint/syscalls/sys_exit_socket")
+int trace_socket_exit(struct sys_exit_socket_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    long ret = ctx->ret;
+
+    bpf_printk("!!!!sys_exit_socket sys_exit_bind PID=%d",pid);
+
+
+    if (ret < 0) {
+        bpf_printk("sys_exit_socket failed for PID=%d\n", pid);
+        return 0;
+    }
+
+    return 0;
+}
+
 
 
 
