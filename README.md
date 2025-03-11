@@ -6,108 +6,43 @@ nc 127.0.0.1 12345
 
 bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=load -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
 
-#include <linux/bpf.h>
-#include <linux/if_ether.h>
-#include <linux/ip.h>
-#include <linux/tcp.h>
-#include <linux/udp.h>
-
-SEC("xdp_prog")
-int xdp_monitor(struct __sk_buff *skb) {
-    // Указатель на Ethernet-заголовок
-    struct ethhdr *eth = bpf_hdr_pointer(skb, 0);
+SEC("xdp")
+int xdp_prog(struct __sk_buff *skb) {
+    void *data_end = (void *)(long)skb->data_end;
+    void *data = (void *)(long)skb->data;
     
-    // Проверяем, что это IP-пакет
-    if (eth->h_proto == htons(ETH_P_IP)) {
-        struct iphdr *ip = (struct iphdr *)(eth + 1);
-
-        // Если это TCP или UDP, то извлекаем нужную информацию
-        if (ip->protocol == IPPROTO_TCP) {
-            struct tcphdr *tcp = (struct tcphdr *)(ip + 1);
-
-            // Локальный IP и порт
-            __be32 local_ip = ip->saddr;
-            __be16 local_port = tcp->source;
-
-            // Удалённый IP и порт
-            __be32 remote_ip = ip->daddr;
-            __be16 remote_port = tcp->dest;
-
-            // Логирование или другой механизм мониторинга
-            bpf_printk("TCP Monitor: Local IP: %pI4, Local Port: %u, Remote IP: %pI4, Remote Port: %u\n",
-                &local_ip, ntohs(local_port), &remote_ip, ntohs(remote_port));
-        } 
-        else if (ip->protocol == IPPROTO_UDP) {
-            struct udphdr *udp = (struct udphdr *)(ip + 1);
-
-            // Локальный IP и порт
-            __be32 local_ip = ip->saddr;
-            __be16 local_port = udp->source;
-
-            // Удалённый IP и порт
-            __be32 remote_ip = ip->daddr;
-            __be16 remote_port = udp->dest;
-
-            // Логирование или другой механизм мониторинга
-            bpf_printk("UDP Monitor: Local IP: %pI4, Local Port: %u, Remote IP: %pI4, Remote Port: %u\n",
-                &local_ip, ntohs(local_port), &remote_ip, ntohs(remote_port));
-        }
-    }
-    return XDP_PASS;
-}
-
-char _license[] SEC("license") = "GPL";
-
-
-
-
-SEC("xdp_prog")
-int xdp_monitor(struct __sk_buff *skb) {
-    // Получаем указатель на Ethernet заголовок
-    struct ethhdr *eth = (struct ethhdr *)bpf_ringbuf_reserve(skb, sizeof(struct ethhdr), 0);
-
-    if (!eth) {
+    struct ethhdr *eth = data;
+    if ((void *)(eth + 1) > data_end)
         return XDP_PASS;
+
+    if (eth->h_proto != __constant_htons(ETH_P_IP))
+        return XDP_PASS;
+
+    struct iphdr *ip = (struct iphdr *)(eth + 1);
+    if ((void *)(ip + 1) > data_end)
+        return XDP_PASS;
+
+    if (ip->protocol == IPPROTO_TCP) {
+        struct tcphdr *tcp = (struct tcphdr *)(ip + 1);
+        if ((void *)(tcp + 1) > data_end)
+            return XDP_PASS;
+
+        bpf_printk("TCP: Src IP=%x, Src Port=%d, Dst IP=%x, Dst Port=%d\n",
+            ip->saddr, ntohs(tcp->source), ip->daddr, ntohs(tcp->dest));
     }
 
-    // Проверяем, что это IP пакет
-    if (eth->h_proto == htons(ETH_P_IP)) {
-        struct iphdr *ip = (struct iphdr *)(eth + 1);
+    if (ip->protocol == IPPROTO_UDP) {
+        struct udphdr *udp = (struct udphdr *)(ip + 1);
+        if ((void *)(udp + 1) > data_end)
+            return XDP_PASS;
 
-        // Если это TCP или UDP, то извлекаем нужную информацию
-        if (ip->protocol == IPPROTO_TCP) {
-            struct tcphdr *tcp = (struct tcphdr *)(ip + 1);
-
-            // Локальный IP и порт
-            __be32 local_ip = ip->saddr;
-            __be16 local_port = tcp->source;
-
-            // Удалённый IP и порт
-            __be32 remote_ip = ip->daddr;
-            __be16 remote_port = tcp->dest;
-
-            // Логирование или другой механизм мониторинга
-            bpf_printk("TCP Monitor: Local IP: %pI4, Local Port: %u, Remote IP: %pI4, Remote Port: %u\n",
-                &local_ip, ntohs(local_port), &remote_ip, ntohs(remote_port));
-        } 
-        else if (ip->protocol == IPPROTO_UDP) {
-            struct udphdr *udp = (struct udphdr *)(ip + 1);
-
-            // Локальный IP и порт
-            __be32 local_ip = ip->saddr;
-            __be16 local_port = udp->source;
-
-            // Удалённый IP и порт
-            __be32 remote_ip = ip->daddr;
-            __be16 remote_port = udp->dest;
-
-            // Логирование или другой механизм мониторинга
-            bpf_printk("UDP Monitor: Local IP: %pI4, Local Port: %u, Remote IP: %pI4, Remote Port: %u\n",
-                &local_ip, ntohs(local_port), &remote_ip, ntohs(remote_port));
-        }
+        bpf_printk("UDP: Src IP=%x, Src Port=%d, Dst IP=%x, Dst Port=%d\n",
+            ip->saddr, ntohs(udp->source), ip->daddr, ntohs(udp->dest));
     }
+
     return XDP_PASS;
 }
+
 
 
 
