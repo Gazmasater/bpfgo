@@ -31,13 +31,7 @@ int trace_bind_exit(struct sys_exit_bind_args *ctx) {
     struct sockaddr addr = {};
     bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
 
-
-    bpf_printk("sys_exit_bind PRotocol=%d \n",
-        addr.sa_family
-        );  
-
-
-
+    bpf_printk("sys_exit_bind Protocol=%d \n", addr.sa_family);  
 
     if (addr.sa_family == AF_INET) {
         struct sockaddr_in addr_in = {};
@@ -48,7 +42,7 @@ int trace_bind_exit(struct sys_exit_bind_args *ctx) {
 
         bpf_map_update_elem(&bind_map, &pid, &addr_in, BPF_ANY);
 
-        bpf_printk("sys_exit_bind  FAMILY=%d PID=%d Comm=%s IP=%d.%d.%d.%d PORT=%d\n",
+        bpf_printk("sys_exit_bind FAMILY=%d PID=%d Comm=%s IP=%d.%d.%d.%d PORT=%d\n",
             addr.sa_family,
             conn_info.pid,
             conn_info.comm,
@@ -61,20 +55,19 @@ int trace_bind_exit(struct sys_exit_bind_args *ctx) {
         struct sockaddr_in6 addr_in6 = {};
         bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr);
 
-
         u16 port = bpf_ntohs(addr_in6.sin6_port);
 
         bpf_map_update_elem(&bind6_map, &pid, &addr_in6, BPF_ANY);
 
-        bpf_printk("sys_exit_bind  FAMILY=%d PID=%d Comm=%s  PORT=%d\n",
+        bpf_printk("sys_exit_bind FAMILY=%d PID=%d Comm=%s PORT=%d\n",
             addr.sa_family,
             conn_info.pid,
             conn_info.comm,
-           
             port);  
     }
   
     return 0;
 }
+
 
 
