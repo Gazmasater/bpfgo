@@ -1,10 +1,3 @@
-   <...>-11485   [000] ...21  3041.586192: bpf_trace_printk: sys_exit_bind  FAMILY=16 PID=2937 Comm=DNS Res~ver #14  PORT=0
-   Socket Thread-3056    [003] ...21  3041.599778: bpf_trace_printk: sys_exit_bind  FAMILY=2 PID=2937 Comm=Socket Thread IP=0.0.0.0 PORT=0
-
-
-
-
-
 
 
 nc -l 12345
@@ -14,21 +7,6 @@ nc 127.0.0.1 12345
 
 
 bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=load -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
-
-SEC("tracepoint/syscalls/sys_enter_bind")
-int trace_bind_enter(struct sys_enter_bind_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;  
-
-    struct conn_info_t conn_info = {};
-    conn_info.pid = pid;
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-
-    struct sockaddr *addr = (struct sockaddr *)ctx->umyaddr;  
-
-    bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
-  
-    return 0;
-}
 
 SEC("tracepoint/syscalls/sys_exit_bind")
 int trace_bind_exit(struct sys_exit_bind_args *ctx) {
@@ -53,6 +31,14 @@ int trace_bind_exit(struct sys_exit_bind_args *ctx) {
     struct sockaddr addr = {};
     bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
 
+
+    bpf_printk("sys_exit_bind PRotocol=%d \n",
+        addr.sa_family
+        );  
+
+
+
+
     if (addr.sa_family == AF_INET) {
         struct sockaddr_in addr_in = {};
         bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
@@ -62,7 +48,8 @@ int trace_bind_exit(struct sys_exit_bind_args *ctx) {
 
         bpf_map_update_elem(&bind_map, &pid, &addr_in, BPF_ANY);
 
-        bpf_printk("sys_exit_bind  FAMILY=AF_INET PID=%d Comm=%s IP=%d.%d.%d.%d PORT=%d\n",
+        bpf_printk("sys_exit_bind  FAMILY=%d PID=%d Comm=%s IP=%d.%d.%d.%d PORT=%d\n",
+            addr.sa_family,
             conn_info.pid,
             conn_info.comm,
             (ip >> 24) & 0xff,
@@ -74,23 +61,20 @@ int trace_bind_exit(struct sys_exit_bind_args *ctx) {
         struct sockaddr_in6 addr_in6 = {};
         bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr);
 
-        u8 ip[16];
-        bpf_probe_read_user(&ip, sizeof(ip), addr_in6.sin6_addr.s6_addr);
 
         u16 port = bpf_ntohs(addr_in6.sin6_port);
 
-        bpf_map_update_elem(&bind_map, &pid, &addr_in6, BPF_ANY);
+        bpf_map_update_elem(&bind6_map, &pid, &addr_in6, BPF_ANY);
 
-        bpf_printk("sys_exit_bind  FAMILY=AF_INET6 PID=%d Comm=%s IP=[%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x] PORT=%d\n",
+        bpf_printk("sys_exit_bind  FAMILY=%d PID=%d Comm=%s  PORT=%d\n",
+            addr.sa_family,
             conn_info.pid,
             conn_info.comm,
-            ip[0], ip[1], ip[2], ip[3],
-            ip[4], ip[5], ip[6], ip[7],
-            ip[8], ip[9], ip[10], ip[11],
-            ip[12], ip[13], ip[14], ip[15],
+           
             port);  
     }
   
     return 0;
 }
+
 
