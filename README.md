@@ -8,66 +8,9 @@ nc 127.0.0.1 12345
 
 bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=load -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
 
-SEC("tracepoint/syscalls/sys_exit_bind")
-int trace_bind_exit(struct sys_exit_bind_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
+PID=767 Comm=systemd-resolve ,SrcIP: 0.0.0.0(Unknown), SrcPort: 0 -> DstIP: 192.168.1.1(beelinerouter.net.), DstPort: 53 
 
-    struct conn_info_t conn_info = {};
-    conn_info.pid = pid;
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-
-    if (ret < 0) {
-        bpf_printk("sys_exit_bind failed for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map, &pid);
-        return 0;
-    }
-
-    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
-    if (!addr_ptr) {
-        return 0;
-    }
-
-    struct sockaddr addr = {};
-    bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
-
-    bpf_printk("sys_exit_bind Protocol=%d \n", addr.sa_family);  
-
-    if (addr.sa_family == AF_INET) {
-        struct sockaddr_in addr_in = {};
-        bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
-
-        u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
-        u16 port = bpf_ntohs(addr_in.sin_port);
-
-        bpf_map_update_elem(&bind_map, &pid, &addr_in, BPF_ANY);
-
-        bpf_printk("sys_exit_bind FAMILY=%d PID=%d Comm=%s IP=%d.%d.%d.%d PORT=%d\n",
-            addr.sa_family,
-            conn_info.pid,
-            conn_info.comm,
-            (ip >> 24) & 0xff,
-            (ip >> 16) & 0xff,
-            (ip >> 8) & 0xff,
-            (ip) & 0xff,
-            port);  
-    } else if (addr.sa_family == AF_INET6) {
-        struct sockaddr_in6 addr_in6 = {};
-        bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr);
-
-        u16 port = bpf_ntohs(addr_in6.sin6_port);
-
-        bpf_map_update_elem(&bind6_map, &pid, &addr_in6, BPF_ANY);
-
-        bpf_printk("sys_exit_bind FAMILY=%d PID=%d Comm=%s PORT=%d\n",
-            addr.sa_family,
-            conn_info.pid,
-            conn_info.comm,
-            port);  
-    }
-  
-    return 0;
-}
+r
 
 
 
