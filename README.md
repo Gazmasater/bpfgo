@@ -11,6 +11,11 @@ bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=loa
 grep CONFIG_BPF_SK_LOOKUP /boot/config-$(uname -r)
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo grep CONFIG_BPF_SK_LOOKUP /boot/config-$(uname -r)
+[sudo] password for gaz358: 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
+
 
 
 
