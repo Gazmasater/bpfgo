@@ -153,8 +153,34 @@ ip netns exec my_netns ip link
 
 sudo bpftool net attach sk_lookup id <prog_id> netns /var/run/netns/my_netns ifindex <ifindex>
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ sudo bpftool net attach sk_lookup id 69  netns /var/run/netns/my_netns ifindex 1
-Error: invalid net attach/detach type: sk_lookup
+
+Шаг 1: Добавьте класс управления трафиком для интерфейса lo (если он еще не был добавлен)
+Это необходимо, чтобы можно было добавлять фильтры на интерфейс:
+
+
+sudo tc qdisc add dev lo clsact
+Шаг 2: Прикрепите программу BPF для входящего трафика
+Это действие уже описано:
+
+
+sudo tc filter add dev lo ingress bpf obj ./sk_lookup.o sec sk_lookup
+Шаг 3: Прикрепите программу BPF для исходящего трафика
+Теперь нужно добавить фильтр для исходящего трафика, используя egress:
+
+
+sudo tc filter add dev lo egress bpf obj ./sk_lookup.o sec sk_lookup
+dev lo — указывает на интерфейс lo.
+egress — указывает, что фильтр будет работать с исходящим трафиком.
+bpf obj ./sk_lookup.o — указывает на объектный файл программы BPF.
+sec sk_lookup — указывает на секцию в объектном файле программы.
+Шаг 4: Проверка фильтров на интерфейсе lo
+Чтобы убедиться, что фильтры были успешно добавлены для обоих направлений трафика, выполните команду:
+
+
+sudo tc -s filter show dev lo
+Эта команда покажет статистику для обоих фильтров (входящего и исходящего трафика) на интерфейсе lo.
+
+
 
 
 
