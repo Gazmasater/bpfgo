@@ -42,6 +42,11 @@ bpf_probe_read_user(&proto,sizeof(proto),&ctx->protocol);
         ctx->protocol, ctx->local_ip4, ctx->local_port);
 
 
+        gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ sudo bpftool net attach sk_lookup id 68  netns /var/run/netns/my_netns ifindex 1
+Error: invalid net attach/detach type: sk_lookup
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ 
+
+
 
 
 
