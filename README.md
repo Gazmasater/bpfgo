@@ -143,6 +143,9 @@ err := link.RawAttachProgram(link.RawAttachProgramOptions{
 		log.Fatalf("failed to attach sk_lookup: %v", err)
 	}
 
+ gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
+2025/03/15 13:41:06 failed to attach sk_lookup: attach program: invalid argument
+
 
 
 
