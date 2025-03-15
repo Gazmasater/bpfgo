@@ -167,6 +167,45 @@ link, err := link.RawAttachProgram(link.RawAttachProgramOptions{
 	"endColumn": 4
 }]
 
+func RawAttachProgram(opts RawAttachProgramOptions) error {
+	if opts.Flags&anchorFlags != 0 {
+		return fmt.Errorf("disallowed flags: use Anchor to specify attach target")
+	}
+
+	attr := sys.ProgAttachAttr{
+		TargetFdOrIfindex: uint32(opts.Target),
+		AttachBpfFd:       uint32(opts.Program.FD()),
+		AttachType:        uint32(opts.Attach),
+		AttachFlags:       uint32(opts.Flags),
+		ExpectedRevision:  opts.ExpectedRevision,
+	}
+
+	if opts.Anchor != nil {
+		fdOrID, flags, err := opts.Anchor.anchor()
+		if err != nil {
+			return fmt.Errorf("attach program: %w", err)
+		}
+
+		if flags == sys.BPF_F_REPLACE {
+			// Ensure that replacing a program works on old kernels.
+			attr.ReplaceBpfFd = fdOrID
+		} else {
+			attr.RelativeFdOrId = fdOrID
+			attr.AttachFlags |= flags
+		}
+	}
+
+	if err := sys.ProgAttach(&attr); err != nil {
+		if haveFeatErr := haveProgAttach(); haveFeatErr != nil {
+			return haveFeatErr
+		}
+		return fmt.Errorf("attach program: %w", err)
+	}
+	runtime.KeepAlive(opts.Program)
+
+	return nil
+}
+
 
 
 
