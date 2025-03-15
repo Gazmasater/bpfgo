@@ -645,8 +645,8 @@ int echo_dispatch(struct bpf_sk_lookup *ctx)
 {
 
      __u8 proto = ctx->protocol; 
-     u32 srcIP=bpf_ntohl(ctx->local_ip4);
-     u16 srcPort=bpf_ntohs(ctx->local_port);
+     __u32 srcIP=bpf_ntohl(ctx->local_ip4);
+     __u16 srcPort=bpf_ntohs(ctx->local_port);
 
 
     const char *proto_str;

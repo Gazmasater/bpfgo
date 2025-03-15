@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"unsafe"
 
+	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/perf"
 	"github.com/cilium/ebpf/rlimit"
@@ -34,11 +35,13 @@ func init() {
 func main() {
 	defer objs.Close() // Закроем объекты при выходе
 
-	netns, err := os.Open("/proc/self/ns/net")
+	err := link.RawAttachProgram(link.RawAttachProgramOptions{
+		Program: objs.EchoDispatch,   // Загрузка программы BPF
+		Attach:  ebpf.AttachSkLookup, // Тип привязки для sk_lookup
+	})
 	if err != nil {
-		log.Fatalf("Ошибка открытия текущего network namespace: %v", err)
+		log.Fatalf("failed to attach sk_lookup: %v", err)
 	}
-	defer netns.Close()
 
 	// Привязываем eBPF-программу к tracepoint
 	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
