@@ -72,23 +72,26 @@ sudo bpftool cgroup show /sys/fs/cgroup/sk_lookup
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ sudo bpftool prog load sk_up.o /sys/fs/bpf/test_prog type sk_lookup
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ sudo bpftool prog show | grep sk_lookup | awk '{print $1}'
-80:
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ echo $$ | sudo tee /sys/fs/cgroup/sk_lookup/cgroup.procs
-3190
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ echo $$ | sudo tee /sys/fs/cgroup/sk_lookup/cgroup.procs
-3190
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ sudo tc qdisc add dev lo clsact
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ sudo tc filter add dev lo ingress bpf obj ./sk_up.o sec sk_lookup
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ sudo tc filter add dev lo egress bpf obj ./sk_up.o sec sk_lookup
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ sudo bpftool cgroup attach /sys/fs/cgroup/sk_lookup sk_lookup id 80            
-Error: failed to attach program
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ sudo bpftool cgroup attach /sys/fs/cgroup/sk_lookup sk_lookup id 3190
-Error: get by id (3190): No such file or directory
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ sudo bpftool cgroup attach /sys/fs/cgroup/sk_lookup sk_lookup id 80
-Error: failed to attach program
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ 
+Окей, если программа загружена, давай разберемся с подключением. Проверь:
+
+1️⃣ Покажи mount | grep cgroup, чтобы убедиться, что используется cgroup v2.
+
+2️⃣ Выведи cat /sys/fs/cgroup/sk_lookup/cgroup.procs
+
+Если пусто — процесс не добавлен, и eBPF не сможет работать.
+3️⃣ Попробуй вручную прикрепить программу к cgroup и проверь ошибки в dmesg
+
+sudo bpftool cgroup attach /sys/fs/cgroup/sk_lookup sk_lookup id 80
+sudo dmesg | tail -50
+Если что-то не так — скидывай ошибки, будем разбираться. 🚀
+
+
+
+
+
+
+
+
 
 
 
