@@ -17,6 +17,10 @@ if err != nil {
 }
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
+2025/03/16 01:28:26 failed to attach sk_lookup: attach program: invalid argument
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
 
 
 
