@@ -114,8 +114,26 @@ func main() {
 SEC("sk_lookup")
 int echo_dispatch(struct bpf_sk_lookup *ctx)
 {
-	return SK_PASS;
+    __u32 pid = bpf_get_current_pid_tgid() >> 32;
+    __u8 proto = ctx->protocol; // Протокол
+
+    // Выводим значение протокола в лог
+    bpf_printk("PID: %d, Protocol Number: %d\n", pid, proto);
+
+    // Определяем протокол (TCP или UDP)
+    const char *proto_str;
+    if (proto == IPPROTO_TCP) {
+        proto_str = "TCP";
+    } else if (proto == IPPROTO_UDP) {
+        proto_str = "UDP";
+    } else {
+        proto_str = "UNKNOWN";
+    }
+
+    bpf_printk("PID: %d, Protocol: %s\n", pid, proto_str);
+    return SK_PASS;
 }
+
 
 
 
