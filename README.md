@@ -58,10 +58,31 @@ func main() {
     fmt.Println("Successfully attached BPF program to cgroup")
 }
 
-err = exec.Command("sudo", "sh", "-c", "echo \"1:1\" > "+cgroupPath+"/net_cls.classid").Run()
-if err != nil {
-    log.Fatalf("failed to set classid for cgroup: %v", err)
+package main
+
+import (
+    "log"
+    "os/exec"
+)
+
+func main() {
+    cgroupPath := "/sys/fs/cgroup/net_cls/my_cgroup" // Путь к cgroup
+
+    // Убедитесь, что cgroup существует, если нет, создайте его
+    cmd := exec.Command("sudo", "sh", "-c", "mkdir -p "+cgroupPath)
+    if err := cmd.Run(); err != nil {
+        log.Fatalf("failed to create cgroup: %v", err)
+    }
+
+    // Попробуйте установить classid
+    cmd = exec.Command("sudo", "sh", "-c", "echo 1:1 > "+cgroupPath+"/net_cls.classid")
+    if err := cmd.Run(); err != nil {
+        log.Fatalf("failed to set classid for cgroup: %v", err)
+    }
+
+    log.Println("Successfully set classid for cgroup")
 }
+
 
 
 
