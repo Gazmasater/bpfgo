@@ -17,33 +17,12 @@ bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=loa
 		log.Fatalf("failed to create cgroup: %v", err)
 	}
 
-	// Шаг 2: Установите classid для cgroup
-	err = exec.Command("sh", "-c", "echo \"1:1\" > "+cgroupPath+"/net_cls.classid").Run()
+	// Шаг 2: Установите classid для cgroup с использованием sudo
+	err = exec.Command("sudo", "sh", "-c", "echo \"1:1\" > "+cgroupPath+"/net_cls.classid").Run()
 	if err != nil {
 		log.Fatalf("failed to set classid for cgroup: %v", err)
 	}
 
-	// Шаг 3: Открыть cgroup для получения дескриптора
-	f, err := os.Open(cgroupPath)
-	if err != nil {
-		log.Fatalf("failed to open cgroup path: %v", err)
-	}
-	defer f.Close()
-
-	// Получаем дескриптор cgroup (это поле 'Target' в RawAttachProgramOptions)
-	cgroupFd := int(f.Fd())
-
-	// Шаг 4: Привязать программу BPF
-	err = link.RawAttachProgram(link.RawAttachProgramOptions{
-		Program: objs.EchoDispatch,   // Программа BPF
-		Attach:  ebpf.AttachSkLookup, // Тип привязки sk_lookup
-		Target:  cgroupFd,            // Дескриптор cgroup
-	})
-	if err != nil {
-		log.Fatalf("failed to attach sk_lookup: %v", err)
-	}
-
-	fmt.Println("Successfully attached BPF program to cgroup")
 
 
 
