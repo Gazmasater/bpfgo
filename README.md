@@ -42,9 +42,34 @@ bpf_probe_read_user(&proto,sizeof(proto),&ctx->protocol);
         ctx->protocol, ctx->local_ip4, ctx->local_port);
 
 
-        gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ sudo bpftool net attach sk_lookup id 68  netns /var/run/netns/my_netns ifindex 1
-Error: invalid net attach/detach type: sk_lookup
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ 
+🔧 Правильный способ загрузки и прикрепления sk_lookup
+1️⃣ Проверьте, загружена ли программа
+
+sudo bpftool prog show
+Если программа загружена, запомните её ID.
+
+2️⃣ Создайте cgroup
+sk_lookup работает через cgroup, поэтому нужно создать каталог и смонтировать его, если он ещё не существует:
+
+
+sudo mkdir -p /sys/fs/cgroup/sk_lookup
+sudo mount -t cgroup2 none /sys/fs/cgroup/sk_lookup
+Затем привяжите текущий процесс к cgroup:
+
+
+echo $$ | sudo tee /sys/fs/cgroup/sk_lookup/cgroup.procs
+3️⃣ Прикрепите sk_lookup к cgroup
+Используйте bpftool cgroup attach, а не net attach:
+
+
+sudo bpftool cgroup attach /sys/fs/cgroup/sk_lookup sk_lookup id <ID_ПРОГРАММЫ>
+Где <ID_ПРОГРАММЫ> — это ID вашей загруженной программы из bpftool prog show.
+
+4️⃣ Проверьте, привязана ли программа
+
+sudo bpftool cgroup show /sys/fs/cgroup/sk_lookup
+Если программа не отображается, значит, она не была успешно привязана.
+
 
 
 
