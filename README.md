@@ -134,6 +134,17 @@ int echo_dispatch(struct bpf_sk_lookup *ctx)
     return SK_PASS;
 }
 
+	// Привязываем eBPF к socket lookup
+	link, err := link.RawAttachProgram(link.RawAttachProgramOptions{
+		Program: objs.SkLookup,
+		Attach:  ebpf.AttachSkLookup,
+	})
+	if err != nil {
+		log.Fatalf("failed to attach sk_lookup: %v", err)
+	}
+	defer link.Close()
+
+
 
 
 
