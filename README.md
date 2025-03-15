@@ -58,8 +58,10 @@ func main() {
     fmt.Println("Successfully attached BPF program to cgroup")
 }
 
-[sudo] password for gaz358: 
-2025/03/16 01:58:47 failed to set classid for cgroup: exit status 2
+err = exec.Command("sudo", "sh", "-c", "echo \"1:1\" > "+cgroupPath+"/net_cls.classid").Run()
+if err != nil {
+    log.Fatalf("failed to set classid for cgroup: %v", err)
+}
 
 
 
