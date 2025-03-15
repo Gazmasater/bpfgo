@@ -92,6 +92,30 @@ if err != nil {
 Не nil ли objs.EchoDispatch?
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo mkdir -p /sys/fs/cgroup/net_cls/my_cgroup
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ls -la /sys/fs/cgroup/net_cls/my_cgroup
+total 0
+drwxr-xr-x 2 root root 0 Mar 16 02:43 .
+drwxr-xr-x 3 root root 0 Mar 16 02:43 ..
+-r--r--r-- 1 root root 0 Mar 16 02:43 cgroup.controllers
+-r--r--r-- 1 root root 0 Mar 16 02:43 cgroup.events
+-rw-r--r-- 1 root root 0 Mar 16 02:43 cgroup.freeze
+--w------- 1 root root 0 Mar 16 02:43 cgroup.kill
+-rw-r--r-- 1 root root 0 Mar 16 02:43 cgroup.max.depth
+-rw-r--r-- 1 root root 0 Mar 16 02:43 cgroup.max.descendants
+-rw-r--r-- 1 root root 0 Mar 16 02:43 cgroup.pressure
+-rw-r--r-- 1 root root 0 Mar 16 02:43 cgroup.procs
+-r--r--r-- 1 root root 0 Mar 16 02:43 cgroup.stat
+-rw-r--r-- 1 root root 0 Mar 16 02:43 cgroup.subtree_control
+-rw-r--r-- 1 root root 0 Mar 16 02:43 cgroup.threads
+-rw-r--r-- 1 root root 0 Mar 16 02:43 cgroup.type
+-rw-r--r-- 1 root root 0 Mar 16 02:43 cpu.pressure
+-r--r--r-- 1 root root 0 Mar 16 02:43 cpu.stat
+-r--r--r-- 1 root root 0 Mar 16 02:43 cpu.stat.local
+-rw-r--r-- 1 root root 0 Mar 16 02:43 io.pressure
+-rw-r--r-- 1 root root 0 Mar 16 02:43 memory.pressure
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
 
 
 
