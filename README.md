@@ -58,6 +58,9 @@ func main() {
     fmt.Println("Successfully attached BPF program to cgroup")
 }
 
+[sudo] password for gaz358: 
+2025/03/16 01:58:47 failed to set classid for cgroup: exit status 2
+
 
 
 
