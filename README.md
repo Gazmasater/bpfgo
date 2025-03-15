@@ -62,6 +62,57 @@ sudo ip netns exec my_netns ping -c 3 8.8.8.8
 Если eBPF-программа корректно перехватывает трафик, ping может не пройти или показать задержку.
 
 
+package main
+
+import (
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/link"
+)
+
+func main() {
+	// Загружаем eBPF-программу
+	spec, err := ebpf.LoadCollectionSpec("test.bpf.o")
+	if err != nil {
+		log.Fatalf("Ошибка загрузки eBPF-программы: %v", err)
+	}
+
+	// Создаём eBPF Collection
+	objs := struct {
+		SkLookup *ebpf.Program `ebpf:"sk_lookup_prog"`
+	}{}
+	if err := spec.LoadAndAssign(&objs, nil); err != nil {
+		log.Fatalf("Ошибка загрузки eBPF-программы в ядро: %v", err)
+	}
+	defer objs.SkLookup.Close()
+
+	// Открываем файловый дескриптор текущего network namespace
+	netns, err := os.Open("/proc/self/ns/net")
+	if err != nil {
+		log.Fatalf("Ошибка открытия текущего network namespace: %v", err)
+	}
+	defer netns.Close()
+
+	// Привязываем eBPF-программу к текущему namespace
+	lnk, err := link.AttachNetNs(link.NetNsOptions{
+		Program: objs.SkLookup,
+		NetNS:   netns,
+	})
+	if err != nil {
+		log.Fatalf("Ошибка привязки sk_lookup к namespace: %v", err)
+	}
+	defer lnk.Close()
+
+	fmt.Println("eBPF программа успешно загружена и привязана к текущему namespace!")
+
+	select {} // Бесконечный цикл
+}
+
+
+
 
 
 
