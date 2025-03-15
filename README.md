@@ -143,8 +143,13 @@ err := link.RawAttachProgram(link.RawAttachProgramOptions{
 		log.Fatalf("failed to attach sk_lookup: %v", err)
 	}
 
- gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
-2025/03/15 13:41:06 failed to attach sk_lookup: attach program: invalid argument
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ip netns add my_netns
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ip netns list
+my_netns
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo bpftool net attach sk_lookup id $(bpftool prog show | grep sk_lookup | awk '{print $1}') netns /var/run/netns/my_netns
+Error: can't get next program: Operation not permitted
+Error: 'attach' needs at least 5 arguments, 4 found
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
 
