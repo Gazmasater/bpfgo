@@ -153,6 +153,10 @@ ip netns exec my_netns ip link
 
 sudo bpftool net attach sk_lookup id <prog_id> netns /var/run/netns/my_netns ifindex <ifindex>
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/bpf$ sudo ip netns exec my_netns ip link
+1: lo: <LOOPBACK> mtu 65536 qdisc noop state DOWN mode DEFAULT group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+
 
 
 
