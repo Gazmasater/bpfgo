@@ -134,7 +134,7 @@ int echo_dispatch(struct bpf_sk_lookup *ctx)
     return SK_PASS;
 }
 
-link, err := link.RawAttachProgram(link.RawAttachProgramOptions{
+err := link.RawAttachProgram(link.RawAttachProgramOptions{
 		Program: objs.EchoDispatch,
 		Attach:  ebpf.AttachSkLookup,
 	})
@@ -142,69 +142,9 @@ link, err := link.RawAttachProgram(link.RawAttachProgramOptions{
 	if err != nil {
 		log.Fatalf("failed to attach sk_lookup: %v", err)
 	}
-	defer link.Close()
 
 
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "WrongAssignCount",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "WrongAssignCount"
-		}
-	},
-	"severity": 8,
-	"message": "assignment mismatch: 2 variables but link.RawAttachProgram returns 1 value",
-	"source": "compiler",
-	"startLineNumber": 44,
-	"startColumn": 15,
-	"endLineNumber": 47,
-	"endColumn": 4
-}]
 
-func RawAttachProgram(opts RawAttachProgramOptions) error {
-	if opts.Flags&anchorFlags != 0 {
-		return fmt.Errorf("disallowed flags: use Anchor to specify attach target")
-	}
-
-	attr := sys.ProgAttachAttr{
-		TargetFdOrIfindex: uint32(opts.Target),
-		AttachBpfFd:       uint32(opts.Program.FD()),
-		AttachType:        uint32(opts.Attach),
-		AttachFlags:       uint32(opts.Flags),
-		ExpectedRevision:  opts.ExpectedRevision,
-	}
-
-	if opts.Anchor != nil {
-		fdOrID, flags, err := opts.Anchor.anchor()
-		if err != nil {
-			return fmt.Errorf("attach program: %w", err)
-		}
-
-		if flags == sys.BPF_F_REPLACE {
-			// Ensure that replacing a program works on old kernels.
-			attr.ReplaceBpfFd = fdOrID
-		} else {
-			attr.RelativeFdOrId = fdOrID
-			attr.AttachFlags |= flags
-		}
-	}
-
-	if err := sys.ProgAttach(&attr); err != nil {
-		if haveFeatErr := haveProgAttach(); haveFeatErr != nil {
-			return haveFeatErr
-		}
-		return fmt.Errorf("attach program: %w", err)
-	}
-	runtime.KeepAlive(opts.Program)
-
-	return nil
-}
 
 
 
