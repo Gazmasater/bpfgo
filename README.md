@@ -111,6 +111,13 @@ func main() {
 	select {} // Бесконечный цикл
 }
 
+SEC("sk_lookup")
+int echo_dispatch(struct bpf_sk_lookup *ctx)
+{
+	return SK_PASS;
+}
+
+
 
 
 
