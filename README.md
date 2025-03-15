@@ -38,6 +38,8 @@ bpf_probe_read_user(&proto,sizeof(proto),&ctx->protocol);
     return SK_PASS;
 }
 
+    bpf_printk("DEBUG: ctx->protocol=%d, ctx->local_ip4=%u, ctx->local_port=%u\n", 
+        ctx->protocol, ctx->local_ip4, ctx->local_port);
 
 
 
