@@ -144,6 +144,72 @@ int echo_dispatch(struct bpf_sk_lookup *ctx)
 	}
 	defer link.Close()
 
+ [{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#2",
+	"code": {
+		"value": "WrongAssignCount",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "WrongAssignCount"
+		}
+	},
+	"severity": 8,
+	"message": "assignment mismatch: 2 variables but link.RawAttachProgram returns 1 value",
+	"source": "compiler",
+	"startLineNumber": 44,
+	"startColumn": 15,
+	"endLineNumber": 47,
+	"endColumn": 3
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#2",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "objs.SkLookup undefined (type bpfObjects has no field or method SkLookup)",
+	"source": "compiler",
+	"startLineNumber": 45,
+	"startColumn": 16,
+	"endLineNumber": 45,
+	"endColumn": 24
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#2",
+	"code": {
+		"value": "UndeclaredName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: ebpf",
+	"source": "compiler",
+	"startLineNumber": 46,
+	"startColumn": 11,
+	"endLineNumber": 46,
+	"endColumn": 15
+}]
+
 
 
 
