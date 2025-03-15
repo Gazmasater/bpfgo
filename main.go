@@ -34,6 +34,12 @@ func init() {
 func main() {
 	defer objs.Close() // Закроем объекты при выходе
 
+	netns, err := os.Open("/proc/self/ns/net")
+	if err != nil {
+		log.Fatalf("Ошибка открытия текущего network namespace: %v", err)
+	}
+	defer netns.Close()
+
 	// Привязываем eBPF-программу к tracepoint
 	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
 	if err != nil {

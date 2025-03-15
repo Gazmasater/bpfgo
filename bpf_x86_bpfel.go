@@ -12,23 +12,17 @@ import (
 	"github.com/cilium/ebpf"
 )
 
-type bpfConnInfoBind struct {
-	Pid        uint32
-	Fd         uint32
-	LocalAddr  bpfSockaddrIn
-	RemoteAddr bpfSockaddrIn
-	Comm       [64]int8
-}
-
 type bpfConnInfoT struct {
-	Pid     uint32
-	SrcIp   uint32
-	DstIp   uint32
-	Addrlen uint32
-	Fd      uint32
-	Sport   uint16
-	Dport   uint16
-	Comm    [64]int8
+	Pid      uint32
+	SrcIp    uint32
+	DstIp    uint32
+	Addrlen  uint32
+	CommHash uint32
+	Sport    uint16
+	Dport    uint16
+	Proto    uint8
+	Comm     [64]int8
+	_        [3]byte
 }
 
 type bpfSockaddr struct {
@@ -41,6 +35,14 @@ type bpfSockaddrIn struct {
 	SinPort   uint16
 	SinAddr   struct{ S_addr uint32 }
 	Pad       [8]uint8
+}
+
+type bpfSockaddrIn6 struct {
+	Sin6Family   uint16
+	Sin6Port     uint16
+	Sin6Flowinfo uint32
+	Sin6Addr     struct{ In6U struct{ U6Addr8 [16]uint8 } }
+	Sin6ScopeId  uint32
 }
 
 type bpfTraceInfo struct {
@@ -94,6 +96,7 @@ type bpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfProgramSpecs struct {
+	EchoDispatch       *ebpf.ProgramSpec `ebpf:"echo_dispatch"`
 	TraceAccept4Enter  *ebpf.ProgramSpec `ebpf:"trace_accept4_enter"`
 	TraceAccept4Exit   *ebpf.ProgramSpec `ebpf:"trace_accept4_exit"`
 	TraceBindEnter     *ebpf.ProgramSpec `ebpf:"trace_bind_enter"`
@@ -110,12 +113,11 @@ type bpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
-	AddrMap         *ebpf.MapSpec `ebpf:"addr_map"`
-	AddrdstMap      *ebpf.MapSpec `ebpf:"addrdst_map"`
-	BindMap         *ebpf.MapSpec `ebpf:"bind_map"`
-	ConnInfoMap     *ebpf.MapSpec `ebpf:"conn_info_map"`
-	ConnInfobindMap *ebpf.MapSpec `ebpf:"conn_infobind_map"`
-	TraceEvents     *ebpf.MapSpec `ebpf:"trace_events"`
+	AddrMap     *ebpf.MapSpec `ebpf:"addr_map"`
+	Bind6Map    *ebpf.MapSpec `ebpf:"bind6_map"`
+	BindMap     *ebpf.MapSpec `ebpf:"bind_map"`
+	ConnInfoMap *ebpf.MapSpec `ebpf:"conn_info_map"`
+	TraceEvents *ebpf.MapSpec `ebpf:"trace_events"`
 }
 
 // bpfVariableSpecs contains global variables before they are loaded into the kernel.
@@ -145,21 +147,19 @@ func (o *bpfObjects) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
-	AddrMap         *ebpf.Map `ebpf:"addr_map"`
-	AddrdstMap      *ebpf.Map `ebpf:"addrdst_map"`
-	BindMap         *ebpf.Map `ebpf:"bind_map"`
-	ConnInfoMap     *ebpf.Map `ebpf:"conn_info_map"`
-	ConnInfobindMap *ebpf.Map `ebpf:"conn_infobind_map"`
-	TraceEvents     *ebpf.Map `ebpf:"trace_events"`
+	AddrMap     *ebpf.Map `ebpf:"addr_map"`
+	Bind6Map    *ebpf.Map `ebpf:"bind6_map"`
+	BindMap     *ebpf.Map `ebpf:"bind_map"`
+	ConnInfoMap *ebpf.Map `ebpf:"conn_info_map"`
+	TraceEvents *ebpf.Map `ebpf:"trace_events"`
 }
 
 func (m *bpfMaps) Close() error {
 	return _BpfClose(
 		m.AddrMap,
-		m.AddrdstMap,
+		m.Bind6Map,
 		m.BindMap,
 		m.ConnInfoMap,
-		m.ConnInfobindMap,
 		m.TraceEvents,
 	)
 }
@@ -175,6 +175,7 @@ type bpfVariables struct {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfPrograms struct {
+	EchoDispatch       *ebpf.Program `ebpf:"echo_dispatch"`
 	TraceAccept4Enter  *ebpf.Program `ebpf:"trace_accept4_enter"`
 	TraceAccept4Exit   *ebpf.Program `ebpf:"trace_accept4_exit"`
 	TraceBindEnter     *ebpf.Program `ebpf:"trace_bind_enter"`
@@ -189,6 +190,7 @@ type bpfPrograms struct {
 
 func (p *bpfPrograms) Close() error {
 	return _BpfClose(
+		p.EchoDispatch,
 		p.TraceAccept4Enter,
 		p.TraceAccept4Exit,
 		p.TraceBindEnter,

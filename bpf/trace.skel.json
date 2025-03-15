@@ -1,0 +1,1 @@
+{"bpf_skel":{"data_sections":[],"maps":[{"ident":"rodata","name":"trace_bp.rodata"}],"obj_name":"trace_bpf","progs":[{"attach":"xdp","link":true,"name":"xdp_drop_non_tcp_udp"}]},"eunomia_version":"0.3.4"}
