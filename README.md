@@ -22,7 +22,9 @@ bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=loa
 	}
 
 
-
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
+[sudo] password for gaz358: 
+2025/03/17 01:30:31 failed to attach program: attach program: invalid argument
 
 
 
