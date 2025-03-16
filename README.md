@@ -58,6 +58,14 @@ func main() {
 	fmt.Println("BPF program attached successfully.")
 }
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
+[sudo] password for gaz358: 
+Opened network namespace successfully.
+Program FD: 8
+Program Type: SkLookup
+2025/03/17 01:37:09 failed to attach program: attach program: invalid argument
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
 
 
 
