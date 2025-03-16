@@ -24,6 +24,13 @@ targetFD, err := os.Open("/proc/self/ns/net")
 		log.Fatalf("failed to attach program: %v", err)
 	}
 
+progFD := objs.EchoDispatch.FD()
+
+err = link.RawAttachProgram(link.RawAttachProgramOptions{
+    Target:  int(targetFD.Fd()),  // Файловый дескриптор целевого объекта (сетевое пространство)
+    Program: progFD,              // Файловый дескриптор программы BPF
+    Attach:  ebpf.AttachSkLookup, // Тип привязки, соответствующий BPF_SK_LOOKUP
+})
 
 
 
