@@ -121,7 +121,7 @@ sudo aa-complain /etc/apparmor.d/*
 Если проблема в AppArmor, можно добавить нужные права:
 
 
-sudo setcap cap_net_admin,cap_bpf+ep ./bpfgo
+sudo setcap cap_net_admin,cap_bpf+ep ./bpfgo   11111
 ./bpfgo
 Если это помогло, значит, проблема была в недостаточных правах.
 
@@ -129,4 +129,4 @@ sudo setcap cap_net_admin,cap_bpf+ep ./bpfgo
 Некоторые политики ядра не позволяют sk_lookup работать в глобальном namespace. Попробуй:
 
 
-sudo unshare -n ./bpfgo
+sudo unshare -n ./bpfgo    222222
