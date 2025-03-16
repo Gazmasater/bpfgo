@@ -109,6 +109,31 @@ err = link.RawAttachProgram(link.RawAttachProgramOptions{
 
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo dmesg | tail -n 20
+[    7.455864] wlp0s20f3: authenticated
+[    7.456233] wlp0s20f3: associate with 0c:73:29:b7:d6:ed (try 1/3)
+[    7.458395] wlp0s20f3: RX AssocResp from 0c:73:29:b7:d6:ed (capab=0x1031 status=0 aid=3)
+[    7.468792] wlp0s20f3: associated
+[   13.612284] systemd-journald[312]: /var/log/journal/1326c6779edf4f3ea9509f461f818711/user-1000.journal: Journal file uses a different sequence number ID, rotating.
+[   13.695036] kauditd_printk_skb: 152 callbacks suppressed
+[   13.695047] audit: type=1400 audit(1742165156.242:163): apparmor="DENIED" operation="capable" class="cap" profile="/snap/snapd/23771/usr/lib/snapd/snap-confine" pid=1921 comm="snap-confine" capability=12  capname="net_admin"
+[   13.695050] audit: type=1400 audit(1742165156.242:164): apparmor="DENIED" operation="capable" class="cap" profile="/snap/snapd/23771/usr/lib/snapd/snap-confine" pid=1921 comm="snap-confine" capability=38  capname="perfmon"
+[   13.948965] rfkill: input handler enabled
+[   14.760577] rfkill: input handler disabled
+[   14.875586] FAT-fs (sda1): Volume was not properly unmounted. Some data may be corrupt. Please run fsck.
+[   16.725090] audit: type=1400 audit(1742165159.272:165): apparmor="DENIED" operation="capable" class="cap" profile="/snap/snapd/23771/usr/lib/snapd/snap-confine" pid=2820 comm="snap-confine" capability=12  capname="net_admin"
+[   16.725102] audit: type=1400 audit(1742165159.272:166): apparmor="DENIED" operation="capable" class="cap" profile="/snap/snapd/23771/usr/lib/snapd/snap-confine" pid=2820 comm="snap-confine" capability=38  capname="perfmon"
+[   28.241185] warning: `ThreadPoolForeg' uses wireless extensions which will stop working for Wi-Fi 7 hardware; use nl80211
+[   93.756813] audit: type=1400 audit(1742165236.280:167): apparmor="DENIED" operation="capable" class="cap" profile="/snap/snapd/23771/usr/lib/snapd/snap-confine" pid=4300 comm="snap-confine" capability=4  capname="fsetid"
+[   93.807433] audit: type=1400 audit(1742165236.331:168): apparmor="DENIED" operation="open" class="file" profile="snap-update-ns.firefox" name="/usr/local/share/" pid=4332 comm="5" requested_mask="r" denied_mask="r" fsuid=0 ouid=0
+[   94.740318] audit: type=1107 audit(1742165237.264:169): pid=918 uid=101 auid=4294967295 ses=4294967295 subj=unconfined msg='apparmor="DENIED" operation="dbus_method_call"  bus="system" path="/org/freedesktop/timedate1" interface="org.freedesktop.DBus.Properties" member="GetAll" mask="send" name=":1.111" pid=4300 label="snap.firefox.firefox" peer_pid=4449 peer_label="unconfined"
+                exe="/usr/bin/dbus-daemon" sauid=101 hostname=? addr=? terminal=?'
+[   94.742104] audit: type=1107 audit(1742165237.265:170): pid=918 uid=101 auid=4294967295 ses=4294967295 subj=unconfined msg='apparmor="DENIED" operation="dbus_method_call"  bus="system" path="/org/freedesktop/timedate1" interface="org.freedesktop.DBus.Properties" member="GetAll" mask="send" name=":1.111" pid=4300 label="snap.firefox.firefox" peer_pid=4449 peer_label="unconfined"
+                exe="/usr/bin/dbus-daemon" sauid=101 hostname=? addr=? terminal=?'
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
+
+
 
 
 
