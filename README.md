@@ -12,3 +12,7 @@ if err != nil {
     log.Fatalf("failed to execute tc command: %v", err)
 }
 
+
+echo "qwert" | sudo -S tc qdisc add dev lo clsact
+
+
