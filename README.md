@@ -45,4 +45,10 @@ func main() {
 	fmt.Println("Вернулись в исходное сетевое пространство")
 }
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
+[sudo] password for gaz358: 
+Создано новое сетевое пространство
+Дескриптор нового namespace: 3
+2025/03/19 01:26:04 failed to attach program: attach program: invalid argument
+
 
