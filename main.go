@@ -11,7 +11,6 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/perf"
 	"github.com/cilium/ebpf/rlimit"
@@ -35,15 +34,26 @@ func init() {
 func main() {
 	defer objs.Close() // Закроем объекты при выходе
 
-	err := link.RawAttachProgram(link.RawAttachProgramOptions{
-		Program: objs.EchoDispatch,   // Загрузка программы BPF
-		Attach:  ebpf.AttachSkLookup, // Тип привязки для sk_lookup
-	})
-	if err != nil {
-		log.Fatalf("failed to attach sk_lookup: %v", err)
+	if err := syscall.Unshare(syscall.CLONE_NEWNET); err != nil {
+		log.Fatalf("Ошибка создания нового network namespace: %v", err)
 	}
+	fmt.Println("Создано новое сетевое пространство")
 
-	// Привязываем eBPF-программу к tracepoint
+	// Открываем дескриптор нового namespace
+	newNS, err := os.Open("/proc/self/ns/net")
+	if err != nil {
+		log.Fatalf("Ошибка открытия дескриптора нового namespace: %v", err)
+	}
+	defer newNS.Close()
+
+	fmt.Printf("Дескриптор нового namespace: %d\n", newNS.Fd())
+
+	skLookupLink, err := link.AttachNetNs(int(newNS.Fd()), objs.LookUp)
+	if err != nil {
+		log.Fatalf("failed to attach sk_lookup program: %v", err)
+	}
+	defer skLookupLink.Close()
+
 	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
 	if err != nil {
 		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)

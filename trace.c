@@ -641,7 +641,7 @@ int trace_bind_exit(struct sys_exit_bind_args *ctx) {
 
 
 SEC("sk_lookup")
-int echo_dispatch(struct bpf_sk_lookup *ctx)
+int look_up(struct bpf_sk_lookup *ctx)
 {
 
      __u8 proto = ctx->protocol; 

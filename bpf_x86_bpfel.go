@@ -96,7 +96,7 @@ type bpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfProgramSpecs struct {
-	EchoDispatch       *ebpf.ProgramSpec `ebpf:"echo_dispatch"`
+	LookUp             *ebpf.ProgramSpec `ebpf:"look_up"`
 	TraceAccept4Enter  *ebpf.ProgramSpec `ebpf:"trace_accept4_enter"`
 	TraceAccept4Exit   *ebpf.ProgramSpec `ebpf:"trace_accept4_exit"`
 	TraceBindEnter     *ebpf.ProgramSpec `ebpf:"trace_bind_enter"`
@@ -175,7 +175,7 @@ type bpfVariables struct {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfPrograms struct {
-	EchoDispatch       *ebpf.Program `ebpf:"echo_dispatch"`
+	LookUp             *ebpf.Program `ebpf:"look_up"`
 	TraceAccept4Enter  *ebpf.Program `ebpf:"trace_accept4_enter"`
 	TraceAccept4Exit   *ebpf.Program `ebpf:"trace_accept4_exit"`
 	TraceBindEnter     *ebpf.Program `ebpf:"trace_bind_enter"`
@@ -190,7 +190,7 @@ type bpfPrograms struct {
 
 func (p *bpfPrograms) Close() error {
 	return _BpfClose(
-		p.EchoDispatch,
+		p.LookUp,
 		p.TraceAccept4Enter,
 		p.TraceAccept4Exit,
 		p.TraceBindEnter,
