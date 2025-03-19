@@ -22,5 +22,10 @@ bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=loa
 
 
 
-go doc github.com/cilium/ebpf/link.AttachNetNs
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go doc github.com/cilium/ebpf/link.AttachNetNs
+package link // import "github.com/cilium/ebpf/link"
 
+func AttachNetNs(ns int, prog *ebpf.Program) (*NetNsLink, error)
+    AttachNetNs attaches a program to a network namespace.
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
