@@ -27,6 +27,12 @@ bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=loa
 	defer skLookupLink.Close()
 
 
+ ip netns add testns
+ip netns exec testns ip link set lo up
+ip netns exec testns nc -u 127.0.0.1 12345
+
+
+
 
 
 
