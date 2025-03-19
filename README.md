@@ -6,31 +6,11 @@ nc 127.0.0.1 12345
 bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=load -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
 
 
-	if err := syscall.Unshare(syscall.CLONE_NEWNET); err != nil {
-		log.Fatalf("Ошибка создания нового network namespace: %v", err)
-	}
-	fmt.Println("Создано новое сетевое пространство")
-
-	// Открываем дескриптор нового namespace
-	newNS, err := os.Open("/proc/self/ns/net")
-	if err != nil {
-		log.Fatalf("Ошибка открытия дескриптора нового namespace: %v", err)
-	}
-	defer newNS.Close()
-
-	fmt.Printf("Дескриптор нового namespace: %d\n", newNS.Fd())
-
-	skLookupLink, err := link.AttachNetNs(int(newNS.Fd()), objs.LookUp)
-	if err != nil {
-		log.Fatalf("failed to attach sk_lookup program: %v", err)
-	}
-	defer skLookupLink.Close()
-
-
- ip netns add testns
-ip netns exec testns ip link set lo up
-ip netns exec testns nc -u 127.0.0.1 12345
-
+60: sk_lookup  name look_up  tag 74506662657241b3  gpl
+        loaded_at 2025-03-19T23:09:40+0300  uid 0
+        xlated 320B  jited 204B  memlock 4096B  map_ids 8,9
+        btf_id 191
+        pids bpfgo(3782)
 
 
 
