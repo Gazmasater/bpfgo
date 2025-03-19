@@ -7,48 +7,11 @@ bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=loa
 
 
 
-package main
-
-import (
-	"fmt"
-	"log"
-	"os"
-	"syscall"
-)
-
-func main() {
-	// Создаем новое сетевое пространство
-	if err := syscall.Unshare(syscall.CLONE_NEWNET); err != nil {
-		log.Fatalf("Ошибка создания нового network namespace: %v", err)
-	}
-	fmt.Println("Создано новое сетевое пространство")
-
-	// Открываем дескриптор нового namespace
-	newNS, err := os.Open("/proc/self/ns/net")
-	if err != nil {
-		log.Fatalf("Ошибка открытия дескриптора нового namespace: %v", err)
-	}
-	defer newNS.Close()
-	fmt.Printf("Дескриптор нового namespace: %d\n", newNS.Fd())
-
-	// --- Если нужно, можно вернуться в исходное пространство ---
-	origNS, err := os.Open("/proc/1/ns/net") // Открываем оригинальный namespace (PID 1)
-	if err != nil {
-		log.Fatalf("Ошибка открытия оригинального namespace: %v", err)
-	}
-	defer origNS.Close()
-
-	// Переключаемся обратно в оригинальный namespace
-	if err := syscall.Setns(int(origNS.Fd()), syscall.CLONE_NEWNET); err != nil {
-		log.Fatalf("Ошибка возврата в оригинальный namespace: %v", err)
-	}
-	fmt.Println("Вернулись в исходное сетевое пространство")
+type AttachedProgram struct {
+    ID     ebpf.ProgramID
+    linkID ID
 }
+func (ap *link.AttachedProgram) LinkID() (link.ID, bool)
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
-[sudo] password for gaz358: 
-Создано новое сетевое пространство
-Дескриптор нового namespace: 3
-2025/03/19 01:26:04 failed to attach program: attach program: invalid argument
 
 
