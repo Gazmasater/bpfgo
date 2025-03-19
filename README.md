@@ -22,4 +22,5 @@ bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=loa
 
 
 
+go doc github.com/cilium/ebpf/link.AttachNetNs
 
