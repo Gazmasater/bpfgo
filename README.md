@@ -1,3 +1,6 @@
+sudo ip netns list
+
+
 
 nc -l 12345
 
@@ -108,14 +111,6 @@ func loadBpfObjects(objs *struct{ LookUp *ebpf.Program }, opts interface{}) erro
 	return nil
 }
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo bpftool net show
-xdp:
-
-tc:
-
-flow_dissector:
-
-netfilter:
 
 
 
