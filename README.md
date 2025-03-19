@@ -18,5 +18,8 @@ bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=loa
 	}
 	defer skLookupLink.Close()
 
+ func link.AttachNetNs(ns int, prog *ebpf.Program) (*link.NetNsLink, error)
+
+
 
 
