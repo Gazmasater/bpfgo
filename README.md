@@ -71,6 +71,17 @@ skLookupLink, err := link.AttachNetNs(int(newNS.Fd()), objs.LookUp)
 sudo bpftool net show
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo bpftool net show
+xdp:
+
+tc:
+
+flow_dissector:
+
+netfilter:
+
+
+
 
 
 
