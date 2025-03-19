@@ -7,11 +7,16 @@ bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=loa
 
 
 
-type AttachedProgram struct {
-    ID     ebpf.ProgramID
-    linkID ID
-}
-func (ap *link.AttachedProgram) LinkID() (link.ID, bool)
+	// Привязываем eBPF-программу к `sk_lookup` в network namespace
+	skLookupLink, err := link.AttachNetNs(link.NetNsOptions{
+		Program: objs.SkLookup,
+		Target:  targetFD,
+		Attach:  ebpf.AttachSkLookup,
+	})
+	if err != nil {
+		log.Fatalf("failed to attach sk_lookup program: %v", err)
+	}
+	defer skLookupLink.Close()
 
 
 
