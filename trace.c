@@ -644,6 +644,9 @@ SEC("sk_lookup")
 int look_up(struct bpf_sk_lookup *ctx)
 {
 
+    bpf_printk("sk_lookup вызван!");
+
+
      __u8 proto = ctx->protocol; 
      __u32 srcIP=bpf_ntohl(ctx->local_ip4);
      __u16 srcPort=bpf_ntohs(ctx->local_port);
