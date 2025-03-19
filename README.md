@@ -6,75 +6,108 @@ nc 127.0.0.1 12345
 bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=load -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
 
 
-1. Создание нового сетевого пространства имен
-Для начала создаём новое пространство имен с помощью команды ip netns add.
+package main
 
+import (
+	"fmt"
+	"log"
+	"os"
+	"syscall"
 
-sudo ip netns add testns
-Теперь у нас есть пространство имен с именем testns.
+	"github.com/vishvananda/netlink"
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/link"
+)
 
-2. Создание пары виртуальных интерфейсов (veth)
-Создаём пару виртуальных Ethernet интерфейсов. Эти интерфейсы будут подключены друг к другу, и один из них будет назначен в новое пространство имен, а второй останется в текущем.
+// Глобальная переменная для хранения объектов eBPF
+var objs struct {
+	LookUp *ebpf.Program `ebpf:"sk_lookup"` // Пример загрузки программы sk_lookup
+}
 
+func init() {
+	// Снимаем ограничение на память
+	if err := rlimit.RemoveMemlock(); err != nil {
+		log.Fatalf("failed to remove memory limit for process: %v", err)
+	}
 
-sudo ip link add veth0 type veth peer name veth1
-Это создаст два интерфейса:
+	// Загружаем eBPF-объекты
+	if err := loadBpfObjects(&objs, nil); err != nil {
+		log.Fatalf("failed to load bpf objects: %v", err)
+	}
+}
 
-veth0 — интерфейс в текущем пространстве имен.
-veth1 — интерфейс, который мы позже перенесем в пространство имен testns.
-3. Перемещение интерфейса в новое пространство имен
-Теперь перемещаем интерфейс veth1 в пространство имен testns.
+func main() {
+	// Шаг 1: Создание нового сетевого пространства
+	if err := syscall.Unshare(syscall.CLONE_NEWNET); err != nil {
+		log.Fatalf("Ошибка создания нового network namespace: %v", err)
+	}
+	fmt.Println("Создано новое сетевое пространство")
 
+	// Шаг 2: Открываем дескриптор нового namespace
+	newNS, err := os.Open("/proc/self/ns/net")
+	if err != nil {
+		log.Fatalf("Ошибка открытия дескриптора нового namespace: %v", err)
+	}
+	defer newNS.Close()
 
-sudo ip link set veth1 netns testns
-Это действие перемещает интерфейс veth1 в пространство имен testns, и он больше не будет виден в текущем пространстве имен.
+	fmt.Printf("Дескриптор нового namespace: %d\n", newNS.Fd())
 
-4. Проверка интерфейсов в новом пространстве имен
-Теперь можно проверить, что интерфейс veth1 действительно оказался в новом пространстве имен. Используем команду ip netns exec для работы с интерфейсами в пространстве имен.
+	// Шаг 3: Создание интерфейса в новом сетевом пространстве
+	// Создаем виртуальную пару интерфейсов (veth)
+	if err := createVethPair(newNS.Fd()); err != nil {
+		log.Fatalf("Ошибка создания интерфейса: %v", err)
+	}
 
+	// Шаг 4: Привязываем BPF-программу к сетевому неймспейсу
+	skLookupLink, err := link.AttachNetNs(int(newNS.Fd()), objs.LookUp)
+	if err != nil {
+		log.Fatalf("Ошибка привязки программы sk_lookup: %v", err)
+	}
+	defer skLookupLink.Close()
 
-sudo ip netns exec testns ip link show
-В результате этой команды ты должен увидеть интерфейс veth1 в пространстве имен testns. Также будет отображён интерфейс lo (loopback), поскольку он создаётся автоматически при создании пространства имен.
+	fmt.Println("Программа sk_lookup успешно привязана")
+}
 
-5. Настройка интерфейсов (опционально)
-Теперь, когда интерфейс veth1 находится в новом пространстве имен, можно настроить его так же, как любой другой интерфейс.
+// Функция для создания виртуальной пары интерфейсов (veth)
+func createVethPair(namespaceFD uintptr) error {
+	// Используем netlink для создания пары интерфейсов veth
+	linkAttrs := netlink.NewLinkAttrs()
+	linkAttrs.Name = "veth0"
+	veth0 := &netlink.Veth{
+		LinkAttrs: linkAttrs,
+		PeerName:  "veth1",
+	}
 
-Для примера:
+	// Создаем интерфейс veth в текущем неймспейсе
+	if err := netlink.LinkAdd(veth0); err != nil {
+		return fmt.Errorf("не удалось создать veth интерфейс: %w", err)
+	}
 
-Включаем интерфейс veth0 в текущем пространстве имен:
+	// Включаем интерфейсы
+	if err := netlink.LinkSetUp(veth0); err != nil {
+		return fmt.Errorf("не удалось включить интерфейс veth0: %w", err)
+	}
 
-sudo ip link set veth0 up
-Включаем интерфейс veth1 в новом пространстве имен testns:
+	// Включаем интерфейс veth1
+	peerLink, err := netlink.LinkByName("veth1")
+	if err != nil {
+		return fmt.Errorf("не удалось найти интерфейс veth1: %w", err)
+	}
 
-sudo ip netns exec testns ip link set veth1 up
-6. Проверка соединения между интерфейсами
-Теперь можно проверить, что интерфейсы могут общаться друг с другом. Для этого настроим IP-адреса на интерфейсах и проверим их соединение.
+	if err := netlink.LinkSetUp(peerLink); err != nil {
+		return fmt.Errorf("не удалось включить интерфейс veth1: %w", err)
+	}
 
-Назначаем IP-адреса интерфейсам:
+	return nil
+}
 
-sudo ip addr add 192.168.1.1/24 dev veth0
-sudo ip netns exec testns ip addr add 192.168.1.2/24 dev veth1
-Включаем интерфейсы:
+// Загрузка объектов eBPF (предположим, что ваши объекты загружаются здесь)
+func loadBpfObjects(objs *struct{ LookUp *ebpf.Program }, opts interface{}) error {
+	// Здесь нужно загрузить ваши eBPF-объекты
+	// Это пример, вам нужно указать путь к файлу или структуру с объектами eBPF
+	return nil
+}
 
-sudo ip link set veth0 up
-sudo ip netns exec testns ip link set veth1 up
-Теперь проверим связь между интерфейсами с помощью ping:
-
-sudo ip netns exec testns ping -c 3 192.168.1.1
-Если всё настроено правильно, ты увидишь ответы от интерфейса veth0, что означает успешное соединение между интерфейсами.
-
-7. Удаление пространства имен (если нужно)
-Если больше не нужно пространство имен, его можно удалить:
-
-
-sudo ip netns del testns
-Итоговый процесс:
-Создаём пространство имен testns.
-Создаём пару виртуальных интерфейсов veth0 и veth1.
-Перемещаем интерфейс veth1 в новое пространство имен testns.
-Проверяем, что интерфейс veth1 находится в testns.
-Настроим интерфейсы и проверим соединение между ними.
-Этот процесс позволяет создать изолированную сеть в Linux, которая полезна для тестирования, контейнеризации и других сетевых задач.
 
 
 
