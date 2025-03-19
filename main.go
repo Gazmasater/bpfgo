@@ -48,6 +48,11 @@ func main() {
 
 	fmt.Printf("Дескриптор нового namespace: %d\n", newNS.Fd())
 
+	// Создаем виртуальную пару интерфейсов (veth)
+	if err := pkg.CreateVethPair(newNS.Fd()); err != nil {
+		log.Fatalf("Ошибка создания интерфейса: %v", err)
+	}
+
 	skLookupLink, err := link.AttachNetNs(int(newNS.Fd()), objs.LookUp)
 	if err != nil {
 		log.Fatalf("failed to attach sk_lookup program: %v", err)
