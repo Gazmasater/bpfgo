@@ -9,72 +9,70 @@ nc 127.0.0.1 12345
 bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=load -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
 
 
-package main
+1. Проверяем, загружена ли программа sk_lookup
+Выполни в терминале:
 
-import (
-	"fmt"
-	"log"
-	"os"
-	"syscall"
 
-	"github.com/vishvananda/netlink"
-)
+bpftool prog show
+Если программа загружена, ты увидишь что-то вроде:
 
-func CreateVethPair(namespaceFD uintptr) error {
-	// Создаем veth-пару
-	linkAttrs := netlink.NewLinkAttrs()
-	linkAttrs.Name = "veth0"
-	veth0 := &netlink.Veth{
-		LinkAttrs: linkAttrs,
-		PeerName:  "veth1",
-	}
 
-	// Добавляем veth-пару в текущий namespace
-	if err := netlink.LinkAdd(veth0); err != nil {
-		return fmt.Errorf("не удалось создать veth интерфейс: %w", err)
-	}
+ID   NAME         TYPE       TAG               GPR   REFS  MEM  LOCK
+42   sk_lookup    sk_lookup  c2d9a4ff33bc5...  0     1     2kB  2kB
+👉 Если программы нет — она не загружается, проверь ошибки при loadBpfObjects(&objs, nil).
 
-	// Включаем veth0
-	if err := netlink.LinkSetUp(veth0); err != nil {
-		return fmt.Errorf("не удалось включить veth0: %w", err)
-	}
+2. Проверяем, привязана ли программа к netns
+Проверяем список сетевых неймспейсов и прикреплённых программ:
 
-	// Получаем ссылку на veth1
-	peerLink, err := netlink.LinkByName("veth1")
-	if err != nil {
-		return fmt.Errorf("не удалось найти интерфейс veth1: %w", err)
-	}
 
-	// Переносим veth1 в другой namespace
-	if err := netlink.LinkSetNsFd(peerLink, int(namespaceFD)); err != nil {
-		return fmt.Errorf("не удалось переместить veth1 в namespace: %w", err)
-	}
+bpftool net list
+Если программа sk_lookup не отображается здесь, значит она не привязана к netns.
 
-	return nil
-}
+Попробуй вручную привязать eBPF к netns:
+Получи ID программы:
 
-func main() {
-	// Создаем новый network namespace
-	if err := syscall.Unshare(syscall.CLONE_NEWNET); err != nil {
-		log.Fatalf("Ошибка создания нового network namespace: %v", err)
-	}
-	fmt.Println("Создано новое сетевое пространство")
+bpftool prog show
+Получи ID netns:
 
-	// Открываем дескриптор нового namespace
-	newNS, err := os.Open("/proc/self/ns/net")
-	if err != nil {
-		log.Fatalf("Ошибка открытия дескриптора нового namespace: %v", err)
-	}
-	defer newNS.Close()
+lsns -t net
+Привяжи программу:
 
-	// Создаем veth-пару и переносим veth1 в новый namespace
-	if err := CreateVethPair(newNS.Fd()); err != nil {
-		log.Fatalf("Ошибка создания veth-пары: %v", err)
-	}
+bpftool prog attach ID_HERE netns ID_HERE
+(замени ID_HERE на реальные ID)
+После этого попробуй снова cat /sys/kernel/debug/tracing/trace_pipe и отправь трафик.
 
-	// Теперь можно привязать sk_lookup к veth1 в новом namespace
-	fmt.Println("Теперь настройте sk_lookup в новом namespace")
-}
+3. Убедись, что sk_lookup вообще может сработать
+Программа sk_lookup срабатывает только при поиске сокета, значит в netns должен быть активный сокет.
+
+Попробуй открыть сервер в netns:
+
+
+ip netns exec myns nc -l -p 1234
+Затем подключись к нему:
+
+
+nc 127.0.0.1 1234
+Если sk_lookup подключён правильно, он должен сработать.
+
+4. Проверяем trace_pipe
+Запусти в отдельном терминале:
+
+
+cat /sys/kernel/debug/tracing/trace_pipe
+Затем искуственно вызови sk_lookup, например, отправив HTTP-запрос внутри netns:
+
+
+ip netns exec myns curl http://127.0.0.1:1234
+Если программа работает, bpf_printk появится.
+
+Вывод
+Если bpf_printk всё ещё молчит:
+
+Проверь bpftool prog show — загружена ли программа?
+Проверь bpftool net list — привязана ли к netns?
+Создай активный сокет в netns, иначе sk_lookup не сработает.
+Проверь trace_pipe во время запроса.
+
 
 
 
