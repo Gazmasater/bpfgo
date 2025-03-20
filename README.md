@@ -74,18 +74,8 @@ ip netns exec myns curl http://127.0.0.1:1234
 Проверь trace_pipe во время запроса.
 
 
-az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ lsns -t net
-        NS TYPE NPROCS   PID USER      NETNSID NSFS COMMAND
-4026531840 net      94  1921 gaz358 unassigned      /usr/bin/pipewire
-4026532838 net       1  3044 gaz358 unassigned      /snap/firefox/5889/usr/lib/firefox/firefox -contentpro
-4026532894 net       1  3050 gaz358 unassigned      /snap/firefox/5889/usr/lib/firefox/firefox -contentpro
-4026532951 net       1  3085 gaz358 unassigned      /snap/firefox/5889/usr/lib/firefox/firefox -contentpro
-4026533008 net       1  3750 gaz358 unassigned      /snap/firefox/5889/usr/lib/firefox/firefox -contentpro
-4026533065 net       1  3759 gaz358 unassigned      /snap/firefox/5889/usr/lib/firefox/firefox -contentpro
-4026533122 net       1  3762 gaz358 unassigned      /snap/firefox/5889/usr/lib/firefox/firefox -contentpro
-4026533179 net       1  3770 gaz358 unassigned      /snap/firefox/5889/usr/lib/firefox/firefox -contentpro
-4026533236 net       1  3883 gaz358 unassigned      /snap/firefox/5889/usr/lib/firefox/firefox -contentpro
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+ls -l /proc/<PID>/ns/net
+
 
 
 
