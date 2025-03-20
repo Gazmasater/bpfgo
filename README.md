@@ -76,17 +76,33 @@ ip netns exec myns curl http://127.0.0.1:1234
 
 ls -l /proc/<PID>/ns/net
 
-az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ls -l /proc/5368/ns/net
-lrwxrwxrwx 1 gaz358 gaz358 0 Mar 20 20:48 /proc/5368/ns/net -> 'net:[4026531840]'
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ls -l /proc/5285/ns/net
-lrwxrwxrwx 1 gaz358 gaz358 0 Mar 20 20:49 /proc/5285/ns/net -> 'net:[4026531840]'
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ls -l /proc/774/ns/net
-ls: cannot read symbolic link '/proc/774/ns/net': Permission denied
-lrwxrwxrwx 1 systemd-resolve systemd-resolve 0 Mar 20 20:50 /proc/774/ns/net
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ls -l /proc/774/ns/net
-[sudo] password for gaz358: 
-lrwxrwxrwx 1 systemd-resolve systemd-resolve 0 Mar 20 20:50 /proc/774/ns/net -> 'net:[4026531840]'
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+package main
+
+import (
+	"fmt"
+	"log"
+	"os"
+	"syscall"
+	"bufio"
+)
+
+func main() {
+	// Создание нового сетевого неймспейса
+	if err := syscall.Unshare(syscall.CLONE_NEWNET); err != nil {
+		log.Fatalf("Ошибка создания нового network namespace: %v", err)
+	}
+	fmt.Println("Создано новое сетевое пространство")
+
+	// Чтение символической ссылки, указывающей на неймспейс
+	nsLink, err := os.Readlink("/proc/self/ns/net")
+	if err != nil {
+		log.Fatalf("Ошибка чтения символической ссылки: %v", err)
+	}
+
+	// Выводим идентификатор неймспейса (после `net:`)
+	fmt.Printf("Идентификатор нового сетевого неймспейса: %s\n", nsLink)
+}
+
 
 
 
