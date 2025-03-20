@@ -79,32 +79,11 @@ ip netns exec myns curl http://127.0.0.1:1234
 
 ls -l /proc/<PID>/ns/net
 
-package main
-
-import (
-	"fmt"
-	"log"
-	"os"
-	"syscall"
-	"bufio"
-)
-
-func main() {
-	// Создание нового сетевого неймспейса
-	if err := syscall.Unshare(syscall.CLONE_NEWNET); err != nil {
-		log.Fatalf("Ошибка создания нового network namespace: %v", err)
-	}
-	fmt.Println("Создано новое сетевое пространство")
-
-	// Чтение символической ссылки, указывающей на неймспейс
-	nsLink, err := os.Readlink("/proc/self/ns/net")
-	if err != nil {
-		log.Fatalf("Ошибка чтения символической ссылки: %v", err)
-	}
-
-	// Выводим идентификатор неймспейса (после `net:`)
-	fmt.Printf("Идентификатор нового сетевого неймспейса: %s\n", nsLink)
-}
+58: sk_lookup  name look_up  tag 8ef8c7f8f5d14efd  gpl
+        loaded_at 2025-03-20T21:58:36+0300  uid 0
+        xlated 360B  jited 229B  memlock 4096B  map_ids 9,10
+        btf_id 191
+        pids bpfgo(4835)
 
 
 
