@@ -76,6 +76,19 @@ ip netns exec myns curl http://127.0.0.1:1234
 
 ls -l /proc/<PID>/ns/net
 
+az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ls -l /proc/5368/ns/net
+lrwxrwxrwx 1 gaz358 gaz358 0 Mar 20 20:48 /proc/5368/ns/net -> 'net:[4026531840]'
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ls -l /proc/5285/ns/net
+lrwxrwxrwx 1 gaz358 gaz358 0 Mar 20 20:49 /proc/5285/ns/net -> 'net:[4026531840]'
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ls -l /proc/774/ns/net
+ls: cannot read symbolic link '/proc/774/ns/net': Permission denied
+lrwxrwxrwx 1 systemd-resolve systemd-resolve 0 Mar 20 20:50 /proc/774/ns/net
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ls -l /proc/774/ns/net
+[sudo] password for gaz358: 
+lrwxrwxrwx 1 systemd-resolve systemd-resolve 0 Mar 20 20:50 /proc/774/ns/net -> 'net:[4026531840]'
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
+
 
 
 
