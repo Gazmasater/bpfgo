@@ -1,3 +1,6 @@
+lsns -t net
+
+
 sudo ip netns list
 
 
