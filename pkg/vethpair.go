@@ -7,7 +7,7 @@ import (
 )
 
 func CreateVethPair(namespaceFD uintptr) error {
-	// Используем netlink для создания пары интерфейсов veth
+	// Создаем veth-пару
 	linkAttrs := netlink.NewLinkAttrs()
 	linkAttrs.Name = "veth0"
 	veth0 := &netlink.Veth{
@@ -15,24 +15,25 @@ func CreateVethPair(namespaceFD uintptr) error {
 		PeerName:  "veth1",
 	}
 
-	// Создаем интерфейс veth в текущем неймспейсе
+	// Добавляем veth-пару в текущий namespace
 	if err := netlink.LinkAdd(veth0); err != nil {
 		return fmt.Errorf("не удалось создать veth интерфейс: %w", err)
 	}
 
-	// Включаем интерфейсы
+	// Включаем veth0
 	if err := netlink.LinkSetUp(veth0); err != nil {
-		return fmt.Errorf("не удалось включить интерфейс veth0: %w", err)
+		return fmt.Errorf("не удалось включить veth0: %w", err)
 	}
 
-	// Включаем интерфейс veth1
+	// Получаем ссылку на veth1
 	peerLink, err := netlink.LinkByName("veth1")
 	if err != nil {
 		return fmt.Errorf("не удалось найти интерфейс veth1: %w", err)
 	}
 
-	if err := netlink.LinkSetUp(peerLink); err != nil {
-		return fmt.Errorf("не удалось включить интерфейс veth1: %w", err)
+	// Переносим veth1 в другой namespace
+	if err := netlink.LinkSetNsFd(peerLink, int(namespaceFD)); err != nil {
+		return fmt.Errorf("не удалось переместить veth1 в namespace: %w", err)
 	}
 
 	return nil
