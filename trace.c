@@ -649,7 +649,11 @@ int look_up(struct bpf_sk_lookup *ctx)
 
      __u8 proto = ctx->protocol; 
      __u32 srcIP=bpf_ntohl(ctx->local_ip4);
+     __u32 dstIP=bpf_ntohl(ctx->remote_ip4);
+
      __u16 srcPort=bpf_ntohs(ctx->local_port);
+     __u16 dstPort=bpf_ntohs(ctx->remote_port);
+
 
 
     const char *proto_str;
@@ -661,12 +665,18 @@ int look_up(struct bpf_sk_lookup *ctx)
         proto_str = "UNKNOWN";
     }
 
- bpf_printk("sk_lookup srcIP=%d.%d.%d.%d    srcPORT=%d: Protocol: %s\n", 
+ bpf_printk("sk_lookup src=%d.%d.%d.%d:%d   dst=%d.%d.%d.%d:%d: Protocol: %s\n", 
     (srcIP>>24)&0xff,
     (srcIP>>16)&0xff,
     (srcIP>>8)&0xff,
     (srcIP)&0xff,
-     srcPort,proto_str);
+     srcPort,
+     (dstIP>>24)&0xff,
+    (dstIP>>16)&0xff,
+    (dstIP>>8)&0xff,
+    (dstIP)&0xff,
+     dstPort,
+     proto_str);
     return SK_PASS;
 }
 

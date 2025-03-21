@@ -34,26 +34,21 @@ func init() {
 func main() {
 	defer objs.Close() // Закроем объекты при выходе
 
-	if err := syscall.Unshare(syscall.CLONE_NEWNET); err != nil {
-		log.Fatalf("Ошибка создания нового network namespace: %v", err)
-	}
-	fmt.Println("Создано новое сетевое пространство")
+	// if err := syscall.Unshare(syscall.CLONE_NEWNET); err != nil {
+	// 	log.Fatalf("Ошибка создания нового network namespace: %v", err)
+	// }
+	// fmt.Println("Создано новое сетевое пространство")
 
-	// Открываем дескриптор нового namespace
-	newNS, err := os.Open("/proc/self/ns/net")
+	// Чтение символической ссылки, указывающей на неймспейс
+	netns, err := os.Open("/proc/self/ns/net")
 	if err != nil {
-		log.Fatalf("Ошибка открытия дескриптора нового namespace: %v", err)
+		panic(err)
 	}
-	defer newNS.Close()
+	defer netns.Close()
 
-	fmt.Printf("Дескриптор нового namespace: %d\n", newNS.Fd())
+	fmt.Printf("Дескриптор нового namespace: %d\n", netns.Fd())
 
-	// Создаем виртуальную пару интерфейсов (veth)
-	if err := pkg.CreateVethPair(newNS.Fd()); err != nil {
-		log.Fatalf("Ошибка создания интерфейса: %v", err)
-	}
-
-	skLookupLink, err := link.AttachNetNs(int(newNS.Fd()), objs.LookUp)
+	skLookupLink, err := link.AttachNetNs(int(netns.Fd()), objs.LookUp)
 	if err != nil {
 		log.Fatalf("failed to attach sk_lookup program: %v", err)
 	}
