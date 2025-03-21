@@ -665,7 +665,7 @@ int look_up(struct bpf_sk_lookup *ctx)
         proto_str = "UNKNOWN";
     }
 
- bpf_printk("sk_lookup src=%d.%d.%d.%d:%d   dst=%d.%d.%d.%d:%d: Protocol: %s\n", 
+ bpf_printk("sk_lookup src=%d.%d.%d.%d:%d   dst=%d.%d.%d.%d:%d: Protocol: %s  IFINDEX=%d\n", 
     (srcIP>>24)&0xff,
     (srcIP>>16)&0xff,
     (srcIP>>8)&0xff,
@@ -676,7 +676,8 @@ int look_up(struct bpf_sk_lookup *ctx)
     (dstIP>>8)&0xff,
     (dstIP)&0xff,
      dstPort,
-     proto_str);
+     proto_str,
+    ctx->ingress_ifindex);
     return SK_PASS;
 }
 
