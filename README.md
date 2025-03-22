@@ -27,20 +27,49 @@ struct {
     __type(value, __u32);
 } sk_lookup_map SEC(".maps");
 
+#include <linux/bpf.h>
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_endian.h>
+#include <linux/in.h>
+
+struct ip_port_key {
+    __u32 ip;
+    __u32 port;
+};
+
+struct ip_port_value {
+    __u32 ip;
+    __u16 port;
+    __u32 protocol;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, struct ip_port_key);
+    __type(value, struct ip_port_value);
+} sk_lookup_map SEC(".maps");
+
 SEC("sk_lookup")
 int look_up(struct bpf_sk_lookup *ctx) {
     __u32 proto = ctx->protocol;
     __u32 dstIP = bpf_ntohl(ctx->local_ip4);
     __u32 srcIP = bpf_ntohl(ctx->remote_ip4);
-    __u16 dstPort = ctx->local_port;
+    __u32 dstPort = ctx->local_port;
     __u16 srcPort = bpf_ntohs(ctx->remote_port);
 
     struct ip_port_key key = {
-        .ip = srcIP,
-        .port = srcPort,
+        .ip = dstIP,
+        .port = dstPort,
     };
 
-    bpf_map_update_elem(&sk_lookup_map, &key, &proto, BPF_ANY);
+    struct ip_port_value value = {
+        .ip =srcIP,
+        .port = srcPort,
+        .protocol = proto,
+    };
+
+    bpf_map_update_elem(&sk_lookup_map, &key, &value, BPF_ANY);
 
     bpf_printk("sk_lookup src=%d.%d.%d.%d:%d dst=%d.%d.%d.%d:%d protocol=%d\n", 
         (srcIP >> 24) & 0xff, (srcIP >> 16) & 0xff, (srcIP >> 8) & 0xff, srcIP & 0xff, srcPort,
@@ -51,6 +80,7 @@ int look_up(struct bpf_sk_lookup *ctx) {
 }
 
 char _license[] SEC("license") = "GPL";
+
 
 
 
