@@ -10,69 +10,46 @@ bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=loa
 https://arthurchiao.art/blog/pidfd-and-socket-lookup-bpf-illustrated/
 
 
-package main
+#include <linux/bpf.h>
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_endian.h>
+#include <linux/in.h>
 
-import (
-	"fmt"
-	"os"
-	"log"
-	"os/exec"
-	"syscall"
-	"time"
-)
+struct ip_port_key {
+    __u32 ip;
+    __u16 port;
+};
 
-func main() {
-	// Чтение символической ссылки, указывающей на неймспейс
-	netns, err := os.Open("/proc/self/ns/net")
-	if err != nil {
-		panic(err)
-	}
-	defer netns.Close()
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, struct ip_port_key);
+    __type(value, __u32);
+} sk_lookup_map SEC(".maps");
 
-	// Применяем пространство имен для текущего процесса
-	err = syscall.Setns(int(netns.Fd()), syscall.CLONE_NEWNET)
-	if err != nil {
-		log.Fatalf("Ошибка при применении нового сетевого пространства имен: %v", err)
-	}
+SEC("sk_lookup")
+int look_up(struct bpf_sk_lookup *ctx) {
+    __u32 proto = ctx->protocol;
+    __u32 dstIP = bpf_ntohl(ctx->local_ip4);
+    __u32 srcIP = bpf_ntohl(ctx->remote_ip4);
+    __u16 dstPort = ctx->local_port;
+    __u16 srcPort = bpf_ntohs(ctx->remote_port);
 
-	// Запуск сервера nc
-	serverCmd := exec.Command("nc", "-l", "127.0.0.1", "12345")
-	serverCmd.Stdout = os.Stdout
-	serverCmd.Stderr = os.Stderr
+    struct ip_port_key key = {
+        .ip = srcIP,
+        .port = srcPort,
+    };
 
-	// Запуск серверной части в новом пространстве имен
-	err = serverCmd.Start()
-	if err != nil {
-		log.Fatalf("Ошибка при запуске сервера nc: %v", err)
-	}
-	fmt.Println("Сервер nc запущен на порту 12345.")
+    bpf_map_update_elem(&sk_lookup_map, &key, &proto, BPF_ANY);
 
-	// Даем серверу немного времени на запуск
-	time.Sleep(1 * time.Second)
-
-	// Запуск клиента nc, который подключается к серверу
-	clientCmd := exec.Command("nc", "127.0.0.1", "12345")
-	clientCmd.Stdout = os.Stdout
-	clientCmd.Stderr = os.Stderr
-
-	// Запуск клиентской части
-	err = clientCmd.Start()
-	if err != nil {
-		log.Fatalf("Ошибка при запуске клиента nc: %v", err)
-	}
-	fmt.Println("Клиент nc подключается к серверу.")
-
-	// Ожидаем завершения обеих команд
-	err = serverCmd.Wait()
-	if err != nil {
-		log.Fatalf("Ошибка при завершении сервера nc: %v", err)
-	}
-
-	err = clientCmd.Wait()
-	if err != nil {
-		log.Fatalf("Ошибка при завершении клиента nc: %v", err)
-	}
-
-	fmt.Println("Сервер и клиент завершили работу.")
+    bpf_printk("sk_lookup src=%d.%d.%d.%d:%d dst=%d.%d.%d.%d:%d protocol=%d\n", 
+        (srcIP >> 24) & 0xff, (srcIP >> 16) & 0xff, (srcIP >> 8) & 0xff, srcIP & 0xff, srcPort,
+        (dstIP >> 24) & 0xff, (dstIP >> 16) & 0xff, (dstIP >> 8) & 0xff, dstIP & 0xff, dstPort,
+        proto);
+    
+    return SK_PASS;
 }
+
+char _license[] SEC("license") = "GPL";
+
 
