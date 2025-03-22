@@ -252,6 +252,7 @@ struct trace_info {
     u32 dst_ip;
     u16 sport;
     u32 dport;
+    u32 proto;
     char comm[64];
 
 };
@@ -396,20 +397,14 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
 
 
         struct ip_port_value *value = bpf_map_lookup_elem(&sk_lookup_map, &key);
-        if (value) {
-            bpf_printk("trace_connect_exit: src=%d.%d.%d.%d:%d protocol=%d\n", 
-                (value->ip >> 24) & 0xff, (value->ip >> 16) & 0xff, (value->ip >> 8) & 0xff, value->ip & 0xff, value->port,
-                value->protocol);
+        if (!value) {
+           return 0;
         }
 
 
-        
-
-
-
-
-            
-
+        bpf_printk("trace_connect_exit: src=%d.%d.%d.%d:%d protocol=%d\n", 
+            (value->ip >> 24) & 0xff, (value->ip >> 16) & 0xff, (value->ip >> 8) & 0xff, value->ip & 0xff, value->port,
+            value->protocol);
 
         struct trace_info info = {};
         info.pid = pid;
@@ -418,8 +413,10 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
         info.pid=conn_info->pid;
         info.dst_ip=ip;
         info.dport = port;
-      //   info.src_ip=value->ip;
-       //  info.sport=value->port;
+        info.src_ip=value->ip;
+        info.sport=value->port;
+        info.proto=value->protocol;
+    
         
         bpf_printk("!!!sys_exit_connect FAMILY=%d PORT=%d Comm=%s ",addr.sa_family,key.port,conn_info->comm);
 

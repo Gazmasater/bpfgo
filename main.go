@@ -167,7 +167,7 @@ func main() {
 			}
 
 			// Выводим все данные
-			fmt.Printf("PID=%d Comm=%s ,SrcIP: %s(%s), SrcPort: %d -> DstIP: %s(%s), DstPort: %d \n",
+			fmt.Printf("PID=%d Comm=%s ,SrcIP: %s(%s), SrcPort: %d -> DstIP: %s(%s), DstPort: %d PROTO: %d\n",
 				event.Pid,
 				pkg.Int8ToString(event.Comm),
 				srcIP.String(),
@@ -176,6 +176,7 @@ func main() {
 				dstIP.String(),
 				pkg.ResolveIP(dstIP),
 				event.Dport,
+				event.Proto,
 			)
 
 		}

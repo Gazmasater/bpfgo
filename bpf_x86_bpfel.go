@@ -64,6 +64,7 @@ type bpfTraceInfo struct {
 	Sport uint16
 	_     [2]byte
 	Dport uint32
+	Proto uint32
 	Comm  [64]int8
 }
 
