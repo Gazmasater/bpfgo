@@ -44,5 +44,9 @@ int look_up(struct bpf_sk_lookup *ctx) {
 }
 
 
+  // Исключаем 127.0.0.53:53 (локальный DNS)
+    if (dstIP == bpf_ntohl(0x7F000035) && dstPort == 53) {
+        return SK_PASS;
+    }
 
 
