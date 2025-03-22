@@ -25,6 +25,18 @@ type bpfConnInfoT struct {
 	_        [3]byte
 }
 
+type bpfIpPortKey struct {
+	Ip   uint32
+	Port uint32
+}
+
+type bpfIpPortValue struct {
+	Port     uint16
+	Pad      uint16
+	Ip       uint32
+	Protocol uint32
+}
+
 type bpfSockaddr struct {
 	SaFamily  uint16
 	SaDataMin [14]int8
@@ -50,7 +62,8 @@ type bpfTraceInfo struct {
 	SrcIp uint32
 	DstIp uint32
 	Sport uint16
-	Dport uint16
+	_     [2]byte
+	Dport uint32
 	Comm  [64]int8
 }
 
@@ -117,6 +130,7 @@ type bpfMapSpecs struct {
 	Bind6Map    *ebpf.MapSpec `ebpf:"bind6_map"`
 	BindMap     *ebpf.MapSpec `ebpf:"bind_map"`
 	ConnInfoMap *ebpf.MapSpec `ebpf:"conn_info_map"`
+	SkLookupMap *ebpf.MapSpec `ebpf:"sk_lookup_map"`
 	TraceEvents *ebpf.MapSpec `ebpf:"trace_events"`
 }
 
@@ -151,6 +165,7 @@ type bpfMaps struct {
 	Bind6Map    *ebpf.Map `ebpf:"bind6_map"`
 	BindMap     *ebpf.Map `ebpf:"bind_map"`
 	ConnInfoMap *ebpf.Map `ebpf:"conn_info_map"`
+	SkLookupMap *ebpf.Map `ebpf:"sk_lookup_map"`
 	TraceEvents *ebpf.Map `ebpf:"trace_events"`
 }
 
@@ -160,6 +175,7 @@ func (m *bpfMaps) Close() error {
 		m.Bind6Map,
 		m.BindMap,
 		m.ConnInfoMap,
+		m.SkLookupMap,
 		m.TraceEvents,
 	)
 }

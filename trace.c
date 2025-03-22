@@ -224,12 +224,34 @@ struct
     __uint(max_entries, 128); 
 } trace_events SEC(".maps");
 
+struct ip_port_key {
+    __u32 ip;
+    __u32 port;
+};
+
+struct ip_port_value {
+    __u16 port;
+    __u16 __pad;
+
+    __u32 ip;
+    __u32 protocol;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, struct ip_port_key);
+    __type(value, struct ip_port_value);
+} sk_lookup_map SEC(".maps");
+
+
+
 struct trace_info {
     u32 pid;
     u32 src_ip;
     u32 dst_ip;
     u16 sport;
-    u16 dport;
+    u32 dport;
     char comm[64];
 
 };
@@ -367,6 +389,28 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
 
         u16 port = bpf_ntohs(addr_in.sin_port);
 
+        struct ip_port_key key = {
+            .ip = ip,
+            .port = port,
+        };
+
+
+        struct ip_port_value *value = bpf_map_lookup_elem(&sk_lookup_map, &key);
+        if (value) {
+            bpf_printk("trace_connect_exit: src=%d.%d.%d.%d:%d protocol=%d\n", 
+                (value->ip >> 24) & 0xff, (value->ip >> 16) & 0xff, (value->ip >> 8) & 0xff, value->ip & 0xff, value->port,
+                value->protocol);
+        }
+
+
+        
+
+
+
+
+            
+
+
         struct trace_info info = {};
         info.pid = pid;
         __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
@@ -374,7 +418,10 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
         info.pid=conn_info->pid;
         info.dst_ip=ip;
         info.dport = port;
-        bpf_printk("sys_exit_connect FAMILY=%d PORT=%d Comm=%s",addr.sa_family,port,conn_info->comm);
+      //   info.src_ip=value->ip;
+       //  info.sport=value->port;
+        
+        bpf_printk("!!!sys_exit_connect FAMILY=%d PORT=%d Comm=%s ",addr.sa_family,key.port,conn_info->comm);
 
 
        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
@@ -620,45 +667,36 @@ int trace_bind_exit(struct sys_exit_bind_args *ctx) {
 
 
 SEC("sk_lookup")
-int look_up(struct bpf_sk_lookup *ctx)
-{
+int look_up(struct bpf_sk_lookup *ctx) {
+    __u32 proto = ctx->protocol;
+    __u32 dstIP = bpf_ntohl(ctx->local_ip4);
+    __u32 srcIP = bpf_ntohl(ctx->remote_ip4);
+    __u32 dstPort = ctx->local_port;
+    __u16 srcPort = bpf_ntohs(ctx->remote_port);
+
+    struct ip_port_key key = {
+        .ip = dstIP,
+        .port = dstPort,
+    };
+
+    struct ip_port_value value={
+
+        .ip=srcIP,
+        .port=srcPort,
+        .protocol=proto,
+        
 
 
+    };
 
-     __u32 proto = ctx->protocol; 
-     __u32 dstIP=bpf_ntohl(ctx->local_ip4);
-     __u32 srcIP=bpf_ntohl(ctx->remote_ip4);
+    bpf_map_update_elem(&sk_lookup_map, &key, &value, BPF_ANY);
 
-     __u32 dstPort=ctx->local_port;
-
-     __be16 srcPort=bpf_ntohs(ctx->remote_port);
-
-
-
-    const char *proto_str;
-    if (proto == IPPROTO_TCP) {
-        proto_str = "TCP";
-    } else if (proto == IPPROTO_UDP) {
-        proto_str = "UDP";
-    } else {
-        proto_str = "UNKNOWN";
-    }
-
- bpf_printk("sk_lookup src=%d.%d.%d.%d:%d   dst=%d.%d.%d.%d:%d: Protocol: %s\n", 
-    (srcIP>>24)&0xff,
-    (srcIP>>16)&0xff,
-    (srcIP>>8)&0xff,
-    (srcIP)&0xff,
-     srcPort,
-     (dstIP>>24)&0xff,
-    (dstIP>>16)&0xff,
-    (dstIP>>8)&0xff,
-    (dstIP)&0xff,
-     dstPort,
-     proto_str
-     );
+    bpf_printk("sk_lookup src=%d.%d.%d.%d:%d dst=%d.%d.%d.%d:%d protocol=%d\n", 
+        (srcIP >> 24) & 0xff, (srcIP >> 16) & 0xff, (srcIP >> 8) & 0xff, srcIP & 0xff, srcPort,
+        (dstIP >> 24) & 0xff, (dstIP >> 16) & 0xff, (dstIP >> 8) & 0xff, dstIP & 0xff, dstPort,
+        proto);
+    
     return SK_PASS;
 }
-
 
 
