@@ -97,4 +97,8 @@ char _license[] SEC("license") = "GPL";
 
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
+2025/03/22 20:28:05 failed to load bpf objects: field TraceConnectExit: program trace_connect_exit: load program: permission denied: invalid access to map value, value_size=4 off=4 size=2: R0 min value is outside of the allowed memory range (102 line(s) omitted)
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
 
