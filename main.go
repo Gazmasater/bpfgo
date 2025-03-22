@@ -34,12 +34,6 @@ func init() {
 func main() {
 	defer objs.Close() // Закроем объекты при выходе
 
-	// if err := syscall.Unshare(syscall.CLONE_NEWNET); err != nil {
-	// 	log.Fatalf("Ошибка создания нового network namespace: %v", err)
-	// }
-	// fmt.Println("Создано новое сетевое пространство")
-
-	// Чтение символической ссылки, указывающей на неймспейс
 	netns, err := os.Open("/proc/self/ns/net")
 	if err != nil {
 		panic(err)
