@@ -12,13 +12,15 @@ https://arthurchiao.art/blog/pidfd-and-socket-lookup-bpf-illustrated/
 
 SEC("sk_lookup")
 int look_up(struct bpf_sk_lookup *ctx) {
-    struct sock *sk = ctx->sk;  // Получаем указатель на сокет
-    __u32 proto = sk->sk_protocol;  // Получаем протокол из сокета
+    struct sock *sk = ctx->sk;  // Получаем сокет
 
-    // Выводим протокол для отладки
-    bpf_printk("Protocol: %u\n", proto);
+    // Получаем состояние сокета
+    __u32 state = sk->sk_state;
 
-    return SK_PASS;  // Пропускаем пакет
+    // Выводим состояние сокета
+    bpf_printk("Socket state: %u\n", state);
+
+    return SK_PASS;
 }
 
 
