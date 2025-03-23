@@ -15,6 +15,22 @@ https://arthurchiao.art/blog/pidfd-and-socket-lookup-bpf-illustrated/
 
            nslookup ya.ru
 
+           gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$            nslookup ya.ru
+Server:         127.0.0.53
+Address:        127.0.0.53#53
+
+Non-authoritative answer:
+Name:   ya.ru
+Address: 5.255.255.242
+Name:   ya.ru
+Address: 77.88.55.242
+Name:   ya.ru
+Address: 77.88.44.242
+Name:   ya.ru
+Address: 2a02:6b8::2:242
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
 
 
 
