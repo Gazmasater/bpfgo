@@ -10,9 +10,8 @@ bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=loa
 https://arthurchiao.art/blog/pidfd-and-socket-lookup-bpf-illustrated/
 
 
-bpfgo-21357   [006] ..s21  5046.280491: bpf_trace_printk: lookup src=127.0.0.1:34329 dst=127.0.0.53:53 protocol=17 FAMILY=2 
-           bpfgo-21357   [006] ..s21  5046.281131: bpf_trace_printk: lookup src=127.0.0.1:47709 dst=127.0.0.53:53 protocol=17 FAMILY=2 
-           bpfgo-21357   [000] ..s21  5046.281844: bpf_trace_printk: lookup src=127.0.0.1:46854 dst=127.0.0.53:53 protocol=17 FAMILY=2 
+systemd-timesyn-814     [005] ...21  1026.549144: bpf_trace_printk: !!!lookup sys_exit_sendto FAMILY=2 ADDRESS=185.125.190.58:123 Comm=systemd-timesyn
 
+irq/145-iwlwifi-522     [002] ..s21  1026.630511: bpf_trace_printk: lookup src=185.125.190.58:123 dst=192.168.1.71:56952 protocol=17 FAMILY=2 
 
 
