@@ -110,11 +110,8 @@ type bpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfProgramSpecs struct {
+	BpfSockOps         *ebpf.ProgramSpec `ebpf:"bpf_sock_ops"`
 	LookUp             *ebpf.ProgramSpec `ebpf:"look_up"`
-	TraceAccept4Enter  *ebpf.ProgramSpec `ebpf:"trace_accept4_enter"`
-	TraceAccept4Exit   *ebpf.ProgramSpec `ebpf:"trace_accept4_exit"`
-	TraceBindEnter     *ebpf.ProgramSpec `ebpf:"trace_bind_enter"`
-	TraceBindExit      *ebpf.ProgramSpec `ebpf:"trace_bind_exit"`
 	TraceConnectEnter  *ebpf.ProgramSpec `ebpf:"trace_connect_enter"`
 	TraceConnectExit   *ebpf.ProgramSpec `ebpf:"trace_connect_exit"`
 	TraceRecvfromEnter *ebpf.ProgramSpec `ebpf:"trace_recvfrom_enter"`
@@ -192,11 +189,8 @@ type bpfVariables struct {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfPrograms struct {
+	BpfSockOps         *ebpf.Program `ebpf:"bpf_sock_ops"`
 	LookUp             *ebpf.Program `ebpf:"look_up"`
-	TraceAccept4Enter  *ebpf.Program `ebpf:"trace_accept4_enter"`
-	TraceAccept4Exit   *ebpf.Program `ebpf:"trace_accept4_exit"`
-	TraceBindEnter     *ebpf.Program `ebpf:"trace_bind_enter"`
-	TraceBindExit      *ebpf.Program `ebpf:"trace_bind_exit"`
 	TraceConnectEnter  *ebpf.Program `ebpf:"trace_connect_enter"`
 	TraceConnectExit   *ebpf.Program `ebpf:"trace_connect_exit"`
 	TraceRecvfromEnter *ebpf.Program `ebpf:"trace_recvfrom_enter"`
@@ -207,11 +201,8 @@ type bpfPrograms struct {
 
 func (p *bpfPrograms) Close() error {
 	return _BpfClose(
+		p.BpfSockOps,
 		p.LookUp,
-		p.TraceAccept4Enter,
-		p.TraceAccept4Exit,
-		p.TraceBindEnter,
-		p.TraceBindExit,
 		p.TraceConnectEnter,
 		p.TraceConnectExit,
 		p.TraceRecvfromEnter,

@@ -48,6 +48,12 @@ func main() {
 	}
 	defer skLookupLink.Close()
 
+	SockopsLink, err := link.AttachNetNs(int(netns.Fd()), objs.BpfSockOps)
+	if err != nil {
+		log.Fatalf("failed to attach sk_lookup program: %v", err)
+	}
+	defer SockopsLink.Close()
+
 	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
 	if err != nil {
 		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
@@ -60,29 +66,29 @@ func main() {
 	}
 	defer SExit.Close()
 
-	REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
-	}
-	defer REnter.Close()
+	// REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
+	// }
+	// defer REnter.Close()
 
-	RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
-	}
-	defer RExit.Close()
+	// RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
+	// }
+	// defer RExit.Close()
 
-	Accept4Enter, err := link.Tracepoint("syscalls", "sys_enter_accept4", objs.TraceAccept4Enter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_accept4: %s", err)
-	}
-	defer Accept4Enter.Close()
+	// Accept4Enter, err := link.Tracepoint("syscalls", "sys_enter_accept4", objs.TraceAccept4Enter, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_enter_accept4: %s", err)
+	// }
+	// defer Accept4Enter.Close()
 
-	Accept4Exit, err := link.Tracepoint("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_accept4: %s", err)
-	}
-	defer Accept4Exit.Close()
+	// Accept4Exit, err := link.Tracepoint("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_exit_accept4: %s", err)
+	// }
+	// defer Accept4Exit.Close()
 
 	ConnectEnter, err := link.Tracepoint("syscalls", "sys_enter_connect", objs.TraceConnectEnter, nil)
 	if err != nil {
@@ -96,17 +102,17 @@ func main() {
 	}
 	defer ConnectExit.Close()
 
-	BindEnter, err := link.Tracepoint("syscalls", "sys_enter_bind", objs.TraceBindEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_bind: %s", err)
-	}
-	defer BindEnter.Close()
+	// BindEnter, err := link.Tracepoint("syscalls", "sys_enter_bind", objs.TraceBindEnter, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_enter_bind: %s", err)
+	// }
+	// defer BindEnter.Close()
 
-	BindExit, err := link.Tracepoint("syscalls", "sys_exit_bind", objs.TraceBindExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_bind: %s", err)
-	}
-	defer BindExit.Close()
+	// BindExit, err := link.Tracepoint("syscalls", "sys_exit_bind", objs.TraceBindExit, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_exit_bind: %s", err)
+	// }
+	// defer BindExit.Close()
 
 	// Создаем perf.Reader для чтения событий eBPF
 	const buffLen = 4096
@@ -167,6 +173,7 @@ func main() {
 			}
 
 			// Выводим все данные
+			// event.Proto == 6 || event.Proto == 17 {
 			fmt.Printf("PID=%d Comm=%s ,SrcIP: %s(%s), SrcPort: %d -> DstIP: %s(%s), DstPort: %d PROTO: %d\n",
 				event.Pid,
 				pkg.Int8ToString(event.Comm),
@@ -178,7 +185,7 @@ func main() {
 				event.Dport,
 				event.Proto,
 			)
-
+			//}
 		}
 
 	}()
