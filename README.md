@@ -10,8 +10,10 @@ bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=loa
 https://arthurchiao.art/blog/pidfd-and-socket-lookup-bpf-illustrated/
 
 
-127.0.0.53:53 dst=127.0.0.1:5500 protocol=17 FAMILY=2 
- systemd-resolve-789     [001] ..s21   625.819110: bpf_trace_printk: lookup src=127.0.0.1:5500 dst=127.0.0.53:53 protocol=17 FAMILY=2 
+^Cgaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo|grep "SYSCALL=1"
+PID=8511 Comm=udp_client ,SrcIP: 0.0.0.0(Unknown), SrcPort: 0 -> DstIP: 127.0.0.1(localhost), DstPort: 33333 PROTO: 0 SYSCALL=1
+2025/03/25 20:23:58 invalid event size
+2025/03/25 20:23:58 invalid event size
 
  
 
