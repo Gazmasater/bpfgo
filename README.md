@@ -56,19 +56,8 @@ int trace_dns(struct __sk_buff *skb) {
 
 
 
-#include <linux/if_ether.h>  // Для определения ETH_P_IP
+#define ETH_P_IP 0x0800
 
-// Пример функции обработки пакетов
-int process_packet(struct sk_buff *skb) {
-    struct ethhdr *eth = (struct ethhdr *)skb->data;
-
-    // Проверяем тип протокола Ethernet
-    if (ntohs(eth->h_proto) == ETH_P_IP) {
-        // Обработка IP-пакета
-    }
-
-    return 0;
-}
 
 
 
