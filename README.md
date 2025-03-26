@@ -45,6 +45,16 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
 }
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir "$(pwd)" -tags linux -type trace_info -go-package=main -target amd64 bpf "$(pwd)/trace.c" -- -I"$(pwd)"
+/home/gaz358/myprog/bpfgo/trace.c:426:14: warning: expression result unused [-Wunused-value]
+  426 |         info.fd_connect;
+      |         ~~~~ ^~~~~~~~~~
+1 warning generated.
+Compiled /home/gaz358/myprog/bpfgo/bpf_x86_bpfel.o
+Stripped /home/gaz358/myprog/bpfgo/bpf_x86_bpfel.o
+Wrote /home/gaz358/myprog/bpfgo/bpf_x86_bpfel.go
+
+
 
 
 
