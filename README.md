@@ -11,28 +11,17 @@ ls /sys/kernel/debug/tracing/events/syscalls/ | grep getaddrinfo
 ls /sys/kernel/debug/tracing/events/syscalls/ | grep socket
 
 
-SEC("tracepoint/syscalls/sys_enter_connect")
-int trace_connect_enter(struct sys_enter_connect_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    struct conn_info_t conn_info = {};
-    conn_info.pid = pid;
-    conn_info.fd=ctx->fd;
+SEC("tracepoint/syscalls/trace_tcp_sendmsg")
+int trace_tcp_sendmsg(struct trace_event_raw_tcp_sendmsg *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;  // Получаем PID
+    u16 port = ctx->sport;  // Исходный порт
+    u32 src_ip = ctx->saddr;  // Исходный IP
 
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-  
-    struct sockaddr *addr = (struct sockaddr *)ctx->uservaddr; 
-
-    struct sockaddr_in *addrin = (struct sockaddr_in *)ctx->uservaddr;
-    conn_info.sport=bpf_ntohs(conn_info.sport);
-    
-    bpf_printk("sys_enter_connect PID=%d FD=%d PORT=%d",conn_info.pid,conn_info.fd,conn_info.sport);
-
-
-    bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
-
-    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+    bpf_printk("TCP sendmsg PID=%d src_ip=%x src_port=%d", pid, src_ip, port);
 
     return 0;
+}
+
 
 
 
