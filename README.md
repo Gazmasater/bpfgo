@@ -106,7 +106,16 @@ int trace_exit_sockname(struct pt_regs *ctx) {
 
 
 
+	SockNameEnter, err := link.Tracepoint("syscalls", "sys_enter_getsockname", objs.TraceEnterGetsockname, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_getsockname: %s", err)
+	}
+	defer SockNameEnter.Close()
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo|grep "SYSCALL=4"
+[sudo] password for gaz358: 
+2025/03/27 18:26:54 opening tracepoint sys_enter_getsockname: cannot create bpf perf link: permission denied
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
 
