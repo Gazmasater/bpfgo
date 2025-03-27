@@ -11,6 +11,28 @@ bpftrace -l
 sudo ss -tunp | grep 192.0.73.2:443
 
 
+SEC("tracepoint/syscalls/sys_enter_getsockname")
+int trace_enter_getsockname(struct sys_enter_getsockname_args *ctx) {
+    struct conn_info_t conn_info = {};
+
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    conn_info.pid = pid;
+
+    // Получаем имя процесса
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+    conn_info.fd = ctx->fd;
+
+    // Получаем указатель на sockaddr
+    struct sockaddr *addr = (struct sockaddr *)ctx->usockaddr;
+    bpf_printk("sys_enter_getsockname PID=%d NAME=%s addr=%p", conn_info.pid, conn_info.comm, addr);
+
+    // Обновляем карту addrSockName_map с addr
+    bpf_map_update_elem(&addrSockName_map, &pid, &addr, BPF_ANY);
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+
+    return 0;
+}
+
 SEC("tracepoint/syscalls/sys_exit_getsockname")
 int trace_exit_getsockname(struct sys_exit_getsockname_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
@@ -23,43 +45,51 @@ int trace_exit_getsockname(struct sys_exit_getsockname_args *ctx) {
     }
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
-    if (!conn_info) return 0;
+    if (!conn_info) {
+        bpf_printk("sys_exit_getsockname: no conn_info found for PID=%d\n", pid);
+        return 0;
+    }
 
     struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addrSockName_map, &pid);
     if (!addr_ptr) {
-        bpf_printk("sys_exit_getsockname: addr_ptr is NULL for PID=%d", pid);
+        bpf_printk("sys_exit_getsockname: addr_ptr is NULL for PID=%d\n", pid);
         return 0;
     }
 
-    bpf_printk("sys_exit_getsockname: addr_ptr=%p", addr_ptr);
+    // Печатаем значение addr_ptr для диагностики
+    bpf_printk("sys_exit_getsockname: addr_ptr=%p for PID=%d", addr_ptr, pid);
 
+    // Попробуем прочитать указатель на sockaddr
     struct sockaddr *user_addr_ptr;
-    if (bpf_probe_read_user(&user_addr_ptr, sizeof(user_addr_ptr), addr_ptr)) {
-        bpf_printk("sys_exit_getsockname: Failed to read user_addr_ptr for PID=%d", pid);
+    if (addr_ptr) {
+        bpf_probe_read_user(&user_addr_ptr, sizeof(user_addr_ptr), addr_ptr);
+        bpf_printk("sys_exit_getsockname: user_addr_ptr=%p for PID=%d", user_addr_ptr, pid);
+    } else {
+        bpf_printk("sys_exit_getsockname: Failed to read addr_ptr for PID=%d", pid);
         return 0;
     }
 
-    bpf_printk("sys_exit_getsockname: user_addr_ptr=%p", user_addr_ptr);
+    if (!user_addr_ptr) {
+        bpf_printk("sys_exit_getsockname: user_addr_ptr is NULL for PID=%d", pid);
+        return 0;
+    }
 
     struct sockaddr addr = {};
-    if (bpf_probe_read_user(&addr, sizeof(addr), user_addr_ptr)) {
-        bpf_printk("sys_exit_getsockname: Failed to read sockaddr struct for PID=%d", pid);
-        return 0;
-    }
+    bpf_probe_read_user(&addr, sizeof(addr), user_addr_ptr);
 
-    bpf_printk("sys_exit_getsockname: pid=%d family=%d", pid, addr.sa_family);
+    // Печатаем результат чтения
+    bpf_printk("sys_exit_getsockname: addr_ptr read: FAMILY=%d for PID=%d", addr.sa_family, pid);
 
     if (addr.sa_family == AF_INET) {
         struct sockaddr_in addr_in = {};
-        if (bpf_probe_read_user(&addr_in, sizeof(addr_in), user_addr_ptr)) {
-            bpf_printk("sys_exit_getsockname: Failed to read sockaddr_in struct for PID=%d", pid);
-            return 0;
-        }
+        bpf_probe_read_user(&addr_in, sizeof(addr_in), user_addr_ptr);
 
         u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
         u16 port = bpf_ntohs(addr_in.sin_port);
 
-        if (port == 0) return 0;
+        if (port == 0) {
+            return 0;
+        }
 
         struct trace_info info = {};
         info.pid = pid;
@@ -68,7 +98,7 @@ int trace_exit_getsockname(struct sys_exit_getsockname_args *ctx) {
         info.dport = port;
         info.sysexit = 6;
 
-        bpf_printk("!!!sys_exit_getsockname PID=%d ADDRESS=%d.%d.%d.%d:%d Comm=%s FD=%d",
+        bpf_printk("sys_exit_getsockname PID=%d ADDRESS=%d.%d.%d.%d:%d Comm=%s FD=%d",
             pid,
             (ip >> 24) & 0xff,
             (ip >> 16) & 0xff,
@@ -88,9 +118,7 @@ int trace_exit_getsockname(struct sys_exit_getsockname_args *ctx) {
     return 0;
 }
 
- Chrome_ChildIOT-4176    [005] ...21   126.175563: bpf_trace_printk: sys_enter_getsockname PID=4150 NAME=Chrome_ChildIOT
- Chrome_ChildIOT-4176    [005] ...21   126.175570: bpf_trace_printk: sys_exit_getsockname: addr_ptr=00000000aac8c0d4
- Chrome_ChildIOT-4176    [005] ...21   126.175572: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=4150
+
 
 
 
