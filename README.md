@@ -119,6 +119,14 @@ int trace_exit_getsockname(struct sys_exit_getsockname_args *ctx) {
 }
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo cat /sys/kernel/debug/tracing/trace_pipe|grep "getsockname"
+[sudo] password for gaz358: 
+  NetworkManager-968     [001] ...21   133.971525: bpf_trace_printk: sys_enter_getsockname PID=968 NAME=NetworkManager addr=000000005fa59627
+  NetworkManager-968     [001] ...21   133.971531: bpf_trace_printk: sys_exit_getsockname: addr_ptr=00000000d864f383 for PID=968
+  NetworkManager-968     [001] ...21   133.971532: bpf_trace_printk: sys_exit_getsockname: user_addr_ptr=0000000000000000 for PID=968
+  NetworkManager-968     [001] ...21   133.971534: bpf_trace_printk: sys_exit_getsockname: user_addr_ptr is NULL for PID=968
+
+
 
 
 
