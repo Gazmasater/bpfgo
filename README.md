@@ -61,6 +61,13 @@ int trace_getaddrinfo(struct pt_regs *ctx) {
     return 0;
 }
 
+	kp, err := link.Kprobe("__x64_sys_getaddrinfo", objs.TraceGetaddrinfo, nil)
+	if err != nil {
+		log.Fatalf("Ошибка привязки kprobe: %v", err)
+	}
+	defer kp.Close()
+
+
 
 
 
