@@ -112,3 +112,48 @@ int trace_exit_getsockname(struct sys_exit_getsockname_args *ctx) {
     return 0;
 }
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo cat /sys/kernel/debug/tracing/trace_pipe|grep "getsockname"
+[sudo] password for gaz358: 
+            sudo-4938    [002] ...21   106.421808: bpf_trace_printk: sys_enter_getsockname PID=4938 NAME=sudo addr=000000007803979e
+            sudo-4938    [002] ...21   106.421811: bpf_trace_printk: sys_exit_getsockname: addr_ptr=00000000a75752a4 for PID=4938
+            sudo-4938    [002] ...21   106.421812: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=4938, error=-14
+           <...>-370     [000] ...21   118.872862: bpf_trace_printk: sys_enter_getsockname PID=370 NAME=systemd-udevd addr=00000000431eec02
+           <...>-370     [000] ...21   118.872867: bpf_trace_printk: sys_exit_getsockname: addr_ptr=00000000bec7499e for PID=370
+           <...>-370     [000] ...21   118.872869: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=370, error=-14
+           <...>-975     [001] ...21   133.737171: bpf_trace_printk: sys_enter_getsockname PID=975 NAME=NetworkManager addr=00000000a05171dc
+           <...>-975     [001] ...21   133.737184: bpf_trace_printk: sys_exit_getsockname: addr_ptr=0000000080810b94 for PID=975
+           <...>-975     [001] ...21   133.737186: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=975, error=-14
+           <...>-975     [001] ...21   133.737247: bpf_trace_printk: sys_enter_getsockname PID=975 NAME=NetworkManager addr=00000000a05171dc
+           <...>-975     [001] ...21   133.737250: bpf_trace_printk: sys_exit_getsockname: addr_ptr=00000000784de4c8 for PID=975
+           <...>-975     [001] ...21   133.737252: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=975, error=-14
+           <...>-975     [001] ...21   133.737282: bpf_trace_printk: sys_enter_getsockname PID=975 NAME=NetworkManager addr=00000000a05171dc
+           <...>-975     [001] ...21   133.737284: bpf_trace_printk: sys_exit_getsockname: addr_ptr=0000000080810b94 for PID=975
+           <...>-975     [001] ...21   133.737286: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=975, error=-14
+           <...>-975     [001] ...21   133.737315: bpf_trace_printk: sys_enter_getsockname PID=975 NAME=NetworkManager addr=00000000a05171dc
+           <...>-975     [001] ...21   133.737318: bpf_trace_printk: sys_exit_getsockname: addr_ptr=00000000784de4c8 for PID=975
+           <...>-975     [001] ...21   133.737319: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=975, error=-14
+           <...>-975     [001] ...21   133.737347: bpf_trace_printk: sys_enter_getsockname PID=975 NAME=NetworkManager addr=00000000a05171dc
+           <...>-975     [001] ...21   133.737349: bpf_trace_printk: sys_exit_getsockname: addr_ptr=0000000080810b94 for PID=975
+           <...>-975     [001] ...21   133.737351: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=975, error=-14
+           <...>-975     [001] ...21   133.737378: bpf_trace_printk: sys_enter_getsockname PID=975 NAME=NetworkManager addr=00000000a05171dc
+           <...>-975     [001] ...21   133.737381: bpf_trace_printk: sys_exit_getsockname: addr_ptr=00000000784de4c8 for PID=975
+           <...>-975     [001] ...21   133.737383: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=975, error=-14
+           <...>-975     [001] ...21   133.737420: bpf_trace_printk: sys_enter_getsockname PID=975 NAME=NetworkManager addr=00000000a05171dc
+           <...>-975     [001] ...21   133.737422: bpf_trace_printk: sys_exit_getsockname: addr_ptr=0000000080810b94 for PID=975
+           <...>-975     [001] ...21   133.737424: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=975, error=-14
+           <...>-975     [001] ...21   133.737455: bpf_trace_printk: sys_enter_getsockname PID=975 NAME=NetworkManager addr=00000000a05171dc
+           <...>-975     [001] ...21   133.737457: bpf_trace_printk: sys_exit_getsockname: addr_ptr=00000000784de4c8 for PID=975
+           <...>-975     [001] ...21   133.737459: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=975, error=-14
+           <...>-975     [001] ...21   133.737491: bpf_trace_printk: sys_enter_getsockname PID=975 NAME=NetworkManager addr=00000000a05171dc
+           <...>-975     [001] ...21   133.737493: bpf_trace_printk: sys_exit_getsockname: addr_ptr=0000000080810b94 for PID=975
+           <...>-975     [001] ...21   133.737496: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=975, error=-14
+           <...>-975     [001] ...21   133.737534: bpf_trace_printk: sys_enter_getsockname PID=975 NAME=NetworkManager addr=00000000a05171dc
+           <...>-975     [001] ...21   133.737537: bpf_trace_printk: sys_exit_getsockname: addr_ptr=00000000784de4c8 for PID=975
+           <...>-975     [001] ...21   133.737539: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=975, error=-14
+           <...>-975     [001] ...21   133.737588: bpf_trace_printk: sys_enter_getsockname PID=975 NAME=NetworkManager addr=00000000a05171dc
+           <...>-975     [001] ...21   133.737591: bpf_trace_printk: sys_exit_getsockname: addr_ptr=0000000080810b94 for PID=975
+           <...>-975     [001] ...21   133.737592: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=975, error=-14
+           <...>-975     [001] ...21   133.737626: bpf_trace_printk: sys_enter_getsockname PID=975 NAME=NetworkManager addr=00000000a05171dc
+           <...>-975     [001] ...21   133.737629: bpf_trace_printk: sys_exit_getsockname: addr_ptr=00000000784de4c8 for PID=975
+           <...>-975     [001] ...21   133.737648: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=975, error=-14
+
