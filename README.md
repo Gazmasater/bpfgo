@@ -128,6 +128,9 @@ bpf_printk("bpf_probe_read_user success FAMILY=%d", addr.sa_family);
  <...>-4397    [005] ...21   162.523106: bpf_trace_printk: sys_exit_getsockname  PID=4384 RET=0 addr_ptr=00000000f3ba05d1
            <...>-4397    [005] ...21   162.523110: bpf_trace_printk: sys_exit_getsockname bpf_probe_read_user (sockaddr) failed! addr_ptr=00000000f3ba05d1
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
+2025/03/28 00:37:38 failed to load bpf objects: field TraceEnterGetsockname: program trace_enter_getsockname: load program: permission denied: 43: (85) call bpf_map_update_elem#2: R3 type=ctx expected=fp, pkt, pkt_meta, map_key, map_value, mem, ringbuf_mem, buf, trusted_ptr_ (57 line(s) omitted)
+
 
 
 
