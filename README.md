@@ -138,6 +138,16 @@ bpf_probe_read_user(&addr_ptr, sizeof(addr_ptr), *addr_ptr);
 struct sockaddr addr = {};
 bpf_probe_read_user(&addr, sizeof(addr), addr_ptr);
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir "$(pwd)" -tags linux -type trace_info -go-package=main -target amd64 bpf "$(pwd)/trace.c" -- -I"$(pwd)"
+/home/gaz358/myprog/bpfgo/trace.c:899:22: error: redefinition of 'addr_ptr' with a different type: 'struct sockaddr *' vs 'struct sockaddr **'
+  899 |     struct sockaddr *addr_ptr;
+      |                      ^
+/home/gaz358/myprog/bpfgo/trace.c:890:23: note: previous definition is here
+  890 |     struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addrSockName_map, &pid);
+      |                       ^
+1 error generated.
+Error: compile: exit status 1
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
 
