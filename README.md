@@ -59,24 +59,8 @@ int trace_dns(struct __sk_buff *skb) {
 #define ETH_P_IP 0x0800
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir "$(pwd)" -tags linux -type trace_info -go-package=main -target amd64 bpf "$(pwd)/trace.c" -- -I"$(pwd)"
-/home/gaz358/myprog/bpfgo/trace.c:790:26: error: call to undeclared function 'bpf_hdr_pointer'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
-  790 |     struct ethhdr *eth = bpf_hdr_pointer(skb, 0);
-      |                          ^
-/home/gaz358/myprog/bpfgo/trace.c:790:20: error: incompatible integer to pointer conversion initializing 'struct ethhdr *' with an expression of type 'int' [-Wint-conversion]
-  790 |     struct ethhdr *eth = bpf_hdr_pointer(skb, 0);
-      |                    ^     ~~~~~~~~~~~~~~~~~~~~~~~
-/home/gaz358/myprog/bpfgo/trace.c:791:25: error: call to undeclared function 'htons'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
-  791 |     if (eth->h_proto == htons(ETH_P_IP)) {
-      |                         ^
-/home/gaz358/myprog/bpfgo/trace.c:792:23: error: incompatible integer to pointer conversion initializing 'struct iphdr *' with an expression of type 'int' [-Wint-conversion]
-  792 |         struct iphdr *ip = bpf_hdr_pointer(skb, sizeof(*eth));
-      |                       ^    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/home/gaz358/myprog/bpfgo/trace.c:794:28: error: incompatible integer to pointer conversion initializing 'struct udphdr *' with an expression of type 'int' [-Wint-conversion]
-  794 |             struct udphdr *udp = bpf_hdr_pointer(skb, sizeof(*eth) + sizeof(*ip));
-      |                            ^     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-5 errors generated.
-Error: compile: exit status 1
+#define bpf_hdr_pointer(skb, offset) ((void *)(skb) + offset)
+
 
 
 
