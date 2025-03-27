@@ -110,7 +110,8 @@ int trace_enter_getaddrinfo(struct sys_enter_getaddrinfo_args *ctx) {
     return 0;
 }
 
-
+sudo cat /sys/kernel/debug/tracing/events/syscalls/sys_enter_getaddrinfo/format
+cat: /sys/kernel/debug/tracing/events/syscalls/sys_enter_getaddrinfo/format: No such file or directory
 
 
 
