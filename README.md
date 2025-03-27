@@ -84,6 +84,35 @@ int trace_enter_getaddrinfo(struct sys_enter_getaddrinfo_args *ctx) {
 }
 
 
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(max_entries, 1);  // Один элемент на процессор
+    __type(key, u32);
+    __type(value, struct dns_query);
+} dns_query_map SEC(".maps");
+
+SEC("tracepoint/syscalls/sys_enter_getaddrinfo")
+int trace_enter_getaddrinfo(struct sys_enter_getaddrinfo_args *ctx) {
+    u32 key = 0;
+    struct dns_query *query;
+
+    // Получаем указатель на элемент карты
+    query = bpf_map_lookup_elem(&dns_query_map, &key);
+    if (!query)
+        return 0; // Проверяем на NULL
+
+    query->pid = bpf_get_current_pid_tgid() >> 32;
+    query->tgid = bpf_get_current_pid_tgid();
+    
+    // Безопасное чтение строки из user-space
+    bpf_probe_read_user_str(query->query_data, sizeof(query->query_data), (char *)ctx->name);
+
+    return 0;
+}
+
+
+
+
 
 
 
