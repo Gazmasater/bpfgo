@@ -110,6 +110,11 @@ int trace_exit_getsockname(struct sys_exit_getsockname_args *ctx) {
 }
 
 
+if (!addr_ptr) {
+    bpf_printk("addr_ptr is NULL");
+    return 0;
+}
+bpf_printk("addr_ptr=%p", *addr_ptr);
 
 
 
