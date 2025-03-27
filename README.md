@@ -119,6 +119,11 @@ bpf_printk("addr_ptr=%p", *addr_ptr);
 Socket Thread-2919    [002] ...21  3153.156173: bpf_trace_printk: sys_exit_getsockname  PID=2799 RET=0 addr_ptr=00000000eeafd000
 
 
+if (bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr)) {
+    bpf_printk("bpf_probe_read_user (sockaddr) failed! addr_ptr=%p", *addr_ptr);
+    return 0;
+}
+bpf_printk("bpf_probe_read_user success FAMILY=%d", addr.sa_family);
 
 
 
