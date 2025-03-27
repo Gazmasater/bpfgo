@@ -61,35 +61,28 @@ int trace_dns(struct __sk_buff *skb) {
 
 #define bpf_hdr_pointer(skb, offset) ((void *)(skb) + offset)
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir "$(pwd)" -tags linux -type trace_info -go-package=main -target amd64 bpf "$(pwd)/trace.c" -- -I"$(pwd)"
-/home/gaz358/myprog/bpfgo/trace.c:798:34: error: Looks like the BPF stack limit is exceeded. Please move large on stack variables into BPF per-cpu array map. For non-kernel uses, the stack can be increased using -mllvm -bpf-stack-size.
 
-  798 |                 struct dns_query query = {};
-      |                                  ^
-/home/gaz358/myprog/bpfgo/trace.c:800:28: error: Looks like the BPF stack limit is exceeded. Please move large on stack variables into BPF per-cpu array map. For non-kernel uses, the stack can be increased using -mllvm -bpf-stack-size.
+struct dns_query {
+    u32 pid;
+    u32 tgid;
+    char query_data[256]; // Если размер данных велик
+};
 
-  800 |                 query.tgid = bpf_get_current_pid_tgid();
-      |                            ^
-/home/gaz358/myprog/bpfgo/trace.c:799:27: error: Looks like the BPF stack limit is exceeded. Please move large on stack variables into BPF per-cpu array map. For non-kernel uses, the stack can be increased using -mllvm -bpf-stack-size.
+// Создаем карту per-cpu
+BPF_PER_CPU_ARRAY(dns_query_map, struct dns_query, 1);
 
-  799 |                 query.pid = bpf_get_current_pid_tgid() >> 32;
-      |                           ^
-/home/gaz358/myprog/bpfgo/trace.c:798:34: error: Looks like the BPF stack limit is exceeded. Please move large on stack variables into BPF per-cpu array map. For non-kernel uses, the stack can be increased using -mllvm -bpf-stack-size.
+SEC("tracepoint/syscalls/sys_enter_getaddrinfo")
+int trace_enter_getaddrinfo(struct sys_enter_getaddrinfo_args *ctx) {
+    struct dns_query *query;
+    query = bpf_per_cpu_ptr(&dns_query_map, 0); // Получаем указатель на текущую пер-CPU карту
 
-  798 |                 struct dns_query query = {};
-      |                                  ^
-/home/gaz358/myprog/bpfgo/trace.c:798:34: error: Looks like the BPF stack limit is exceeded. Please move large on stack variables into BPF per-cpu array map. For non-kernel uses, the stack can be increased using -mllvm -bpf-stack-size.
+    query->pid = bpf_get_current_pid_tgid() >> 32;
+    query->tgid = bpf_get_current_pid_tgid();
+    bpf_probe_read_user_str(query->query_data, sizeof(query->query_data), (char *)ctx->name);
 
-/home/gaz358/myprog/bpfgo/trace.c:798:34: error: Looks like the BPF stack limit is exceeded. Please move large on stack variables into BPF per-cpu array map. For non-kernel uses, the stack can be increased using -mllvm -bpf-stack-size.
+    return 0;
+}
 
-/home/gaz358/myprog/bpfgo/trace.c:798:34: error: Looks like the BPF stack limit is exceeded. Please move large on stack variables into BPF per-cpu array map. For non-kernel uses, the stack can be increased using -mllvm -bpf-stack-size.
-
-/home/gaz358/myprog/bpfgo/trace.c:798:34: error: Looks like the BPF stack limit is exceeded. Please move large on stack variables into BPF per-cpu array map. For non-kernel uses, the stack can be increased using -mllvm -bpf-stack-size.
-
-/home/gaz358/myprog/bpfgo/trace.c:798:34: error: Looks like the BPF stack limit is exceeded. Please move large on stack variables into BPF per-cpu array map. For non-kernel uses, the stack can be increased using -mllvm -bpf-stack-size.
-
-9 errors generated.
-Error: compile: exit status 1
 
 
 
