@@ -35,8 +35,8 @@ int trace_enter_getsockname(struct sys_enter_getsockname_args *ctx) {
 }
 
 
-srcAddr=140.82.114.25:443 dstAddr=192.168.1.71:43978  SYSCALL=3  PROTO=6
-
+PID=3678 srcAddr=34.117.188.166:443  SYSCALL=2
+PID=3678 dstAddr=34.117.188.166:443  SYSCALL=1
 
 
 
