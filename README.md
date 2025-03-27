@@ -45,6 +45,23 @@ int trace_getaddrinfo(struct pt_regs *ctx) {
 }
 
 
+SEC("kprobe/__x64_sys_getaddrinfo")
+int trace_getaddrinfo(struct pt_regs *ctx) {
+    char query_data[256]; 
+    const char  *user_ptr; 
+
+     user_ptr = (const char  *)PT_REGS_PARM1(ctx);
+
+    if (user_ptr) {
+        if (bpf_probe_read_user_str(query_data, sizeof(query_data), user_ptr) > 0) {
+            bpf_printk("getaddrinfo called with query: %s\n", query_data);
+        }
+    }
+
+    return 0;
+}
+
+
 
 
 
