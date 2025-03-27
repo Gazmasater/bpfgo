@@ -88,6 +88,10 @@ int trace_exit_getsockname(struct sys_exit_getsockname_args *ctx) {
     return 0;
 }
 
+ Chrome_ChildIOT-4176    [005] ...21   126.175563: bpf_trace_printk: sys_enter_getsockname PID=4150 NAME=Chrome_ChildIOT
+ Chrome_ChildIOT-4176    [005] ...21   126.175570: bpf_trace_printk: sys_exit_getsockname: addr_ptr=00000000aac8c0d4
+ Chrome_ChildIOT-4176    [005] ...21   126.175572: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=4150
+
 
 
 
