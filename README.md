@@ -21,24 +21,40 @@ int trace_exit_getsockname(struct sys_exit_getsockname_args *ctx) {
         bpf_map_delete_elem(&conn_info_map, &pid);
         return 0;
     }
-  
+
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
     if (!conn_info) return 0;
 
     struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addrSockName_map, &pid);
-    if (!addr_ptr) return 0;
+    if (!addr_ptr) {
+        bpf_printk("sys_exit_getsockname: addr_ptr is NULL for PID=%d", pid);
+        return 0;
+    }
+
+    bpf_printk("sys_exit_getsockname: addr_ptr=%p", addr_ptr);
 
     struct sockaddr *user_addr_ptr;
-    bpf_probe_read_user(&user_addr_ptr, sizeof(user_addr_ptr), addr_ptr);
-    
-    struct sockaddr addr = {};
-    bpf_probe_read_user(&addr, sizeof(addr), user_addr_ptr);
+    if (bpf_probe_read_user(&user_addr_ptr, sizeof(user_addr_ptr), addr_ptr)) {
+        bpf_printk("sys_exit_getsockname: Failed to read user_addr_ptr for PID=%d", pid);
+        return 0;
+    }
 
-    bpf_printk("sys_exit_getsockname PID=%d FAMILY=%d", pid, addr.sa_family);
+    bpf_printk("sys_exit_getsockname: user_addr_ptr=%p", user_addr_ptr);
+
+    struct sockaddr addr = {};
+    if (bpf_probe_read_user(&addr, sizeof(addr), user_addr_ptr)) {
+        bpf_printk("sys_exit_getsockname: Failed to read sockaddr struct for PID=%d", pid);
+        return 0;
+    }
+
+    bpf_printk("sys_exit_getsockname: pid=%d family=%d", pid, addr.sa_family);
 
     if (addr.sa_family == AF_INET) {
         struct sockaddr_in addr_in = {};
-        bpf_probe_read_user(&addr_in, sizeof(addr_in), user_addr_ptr);
+        if (bpf_probe_read_user(&addr_in, sizeof(addr_in), user_addr_ptr)) {
+            bpf_printk("sys_exit_getsockname: Failed to read sockaddr_in struct for PID=%d", pid);
+            return 0;
+        }
 
         u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
         u16 port = bpf_ntohs(addr_in.sin_port);
