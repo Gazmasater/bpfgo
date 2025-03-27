@@ -8,6 +8,9 @@ bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=loa
 
 bpftrace -l
 
+sys_enter_getsockname
+sys_exit_getsockname
+
 
 
 ls /sys/kernel/debug/tracing/events/syscalls/ | grep getaddrinfo
