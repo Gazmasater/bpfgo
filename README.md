@@ -133,3 +133,10 @@ int trace_exit_getsockname(struct sys_exit_getsockname_args *ctx) {
 
     return 0;
 }
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo cat /sys/kernel/debug/tracing/trace_pipe|grep "getsockname"
+[sudo] password for gaz358: 
+            sudo-4981    [000] ...21   106.977771: bpf_trace_printk: sys_enter_getsockname PID=4981 NAME=sudo addr=00000000076f7c13
+            sudo-4981    [000] ...21   106.977776: bpf_trace_printk: sys_exit_getsockname: addr_ptr=0000000056126c34 for PID=4981
+            sudo-4981    [000] ...21   106.977778: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=4981, error=-14
