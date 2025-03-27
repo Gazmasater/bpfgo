@@ -117,6 +117,9 @@ gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo|grep "SYSCALL=4"
 2025/03/27 18:26:54 opening tracepoint sys_enter_getsockname: cannot create bpf perf link: permission denied
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
+sudo strace -e bpf,perf_event_open ./bpfgo
+
+
 
 
 
