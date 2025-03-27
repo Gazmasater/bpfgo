@@ -125,6 +125,9 @@ if (bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr)) {
 }
 bpf_printk("bpf_probe_read_user success FAMILY=%d", addr.sa_family);
 
+ <...>-4397    [005] ...21   162.523106: bpf_trace_printk: sys_exit_getsockname  PID=4384 RET=0 addr_ptr=00000000f3ba05d1
+           <...>-4397    [005] ...21   162.523110: bpf_trace_printk: sys_exit_getsockname bpf_probe_read_user (sockaddr) failed! addr_ptr=00000000f3ba05d1
+
 
 
 
