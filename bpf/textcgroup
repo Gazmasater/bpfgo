@@ -2,6 +2,7 @@ sudo apt update
 sudo apt install cgroup-tools
 sudo mkdir -p /sys/fs/cgroup/net_cls
 sudo mount -t cgroup -o net_cls none /sys/fs/cgroup/net_cls
-sudo cgcreate -g net_cls:/my_cgroup
+sudo cgcreate -g net_cls:/my_monitor
 
-sudo cgclassify -g net_cls:/my_monitor 779 
+sudo cgclassify -g net_cls:/my_monitor 3240
+

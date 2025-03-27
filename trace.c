@@ -1,6 +1,5 @@
 //go:build ignore
 #include "vmlinux.h"
-//#include "netinet/in.h"
 
 
 #include "bpf/bpf_tracing.h"
@@ -14,7 +13,7 @@ struct conn_info_t
     u32 src_ip;
     u32 dst_ip;
     u32 addrlen;
-    u32 comm_hash;
+    u32 fd;
     u16 sport;
     u16 dport;
     u8  proto;
@@ -22,9 +21,22 @@ struct conn_info_t
     char comm[64];
 };
 
-struct sockaddr_info_t {
-    struct sockaddr_in local_addr;  // Локальный адрес
+
+
+struct sys_enter_getsockname_args {
+
+    unsigned short common_type;      
+    unsigned char common_flags;    
+    unsigned char common_preempt_count;  
+    int common_pid;  
+    int __syscall_nr;
+    int fd;  
+    struct sockaddr * usockaddr;     
+    int * usockaddr_len;    
+    
+
 };
+
 
 struct sys_enter_socket_args {
 
@@ -191,6 +203,42 @@ struct
     __type(value, struct sockaddr);
 } addr_map SEC(".maps");
 
+struct
+{
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, u32);
+    __type(value, struct sockaddr);
+} addrBind_map SEC(".maps");
+
+struct
+{
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, u32);
+    __type(value, struct sockaddr);
+} addrConnect_map SEC(".maps");
+
+struct
+{
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, u32);
+    __type(value, struct sockaddr);
+} addrSend_map SEC(".maps");
+
+struct
+{
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, u32);
+    __type(value, struct sockaddr);
+} addrRecv_map SEC(".maps");
+
+
+
+
+
 
 
 struct
@@ -224,25 +272,6 @@ struct
     __uint(max_entries, 128); 
 } trace_events SEC(".maps");
 
-struct ip_port_key {
-    __u32 ip;
-    __u32 port;
-};
-
-struct ip_port_value {
-    __u16 port;
-    __u16 __pad;
-
-    __u32 ip;
-    __u32 protocol;
-};
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 1024);
-    __type(key, struct ip_port_key);
-    __type(value, struct ip_port_value);
-} sk_lookup_map SEC(".maps");
 
 
 
@@ -253,15 +282,20 @@ struct trace_info {
     u16 sport;
     u32 dport;
     u32 proto;
+    u32  sysexit;
+    u32 fd;
     char comm[64];
 
 };
+
+
+
+
 
 // Размещение переменной с атрибутом unused
 const struct trace_info *unused __attribute__((unused));
 #define AF_INET 2
 #define AF_INET6 10
-#define ETH_HLEN 14
 
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
@@ -317,7 +351,23 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 //         u16 port = bpf_ntohs(addr_in.sin_port);
 
-//         bpf_printk("sys_exit_accept4 PID=%d  FAMILY=%d PORT=%d Comm=%s",conn_info->pid,addr.sa_family,port,conn_info->comm);
+//         struct ip_port_key key = {
+//             .ip = ip,
+//             .port = port,
+//         };
+
+
+
+//         bpf_printk("!!!lookup sys_exit_accept4 FAMILY=%d ADDRESS=%d.%d.%d.%d:%d Comm=%s ",
+//             addr.sa_family,
+//             (key.ip>>24)&0xff,
+//             (key.ip>>16)&0xff,
+//             (key.ip>>8)&0xff,
+//             (key.ip)&0xff,
+//             key.port,
+//             conn_info->comm);
+
+
 
 //         struct trace_info info = {};
 //         __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
@@ -344,14 +394,19 @@ SEC("tracepoint/syscalls/sys_enter_connect")
 int trace_connect_enter(struct sys_enter_connect_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     struct conn_info_t conn_info = {};
-    int fd=ctx->fd;
-
     conn_info.pid = pid;
+    conn_info.fd=ctx->fd;
 
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+  
+    struct sockaddr *addr = (struct sockaddr *)ctx->uservaddr; 
+
     
-    struct sockaddr *addr = (struct sockaddr *)ctx->uservaddr;  
-    bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
+    bpf_printk("sys_enter_connect PID=%d FD=%d",conn_info.pid,conn_info.fd);
+
+
+    bpf_map_update_elem(&addrConnect_map, &pid, &addr, BPF_ANY);
+
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
     return 0;
@@ -362,6 +417,8 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
+  
+
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
     if (!conn_info) return 0;
 
@@ -371,7 +428,7 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
         return 0;
     }
 
-    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
+    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addrConnect_map, &pid);
     if (!addr_ptr) {
         return 0;
     }
@@ -390,48 +447,41 @@ int trace_connect_exit(struct sys_exit_connect_args *ctx) {
 
         u16 port = bpf_ntohs(addr_in.sin_port);
 
-        struct ip_port_key key = {
-            .ip = ip,
-            .port = port,
-        };
+        if (port==0) {
 
+            return 0;
+        }
 
-        // struct ip_port_value *value = bpf_map_lookup_elem(&sk_lookup_map, &key);
-        // if (!value) {
-        //    return 0;
-        // }
-
-
-        // bpf_printk("trace_connect_exit: src=%d.%d.%d.%d:%d protocol=%d\n", 
-        //     (value->ip >> 24) & 0xff, (value->ip >> 16) & 0xff, (value->ip >> 8) & 0xff, value->ip & 0xff, value->port,
-        //     value->protocol);
-
+        
         struct trace_info info = {};
+
         info.pid = pid;
         __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
 
         info.pid=conn_info->pid;
         info.dst_ip=ip;
         info.dport = port;
-        // info.src_ip=value->ip;
-        // info.sport=value->port;
-        // info.proto=value->protocol;
+        info.sysexit=4;
+        info.fd=conn_info->fd;
+        
     
         
-        bpf_printk("!!!sys_exit_connect FAMILY=%d ADDRESS=%d.%d.%d.%d:%d Comm=%s ",addr.sa_family,
-            (key.ip>>24)&0xff,
-            (key.ip>>16)&0xff,
-            (key.ip>>8)&0xff,
-            (key.ip)&0xff,
-            key.port,
-            conn_info->comm);
-
+        bpf_printk("!!!lookup sys_exit_connect FAMILY=%d ADDRESS=%d.%d.%d.%d:%d Comm=%s FD=%d",
+            addr.sa_family,
+            (ip>>24)&0xff,
+            (ip>>16)&0xff,
+            (ip>>8)&0xff,
+            (ip)&0xff,
+            port,
+            conn_info->comm,
+            conn_info->fd
+        );
 
        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
        
     }
 
-    bpf_map_delete_elem(&addr_map, &pid);  
+    bpf_map_delete_elem(&addrConnect_map, &pid);  
     bpf_map_delete_elem(&conn_info_map, &pid);
 
     return 0;
@@ -451,7 +501,7 @@ int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
 
     struct sockaddr *addr = (struct sockaddr *)ctx->addr;  
 
-    bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
+    bpf_map_update_elem(&addrSend_map, &pid, &addr, BPF_ANY);
 
 
     return 0;
@@ -472,7 +522,7 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         return 0;
     }
 
-    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
+    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addrSend_map, &pid);
     if (!addr_ptr) {
         return 0;
     }
@@ -489,18 +539,23 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
 
         u16 port = bpf_ntohs(addr_in.sin_port);
 
-        struct ip_port_key key = {
-            .ip = ip,
-            .port = port,
-        };
+        if (port==0) {
+
+            return 0;
+        }
+
+      
+
+       
 
 
-        bpf_printk("!!!sys_exit_sendto FAMILY=%d ADDRESS=%d.%d.%d.%d:%d Comm=%s ",addr.sa_family,
-            (key.ip>>24)&0xff,
-            (key.ip>>16)&0xff,
-            (key.ip>>8)&0xff,
-            (key.ip)&0xff,
-            key.port,
+        bpf_printk("!!!lookup sys_exit_sendto FAMILY=%d ADDRESS=%d.%d.%d.%d:%d Comm=%s ",
+            addr.sa_family,
+            (ip>>24)&0xff,
+            (ip>>16)&0xff,
+            (ip>>8)&0xff,
+            (ip)&0xff,
+            port,
             conn_info->comm);
 
 
@@ -517,6 +572,8 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
         info.pid=conn_info->pid;
         info.dst_ip=ip;
         info.dport = port;
+        
+        info.sysexit=1;
        
 
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
@@ -525,7 +582,7 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     }
 
     bpf_map_delete_elem(&addr_map, &pid);  
-    bpf_map_delete_elem(&conn_info_map, &pid);
+  //  bpf_map_delete_elem(&conn_info_map, &pid);
 
     return 0;
 
@@ -536,6 +593,8 @@ int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     struct conn_info_t conn_info = {};
 
+    
+
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
@@ -543,7 +602,7 @@ int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx) {
 
     struct sockaddr *addr = (struct sockaddr *)ctx->addr;  
 
-    bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
+    bpf_map_update_elem(&addrRecv_map, &pid, &addr, BPF_ANY);
 
 
     return 0;
@@ -564,7 +623,7 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
         return 0;
     }
 
-    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
+    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addrRecv_map, &pid);
     if (!addr_ptr) {
         return 0;
     }
@@ -581,24 +640,21 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
 
         u16 port = bpf_ntohs(addr_in.sin_port);
 
-        struct ip_port_key key = {
-            .ip = ip,
-            .port = port,
-        };
+       
 
 
-        bpf_printk("!!!sys_exit_recvfrom FAMILY=%d ADDRESS=%d.%d.%d.%d:%d Comm=%s ",addr.sa_family,
-            (key.ip>>24)&0xff,
-            (key.ip>>16)&0xff,
-            (key.ip>>8)&0xff,
-            (key.ip)&0xff,
-            key.port,
+        bpf_printk("#####lookup sys_exit_recvfrom ADDRESS=%d.%d.%d.%d:%d Comm=%s ",
+            (ip>>24)&0xff,
+            (ip>>16)&0xff,
+            (ip>>8)&0xff,
+            (ip)&0xff,
+            port,
             conn_info->comm);
 
 
 
 
-     //  bpf_printk("sys_exit_recvfrom FAMILY=%d PORT=%d Comm=%s",addr.sa_family,port,conn_info->comm);
+      // bpf_printk("#######lookup sys_exit_recvfrom FAMILY=%d PORT=%d Comm=%s",addr.sa_family,port,conn_info->comm);
 
         struct trace_info info = {};
         info.pid = pid;
@@ -607,8 +663,11 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
 
         info.src_ip=ip;
         info.sport = port;
+        info.dst_ip=0;
+        info.dport=0;
+        info.sysexit=2;
+        info.pid=pid;
       
-        bpf_printk("sys_exit_recvfrom FAMILY=%d Comm=%s",addr.sa_family,conn_info->comm);
 
 
 
@@ -618,86 +677,107 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
     }
 
     bpf_map_delete_elem(&addr_map, &pid);
-    bpf_map_delete_elem(&conn_info_map, &pid);
+  //  bpf_map_delete_elem(&conn_info_map, &pid);
  
     return 0;
 
 }
 
-// SEC("tracepoint/syscalls/sys_enter_bind")
-// int trace_bind_enter(struct sys_enter_bind_args *ctx) {
-//     u32 pid = bpf_get_current_pid_tgid() >> 32;  
+SEC("tracepoint/syscalls/sys_enter_bind")
+int trace_bind_enter(struct sys_enter_bind_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;  
 
-//     struct conn_info_t conn_info = {};
-//     conn_info.pid = pid;
-//     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+    struct conn_info_t conn_info = {};
+    conn_info.pid = pid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
-//     struct sockaddr *addr = (struct sockaddr *)ctx->umyaddr;  
+    struct sockaddr *addr = (struct sockaddr *)ctx->umyaddr;  
 
-//     bpf_map_update_elem(&addr_map, &pid, &addr, BPF_ANY);
+    bpf_map_update_elem(&addrBind_map, &pid, &addr, BPF_ANY);
   
-//     return 0;
-// }
+    return 0;
+}
 
-// SEC("tracepoint/syscalls/sys_exit_bind")
-// int trace_bind_exit(struct sys_exit_bind_args *ctx) {
-//     u32 pid = bpf_get_current_pid_tgid() >> 32;
-//     long ret = ctx->ret;
+SEC("tracepoint/syscalls/sys_exit_bind")
+int trace_bind_exit(struct sys_exit_bind_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    long ret = ctx->ret;
 
-//     struct conn_info_t conn_info = {};
-//     conn_info.pid = pid;
-//     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+    
 
-//     if (ret < 0) {
-//         bpf_printk("sys_exit_bind failed for PID=%d\n", pid);
-//         bpf_map_delete_elem(&conn_info_map, &pid);
-//         return 0;
-//     }
+    struct conn_info_t conn_info = {};
+    conn_info.pid = pid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
-//     struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addr_map, &pid);
-//     if (!addr_ptr) {
-//         return 0;
-//     }
+    if (ret < 0) {
+        bpf_printk("sys_exit_bind failed for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        return 0;
+    }
 
-//     struct sockaddr addr = {};
-//     bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
+    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addrBind_map, &pid);
+    if (!addr_ptr) {
+        return 0;
+    }
 
-//     if (addr.sa_family == AF_INET) {
-//         struct sockaddr_in addr_in = {};
-//         bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
+    struct sockaddr addr = {};
+    bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
 
-//         u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
-//         u16 port = bpf_ntohs(addr_in.sin_port);
+    if (addr.sa_family == AF_INET) {
+        struct sockaddr_in addr_in = {};
+        bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
 
-//         bpf_map_update_elem(&bind_map, &pid, &addr_in, BPF_ANY);
+        u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
+        u16 port = bpf_ntohs(addr_in.sin_port);
 
-//         bpf_printk("sys_exit_bind FAMILY=%d PID=%d Comm=%s IP=%d.%d.%d.%d PORT=%d\n",
-//             addr.sa_family,
-//             conn_info.pid,
-//             conn_info.comm,
-//             (ip >> 24) & 0xff,
-//             (ip >> 16) & 0xff,
-//             (ip >> 8) & 0xff,
-//             (ip) & 0xff,
-//             port);  
-//     } else if (addr.sa_family == AF_INET6) {
-//         struct sockaddr_in6 addr_in6 = {};
-//         bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr);
+        if (port==0) {
 
-//         u16 port = bpf_ntohs(addr_in6.sin6_port);
+            return 0;
+        }
+        
 
-//         bpf_map_update_elem(&bind6_map, &pid, &addr_in6, BPF_ANY);
 
-//         bpf_printk("sys_exit_bind IP6 FAMILY=%d PID=%d Comm=%s PORT=%d\n",
-//             addr.sa_family,
-//             conn_info.pid,
-//             conn_info.comm,
-//             port);  
-//     }
+        struct trace_info info = {};
+        info.pid = pid;
+        info.src_ip=ip;
+        info.sport = port;
+        info.sysexit=5;
+      
+
+
+
+         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+
+        bpf_map_update_elem(&bind_map, &pid, &addr_in, BPF_ANY);
+
+        bpf_printk("sys_exit_bind FAMILY=%d PID=%d Comm=%s IP=%d.%d.%d.%d PORT=%d\n",
+            addr.sa_family,
+            conn_info.pid,
+            conn_info.comm,
+            (ip >> 24) & 0xff,
+            (ip >> 16) & 0xff,
+            (ip >> 8) & 0xff,
+            (ip) & 0xff,
+            port);  
+    } else if (addr.sa_family == AF_INET6) {
+        struct sockaddr_in6 addr_in6 = {};
+        bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr);
+
+        u16 port = bpf_ntohs(addr_in6.sin6_port);
+
+        bpf_map_update_elem(&bind6_map, &pid, &addr_in6, BPF_ANY);
+
+        bpf_printk("sys_exit_bind IP6 FAMILY=%d PID=%d Comm=%s PORT=%d\n",
+            addr.sa_family,
+            conn_info.pid,
+            conn_info.comm,
+            port);  
+    }
 
   
-//     return 0;
-// }
+    return 0;
+}
 
 
 SEC("sk_lookup")
@@ -708,32 +788,21 @@ int look_up(struct bpf_sk_lookup *ctx) {
     __u32 dstPort = ctx->local_port;
     __u16 srcPort = bpf_ntohs(ctx->remote_port);
 
-    struct bpf_sock *sk=ctx->sk;
 
-    __u32 state;
+    struct trace_info info = {};
 
-   
-
-
-
-    struct ip_port_key key = {
-        .ip = dstIP,
-        .port = dstPort,
-    };
-
-    struct ip_port_value value={
-
-        .ip=srcIP,
-        .port=srcPort,
-        .protocol=proto,
-        
+    info.src_ip=srcIP;
+    info.sport=srcPort;
+    info.dst_ip=dstIP;
+    info.dport=dstPort;
+    info.sysexit=3;
+    info.proto=ctx->protocol;
 
 
-    };
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
-    bpf_map_update_elem(&sk_lookup_map, &key, &value, BPF_ANY);
 
-    bpf_printk("sk_lookup src=%d.%d.%d.%d:%d dst=%d.%d.%d.%d:%d protocol=%d FAMILY=%d STATE=%d\n", 
+    bpf_printk("lookup src=%d.%d.%d.%d:%d dst=%d.%d.%d.%d:%d protocol=%d FAMILY=%d \n", 
         (srcIP >> 24) & 0xff,
         (srcIP >> 16) & 0xff, 
         (srcIP >> 8) & 0xff, 
@@ -752,26 +821,42 @@ int look_up(struct bpf_sk_lookup *ctx) {
 }
 
 
-SEC("sockops")
-int bpf_sock_ops(struct bpf_sock_ops *ctx) {
 
-    bpf_printk("TCP STATE: " );
+SEC("tracepoint/syscalls/sys_enter_getsockname")
+int trace_enter_getsockname(struct sys_enter_getsockname_args *ctx) {
 
-    struct bpf_sock *sk = ctx->sk;
-    if (!sk) {
-        return 0;
-    }
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct conn_info_t conn_info = {};
 
-    __u32 srcPort=sk->src_port;
+    conn_info.pid = pid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
+    struct sockaddr *addr = (struct sockaddr *)ctx->usockaddr; 
 
 
 
-    __u32 state = sk->state;  // Получаем состояние TCP-сокета
+    bpf_printk("sys_enter_getsockname PID=%d NAME=%s",pid,conn_info.comm);
 
-    bpf_printk("TCP STATE: %d  PORT=%d", state,srcPort );
 
     return 0;
 }
 
+// SEC("tracepoint/syscalls/sys_exit_getsockname")
+// int trace_exit_getsockname(struct pt_regs *ctx) {
+//     int sockfd = (int)PT_REGS_PARM1(ctx);  // Дескриптор сокета
+//     struct sockaddr *addr = (struct sockaddr *)PT_REGS_PARM2(ctx);  // Указатель на sockaddr
+//     int addrlen = (int)PT_REGS_PARM3(ctx);  // Длина структуры sockaddr
 
+//     if (addr) {
+//         if (addr->sa_family == AF_INET) {  // Проверяем IPv4
+//             struct sockaddr_in *addr_in = (struct sockaddr_in *)addr;
+//             u32 ip = addr_in->sin_addr.s_addr;
+//             u16 port = bpf_ntohs(addr_in->sin_port);
 
+//             // Печатаем локальный IP и порт
+//             bpf_printk("Exit getsockname syscall: sockfd=%d, local ip=%x, local port=%d\n", sockfd, ip, port);
+//         }
+//     }
+
+//     return 0;
+// }

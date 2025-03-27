@@ -1,1 +1,1 @@
-{"bpf_skel":{"data_sections":[],"maps":null,"obj_name":"socket_bpf","progs":[{"attach":"tc","link":true,"name":"tc_ingress"}]},"eunomia_version":"0.3.4"}
+{"bpf_skel":{"data_sections":[],"maps":null,"obj_name":"socket_bpf","progs":[{"attach":"sockops","link":true,"name":"bpf_sock_ops"}]},"eunomia_version":"0.3.4"}

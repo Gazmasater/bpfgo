@@ -48,12 +48,6 @@ func main() {
 	}
 	defer skLookupLink.Close()
 
-	SockopsLink, err := link.AttachNetNs(int(netns.Fd()), objs.BpfSockOps)
-	if err != nil {
-		log.Fatalf("failed to attach sk_lookup program: %v", err)
-	}
-	defer SockopsLink.Close()
-
 	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
 	if err != nil {
 		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
@@ -66,17 +60,23 @@ func main() {
 	}
 	defer SExit.Close()
 
-	// REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
-	// if err != nil {
-	// 	log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
-	// }
-	// defer REnter.Close()
+	REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
+	}
+	defer REnter.Close()
 
-	// RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
-	// if err != nil {
-	// 	log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
-	// }
-	// defer RExit.Close()
+	RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
+	}
+	defer RExit.Close()
+
+	SockNameEnter, err := link.Tracepoint("syscalls", "sys_enter_getsockname", objs.TraceEnterGetsockname, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_getsockname: %s", err)
+	}
+	defer SockNameEnter.Close()
 
 	// Accept4Enter, err := link.Tracepoint("syscalls", "sys_enter_accept4", objs.TraceAccept4Enter, nil)
 	// if err != nil {
@@ -102,17 +102,17 @@ func main() {
 	}
 	defer ConnectExit.Close()
 
-	// BindEnter, err := link.Tracepoint("syscalls", "sys_enter_bind", objs.TraceBindEnter, nil)
-	// if err != nil {
-	// 	log.Fatalf("opening tracepoint sys_enter_bind: %s", err)
-	// }
-	// defer BindEnter.Close()
+	BindEnter, err := link.Tracepoint("syscalls", "sys_enter_bind", objs.TraceBindEnter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_bind: %s", err)
+	}
+	defer BindEnter.Close()
 
-	// BindExit, err := link.Tracepoint("syscalls", "sys_exit_bind", objs.TraceBindExit, nil)
-	// if err != nil {
-	// 	log.Fatalf("opening tracepoint sys_exit_bind: %s", err)
-	// }
-	// defer BindExit.Close()
+	BindExit, err := link.Tracepoint("syscalls", "sys_exit_bind", objs.TraceBindExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_bind: %s", err)
+	}
+	defer BindExit.Close()
 
 	// Создаем perf.Reader для чтения событий eBPF
 	const buffLen = 4096
@@ -153,6 +153,8 @@ func main() {
 			// Приводим прочитанные данные к структуре bpfTraceInfo
 			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
 
+			//	portsMap := make(map[string]string)
+
 			// Преобразуем IP-адреса в строковый формат
 			srcIP := net.IPv4(
 				byte(event.SrcIp>>24),
@@ -168,23 +170,53 @@ func main() {
 				byte(event.DstIp),
 			)
 
+			// Формируем строковые представления адресов с портами
+			srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
+			dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
+
 			if pkg.Int8ToString(event.Comm) == executableName {
 				continue
 			}
 
+			if event.Sysexit == 1 {
+				fmt.Printf("PID=%d dstAddr=%s  SYSCALL=%d\n", event.Pid, dstAddr, event.Sysexit)
+			}
+
+			if event.Sysexit == 2 {
+				fmt.Printf("PID=%d srcAddr=%s  SYSCALL=%d\n", event.Pid, srcAddr, event.Sysexit)
+			}
+
+			if event.Sysexit == 3 {
+				fmt.Printf("srcAddr=%s dstAddr=%s  SYSCALL=%d  PROTO=%d\n", srcAddr, dstAddr, event.Sysexit, event.Proto)
+			}
+
+			if event.Sysexit == 4 {
+				fmt.Printf("PID=%d dstAddr=%s  SYSCALL=%d  FD=%d \n", event.Pid, dstAddr, event.Sysexit, event.Fd)
+			}
+
+			if event.Sysexit == 5 {
+				fmt.Printf("PID=%d srcAddr=%s  SYSCALL=%d\n", event.Pid, srcAddr, event.Sysexit)
+			}
+
+			// if event.Sysexit == 4 {
+			// 	portsMap[dstAddr] = srcAddr
+			// }
+
+			//fmt.Printf("%s -> %s (PROTO: %d)\n", srcAddr, dstAddr, event.Proto)
+
 			// Выводим все данные
 			// event.Proto == 6 || event.Proto == 17 {
-			fmt.Printf("PID=%d Comm=%s ,SrcIP: %s(%s), SrcPort: %d -> DstIP: %s(%s), DstPort: %d PROTO: %d\n",
-				event.Pid,
-				pkg.Int8ToString(event.Comm),
-				srcIP.String(),
-				pkg.ResolveIP(srcIP),
-				event.Sport,
-				dstIP.String(),
-				pkg.ResolveIP(dstIP),
-				event.Dport,
-				event.Proto,
-			)
+			// fmt.Printf("PID=%d Comm=%s ,SrcIP: %s, SrcPort: %d -> DstIP: %s, DstPort: %d  SYSCALL=%d\n",
+			// 	event.Pid,
+			// 	pkg.Int8ToString(event.Comm),
+			// 	srcIP.String(),
+			// 	//	pkg.ResolveIP(srcIP),
+			// 	event.Sport,
+			// 	dstIP.String(),
+			// 	//pkg.ResolveIP(dstIP),
+			// 	event.Dport,
+			// 	event.Sysexit,
+			// )
 			//}
 		}
 
