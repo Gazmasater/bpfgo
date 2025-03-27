@@ -8,6 +8,9 @@ bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=loa
 
 bpftrace -l
 
+sudo ss -tunp | grep 192.0.73.2:443
+
+
 struct sys_enter_getsockname_args {
 
     unsigned short common_type;      
