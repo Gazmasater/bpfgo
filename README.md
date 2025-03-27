@@ -59,15 +59,21 @@ int trace_exit_getsockname(struct sys_exit_getsockname_args *ctx) {
     // Печатаем значение addr_ptr для диагностики
     bpf_printk("sys_exit_getsockname: addr_ptr=%p for PID=%d", addr_ptr, pid);
 
-    // Попробуем прочитать указатель на sockaddr
-    struct sockaddr *user_addr_ptr;
-    if (addr_ptr) {
-        bpf_probe_read_user(&user_addr_ptr, sizeof(user_addr_ptr), addr_ptr);
-        bpf_printk("sys_exit_getsockname: user_addr_ptr=%p for PID=%d", user_addr_ptr, pid);
-    } else {
-        bpf_printk("sys_exit_getsockname: Failed to read addr_ptr for PID=%d", pid);
+    if (!addr_ptr || *addr_ptr == NULL) {
+        bpf_printk("sys_exit_getsockname: addr_ptr is NULL or points to NULL for PID=%d", pid);
         return 0;
     }
+
+    // Попробуем прочитать указатель на sockaddr
+    struct sockaddr *user_addr_ptr;
+    int read_result = bpf_probe_read_user(&user_addr_ptr, sizeof(user_addr_ptr), addr_ptr);
+
+    if (read_result < 0) {
+        bpf_printk("sys_exit_getsockname: Failed to read user_addr_ptr for PID=%d, error=%d", pid, read_result);
+        return 0;
+    }
+
+    bpf_printk("sys_exit_getsockname: user_addr_ptr=%p for PID=%d", user_addr_ptr, pid);
 
     if (!user_addr_ptr) {
         bpf_printk("sys_exit_getsockname: user_addr_ptr is NULL for PID=%d", pid);
@@ -75,14 +81,24 @@ int trace_exit_getsockname(struct sys_exit_getsockname_args *ctx) {
     }
 
     struct sockaddr addr = {};
-    bpf_probe_read_user(&addr, sizeof(addr), user_addr_ptr);
+    read_result = bpf_probe_read_user(&addr, sizeof(addr), user_addr_ptr);
+
+    if (read_result < 0) {
+        bpf_printk("sys_exit_getsockname: Failed to read sockaddr for PID=%d, error=%d", pid, read_result);
+        return 0;
+    }
 
     // Печатаем результат чтения
     bpf_printk("sys_exit_getsockname: addr_ptr read: FAMILY=%d for PID=%d", addr.sa_family, pid);
 
     if (addr.sa_family == AF_INET) {
         struct sockaddr_in addr_in = {};
-        bpf_probe_read_user(&addr_in, sizeof(addr_in), user_addr_ptr);
+        read_result = bpf_probe_read_user(&addr_in, sizeof(addr_in), user_addr_ptr);
+
+        if (read_result < 0) {
+            bpf_printk("sys_exit_getsockname: Failed to read sockaddr_in for PID=%d, error=%d", pid, read_result);
+            return 0;
+        }
 
         u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
         u16 port = bpf_ntohs(addr_in.sin_port);
@@ -117,19 +133,3 @@ int trace_exit_getsockname(struct sys_exit_getsockname_args *ctx) {
 
     return 0;
 }
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo cat /sys/kernel/debug/tracing/trace_pipe|grep "getsockname"
-[sudo] password for gaz358: 
-  NetworkManager-968     [001] ...21   133.971525: bpf_trace_printk: sys_enter_getsockname PID=968 NAME=NetworkManager addr=000000005fa59627
-  NetworkManager-968     [001] ...21   133.971531: bpf_trace_printk: sys_exit_getsockname: addr_ptr=00000000d864f383 for PID=968
-  NetworkManager-968     [001] ...21   133.971532: bpf_trace_printk: sys_exit_getsockname: user_addr_ptr=0000000000000000 for PID=968
-  NetworkManager-968     [001] ...21   133.971534: bpf_trace_printk: sys_exit_getsockname: user_addr_ptr is NULL for PID=968
-
-
-
-
-
-
-
-
