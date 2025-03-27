@@ -134,3 +134,19 @@ int trace_exit_getsockname(struct sys_exit_getsockname_args *ctx) {
     return 0;
 }
 
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo cat /sys/kernel/debug/tracing/trace_pipe|grep "getsockname"
+[sudo] password for gaz358: 
+ DNS Resolver #3-3529    [002] ...21    84.200362: bpf_trace_printk: sys_enter_getsockname PID=2896 NAME=DNS Resolver #3 addr=000000006ec58499
+ DNS Resolver #3-3529    [002] ...21    84.200369: bpf_trace_printk: sys_exit_getsockname: addr_ptr=00000000c7f5a6b3 for PID=2896
+ DNS Resolver #3-3529    [002] ...21    84.200371: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=2896, error=-14
+ DNS Resolver #8-3534    [004] ...21    84.200876: bpf_trace_printk: sys_enter_getsockname PID=2896 NAME=DNS Resolver #8 addr=000000002d7aca84
+ DNS Resolver #8-3534    [004] ...21    84.200884: bpf_trace_printk: sys_exit_getsockname: addr_ptr=0000000044ea294c for PID=2896
+ DNS Resolver #8-3534    [004] ...21    84.200886: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=2896, error=-14
+ DNS Resolver #3-3529    [002] ...21    84.215381: bpf_trace_printk: sys_enter_getsockname PID=2896 NAME=DNS Resolver #3 addr=000000006ec58499
+ DNS Resolver #3-3529    [002] ...21    84.215385: bpf_trace_printk: sys_exit_getsockname: addr_ptr=00000000e6460ae0 for PID=2896
+ DNS Resolver #3-3529    [002] ...21    84.215385: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=2896, error=-14
+   Socket Thread-3015    [005] ...21    84.236400: bpf_trace_printk: sys_enter_getsockname PID=2896 NAME=Socket Thread addr=000000002d7aca84
+   Socket Thread-3015    [005] ...21    84.236404: bpf_trace_printk: sys_exit_getsockname: addr_ptr=0000000050dddbaf for PID=2896
+   Socket Thread-3015    [005] ...21    84.236405: bpf_trace_printk: sys_exit_getsockname: Failed to read user_addr_ptr for PID=2896, error=-14
+
