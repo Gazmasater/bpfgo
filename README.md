@@ -132,6 +132,14 @@ bpf_map_update_elem(&addrSockName_map, &pid, &addr, BPF_ANY);
   NetworkManager-972     [002] ...21  1717.775295: bpf_trace_printk: sys_exit_getsockname bpf_probe_read_user (sockaddr) failed! addr_ptr=0000000028da3f84
 
 
+  struct sockaddr *addr_ptr;
+bpf_probe_read_user(&addr_ptr, sizeof(addr_ptr), *addr_ptr);
+
+struct sockaddr addr = {};
+bpf_probe_read_user(&addr, sizeof(addr), addr_ptr);
+
+
+
 
 
 
