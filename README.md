@@ -67,6 +67,20 @@ int trace_getaddrinfo(struct pt_regs *ctx) {
 	}
 	defer kp.Close()
 
+ func link.Kprobe(symbol string, prog *ebpf.Program, opts *link.KprobeOptions) (link.Link, error)
+Kprobe attaches the given eBPF program to a perf event that fires when the given kernel symbol starts executing. See /proc/kallsyms for available symbols. For example, printk():
+
+kp, err := Kprobe("printk", prog, nil)
+Losing the reference to the resulting Link (kp) will close the Kprobe and prevent further execution of prog. The Link must be Closed during program shutdown to avoid leaking system resources.
+
+If attaching to symbol fails, automatically retries with the running platform's syscall prefix (e.g. __x64_) to support attaching to syscalls in a portable fashion.
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
+[sudo] password for gaz358: 
+Дескриптор нового namespace: 7
+2025/03/27 13:55:40 Ошибка привязки kprobe: creating perf_kprobe PMU (arch-specific fallback for "__x64_sys_getaddrinfo"): token __x64___x64_sys_getaddrinfo: not found: no such file or directory
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
 
 
 
