@@ -60,6 +60,7 @@ bpf_printk("inet_sock_set_state srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d PROT
 
 );
 
+        __u32 pid = bpf_get_current_pid_tgid() >> 32;
 
 
 
