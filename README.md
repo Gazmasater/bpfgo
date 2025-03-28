@@ -19,8 +19,9 @@ int trace_tcp_syn(struct trace_event_raw_inet_sock_set_state *ctx) {
 
 
 
-    // Проверяем, что это состояние TCP_SYN_SENT (начало соединения)
-    if (ctx->newstate == TCP_SYN_SENT) {
+    if (ctx->newstate == TCP_ESTABLISHED) {
+
+        
 
 
 __u32 srcip;
@@ -32,15 +33,16 @@ bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
 dstip = bpf_ntohl(dstip);
 
 
-__u16 sport;
+__u16 sport=0;
 
-sport = ctx->sport;
+sport=ctx->sport;
+
 
 __u16 dport;
 dport=ctx->dport;
 
 
-bpf_printk("inet_sock_set_state srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d ",
+bpf_printk("inet_sock_set_state srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d PROTO=%d ",
 
     (srcip >> 24) & 0xff,
     (srcip >> 16) & 0xff,
@@ -52,17 +54,13 @@ bpf_printk("inet_sock_set_state srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d ",
     (dstip >> 16) & 0xff,
     (dstip >> 8) & 0xff,
     (dstip) & 0xff,
-    dport
+    dport,
+    ctx->protocol
 
 
 );
 
 
-
-    }
-
-    return 0;
-}
 
 
 __u16 sport = 0;
