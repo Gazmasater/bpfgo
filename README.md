@@ -47,7 +47,7 @@ bpf_printk("inet_sock_set_state srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d ",
     (srcip >> 16) & 0xff,
     (srcip >> 8) & 0xff,
     (srcip) & 0xff,
-    conn_info.sport,
+    sport,
 
     (dstip >> 24) & 0xff,
     (dstip >> 16) & 0xff,
@@ -57,5 +57,12 @@ bpf_printk("inet_sock_set_state srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d ",
 
 
 );
+
+
+
+    }
+
+    return 0;
+}
 
 
