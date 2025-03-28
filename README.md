@@ -128,28 +128,46 @@ SEC("tracepoint/sock/inet_sock_set_state")
 int trace_tcp_syn(struct trace_event_raw_inet_sock_set_state *ctx) {
     struct conn_info_t conn_info = {};
 
+
+
     // Проверяем, что это состояние TCP_SYN_SENT (начало соединения)
     if (ctx->newstate == TCP_SYN_SENT) {
-    conn_info.src_ip = bpf_ntohl(ctx->saddr);
-    conn_info.dst_ip = bpf_ntohl(ctx->daddr);
-    conn_info.sport = bpf_ntohs(ctx->sport);
-    conn_info.dport = bpf_ntohs(ctx->dport);
+
+
+__u32 srcip;
+bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
+conn_info.src_ip = bpf_ntohl(srcip);
+
+__u16 sport;
+bpf_probe_read_kernel(&sport, sizeof(sport), ctx->sport);
+conn_info.sport = bpf_ntohs(sport);
+
+
+bpf_printk("inet_sock_set_state ip=%d.%d.%d.%d:%d",
+
+    (srcip) & 0xff,
+    (srcip >> 8) & 0xff,
+    (srcip >> 16) & 0xff,
+    (srcip >> 24) & 0xff,
+    conn_info.sport
+
+);
+
+    // conn_info.dst_ip = bpf_ntohl(ctx->daddr);
+
+    // conn_info.sport = bpf_ntohs(ctx->sport);
+    // conn_info.dport = bpf_ntohs(ctx->dport);
+
 
     }
 
     return 0;
 }
 
-
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir "$(pwd)" -tags linux -type trace_info -go-package=main -target amd64 bpf "$(pwd)/trace.c" -- -I"$(pwd)"
-/home/gaz358/myprog/bpfgo/trace.c:965:24: warning: cast to smaller integer type '__u32' (aka 'unsigned int') from '__u8 *' (aka 'unsigned char *') [-Wpointer-to-int-cast]
-  965 |     conn_info.src_ip = bpf_ntohl(ctx->saddr);
-      |                        ^~~~~~~~~~~~~~~~~~~~~
-/usr/include/bpf/bpf_endian.h:91:3: note: expanded from macro 'bpf_ntohl'
-   91 |          __bpf_constant_ntohl(x) : __bpf_ntohl(x))
-      |          ^~~~~~~~~~~~~~~~~~~~~~~
-
-__u32 ip;
-bpf_probe_read_kernel(&ip, sizeof(ip), ctx->saddr);
-conn_info.src_ip = bpf_ntohl(ip);
+/home/gaz358/myprog/bpfgo/trace.c:972:46: error: incompatible integer to pointer conversion passing '__u16' (aka 'unsigned short') to parameter of type 'const void *' [-Wint-conversion]
+  972 | bpf_probe_read_kernel(&sport, sizeof(sport), ctx->sport);
+      |                                              ^~~~~~~~~~
+1 error generated.
+Error: compile: exit status 1
 
