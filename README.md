@@ -124,48 +124,29 @@ int trace_exit_getsockname(struct sys_exit_getsockname_args *ctx) {
 sudo apt update && sudo apt install -y tcpdump
 sudo tcpdump -i any -nn 'tcp[tcpflags] & (tcp-syn) != 0'
 
-#include <linux/bpf.h>
-#include <linux/in.h>
-#include <linux/tcp.h>
-#include <bpf/bpf_helpers.h>
-#include <bpf/bpf_endian.h>
-
-// Определяем карту BPF для передачи событий в user-space
-struct {
-    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-    __uint(key_size, sizeof(int));
-    __uint(value_size, sizeof(int));
-} tcp_events SEC(".maps");
-
-// Структура события
-struct tcp_event {
-    __u32 src_ip;
-    __u32 dst_ip;
-    __u16 src_port;
-    __u16 dst_port;
-};
-
-// Основная функция обработки tracepoint
 SEC("tracepoint/sock/inet_sock_set_state")
 int trace_tcp_syn(struct trace_event_raw_inet_sock_set_state *ctx) {
-    struct tcp_event event = {};
+    struct conn_info_t conn_info = {};
 
     // Проверяем, что это состояние TCP_SYN_SENT (начало соединения)
     if (ctx->newstate == TCP_SYN_SENT) {
-        event.src_ip = bpf_ntohl(ctx->saddr);
-        event.dst_ip = bpf_ntohl(ctx->daddr);
-        event.src_port = bpf_ntohs(ctx->sport);
-        event.dst_port = bpf_ntohs(ctx->dport);
+    conn_info.src_ip = bpf_ntohl(ctx->saddr);
+    conn_info.dst_ip = bpf_ntohl(ctx->daddr);
+    conn_info.sport = bpf_ntohs(ctx->sport);
+    conn_info.dport = bpf_ntohs(ctx->dport);
 
-        // Отправляем событие в user-space
-        bpf_perf_event_output(ctx, &tcp_events, BPF_F_CURRENT_CPU, &event, sizeof(event));
     }
 
     return 0;
 }
 
-// Лицензия GPL (обязательно для работы eBPF)
-char LICENSE[] SEC("license") = "GPL";
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir "$(pwd)" -tags linux -type trace_info -go-package=main -target amd64 bpf "$(pwd)/trace.c" -- -I"$(pwd)"
+/home/gaz358/myprog/bpfgo/trace.c:965:24: warning: cast to smaller integer type '__u32' (aka 'unsigned int') from '__u8 *' (aka 'unsigned char *') [-Wpointer-to-int-cast]
+  965 |     conn_info.src_ip = bpf_ntohl(ctx->saddr);
+      |                        ^~~~~~~~~~~~~~~~~~~~~
+/usr/include/bpf/bpf_endian.h:91:3: note: expanded from macro 'bpf_ntohl'
+   91 |          __bpf_constant_ntohl(x) : __bpf_ntohl(x))
+      |          ^~~~~~~~~~~~~~~~~~~~~~~
 
 
