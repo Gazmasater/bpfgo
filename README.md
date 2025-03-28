@@ -121,8 +121,7 @@ int trace_exit_getsockname(struct sys_exit_getsockname_args *ctx) {
 }
 
 
-lsof -nP -p 967 | grep TCP
+sudo apt update && sudo apt install -y tcpdump
+sudo tcpdump -i any -nn 'tcp[tcpflags] & (tcp-syn) != 0'
 
-srcAddr=127.0.0.53:53 dstAddr=127.0.0.1:16116  SYSCALL=3  PROTO=17
-srcAddr=127.0.0.1:16116 dstAddr=127.0.0.53:53  SYSCALL=3  PROTO=17
 
