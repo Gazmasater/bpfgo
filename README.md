@@ -64,6 +64,12 @@ bpf_printk("inet_sock_set_state srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d ",
     return 0;
 }
 
+
+__u16 sport = 0;
+bpf_probe_read_kernel(&sport, sizeof(sport), &ctx->sport);
+sport = bpf_ntohs(sport);  // Преобразование из сетевого порядка в хостовый
+
+
 TCP_SYN_SENT — Инициатор отправил SYN-запрос, но еще не получил ответа.
 
 TCP_SYN_RECV — Получено SYN-ACK от другой стороны.
