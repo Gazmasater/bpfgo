@@ -123,6 +123,6 @@ int trace_exit_getsockname(struct sys_exit_getsockname_args *ctx) {
 
 lsof -nP -p 967 | grep TCP
 
-PID=967 dstAddr=91.189.91.98:80  SYSCALL=4  FD=31 
-PID=967 dstAddr=185.125.190.17:80  SYSCALL=4  FD=31 
+srcAddr=127.0.0.53:53 dstAddr=127.0.0.1:16116  SYSCALL=3  PROTO=17
+srcAddr=127.0.0.1:16116 dstAddr=127.0.0.53:53  SYSCALL=3  PROTO=17
 
