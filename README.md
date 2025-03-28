@@ -16,7 +16,6 @@ sudo tcpdump -i any -nn 'tcp[tcpflags] & (tcp-syn) != 0'
 
 SEC("tracepoint/sock/inet_sock_set_state")
 int trace_tcp_syn(struct trace_event_raw_inet_sock_set_state *ctx) {
-    struct conn_info_t conn_info = {};
 
 
 
