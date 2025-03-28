@@ -120,3 +120,7 @@ int trace_exit_getsockname(struct sys_exit_getsockname_args *ctx) {
     return 0;
 }
 
+
+sudo perf trace -e tcp:tcp_connect | grep 'daddr=8.8.8.8 dport=443'
+
+
