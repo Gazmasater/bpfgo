@@ -57,6 +57,13 @@ bpf_printk("inet_sock_set_state srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d ",
 
 );
 
+
+
+    }
+
+    return 0;
+}
+
 TCP_SYN_SENT — Инициатор отправил SYN-запрос, но еще не получил ответа.
 
 TCP_SYN_RECV — Получено SYN-ACK от другой стороны.
