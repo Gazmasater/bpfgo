@@ -123,4 +123,7 @@ int trace_exit_getsockname(struct sys_exit_getsockname_args *ctx) {
 
 sudo perf trace -e tcp:tcp_connect | grep 'daddr=8.8.8.8 dport=443'
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo perf trace -e tcp:tcp_connect | grep 'daddr=192.168.1.1 dport=443'
+[sudo] password for gaz358: 
+perf: 'trace' is not a perf-command. See 'perf --help'.
 
