@@ -149,4 +149,7 @@ gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir "$(pwd)" -tags linux -
    91 |          __bpf_constant_ntohl(x) : __bpf_ntohl(x))
       |          ^~~~~~~~~~~~~~~~~~~~~~~
 
+__u32 ip;
+bpf_probe_read_kernel(&ip, sizeof(ip), ctx->saddr);
+conn_info.src_ip = bpf_ntohl(ip);
 
