@@ -100,3 +100,35 @@ TCP_CLOSE — Соединение завершено.
 }
 
 
+
+SEC("tracepoint/sock/tcp_connect")
+int trace_tcp_connect(struct trace_event_raw_tcp_connect *ctx) {
+    __u32 srcip, dstip;
+    __u16 sport, dport;
+
+    bpf_probe_read_kernel(&srcip, sizeof(srcip), &ctx->saddr);
+    srcip = bpf_ntohl(srcip);
+
+    bpf_probe_read_kernel(&dstip, sizeof(dstip), &ctx->daddr);
+    dstip = bpf_ntohl(dstip);
+
+    sport = ctx->sport;
+    dport = ctx->dport;
+
+    bpf_printk("tcp_connect srcip=%d.%d.%d.%d:%d dstip=%d.%d.%d.%d:%d\n",
+               (srcip >> 24) & 0xff,
+               (srcip >> 16) & 0xff,
+               (srcip >> 8) & 0xff,
+               (srcip) & 0xff,
+               sport,
+               (dstip >> 24) & 0xff,
+               (dstip >> 16) & 0xff,
+               (dstip >> 8) & 0xff,
+               (dstip) & 0xff,
+               dport);
+    
+    return 0;
+}
+
+
+
