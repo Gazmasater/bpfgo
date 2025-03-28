@@ -121,7 +121,7 @@ int trace_exit_getsockname(struct sys_exit_getsockname_args *ctx) {
 }
 
 
-sudo perf trace -e tcp:tcp_connect | grep 'daddr=8.8.8.8 dport=443'
+lsof -nP -p 967 | grep TCP
 
 PID=967 dstAddr=91.189.91.98:80  SYSCALL=4  FD=31 
 PID=967 dstAddr=185.125.190.17:80  SYSCALL=4  FD=31 
