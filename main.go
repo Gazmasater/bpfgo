@@ -114,6 +114,12 @@ func main() {
 	}
 	defer BindExit.Close()
 
+	InetSock, err := link.Tracepoint("sock", "inet_sock_set_state", objs.TraceTcpSyn, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint inet_sock_set_state: %s", err)
+	}
+	defer InetSock.Close()
+
 	// Создаем perf.Reader для чтения событий eBPF
 	const buffLen = 4096
 	rd, err := perf.NewReader(objs.TraceEvents, buffLen)
@@ -196,6 +202,10 @@ func main() {
 
 			if event.Sysexit == 5 {
 				fmt.Printf("PID=%d srcAddr=%s  SYSCALL=%d\n", event.Pid, srcAddr, event.Sysexit)
+			}
+
+			if event.Sysexit == 6 {
+				fmt.Printf("PID=%d srcAddr=%s  SYSCALL=%d\n", event.Pid, dstAddr, event.Sysexit)
 			}
 
 			// if event.Sysexit == 4 {

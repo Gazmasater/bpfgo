@@ -1,6 +1,6 @@
 ./ecc trace.c
 sudo ./ecli run package.json
-sudo cat /sys/kernel/debug/tracing/trace_pipe|grep "lookup"
+sudo cat /sys/kernel/debug/tracing/trace_pipe|grep "SYSCALL=2"
 
 gcc udp_server.c -o udp_server
 gcc udp_client.c -o udp_client

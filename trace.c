@@ -38,6 +38,20 @@ struct sys_enter_getsockname_args {
 };
 
 
+struct sys_exit_getsockname_args {
+
+    unsigned short common_type;       
+    unsigned char common_flags;      
+    unsigned char common_preempt_count;     
+    int common_pid;  
+    int __syscall_nr;
+    int pad1;
+    long ret; 
+
+};
+
+
+
 struct sys_enter_socket_args {
 
 
@@ -234,6 +248,15 @@ struct
     __type(key, u32);
     __type(value, struct sockaddr);
 } addrRecv_map SEC(".maps");
+
+struct
+{
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, u32);
+    __type(value, struct sockaddr);
+} addrSockName_map SEC(".maps");
+
 
 
 
@@ -549,7 +572,7 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
        
 
 
-        bpf_printk("!!!lookup sys_exit_sendto FAMILY=%d ADDRESS=%d.%d.%d.%d:%d Comm=%s ",
+        bpf_printk("!!! lookup sys_exit_sendto FAMILY=%d ADDRESS=%d.%d.%d.%d:%d Comm=%s ",
             addr.sa_family,
             (ip>>24)&0xff,
             (ip>>16)&0xff,
@@ -723,6 +746,8 @@ int trace_bind_exit(struct sys_exit_bind_args *ctx) {
     struct sockaddr addr = {};
     bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
 
+
+
     if (addr.sa_family == AF_INET) {
         struct sockaddr_in addr_in = {};
         bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
@@ -783,11 +808,10 @@ int trace_bind_exit(struct sys_exit_bind_args *ctx) {
 SEC("sk_lookup")
 int look_up(struct bpf_sk_lookup *ctx) {
     __u32 proto = ctx->protocol;
-    __u32 dstIP = bpf_ntohl(ctx->local_ip4);
-    __u32 srcIP = bpf_ntohl(ctx->remote_ip4);
-    __u32 dstPort = ctx->local_port;
-    __u16 srcPort = bpf_ntohs(ctx->remote_port);
-
+    __u32 srcIP = bpf_ntohl(ctx->local_ip4);
+    __u32 dstIP = bpf_ntohl(ctx->remote_ip4);
+    __u32 srcPort = ctx->local_port;
+    __u16 dstPort = bpf_ntohs(ctx->remote_port);
 
     struct trace_info info = {};
 
@@ -822,41 +846,112 @@ int look_up(struct bpf_sk_lookup *ctx) {
 
 
 
-SEC("tracepoint/syscalls/sys_enter_getsockname")
-int trace_enter_getsockname(struct sys_enter_getsockname_args *ctx) {
-
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    struct conn_info_t conn_info = {};
-
-    conn_info.pid = pid;
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-
-    struct sockaddr *addr = (struct sockaddr *)ctx->usockaddr; 
+SEC("tracepoint/sock/inet_sock_set_state")
+int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 
 
+    if (ctx->newstate == TCP_ESTABLISHED) {
 
-    bpf_printk("sys_enter_getsockname PID=%d NAME=%s",pid,conn_info.comm);
+        __u32 pid2 = bpf_get_current_pid_tgid() >> 32;
+ 
 
+
+__u32 srcip;
+bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
+srcip = bpf_ntohl(srcip);
+
+__u32 dstip;
+bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
+dstip = bpf_ntohl(dstip);
+
+
+__u16 sport=0;
+
+sport=ctx->sport;
+
+
+__u16 dport;
+dport=ctx->dport;
+
+
+bpf_printk("inet_sock_set_state PID2=%d srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d PROTO=%d ",
+    
+    pid2,
+    (srcip >> 24) & 0xff,
+    (srcip >> 16) & 0xff,
+    (srcip >> 8) & 0xff,
+    (srcip) & 0xff,
+    sport,
+
+    (dstip >> 24) & 0xff,
+    (dstip >> 16) & 0xff,
+    (dstip >> 8) & 0xff,
+    (dstip) & 0xff,
+    dport,
+    ctx->protocol
+
+
+);
+
+
+
+    }
 
     return 0;
 }
 
-// SEC("tracepoint/syscalls/sys_exit_getsockname")
-// int trace_exit_getsockname(struct pt_regs *ctx) {
-//     int sockfd = (int)PT_REGS_PARM1(ctx);  // Дескриптор сокета
-//     struct sockaddr *addr = (struct sockaddr *)PT_REGS_PARM2(ctx);  // Указатель на sockaddr
-//     int addrlen = (int)PT_REGS_PARM3(ctx);  // Длина структуры sockaddr
 
-//     if (addr) {
-//         if (addr->sa_family == AF_INET) {  // Проверяем IPv4
-//             struct sockaddr_in *addr_in = (struct sockaddr_in *)addr;
-//             u32 ip = addr_in->sin_addr.s_addr;
-//             u16 port = bpf_ntohs(addr_in->sin_port);
+SEC("tracepoint/sock/inet_sock_set_state")
+int trace_tcp_syn(struct trace_event_raw_inet_sock_set_state *ctx) {
 
-//             // Печатаем локальный IP и порт
-//             bpf_printk("Exit getsockname syscall: sockfd=%d, local ip=%x, local port=%d\n", sockfd, ip, port);
-//         }
-//     }
+    if (ctx->newstate == TCP_SYN_SENT) {
 
-//     return 0;
-// }
+        __u32 pid1 = bpf_get_current_pid_tgid() >> 32;
+
+        __u32 srcip;
+        bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
+        srcip = bpf_ntohl(srcip);
+
+        __u32 dstip;
+        bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
+        dstip = bpf_ntohl(dstip);
+
+
+        __u16 sport=0;
+
+        sport=ctx->sport;
+
+
+        __u16 dport;
+        dport=ctx->dport;
+
+
+
+bpf_printk("inet_sock_set_state PID1=%d srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d PROTO=%d ",
+    
+    pid1,
+    (srcip >> 24) & 0xff,
+    (srcip >> 16) & 0xff,
+    (srcip >> 8) & 0xff,
+    (srcip) & 0xff,
+    sport,
+
+    (dstip >> 24) & 0xff,
+    (dstip >> 16) & 0xff,
+    (dstip >> 8) & 0xff,
+    (dstip) & 0xff,
+    dport,
+    ctx->protocol
+
+
+);
+
+
+    }
+
+
+
+
+
+    return 0;
+}
