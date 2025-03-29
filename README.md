@@ -85,14 +85,11 @@ bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info)
 
 
 
-__u8 state = ctx->newstate;
-
-bpf_printk("inet_sock_set_state PID=%d srcip=%d.%d.%d.%d:%d dstip=%d.%d.%d.%d:%d PROTO=%d STATE=%d",
-    pid_tcp,
-    (srcip >> 24) & 0xff, (srcip >> 16) & 0xff, (srcip >> 8) & 0xff, (srcip) & 0xff, sport,
-    (dstip >> 24) & 0xff, (dstip >> 16) & 0xff, (dstip >> 8) & 0xff, (dstip) & 0xff, dport,
-    ctx->protocol,
-    (__u32) state  // Явное приведение типа к 32-битному целому числу
-);
+PID=3531 srcAddr=192.168.1.71:0 -> dstAddr=185.199.110.154:443  SYSCALL=6 STATE=2
+PID=3531 srcAddr=192.168.1.71:0 -> dstAddr=185.199.111.133:443  SYSCALL=6 STATE=2
+PID=3531 srcAddr=192.168.1.71:0 -> dstAddr=140.82.121.4:443  SYSCALL=6 STATE=2
+PID=525 srcAddr=192.168.1.71:49274 <- dstAddr=185.199.110.154:443  SYSCALL=6 STATE=1
+PID=524 srcAddr=192.168.1.71:54470 <- dstAddr=185.199.111.133:443  SYSCALL=6 STATE=1
+PID=522 srcAddr=192.168.1.71:49518 <- dstAddr=140.82.121.4:443  SYSCALL=6 STATE=1
 
 
