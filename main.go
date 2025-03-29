@@ -72,12 +72,6 @@ func main() {
 	}
 	defer RExit.Close()
 
-	SockNameEnter, err := link.Tracepoint("syscalls", "sys_enter_getsockname", objs.TraceEnterGetsockname, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_getsockname: %s", err)
-	}
-	defer SockNameEnter.Close()
-
 	// Accept4Enter, err := link.Tracepoint("syscalls", "sys_enter_accept4", objs.TraceAccept4Enter, nil)
 	// if err != nil {
 	// 	log.Fatalf("opening tracepoint sys_enter_accept4: %s", err)
@@ -114,7 +108,7 @@ func main() {
 	}
 	defer BindExit.Close()
 
-	InetSock, err := link.Tracepoint("sock", "inet_sock_set_state", objs.TraceTcpSyn, nil)
+	InetSock, err := link.Tracepoint("sock", "inet_sock_set_state", objs.TraceTcpEst, nil)
 	if err != nil {
 		log.Fatalf("opening tracepoint inet_sock_set_state: %s", err)
 	}
@@ -205,7 +199,12 @@ func main() {
 			}
 
 			if event.Sysexit == 6 {
-				fmt.Printf("PID=%d srcAddr=%s  SYSCALL=%d\n", event.Pid, dstAddr, event.Sysexit)
+				if event.Sport == 0 {
+					fmt.Printf("PID=%d srcAddr=%s -> dstAddr=%s  SYSCALL=%d STATE=%d\n", event.Pid, srcAddr, dstAddr, event.Sysexit, event.State)
+				} else {
+					fmt.Printf("PID=%d srcAddr=%s <- dstAddr=%s  SYSCALL=%d STATE=%d\n", event.Pid, srcAddr, dstAddr, event.Sysexit, event.State)
+
+				}
 			}
 
 			// if event.Sysexit == 4 {

@@ -307,6 +307,7 @@ struct trace_info {
     u32 proto;
     u32  sysexit;
     u32 fd;
+    u32 state;
     char comm[64];
 
 };
@@ -319,6 +320,9 @@ struct trace_info {
 const struct trace_info *unused __attribute__((unused));
 #define AF_INET 2
 #define AF_INET6 10
+#define TCP_ESTABLISHED 1
+#define TCP_SYN_SENT 2
+
 
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
@@ -700,7 +704,7 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
     }
 
     bpf_map_delete_elem(&addr_map, &pid);
-  //  bpf_map_delete_elem(&conn_info_map, &pid);
+    bpf_map_delete_elem(&conn_info_map, &pid);
  
     return 0;
 
@@ -813,6 +817,8 @@ int look_up(struct bpf_sk_lookup *ctx) {
     __u32 srcPort = ctx->local_port;
     __u16 dstPort = bpf_ntohs(ctx->remote_port);
 
+    
+
     struct trace_info info = {};
 
     info.src_ip=srcIP;
@@ -821,6 +827,7 @@ int look_up(struct bpf_sk_lookup *ctx) {
     info.dport=dstPort;
     info.sysexit=3;
     info.proto=ctx->protocol;
+
 
 
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
@@ -850,33 +857,30 @@ SEC("tracepoint/sock/inet_sock_set_state")
 int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 
 
-    if (ctx->newstate == TCP_ESTABLISHED) {
+    __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
 
-        __u32 pid2 = bpf_get_current_pid_tgid() >> 32;
- 
-
-
-__u32 srcip;
-bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
-srcip = bpf_ntohl(srcip);
-
-__u32 dstip;
-bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
-dstip = bpf_ntohl(dstip);
-
-
-__u16 sport=0;
-
-sport=ctx->sport;
-
-
-__u16 dport;
-dport=ctx->dport;
-
-
-bpf_printk("inet_sock_set_state PID2=%d srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d PROTO=%d ",
+    __u32 srcip;
+    bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
+    srcip = bpf_ntohl(srcip);
     
-    pid2,
+    __u32 dstip;
+    bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
+    dstip = bpf_ntohl(dstip);
+       
+    __u16 sport=0;
+    
+    sport=ctx->sport;
+       
+    __u16 dport;
+    dport=ctx->dport;
+
+   __u8 state=ctx->newstate;
+    
+    if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
+
+bpf_printk("inet_sock_set_state PID=%d srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d PROTO=%d STATE=%d",
+    
+    pid_tcp,
     (srcip >> 24) & 0xff,
     (srcip >> 16) & 0xff,
     (srcip >> 8) & 0xff,
@@ -890,8 +894,21 @@ bpf_printk("inet_sock_set_state PID2=%d srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d
     dport,
     ctx->protocol
 
-
 );
+
+struct trace_info info = {};
+
+info.src_ip=srcip;
+info.sport=sport;
+info.dst_ip=dstip;
+info.dport=dport;
+info.sysexit=6;
+info.proto=ctx->protocol;
+info.pid=pid_tcp;
+info.state=ctx->newstate;
+bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+
 
 
 
@@ -900,58 +917,3 @@ bpf_printk("inet_sock_set_state PID2=%d srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d
     return 0;
 }
 
-
-SEC("tracepoint/sock/inet_sock_set_state")
-int trace_tcp_syn(struct trace_event_raw_inet_sock_set_state *ctx) {
-
-    if (ctx->newstate == TCP_SYN_SENT) {
-
-        __u32 pid1 = bpf_get_current_pid_tgid() >> 32;
-
-        __u32 srcip;
-        bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
-        srcip = bpf_ntohl(srcip);
-
-        __u32 dstip;
-        bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
-        dstip = bpf_ntohl(dstip);
-
-
-        __u16 sport=0;
-
-        sport=ctx->sport;
-
-
-        __u16 dport;
-        dport=ctx->dport;
-
-
-
-bpf_printk("inet_sock_set_state PID1=%d srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d PROTO=%d ",
-    
-    pid1,
-    (srcip >> 24) & 0xff,
-    (srcip >> 16) & 0xff,
-    (srcip >> 8) & 0xff,
-    (srcip) & 0xff,
-    sport,
-
-    (dstip >> 24) & 0xff,
-    (dstip >> 16) & 0xff,
-    (dstip >> 8) & 0xff,
-    (dstip) & 0xff,
-    dport,
-    ctx->protocol
-
-
-);
-
-
-    }
-
-
-
-
-
-    return 0;
-}

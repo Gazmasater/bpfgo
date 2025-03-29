@@ -55,6 +55,7 @@ type bpfTraceInfo struct {
 	Proto   uint32
 	Sysexit uint32
 	Fd      uint32
+	State   uint32
 	Comm    [64]int8
 }
 
@@ -100,18 +101,16 @@ type bpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfProgramSpecs struct {
-	LookUp                *ebpf.ProgramSpec `ebpf:"look_up"`
-	TraceBindEnter        *ebpf.ProgramSpec `ebpf:"trace_bind_enter"`
-	TraceBindExit         *ebpf.ProgramSpec `ebpf:"trace_bind_exit"`
-	TraceConnectEnter     *ebpf.ProgramSpec `ebpf:"trace_connect_enter"`
-	TraceConnectExit      *ebpf.ProgramSpec `ebpf:"trace_connect_exit"`
-	TraceEnterGetsockname *ebpf.ProgramSpec `ebpf:"trace_enter_getsockname"`
-	TraceRecvfromEnter    *ebpf.ProgramSpec `ebpf:"trace_recvfrom_enter"`
-	TraceRecvfromExit     *ebpf.ProgramSpec `ebpf:"trace_recvfrom_exit"`
-	TraceSendtoEnter      *ebpf.ProgramSpec `ebpf:"trace_sendto_enter"`
-	TraceSendtoExit       *ebpf.ProgramSpec `ebpf:"trace_sendto_exit"`
-	TraceTcpEst           *ebpf.ProgramSpec `ebpf:"trace_tcp_est"`
-	TraceTcpSyn           *ebpf.ProgramSpec `ebpf:"trace_tcp_syn"`
+	LookUp             *ebpf.ProgramSpec `ebpf:"look_up"`
+	TraceBindEnter     *ebpf.ProgramSpec `ebpf:"trace_bind_enter"`
+	TraceBindExit      *ebpf.ProgramSpec `ebpf:"trace_bind_exit"`
+	TraceConnectEnter  *ebpf.ProgramSpec `ebpf:"trace_connect_enter"`
+	TraceConnectExit   *ebpf.ProgramSpec `ebpf:"trace_connect_exit"`
+	TraceRecvfromEnter *ebpf.ProgramSpec `ebpf:"trace_recvfrom_enter"`
+	TraceRecvfromExit  *ebpf.ProgramSpec `ebpf:"trace_recvfrom_exit"`
+	TraceSendtoEnter   *ebpf.ProgramSpec `ebpf:"trace_sendto_enter"`
+	TraceSendtoExit    *ebpf.ProgramSpec `ebpf:"trace_sendto_exit"`
+	TraceTcpEst        *ebpf.ProgramSpec `ebpf:"trace_tcp_est"`
 }
 
 // bpfMapSpecs contains maps before they are loaded into the kernel.
@@ -195,18 +194,16 @@ type bpfVariables struct {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfPrograms struct {
-	LookUp                *ebpf.Program `ebpf:"look_up"`
-	TraceBindEnter        *ebpf.Program `ebpf:"trace_bind_enter"`
-	TraceBindExit         *ebpf.Program `ebpf:"trace_bind_exit"`
-	TraceConnectEnter     *ebpf.Program `ebpf:"trace_connect_enter"`
-	TraceConnectExit      *ebpf.Program `ebpf:"trace_connect_exit"`
-	TraceEnterGetsockname *ebpf.Program `ebpf:"trace_enter_getsockname"`
-	TraceRecvfromEnter    *ebpf.Program `ebpf:"trace_recvfrom_enter"`
-	TraceRecvfromExit     *ebpf.Program `ebpf:"trace_recvfrom_exit"`
-	TraceSendtoEnter      *ebpf.Program `ebpf:"trace_sendto_enter"`
-	TraceSendtoExit       *ebpf.Program `ebpf:"trace_sendto_exit"`
-	TraceTcpEst           *ebpf.Program `ebpf:"trace_tcp_est"`
-	TraceTcpSyn           *ebpf.Program `ebpf:"trace_tcp_syn"`
+	LookUp             *ebpf.Program `ebpf:"look_up"`
+	TraceBindEnter     *ebpf.Program `ebpf:"trace_bind_enter"`
+	TraceBindExit      *ebpf.Program `ebpf:"trace_bind_exit"`
+	TraceConnectEnter  *ebpf.Program `ebpf:"trace_connect_enter"`
+	TraceConnectExit   *ebpf.Program `ebpf:"trace_connect_exit"`
+	TraceRecvfromEnter *ebpf.Program `ebpf:"trace_recvfrom_enter"`
+	TraceRecvfromExit  *ebpf.Program `ebpf:"trace_recvfrom_exit"`
+	TraceSendtoEnter   *ebpf.Program `ebpf:"trace_sendto_enter"`
+	TraceSendtoExit    *ebpf.Program `ebpf:"trace_sendto_exit"`
+	TraceTcpEst        *ebpf.Program `ebpf:"trace_tcp_est"`
 }
 
 func (p *bpfPrograms) Close() error {
@@ -216,13 +213,11 @@ func (p *bpfPrograms) Close() error {
 		p.TraceBindExit,
 		p.TraceConnectEnter,
 		p.TraceConnectExit,
-		p.TraceEnterGetsockname,
 		p.TraceRecvfromEnter,
 		p.TraceRecvfromExit,
 		p.TraceSendtoEnter,
 		p.TraceSendtoExit,
 		p.TraceTcpEst,
-		p.TraceTcpSyn,
 	)
 }
 
