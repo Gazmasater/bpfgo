@@ -17,79 +17,82 @@ sudo tcpdump -i any -nn 'tcp[tcpflags] & (tcp-syn) != 0'
 ls /sys/kernel/debug/tracing/events/sock/udp_sendmsg
 
 
-#define TCP_ESTABLISHED 1
-#define TCP_SYN_SENT 2
+package main
 
-SEC("tracepoint/sock/inet_sock_set_state")
-int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"strings"
+)
 
-
-    __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
-
-    __u32 srcip;
-    bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
-    srcip = bpf_ntohl(srcip);
-    
-    __u32 dstip;
-    bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
-    dstip = bpf_ntohl(dstip);
-       
-    __u16 sport=0;
-    
-    sport=ctx->sport;
-       
-    __u16 dport;
-    dport=ctx->dport;
-    
-    if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
-
-bpf_printk("inet_sock_set_state PID=%d srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d PROTO=%d ",
-    
-    pid_tcp,
-    (srcip >> 24) & 0xff,
-    (srcip >> 16) & 0xff,
-    (srcip >> 8) & 0xff,
-    (srcip) & 0xff,
-    sport,
-
-    (dstip >> 24) & 0xff,
-    (dstip >> 16) & 0xff,
-    (dstip >> 8) & 0xff,
-    (dstip) & 0xff,
-    dport,
-    ctx->protocol
-
-
-);
-
-struct trace_info info = {};
-
-info.src_ip=srcip;
-info.sport=sport;
-info.dst_ip=dstip;
-info.dport=dport;
-info.sysexit=6;
-info.proto=ctx->protocol;
-info.pid=pid_tcp;
-bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-
-
-
-
-    }
-
-    return 0;
+// Event — структура события
+type Event struct {
+	Pid     int
+	SrcIP   string
+	Sport   int
+	DstIP   string
+	DstPort int
+	Sysexit int
+	State   int
 }
 
+func parseEvent(line string) (Event, bool) {
+	var event Event
+	_, err := fmt.Sscanf(line, "PID=%d srcAddr=%s -> dstAddr=%s SYSCALL=%d STATE=%d",
+		&event.Pid, &event.SrcIP, &event.DstIP, &event.Sysexit, &event.State)
+	if err == nil {
+		parts := strings.Split(event.SrcIP, ":")
+		if len(parts) == 2 {
+			event.SrcIP = parts[0]
+			fmt.Sscanf(parts[1], "%d", &event.Sport)
+		}
+		parts = strings.Split(event.DstIP, ":")
+		if len(parts) == 2 {
+			event.DstIP = parts[0]
+			fmt.Sscanf(parts[1], "%d", &event.DstPort)
+		}
+		return event, true
+	}
+	return event, false
+}
 
+func main() {
+	portMap := make(map[string]int) // Карта для хранения портов STATE=1
 
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		line := scanner.Text()
+		event, ok := parseEvent(line)
+		if !ok {
+			continue
+		}
 
-PID=3531 srcAddr=192.168.1.71:0 -> dstAddr=185.199.110.154:443  SYSCALL=6 STATE=2
-PID=3531 srcAddr=192.168.1.71:0 -> dstAddr=185.199.111.133:443  SYSCALL=6 STATE=2
-PID=3531 srcAddr=192.168.1.71:0 -> dstAddr=140.82.121.4:443  SYSCALL=6 STATE=2
-PID=525 srcAddr=192.168.1.71:49274 <- dstAddr=185.199.110.154:443  SYSCALL=6 STATE=1
-PID=524 srcAddr=192.168.1.71:54470 <- dstAddr=185.199.111.133:443  SYSCALL=6 STATE=1
-PID=522 srcAddr=192.168.1.71:49518 <- dstAddr=140.82.121.4:443  SYSCALL=6 STATE=1
+		// Запоминаем порт, если STATE=1
+		if event.State == 1 {
+			key := fmt.Sprintf("%s->%s:%d", event.SrcIP, event.DstIP, event.DstPort)
+			portMap[key] = event.Sport
+		}
+
+		// Если SPORT=0 и есть соответствие в portMap — заменяем
+		if event.Sport == 0 {
+			key := fmt.Sprintf("%s->%s:%d", event.SrcIP, event.DstIP, event.DstPort)
+			if port, found := portMap[key]; found {
+				event.Sport = port
+			}
+		}
+
+		// Вывод обновлённых данных
+		srcAddr := fmt.Sprintf("%s:%d", event.SrcIP, event.Sport)
+		dstAddr := fmt.Sprintf("%s:%d", event.DstIP, event.DstPort)
+
+		if event.Sport == 0 {
+			fmt.Printf("PID=%d srcAddr=%s -> dstAddr=%s  SYSCALL=%d STATE=%d\n", event.Pid, srcAddr, dstAddr, event.Sysexit, event.State)
+		} else {
+			fmt.Printf("PID=%d srcAddr=%s <- dstAddr=%s  SYSCALL=%d STATE=%d\n", event.Pid, srcAddr, dstAddr, event.Sysexit, event.State)
+		}
+	}
+}
+
 
 
