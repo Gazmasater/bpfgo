@@ -16,37 +16,37 @@ sudo tcpdump -i any -nn 'tcp[tcpflags] & (tcp-syn) != 0'
 
 ls /sys/kernel/debug/tracing/events/sock/udp_sendmsg
 
-
 SEC("tracepoint/sock/inet_sock_set_state")
-int trace_tcp_syn(struct trace_event_raw_inet_sock_set_state *ctx) {
-
+int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 
 
     if (ctx->newstate == TCP_ESTABLISHED) {
 
+    __u32 pid2 = bpf_get_current_pid_tgid() >> 32;
         
 
 
-__u32 srcip;
-bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
-srcip = bpf_ntohl(srcip);
+    __u32 srcip;
+    bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
+    srcip = bpf_ntohl(srcip);
 
-__u32 dstip;
-bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
-dstip = bpf_ntohl(dstip);
-
-
-__u16 sport=0;
-
-sport=ctx->sport;
+    __u32 dstip;
+    bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
+    dstip = bpf_ntohl(dstip);
 
 
-__u16 dport;
-dport=ctx->dport;
+    __u16 sport=0;
+
+    sport=ctx->sport;
 
 
-bpf_printk("inet_sock_set_state srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d PROTO=%d ",
+    __u16 dport;
+    dport=ctx->dport;
 
+
+bpf_printk("inet_sock_ESTABLISHED  PID2=%d srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d PROTO=%d ",
+    
+    pid2,
     (srcip >> 24) & 0xff,
     (srcip >> 16) & 0xff,
     (srcip >> 8) & 0xff,
@@ -58,79 +58,53 @@ bpf_printk("inet_sock_set_state srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d PROT
     (dstip >> 8) & 0xff,
     (dstip) & 0xff,
     dport,
-    ctx->protocol
+    ctx->protocol);
+
+    } 
+
+    if (ctx->newstate == TCP_SYN_SENT){
+
+        __u32 pid1 = bpf_get_current_pid_tgid() >> 32;
+        
 
 
-);
+        __u32 srcip1;
+        bpf_probe_read_kernel(&srcip1, sizeof(srcip1), ctx->saddr);
+        srcip1 = bpf_ntohl(srcip1);
+    
+        __u32 dstip1;
+        bpf_probe_read_kernel(&dstip1, sizeof(dstip1), ctx->daddr);
+        dstip1 = bpf_ntohl(dstip1);
+    
+    
+        __u16 sport1=0;
+    
+        sport1=ctx->sport;
+    
+    
+        __u16 dport1;
+        dport1=ctx->dport;
+    
+    
+    bpf_printk("inet_sock_ESTABLISHED  PID1=%d srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d PROTO=%d ",
+        
+        pid1,
+        (srcip1 >> 24) & 0xff,
+        (srcip1 >> 16) & 0xff,
+        (srcip1 >> 8) & 0xff,
+        (srcip1) & 0xff,
+        sport1,
+    
+        (dstip1 >> 24) & 0xff,
+        (dstip1 >> 16) & 0xff,
+        (dstip1 >> 8) & 0xff,
+        (dstip1) & 0xff,
+        dport1,
+        ctx->protocol);
+    
+        
+    } 
 
-        __u32 pid = bpf_get_current_pid_tgid() >> 32;
-
-
-
-__u16 sport = 0;
-bpf_probe_read_kernel(&sport, sizeof(sport), &ctx->sport);
-sport = bpf_ntohs(sport);  // Преобразование из сетевого порядка в хостовый
-
-
-TCP_SYN_SENT — Инициатор отправил SYN-запрос, но еще не получил ответа.
-
-TCP_SYN_RECV — Получено SYN-ACK от другой стороны.
-
-TCP_ESTABLISHED — Соединение установлено, активный обмен данными.
-
-TCP_FIN_WAIT1 — Инициатор завершения соединения отправил FIN-запрос.
-
-TCP_FIN_WAIT2 — Ожидание завершения соединения от другой стороны.
-
-TCP_CLOSE_WAIT — Получен FIN-запрос от другой стороны, но еще не отправлен ACK.
-
-TCP_CLOSING — Ожидание FIN от другой стороны.
-
-TCP_LAST_ACK — Ожидание подтверждения от другой стороны после отправки FIN.
-
-TCP_TIME_WAIT — Ожидание завершения процесса закрытия соединения.
-
-TCP_CLOSE — Соединение завершено.
-
-
-
-
+    return 0;
 
     }
-
-    return 0;
-}
-
-
-
-SEC("tracepoint/sock/tcp_connect")
-int trace_tcp_connect(struct trace_event_raw_tcp_connect *ctx) {
-    __u32 srcip, dstip;
-    __u16 sport, dport;
-
-    bpf_probe_read_kernel(&srcip, sizeof(srcip), &ctx->saddr);
-    srcip = bpf_ntohl(srcip);
-
-    bpf_probe_read_kernel(&dstip, sizeof(dstip), &ctx->daddr);
-    dstip = bpf_ntohl(dstip);
-
-    sport = ctx->sport;
-    dport = ctx->dport;
-
-    bpf_printk("tcp_connect srcip=%d.%d.%d.%d:%d dstip=%d.%d.%d.%d:%d\n",
-               (srcip >> 24) & 0xff,
-               (srcip >> 16) & 0xff,
-               (srcip >> 8) & 0xff,
-               (srcip) & 0xff,
-               sport,
-               (dstip >> 24) & 0xff,
-               (dstip >> 16) & 0xff,
-               (dstip >> 8) & 0xff,
-               (dstip) & 0xff,
-               dport);
-    
-    return 0;
-}
-
-
-
