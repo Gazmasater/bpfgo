@@ -82,3 +82,17 @@ bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info)
     return 0;
 }
 
+
+
+
+__u8 state = ctx->newstate;
+
+bpf_printk("inet_sock_set_state PID=%d srcip=%d.%d.%d.%d:%d dstip=%d.%d.%d.%d:%d PROTO=%d STATE=%d",
+    pid_tcp,
+    (srcip >> 24) & 0xff, (srcip >> 16) & 0xff, (srcip >> 8) & 0xff, (srcip) & 0xff, sport,
+    (dstip >> 24) & 0xff, (dstip >> 16) & 0xff, (dstip >> 8) & 0xff, (dstip) & 0xff, dport,
+    ctx->protocol,
+    (__u32) state  // Явное приведение типа к 32-битному целому числу
+);
+
+
