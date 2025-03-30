@@ -42,5 +42,10 @@ ls /sys/kernel/debug/tracing/events/sock/udp_sendmsg
 				}
 
 
+    if port, found := portMap[key]; found {
+						event.Sport = uint16(port)
+					}
+
+
 
 
