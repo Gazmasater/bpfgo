@@ -22,56 +22,12 @@ dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstI
 
 
 
-var portMap = make(map[string]uint16) // Хранилище портов по IP+порт
-var mu sync.Mutex                     // Мьютекс для защиты portMap
+WARNING: Timeout waiting for port assignment (PID=5691)
+PID=5691 TCP: 192.168.1.71:0 <- 77.88.55.242:80 
+PID=482 TCP: 192.168.1.71:45992 -> 77.88.55.242:80 
+PID=5746 TCP: 192.168.1.71:45992 <- 77.88.55.242:80 
+PID=482 TCP: 192.168.1.71:40758 -> 77.88.55.242:80 
 
-if event.State == 2 {
-    select {
-    case port := <-portChan:
-        event.Sport = uint16(port)
-        mu.Lock()
-        // Формируем ключ прямо в коде, учитывая направление потока
-        key := fmt.Sprintf("%s:%s:%d:in", dstIP.String(), srcIP.String(), event.Dport)
-        portMap[key] = event.Sport
-        mu.Unlock()
-    case <-time.After(15 * time.Second):
-        fmt.Printf("WARNING: Timeout waiting for port assignment (PID=%d)\n", event.Pid)
-    }
 
-    srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
-    dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
-
-    if event.Proto == 6 {
-        proto = "TCP"
-    }
-
-    fmt.Printf("PID=%d %s: %s <- %s \n", event.Pid, proto, srcAddr, dstAddr)
-}
-
-if event.State == 1 {
-    mu.Lock()
-    // Формируем ключ для исходящего соединения
-    key := fmt.Sprintf("%s:%s:%d:out", srcIP.String(), dstIP.String(), event.Dport)
-    if port, ok := portMap[key]; ok {
-        event.Sport = port
-        delete(portMap, key) // Удаляем порт после использования
-    }
-    mu.Unlock()
-
-    srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
-    dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
-
-    if event.Proto == 6 {
-        proto = "TCP"
-    }
-
-    fmt.Printf("PID=%d %s: %s -> %s \n", event.Pid, proto, srcAddr, dstAddr)
-
-    // Отправляем порт в канал с задержкой 2 сек
-    go func(port int) {
-        time.Sleep(2 * time.Second)
-        portChan <- port
-    }(int(event.Sport))
-}
 
 
