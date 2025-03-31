@@ -21,43 +21,24 @@ srcAddr := fmt.Sprintf("%s:%d (%s)", srcIP.String(), event.Sport, ResolveIP(srcI
 dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstIP))
 
 
-package main
-
-import (
-	"fmt"
-	"sync"
-)
-
-// Канал с буфером 1 для хранения порта
-var eventChan = make(chan int, 1)
-var mu sync.Mutex
-
-func handleEvent(event Event) {
-	if event.State == 2 {
-		mu.Lock()
-		select {
-		case eventChan <- event.Sport:
-			fmt.Printf("State 2: сохранен порт %d\n", event.Sport)
-		default:
-			// Если канал уже содержит значение, заменяем его
-			<-eventChan
-			eventChan <- event.Sport
-			fmt.Printf("State 2: заменен порт %d\n", event.Sport)
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"code": {
+		"value": "InvalidSend",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "InvalidSend"
 		}
-		mu.Unlock()
-	}
-
-	if event.State == 1 {
-		mu.Lock()
-		select {
-		case xxx := <-eventChan:
-			fmt.Printf("State 1: получен порт %d\n", xxx)
-			srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), xxx)
-			dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
-			fmt.Printf("PID=%d %s <- %s\n", event.Pid, srcAddr, dstAddr)
-		default:
-			fmt.Println("State 1: канал пуст, порт не получен")
-		}
-		mu.Unlock()
-	}
-}
+	},
+	"severity": 8,
+	"message": "invalid operation: cannot send to non-channel xxx (variable of type int)",
+	"source": "compiler",
+	"startLineNumber": 205,
+	"startColumn": 11,
+	"endLineNumber": 205,
+	"endColumn": 27
+}]
