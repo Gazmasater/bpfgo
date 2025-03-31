@@ -21,30 +21,29 @@ srcAddr := fmt.Sprintf("%s:%d (%s)", srcIP.String(), event.Sport, ResolveIP(srcI
 dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstIP))
 
 
-			if event.Sysexit == 6 {
+		if event.State == 1 {
+			mu.Lock()
+			xxx := event.Sport // Присваиваем xxx значение event.Sport
+			xxxChan <- xxx     // Передаём xxx в канал
+			mu.Unlock()
 
-				if event.State == 1 {
-					mu.Lock()
+			srcAddr := fmt.Sprintf("%s:%d", event.SrcIP.String(), event.Sport)
+			dstAddr := fmt.Sprintf("%s:%d", event.DstIP.String(), event.Dport)
 
-					key := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
-					portMap[key] = event.Sport // Сохраняем порт для состояния 2
-					mu.Unlock()
+			fmt.Printf("PID=%d %s <- %s\n", event.Pid, srcAddr, dstAddr)
+		}
 
-					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
-					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
+		if event.State == 2 {
+			mu.Lock()
+			xxx := <-xxxChan // Получаем xxx из канала
+			mu.Unlock()
 
-					fmt.Printf("PID=%d %s <- %s\n", event.Pid, srcAddr, dstAddr)
-				}
+			srcAddr := fmt.Sprintf("%s:%d", event.SrcIP.String(), xxx)
+			dstAddr := fmt.Sprintf("%s:%d", event.DstIP.String(), event.Dport)
 
-				if event.State == 2 {
+			fmt.Printf("PID=%d %s -> %s\n", event.Pid, srcAddr, dstAddr)
+		}
 
-					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
-					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
-
-					fmt.Printf("PID=%d %s -> %s\n", event.Pid, srcAddr, dstAddr)
-				}
-
-			}
 
 
 
