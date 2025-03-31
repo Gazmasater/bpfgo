@@ -21,48 +21,50 @@ srcAddr := fmt.Sprintf("%s:%d (%s)", srcIP.String(), event.Sport, ResolveIP(srcI
 dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstIP))
 
 
-			if event.Sysexit == 6 {
+var lastPid *int // Указатель на PID
 
-				var xxx int
-				var xxx_pid int
+if event.Sysexit == 6 {
 
-				if event.State == 1 {
+	var xxx int
 
-					mu.Lock()
-					select {
-					case eventChan <- int(event.Sport):
-					default:
-						// Если канал уже содержит значение, заменяем его
-						//	<-eventChan
-						eventChan <- int(event.Sport)
-						fmt.Printf("State 1: заменен порт %d\n", event.Sport)
-					}
-					mu.Unlock()
-					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
-					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
-					fmt.Printf("PID=%d PROTO=%d %s <- %s \n", event.Pid, event.Proto, srcAddr, dstAddr)
+	if event.State == 1 {
+		mu.Lock()
+		select {
+		case eventChan <- int(event.Sport):
+		default:
+			eventChan <- int(event.Sport)
+			fmt.Printf("State 1: заменен порт %d\n", event.Sport)
+		}
+		mu.Unlock()
+		srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
+		dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
+		fmt.Printf("PID=%d PROTO=%d %s <- %s \n", event.Pid, event.Proto, srcAddr, dstAddr)
+	}
 
-				}
-				if event.State == 2 {
+	if event.State == 2 {
+		pid := int(event.Pid) // Локальная переменная
+		lastPid = &pid        // Запоминаем PID через указатель
+		fmt.Println("Запомнил PID:", *lastPid)
+	}
 
-					xxx_pid = int(event.Pid)
+	select {
+	case xxx = <-eventChan:
+		srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), xxx)
+		dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
 
-					fmt.Println("xxx_pid", xxx_pid)
+		// Если lastPid не nil, используем его значение
+		if lastPid != nil {
+			fmt.Printf("PID=%d PROTO=%d %s -> %s \n", *lastPid, event.Proto, srcAddr, dstAddr)
+		} else {
+			fmt.Println("PID не установлен, пропускаю вывод")
+		}
 
-				}
+	default:
+		fmt.Println("State 2: канал пуст, пропускаю чтение")
+	}
 
-				select {
+}
 
-				case xxx = <-eventChan:
-					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), xxx)
-					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
-					fmt.Printf("PID=%d PROTO=%d %s -> %s \n", xxx_pid, event.Proto, srcAddr, dstAddr)
-
-				default:
-					fmt.Println("State 2: канал пуст, пропускаю чтение")
-				}
-
-			}
 
 
 
