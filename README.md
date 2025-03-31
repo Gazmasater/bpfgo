@@ -22,66 +22,32 @@ dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstI
 
 
 
-if event.Sysexit == 6 {
-    var proto string
+			if event.Sysexit == 6 {
 
-    if event.State == 2 {
-        select {
-        case port := <-portChan:
-            event.Sport = uint16(port)
-            mu.Lock()
-            // Формируем ключ для входящего соединения
-            key := fmt.Sprintf("%s:%s:%d:in", dstIP.String(), srcIP.String(), event.Dport)
-            portMap[key] = event.Sport // Записываем порт в мапу
-            fmt.Printf("Assigned port %d to incoming connection (PID=%d)\n", event.Sport, event.Pid) // Логируем назначение порта
-            mu.Unlock()
+				if event.State == 2 {
+					// Формируем ключ для входящего соединения
+					//key := fmt.Sprintf("%s:%s:%d:in", dstIP.String(), srcIP.String(), event.Dport)
 
-            // Формируем адреса для вывода
-            srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
-            dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
+					// Формируем адреса для вывода
+					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
+					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
 
-            if event.Proto == 6 {
-                proto = "TCP"
-            }
+					fmt.Printf("PID=%d %s <- %s  \n", event.Pid, srcAddr, dstAddr)
 
-            fmt.Printf("PID=%d %s: %s <- %s \n", event.Pid, proto, srcAddr, dstAddr)
+				}
+			}
 
-        case <-time.After(15 * time.Second):
-            fmt.Printf("WARNING: Timeout waiting for port assignment (PID=%d)\n", event.Pid)
-        }
-    }
+			if event.State == 1 {
+				// Формируем ключ для исходящего соединения
+				//key := fmt.Sprintf("%s:%s:%d:out", srcIP.String(), dstIP.String(), event.Dport)
 
-    if event.State == 1 {
-        mu.Lock()
-        // Формируем ключ для исходящего соединения
-        key := fmt.Sprintf("%s:%s:%d:out", srcIP.String(), dstIP.String(), event.Dport)
-        if port, ok := portMap[key]; ok {
-            event.Sport = port // Получаем порт из мапы
-            delete(portMap, key) // Удаляем порт из мапы после использования
-            fmt.Printf("Using port %d for outgoing connection (PID=%d)\n", port, event.Pid) // Логируем использование порта
-            mu.Unlock()
+				srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
+				dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
 
-            // Формируем адреса для вывода
-            srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
-            dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
+				fmt.Printf("PID=%d %s: -> %s \n", event.Pid, srcAddr, dstAddr)
 
-            if event.Proto == 6 {
-                proto = "TCP"
-            }
+			}
 
-            fmt.Printf("PID=%d %s: %s -> %s \n", event.Pid, proto, srcAddr, dstAddr)
-
-            // Отправляем порт в канал с задержкой 2 сек
-            go func(port int) {
-                time.Sleep(2 * time.Second)
-                portChan <- port
-            }(int(event.Sport))
-        } else {
-            fmt.Printf("No port found for outgoing connection (PID=%d)\n", event.Pid) // Логируем, если порта нет
-            mu.Unlock()
-        }
-    }
-}
 
 
 
