@@ -30,11 +30,11 @@ dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstI
 
 					mu.Lock()
 					select {
-					case eventChan <- int(event.Sport):
+					case eventChan_sport <- int(event.Sport):
 					default:
 						// Если канал уже содержит значение, заменяем его
 						//	<-eventChan
-						eventChan <- int(event.Sport)
+						eventChan_sport <- int(event.Sport)
 						fmt.Printf("State 1: заменен порт %d\n", event.Sport)
 					}
 					mu.Unlock()
@@ -61,11 +61,17 @@ dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstI
 
 				select {
 
-				case xxx = <-eventChan:
+				case xxx = <-eventChan_sport:
 					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), xxx)
 					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
 
-					//xxx_pid = <-eventChan_pid
+					select {
+					case xxx_pid = <-eventChan_pid:
+						//fmt.Printf("State 2: получил PID %d\n", xxx_pid)
+					default:
+						fmt.Println("State 2: eventChan_pid пуст, PID неизвестен")
+					}
+
 					if event.Proto == 6 {
 
 						proto = "TCP"
@@ -79,14 +85,6 @@ dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstI
 
 			}
 
-
-
-		select {
-		case xxx_pid = <-eventChan_pid:
-			fmt.Printf("State 2: получил PID %d\n", xxx_pid)
-		default:
-			fmt.Println("State 2: eventChan_pid пуст, PID неизвестен")
-		}
 
 
 
