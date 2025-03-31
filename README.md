@@ -24,6 +24,7 @@ dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstI
 			if event.Sysexit == 6 {
 
 				var xxx int
+				var xxx_pid int
 
 				if event.State == 1 {
 
@@ -39,31 +40,30 @@ dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstI
 					mu.Unlock()
 					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
 					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
-					fmt.Printf("PID=%d %s <- %s STATE=%d\n", event.Pid, srcAddr, dstAddr, event.State)
+					fmt.Printf("PID=%d PROTO=%d %s <- %s \n", event.Pid, event.Proto, srcAddr, dstAddr)
 
 				}
 				if event.State == 2 {
 
-					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
-					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
-					fmt.Printf("PID=%d %s -> %s STATE=%d\n", event.Pid, srcAddr, dstAddr, event.State)
+					xxx_pid = int(event.Pid)
+
+					fmt.Println("xxx_pid", xxx_pid)
 
 				}
 
-				xxx = <-eventChan
-				fmt.Printf("State 2: peredal порт %d\n", xxx)
-				fmt.Println(" peredal")
+				select {
+
+				case xxx = <-eventChan:
+					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), xxx)
+					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
+					fmt.Printf("PID=%d PROTO=%d %s -> %s \n", xxx_pid, event.Proto, srcAddr, dstAddr)
+
+				default:
+					fmt.Println("State 2: канал пуст, пропускаю чтение")
+				}
 
 			}
 
-
-
-   select {
-case xxx = <-eventChan:
-    fmt.Printf("State 2: peredal порт %d\n", xxx)
-default:
-    fmt.Println("State 2: канал пуст, пропускаю чтение")
-}
 
 
 
