@@ -78,7 +78,27 @@ func handleEvent(event Event) {
 
 
 
-
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "IncompatibleAssign",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "IncompatibleAssign"
+		}
+	},
+	"severity": 8,
+	"message": "cannot use event.Sport (variable of type uint16) as int value in send",
+	"source": "compiler",
+	"startLineNumber": 186,
+	"startColumn": 19,
+	"endLineNumber": 186,
+	"endColumn": 30
+}]
 
 
 
