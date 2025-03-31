@@ -21,55 +21,43 @@ srcAddr := fmt.Sprintf("%s:%d (%s)", srcIP.String(), event.Sport, ResolveIP(srcI
 dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstIP))
 
 
-				if event.State == 1 {
+package main
 
-					eventChan <- int(event.Sport)
+import (
+	"fmt"
+	"sync"
+)
 
-					mu.Lock()
+// Канал с буфером 1 для хранения порта
+var eventChan = make(chan int, 1)
+var mu sync.Mutex
 
-					// Извлекаем значение из канала, если оно есть
-					select {
+func handleEvent(event Event) {
+	if event.State == 2 {
+		mu.Lock()
+		select {
+		case eventChan <- event.Sport:
+			fmt.Printf("State 2: сохранен порт %d\n", event.Sport)
+		default:
+			// Если канал уже содержит значение, заменяем его
+			<-eventChan
+			eventChan <- event.Sport
+			fmt.Printf("State 2: заменен порт %d\n", event.Sport)
+		}
+		mu.Unlock()
+	}
 
-					case xxx = <-eventChan: // Сохраняем значение в переменной xxx
-						fmt.Printf("State 1: получено значение Sport = %d\n", xxx)
-					default:
-						// Канал пуст, ничего не делаем
-					}
-					mu.Unlock()
-
-					// Формируем адреса и выводим информацию
-					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
-					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
-
-					fmt.Printf("PID=%d %s <- %s, xxx=%d\n", event.Pid, srcAddr, dstAddr, xxx)
-				}
-
-				if event.State == 2 {
-					select {
-					case xxx = <-eventChan: // Извлекаем значение Sport из канала и сохраняем его в xxx
-						fmt.Printf("State 1: получено значение Sport = %d\n", xxx)
-
-					default:
-						// Канал пуст, ничего не делаем
-					}
-					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), xxx)
-					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
-
-					fmt.Printf("PID=%d %s -> %s\n", event.Pid, srcAddr, dstAddr)
-
-				}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+	if event.State == 1 {
+		mu.Lock()
+		select {
+		case xxx := <-eventChan:
+			fmt.Printf("State 1: получен порт %d\n", xxx)
+			srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), xxx)
+			dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
+			fmt.Printf("PID=%d %s <- %s\n", event.Pid, srcAddr, dstAddr)
+		default:
+			fmt.Println("State 1: канал пуст, порт не получен")
+		}
+		mu.Unlock()
+	}
+}
