@@ -32,6 +32,9 @@ if event.Sysexit == 6 {
         if port, ok := portMap[key]; ok {
             event.Sport = port // Берем порт из состояния 1
             delete(portMap, key) // Удаляем после использования
+        } else if event.Sport == 0 {
+            mu.Unlock()
+            return // Пропускаем, если порт не найден и он нулевой
         }
         mu.Unlock()
 
@@ -44,7 +47,9 @@ if event.Sysexit == 6 {
     if event.State == 1 {
         mu.Lock()
         key := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
-        portMap[key] = event.Sport // Сохраняем порт для состояния 2
+        if _, exists := portMap[key]; !exists {
+            portMap[key] = event.Sport // Сохраняем порт для состояния 2
+        }
         mu.Unlock()
 
         srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
@@ -54,12 +59,6 @@ if event.Sysexit == 6 {
     }
 }
 
-Дескриптор нового namespace: 6
-Press Ctrl+C to exit
-PID=6013 192.168.1.71:0 <- 77.88.44.242:80
-PID=536 192.168.1.71:38352 -> 77.88.44.242:80
-PID=6071 192.168.1.71:38352 <- 77.88.44.242:80
-PID=538 192.168.1.71:52290 -> 77.88.44.242:80
 
 
 
