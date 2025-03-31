@@ -81,6 +81,12 @@ dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstI
 
 
 
+		select {
+		case xxx_pid = <-eventChan_pid:
+			fmt.Printf("State 2: получил PID %d\n", xxx_pid)
+		default:
+			fmt.Println("State 2: eventChan_pid пуст, PID неизвестен")
+		}
 
 
 
