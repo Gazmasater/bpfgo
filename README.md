@@ -21,29 +21,65 @@ srcAddr := fmt.Sprintf("%s:%d (%s)", srcIP.String(), event.Sport, ResolveIP(srcI
 dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstIP))
 
 
-if event.Sysexit == 6 {
+			if event.Sysexit == 6 {
 
-	var xxx_pid int
+				var xxx, xxx_pid int
+				var proto string
 
-	if event.State == 2 {
-		mu.Lock()
-		select {
-		case eventChan_pid <- int(event.Pid):
-			fmt.Printf("State 2: записал PID %d\n", event.Pid)
-		default:
-			fmt.Println("State 2: eventChan_pid заполнен, пропускаю запись PID")
-		}
-		mu.Unlock()
-	}
+				if event.State == 1 {
 
-	// Читаем PID из eventChan_pid
-	select {
-	case xxx_pid = <-eventChan_pid:
-		fmt.Printf("PID=%d PROTO=%d \n", xxx_pid, event.Proto)
-	default:
-		fmt.Println("State 2: eventChan_pid пуст, PID неизвестен")
-	}
-}
+					mu.Lock()
+					select {
+					case eventChan <- int(event.Sport):
+					default:
+						// Если канал уже содержит значение, заменяем его
+						//	<-eventChan
+						eventChan <- int(event.Sport)
+						fmt.Printf("State 1: заменен порт %d\n", event.Sport)
+					}
+					mu.Unlock()
+					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
+					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
+
+					if event.Proto == 6 {
+
+						proto = "TCP"
+					}
+
+					fmt.Printf("PID=%d %s %s <- %s \n", event.Pid, proto, srcAddr, dstAddr)
+
+				}
+				if event.State == 2 {
+					mu.Lock()
+					select {
+					case eventChan_pid <- int(event.Pid):
+					default:
+						fmt.Println("State 2: eventChan_pid заполнен, пропускаю запись PID")
+					}
+					mu.Unlock()
+				}
+
+				select {
+
+				case xxx = <-eventChan:
+					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), xxx)
+					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
+
+					//xxx_pid = <-eventChan_pid
+					if event.Proto == 6 {
+
+						proto = "TCP"
+					}
+
+					fmt.Printf("PID=%d %s %s <- %s \n", xxx_pid, proto, srcAddr, dstAddr)
+
+				default:
+					fmt.Println("")
+				}
+
+			}
+
+
 
 
 
