@@ -58,3 +58,13 @@ dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstI
 
 
 
+   select {
+case xxx = <-eventChan:
+    fmt.Printf("State 2: peredal порт %d\n", xxx)
+default:
+    fmt.Println("State 2: канал пуст, пропускаю чтение")
+}
+
+
+
+
