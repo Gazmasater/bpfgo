@@ -86,6 +86,19 @@ dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstI
 			}
 
 
+   [{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "go-staticcheck",
+	"severity": 4,
+	"message": "var xxx is unused (U1000)",
+	"source": "go-staticcheck",
+	"startLineNumber": 29,
+	"startColumn": 5,
+	"endLineNumber": 29,
+	"endColumn": 12
+}]
+
+
 
 
 
