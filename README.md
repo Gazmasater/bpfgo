@@ -20,6 +20,8 @@ ls /sys/kernel/debug/tracing/events/sock/udp_sendmsg
 srcAddr := fmt.Sprintf("%s:%d (%s)", srcIP.String(), event.Sport, ResolveIP(srcIP))
 dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstIP))
 
+
+
 var portMap = make(map[string]uint16) // Хранилище портов по IP+порт
 var mu sync.Mutex                     // Мьютекс для защиты portMap
 
@@ -28,7 +30,8 @@ if event.State == 2 {
     case port := <-portChan:
         event.Sport = uint16(port)
         mu.Lock()
-        key := fmt.Sprintf("%s:%s:%d", dstIP.String(), srcIP.String(), event.Dport)
+        // Формируем ключ прямо в коде, учитывая направление потока
+        key := fmt.Sprintf("%s:%s:%d:in", dstIP.String(), srcIP.String(), event.Dport)
         portMap[key] = event.Sport
         mu.Unlock()
     case <-time.After(15 * time.Second):
@@ -47,7 +50,8 @@ if event.State == 2 {
 
 if event.State == 1 {
     mu.Lock()
-    key := fmt.Sprintf("%s:%s:%d", srcIP.String(), dstIP.String(), event.Dport)
+    // Формируем ключ для исходящего соединения
+    key := fmt.Sprintf("%s:%s:%d:out", srcIP.String(), dstIP.String(), event.Dport)
     if port, ok := portMap[key]; ok {
         event.Sport = port
         delete(portMap, key) // Удаляем порт после использования
@@ -69,4 +73,5 @@ if event.State == 1 {
         portChan <- port
     }(int(event.Sport))
 }
+
 
