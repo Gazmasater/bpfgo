@@ -17,8 +17,6 @@ sudo tcpdump -i any -nn 'tcp[tcpflags] & (tcp-syn) != 0'
 ls /sys/kernel/debug/tracing/events/sock/udp_sendmsg
 
 
-			if event.Sysexit == 6 {
-
 				if event.State == 1 {
 					key := fmt.Sprintf("%s->%s:%d", srcIP.String(), dstIP.String(), event.Dport)
 
@@ -33,9 +31,8 @@ ls /sys/kernel/debug/tracing/events/sock/udp_sendmsg
 				if event.State == 2 {
 
 					key := fmt.Sprintf("%s->%s:%d", srcIP.String(), dstIP.String(), event.Dport)
-					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
-					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
-					fmt.Printf("!!!!!!!PID=%d srcAddr=%s -> dstAddr=%s  STATE=%d\n", event.Pid, srcAddr, dstAddr, event.State)
+
+					time.Sleep(10 * time.Second)
 
 					if port, found := portMap[key]; found {
 
@@ -43,9 +40,14 @@ ls /sys/kernel/debug/tracing/events/sock/udp_sendmsg
 
 					}
 
+					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
+					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
+					fmt.Printf("!!!!!!!PID=%d srcAddr=%s -> dstAddr=%s  STATE=%d\n", event.Pid, srcAddr, dstAddr, event.State)
+
 				}
 
 			}
+
 
 
 
