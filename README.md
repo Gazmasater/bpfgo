@@ -21,30 +21,23 @@ srcAddr := fmt.Sprintf("%s:%d (%s)", srcIP.String(), event.Sport, ResolveIP(srcI
 dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstIP))
 
 
-			if event.Sysexit == 6 {
+var eventChan = make(chan int, 1)
 
-				if event.State == 1 {
-					mu.Lock()
 
-					key := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
-					portMap[key] = event.Sport // Сохраняем порт для состояния 2
-					mu.Unlock()
+if event.State == 2 {
+    eventChan <- event.Sport // Сохраняем значение Sport в канал
+    fmt.Printf("State 2: отправлено значение Sport = %d\n", event.Sport)
+}
 
-					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
-					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
+if event.State == 1 {
+    select {
+    case xxx = <-eventChan: // Извлекаем значение Sport из канала и сохраняем его в xxx
+        fmt.Printf("State 1: получено значение Sport = %d\n", xxx)
+    default:
+        // Канал пуст, ничего не делаем
+    }
+}
 
-					fmt.Printf("PID=%d %s <- %s\n", event.Pid, srcAddr, dstAddr)
-				}
-
-				if event.State == 2 {
-
-					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
-					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
-
-					fmt.Printf("PID=%d %s -> %s\n", event.Pid, srcAddr, dstAddr)
-				}
-
-			}
 
 
 
