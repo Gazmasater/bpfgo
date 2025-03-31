@@ -24,32 +24,57 @@ dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstI
 var eventChan = make(chan int, 1)
 
 
-if event.State == 2 {
-    eventChan <- event.Sport // Сохраняем значение Sport в канал
-    fmt.Printf("State 2: отправлено значение Sport = %d\n", event.Sport)
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+var mu sync.Mutex
+
+// Канал для передачи значения Sport, буферизированный для хранения нескольких значений
+var eventChan = make(chan int, 10)
+
+func handleEvent(event Event) {
+	var xxx int // Переменная для хранения значения из состояния 2
+
+	if event.Sysexit == 6 {
+
+		if event.State == 1 {
+			mu.Lock()
+
+			// Извлекаем значение из канала, если оно есть
+			select {
+			case xxx = <-eventChan: // Сохраняем значение в переменной xxx
+				fmt.Printf("State 1: получено значение Sport = %d\n", xxx)
+			default:
+				// Канал пуст, ничего не делаем
+			}
+			mu.Unlock()
+
+			// Формируем адреса и выводим информацию
+			srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
+			dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
+
+			fmt.Printf("PID=%d %s <- %s, xxx=%d\n", event.Pid, srcAddr, dstAddr, xxx)
+		}
+
+		if event.State == 2 {
+			// Передаем значение Sport в канал для использования в состоянии 1
+			eventChan <- event.Sport
+			fmt.Printf("State 2: отправлено значение Sport = %d\n", event.Sport)
+
+			// Формируем адреса и выводим информацию
+			srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
+			dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
+
+			fmt.Printf("PID=%d %s -> %s\n", event.Pid, srcAddr, dstAddr)
+		}
+	}
 }
 
-if event.State == 1 {
-    select {
-    case xxx = <-eventChan: // Извлекаем значение Sport из канала и сохраняем его в xxx
-        fmt.Printf("State 1: получено значение Sport = %d\n", xxx)
-    default:
-        // Канал пуст, ничего не делаем
-    }
-}
 
-
-PID=7493 192.168.1.71:0 -> 77.88.55.242:80
-PID=535 192.168.1.71:35908 <- 77.88.55.242:80
-State 1: получено значение Sport = 35908
-PID=988 192.168.1.71:35908 -> 185.125.190.49:80
-PID=537 192.168.1.71:55356 <- 185.125.190.49:80
-State 1: получено значение Sport = 55356
-PID=7600 192.168.1.71:55356 -> 173.194.73.141:443
-PID=536 192.168.1.71:41522 <- 173.194.73.141:443
-State 1: получено значение Sport = 41522
-PID=4107 192.168.1.71:41522 -> 13.107.246.45:443
-PID=534 192.168.1.71:45552 <- 13.107.246.45:443
 
 
 
