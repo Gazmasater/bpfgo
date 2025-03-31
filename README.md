@@ -21,84 +21,43 @@ srcAddr := fmt.Sprintf("%s:%d (%s)", srcIP.String(), event.Sport, ResolveIP(srcI
 dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstIP))
 
 
-var eventChan = make(chan int, 1)
+				if event.State == 1 {
 
+					eventChan <- int(event.Sport)
 
-package main
+					mu.Lock()
 
-import (
-	"fmt"
-	"sync"
-)
+					// Извлекаем значение из канала, если оно есть
+					select {
 
-var mu sync.Mutex
+					case xxx = <-eventChan: // Сохраняем значение в переменной xxx
+						fmt.Printf("State 1: получено значение Sport = %d\n", xxx)
+					default:
+						// Канал пуст, ничего не делаем
+					}
+					mu.Unlock()
 
-// Канал для передачи значения Sport, буферизированный для хранения нескольких значений
-var eventChan = make(chan int, 10)
+					// Формируем адреса и выводим информацию
+					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
+					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
 
-func handleEvent(event Event) {
-	var xxx int // Переменная для хранения значения из состояния 2
+					fmt.Printf("PID=%d %s <- %s, xxx=%d\n", event.Pid, srcAddr, dstAddr, xxx)
+				}
 
-	if event.Sysexit == 6 {
+				if event.State == 2 {
+					select {
+					case xxx = <-eventChan: // Извлекаем значение Sport из канала и сохраняем его в xxx
+						fmt.Printf("State 1: получено значение Sport = %d\n", xxx)
 
-		if event.State == 1 {
-			mu.Lock()
+					default:
+						// Канал пуст, ничего не делаем
+					}
+					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), xxx)
+					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
 
-			// Извлекаем значение из канала, если оно есть
-			select {
-			case xxx = <-eventChan: // Сохраняем значение в переменной xxx
-				fmt.Printf("State 1: получено значение Sport = %d\n", xxx)
-			default:
-				// Канал пуст, ничего не делаем
-			}
-			mu.Unlock()
+					fmt.Printf("PID=%d %s -> %s\n", event.Pid, srcAddr, dstAddr)
 
-			// Формируем адреса и выводим информацию
-			srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
-			dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
-
-			fmt.Printf("PID=%d %s <- %s, xxx=%d\n", event.Pid, srcAddr, dstAddr, xxx)
-		}
-
-		if event.State == 2 {
-			// Передаем значение Sport в канал для использования в состоянии 1
-			eventChan <- event.Sport
-			fmt.Printf("State 2: отправлено значение Sport = %d\n", event.Sport)
-
-			// Формируем адреса и выводим информацию
-			srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
-			dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
-
-			fmt.Printf("PID=%d %s -> %s\n", event.Pid, srcAddr, dstAddr)
-		}
-	}
-}
-
-
-
-
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "IncompatibleAssign",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "IncompatibleAssign"
-		}
-	},
-	"severity": 8,
-	"message": "cannot use event.Sport (variable of type uint16) as int value in send",
-	"source": "compiler",
-	"startLineNumber": 186,
-	"startColumn": 19,
-	"endLineNumber": 186,
-	"endColumn": 30
-}]
+				}
 
 
 
