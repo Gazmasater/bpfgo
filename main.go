@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"unsafe"
 
@@ -18,6 +19,18 @@ import (
 
 // Глобальные объекты BPF
 var objs bpfObjects
+
+var eventChan_sport = make(chan int, 1)
+
+var eventChan_pid = make(chan int, 1)
+
+var mu sync.Mutex
+
+var xxx int
+var xxx_pid int
+var proto string
+var srchost string
+var dsthost string
 
 func init() {
 	// Снимаем ограничение на память
@@ -125,6 +138,7 @@ func main() {
 	// Канал для завершения работы
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	//portChan := make(chan int, 1)
 
 	// Запускаем цикл чтения событий eBPF
 	go func() {
@@ -153,8 +167,6 @@ func main() {
 			// Приводим прочитанные данные к структуре bpfTraceInfo
 			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
 
-			//	portsMap := make(map[string]string)
-
 			// Преобразуем IP-адреса в строковый формат
 			srcIP := net.IPv4(
 				byte(event.SrcIp>>24),
@@ -170,63 +182,84 @@ func main() {
 				byte(event.DstIp),
 			)
 
-			// Формируем строковые представления адресов с портами
-			srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
-			dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
-
 			if pkg.Int8ToString(event.Comm) == executableName {
 				continue
 			}
 
-			if event.Sysexit == 1 {
-				fmt.Printf("PID=%d dstAddr=%s  SYSCALL=%d\n", event.Pid, dstAddr, event.Sysexit)
-			}
-
-			if event.Sysexit == 2 {
-				fmt.Printf("PID=%d srcAddr=%s  SYSCALL=%d\n", event.Pid, srcAddr, event.Sysexit)
-			}
-
-			if event.Sysexit == 3 {
-				fmt.Printf("srcAddr=%s dstAddr=%s  SYSCALL=%d  PROTO=%d\n", srcAddr, dstAddr, event.Sysexit, event.Proto)
-			}
-
-			if event.Sysexit == 4 {
-				fmt.Printf("PID=%d dstAddr=%s  SYSCALL=%d  FD=%d \n", event.Pid, dstAddr, event.Sysexit, event.Fd)
-			}
-
-			if event.Sysexit == 5 {
-				fmt.Printf("PID=%d srcAddr=%s  SYSCALL=%d\n", event.Pid, srcAddr, event.Sysexit)
-			}
-
 			if event.Sysexit == 6 {
-				if event.Sport == 0 {
-					fmt.Printf("PID=%d srcAddr=%s -> dstAddr=%s  SYSCALL=%d STATE=%d\n", event.Pid, srcAddr, dstAddr, event.Sysexit, event.State)
-				} else {
-					fmt.Printf("PID=%d srcAddr=%s <- dstAddr=%s  SYSCALL=%d STATE=%d\n", event.Pid, srcAddr, dstAddr, event.Sysexit, event.State)
+
+				if event.State == 1 {
+
+					mu.Lock()
+					select {
+					case eventChan_sport <- int(event.Sport):
+					default:
+						// Если канал уже содержит значение, заменяем его
+						//	<-eventChan
+						eventChan_sport <- int(event.Sport)
+						fmt.Printf("State 1: заменен порт %d\n", event.Sport)
+					}
+					mu.Unlock()
+
+					// var srchost string
+					// var dsthost string
+
+					srchost = pkg.ResolveIP(srcIP)
+					dsthost = pkg.ResolveIP(dstIP)
+
+					srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
+					dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
+
+					if event.Proto == 6 {
+
+						proto = "TCP:"
+					}
+
+					fmt.Printf("PID=%d %s%s <- %s%s \n", event.Pid, proto, srcAddr, proto, dstAddr)
 
 				}
+				if event.State == 2 {
+					mu.Lock()
+					select {
+					case eventChan_pid <- int(event.Pid):
+					default:
+						//fmt.Println("State 2: eventChan_pid заполнен, пропускаю запись PID")
+					}
+					mu.Unlock()
+				}
+
+				select {
+
+				case xxx = <-eventChan_sport:
+					var srchost string
+					var dsthost string
+
+					srchost = pkg.ResolveIP(srcIP)
+					dsthost = pkg.ResolveIP(dstIP)
+
+					srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), xxx)
+					dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
+
+					select {
+					case xxx_pid = <-eventChan_pid:
+						//fmt.Printf("State 2: получил PID %d\n", xxx_pid)
+					default:
+						//fmt.Println("State 2: eventChan_pid пуст, PID неизвестен")
+					}
+
+					if event.Proto == 6 {
+
+						proto = "TCP"
+					}
+
+					fmt.Printf("PID=%d %s%s -> %s%s \n", xxx_pid, proto, srcAddr, proto, dstAddr)
+
+				default:
+					fmt.Println("")
+				}
+
 			}
 
-			// if event.Sysexit == 4 {
-			// 	portsMap[dstAddr] = srcAddr
-			// }
-
-			//fmt.Printf("%s -> %s (PROTO: %d)\n", srcAddr, dstAddr, event.Proto)
-
-			// Выводим все данные
-			// event.Proto == 6 || event.Proto == 17 {
-			// fmt.Printf("PID=%d Comm=%s ,SrcIP: %s, SrcPort: %d -> DstIP: %s, DstPort: %d  SYSCALL=%d\n",
-			// 	event.Pid,
-			// 	pkg.Int8ToString(event.Comm),
-			// 	srcIP.String(),
-			// 	//	pkg.ResolveIP(srcIP),
-			// 	event.Sport,
-			// 	dstIP.String(),
-			// 	//pkg.ResolveIP(dstIP),
-			// 	event.Dport,
-			// 	event.Sysexit,
-			// )
-			//}
 		}
 
 	}()

@@ -875,10 +875,11 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
     dport=ctx->dport;
 
    __u8 state=ctx->newstate;
+
     
     if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
 
-bpf_printk("inet_sock_set_state PID=%d srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d PROTO=%d STATE=%d",
+bpf_printk("inet_sock_set_state PID=%d srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d PROTO=%d ",
     
     pid_tcp,
     (srcip >> 24) & 0xff,
