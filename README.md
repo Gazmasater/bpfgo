@@ -22,10 +22,8 @@ dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstI
 
 
 
-WARNING: Timeout waiting for port assignment (PID=5382)
-No port found for outgoing connection (PID=465)
-WARNING: Timeout waiting for port assignment (PID=5443)
-No port found for outgoing connection (PID=466)
+ curl-3950    [005] ...21    90.326815: bpf_trace_printk: inet_sock_set_state PID=3950 srcip=192.168.1.71:0   dstip=77.88.44.242:80 PROTO=6 
+           <...>-534     [002] ..s41    90.340175: bpf_trace_printk: inet_sock_set_state PID=534 srcip=192.168.1.71:35350   dstip=77.88.44.242:80 PROTO=6 
 
 
 
