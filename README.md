@@ -23,16 +23,13 @@ dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstI
 var portMap = make(map[string]uint16) // Хранилище портов по IP+порт
 var mu sync.Mutex                     // Мьютекс для защиты portMap
 
-func getPortKey(srcIP, dstIP net.IP, dport uint16) string {
-    return fmt.Sprintf("%s:%s:%d", srcIP.String(), dstIP.String(), dport)
-}
-
 if event.State == 2 {
     select {
     case port := <-portChan:
         event.Sport = uint16(port)
         mu.Lock()
-        portMap[getPortKey(dstIP, srcIP, event.Dport)] = event.Sport
+        key := fmt.Sprintf("%s:%s:%d", dstIP.String(), srcIP.String(), event.Dport)
+        portMap[key] = event.Sport
         mu.Unlock()
     case <-time.After(15 * time.Second):
         fmt.Printf("WARNING: Timeout waiting for port assignment (PID=%d)\n", event.Pid)
@@ -50,7 +47,7 @@ if event.State == 2 {
 
 if event.State == 1 {
     mu.Lock()
-    key := getPortKey(srcIP, dstIP, event.Dport)
+    key := fmt.Sprintf("%s:%s:%d", srcIP.String(), dstIP.String(), event.Dport)
     if port, ok := portMap[key]; ok {
         event.Sport = port
         delete(portMap, key) // Удаляем порт после использования
@@ -72,3 +69,4 @@ if event.State == 1 {
         portChan <- port
     }(int(event.Sport))
 }
+
