@@ -84,4 +84,10 @@ bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info)
     return 0;
 }
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo tcpdump -i eth0 udp -nn
+[sudo] password for gaz358: 
+tcpdump: eth0: No such device exists
+(No such device exists)
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfg
+
 
