@@ -60,12 +60,48 @@ filemap           iwlwifi_io      notifier       sock
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
-az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ls /sys/kernel/tracing/events/sock/
-enable  inet_sk_error_report  sk_data_ready          sock_rcvqueue_full  sock_send_length
-filter  inet_sock_set_state   sock_exceed_buf_limit  sock_recv_length
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+#include <linux/bpf.h>
+#include <linux/if_ether.h>
+#include <linux/ip.h>
+#include <linux/udp.h>
+#include <bpf/bpf_helpers.h>
 
+SEC("tc")
+int trace_udp(struct __sk_buff *skb) {
+    struct ethhdr eth;
+    struct iphdr ip;
+    struct udphdr udp;
 
-sudo cat /sys/kernel/tracing/trace_pipe | grep sock_send_length
+    // Загружаем Ethernet-заголовок через bpf_skb_pull_data()
+    if (bpf_skb_pull_data(skb, sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr)) < 0)
+        return 0;
+
+    // Читаем Ethernet-заголовок
+    bpf_skb_load_bytes_relative(skb, 0, &eth, sizeof(eth), BPF_HDR_START_MAC);
+
+    // Проверяем, что это IPv4
+    if (eth.h_proto != __constant_htons(ETH_P_IP))
+        return 0;
+
+    // Читаем IP-заголовок
+    bpf_skb_load_bytes_relative(skb, sizeof(eth), &ip, sizeof(ip), BPF_HDR_START_MAC);
+
+    // Проверяем, что это UDP
+    if (ip.protocol != IPPROTO_UDP)
+        return 0;
+
+    // Читаем UDP-заголовок
+    int udp_offset = sizeof(eth) + (ip.ihl * 4);
+    bpf_skb_load_bytes_relative(skb, udp_offset, &udp, sizeof(udp), BPF_HDR_START_MAC);
+
+    // Вывод информации о пакете
+    bpf_printk("UDP Packet: SRC=%pI4:%d DST=%pI4:%d\n",
+        &ip.saddr, ntohs(udp.source),
+        &ip.daddr, ntohs(udp.dest));
+
+    return 0;
+}
+
+char LICENSE[] SEC("license") = "GPL";
 
 
