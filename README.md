@@ -2,7 +2,9 @@ lsns -t net
 
 
 sudo ip netns list
-ls /sys/kernel/tracing/events/udp/
+ls /sys/kernel/tracing/events
+ls /sys/kernel/tracing/events/net/
+
 
 
 
