@@ -69,6 +69,32 @@ sudo systemctl disable systemd-resolved
 
 ip route
 
+#include <linux/bpf.h>
+#include <linux/if_ether.h>
+#include <linux/ip.h>
+#include <linux/tcp.h>
+#include <linux/udp.h>
+#include <linux/socket.h>
+#include <linux/in.h>
+
+struct ip_port_key {
+    __u32 dst_ip;
+    __u16 dst_port;
+};
+
+struct ip_port_value {
+    __u32 src_ip;
+    __u16 src_port;
+};
+
+// Определение мапы
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, struct ip_port_key);  // Ключ (dst_ip:dst_port)
+    __type(value, struct ip_port_value);  // Значение (src_ip:src_port)
+} addrBind_map SEC(".maps");
+
 SEC("sk_lookup")
 int look_up(struct bpf_sk_lookup *ctx) {
     __u32 proto = ctx->protocol;
@@ -77,21 +103,18 @@ int look_up(struct bpf_sk_lookup *ctx) {
     __u32 srcPort = ctx->local_port;
     __u16 dstPort = bpf_ntohs(ctx->remote_port);
 
-    
+    // Заполнение ключа (dst_ip, dst_port)
+    struct ip_port_key key = {};
+    key.dst_ip = dstIP;
+    key.dst_port = dstPort;
 
-    struct trace_info info = {};
-    
+    // Заполнение значения (src_ip, src_port)
+    struct ip_port_value value = {};
+    value.src_ip = srcIP;
+    value.src_port = srcPort;
 
-    info.src_ip=srcIP;
-    info.sport=srcPort;
-    info.dst_ip=dstIP;
-    info.dport=dstPort;
-    info.sysexit=3;
-    info.proto=ctx->protocol;
-
-
-
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    // Сохранение в мапу
+    bpf_map_update_elem(&addrBind_map, &key, &value, BPF_ANY);
 
     if ((((srcIP >> 24) & 0xff) != 127) && (ctx->protocol == 17)) {
         bpf_printk("lookup src=%d.%d.%d.%d:%d dst=%d.%d.%d.%d:%d protocol=%d FAMILY=%d \n", 
@@ -109,7 +132,8 @@ int look_up(struct bpf_sk_lookup *ctx) {
             ctx->family        
         );
     }
-    
+
     return SK_PASS;
 }
+
 
