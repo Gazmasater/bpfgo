@@ -60,19 +60,9 @@ filemap           iwlwifi_io      notifier       sock
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo cat /sys/kernel/debug/tracing/events/net/net_dev_queue/fo
-rmat
-name: net_dev_queue
-ID: 1623
-format:
-        field:unsigned short common_type;       offset:0;       size:2; signed:0;
-        field:unsigned char common_flags;       offset:2;       size:1; signed:0;
-        field:unsigned char common_preempt_count;       offset:3;       size:1; signed:0;
-        field:int common_pid;   offset:4;       size:4; signed:1;
+systemctl is-active systemd-resolved
 
-        field:void * skbaddr;   offset:8;       size:8; signed:0;
-        field:unsigned int len; offset:16;      size:4; signed:0;
-        field:__data_loc char[] name;   offset:20;      size:4; signed:0;
+sudo systemctl stop systemd-resolved
+sudo systemctl disable systemd-resolved
 
-print fmt: "dev=%s skbaddr=%p len=%u", __get_str(name), REC->skbaddr, REC->len
 
