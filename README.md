@@ -69,71 +69,28 @@ sudo systemctl disable systemd-resolved
 
 ip route
 
-#include <linux/bpf.h>
-#include <linux/if_ether.h>
-#include <linux/ip.h>
-#include <linux/tcp.h>
-#include <linux/udp.h>
-#include <linux/socket.h>
-#include <linux/in.h>
+    if ((srcIP >> 24)!=127)&&(ctx->protocol==17) {
 
-struct ip_port_key {
-    __u32 dst_ip;
-    __u16 dst_port;
-};
+        info.src_ip=srcIP;
+        info.sport = srcPort;
+        info.dst_ip=dstIP;
+        info.dport=dstPort;
+        info.sysexit=3;
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
-struct ip_port_value {
-    __u32 src_ip;
-    __u16 src_port;
-};
-
-// Определение мапы
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 1024);
-    __type(key, struct ip_port_key);  // Ключ (dst_ip:dst_port)
-    __type(value, struct ip_port_value);  // Значение (src_ip:src_port)
-} addrBind_map SEC(".maps");
-
-SEC("sk_lookup")
-int look_up(struct bpf_sk_lookup *ctx) {
-    __u32 proto = ctx->protocol;
-    __u32 srcIP = bpf_ntohl(ctx->local_ip4);
-    __u32 dstIP = bpf_ntohl(ctx->remote_ip4);
-    __u32 srcPort = ctx->local_port;
-    __u16 dstPort = bpf_ntohs(ctx->remote_port);
-
-    // Заполнение ключа (dst_ip, dst_port)
-    struct ip_port_key key = {};
-    key.dst_ip = dstIP;
-    key.dst_port = dstPort;
-
-    // Заполнение значения (src_ip, src_port)
-    struct ip_port_value value = {};
-    value.src_ip = srcIP;
-    value.src_port = srcPort;
-
-    // Сохранение в мапу
-    bpf_map_update_elem(&addrBind_map, &key, &value, BPF_ANY);
-
-    if ((((srcIP >> 24) & 0xff) != 127) && (ctx->protocol == 17)) {
-        bpf_printk("lookup src=%d.%d.%d.%d:%d dst=%d.%d.%d.%d:%d protocol=%d FAMILY=%d \n", 
-            (srcIP >> 24) & 0xff,
-            (srcIP >> 16) & 0xff, 
-            (srcIP >> 8) & 0xff, 
-            srcIP & 0xff,
-            srcPort,
-            (dstIP >> 24) & 0xff, 
-            (dstIP >> 16) & 0xff, 
-            (dstIP >> 8) & 0xff,
-            dstIP & 0xff,
-            dstPort,
-            proto,
-            ctx->family        
-        );
-    }
-
-    return SK_PASS;
 }
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "29",
+	"severity": 8,
+	"message": "expected an expression",
+	"source": "C/C++",
+	"startLineNumber": 386,
+	"startColumn": 28,
+	"endLineNumber": 386,
+	"endColumn": 30
+}]
 
 
