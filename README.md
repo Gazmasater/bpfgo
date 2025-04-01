@@ -21,88 +21,65 @@ srcAddr := fmt.Sprintf("%s:%d (%s)", srcIP.String(), event.Sport, ResolveIP(srcI
 dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstIP))
 
 
-			if event.Sysexit == 6 {
+SEC("tracepoint/sock/inet_sock_set_state")
+int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 
-				var xxx, xxx_pid int
-				var proto string
+    __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
 
-				if event.State == 1 {
+    __u32 srcip;
+    bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
+    srcip = bpf_ntohl(srcip);
+    
+    __u32 dstip;
+    bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
+    dstip = bpf_ntohl(dstip);
+       
+    __u16 sport=0;
+    
+    sport=ctx->sport;
+       
+    __u16 dport;
+    dport=ctx->dport;
 
-					mu.Lock()
-					select {
-					case eventChan_sport <- int(event.Sport):
-					default:
-						// Если канал уже содержит значение, заменяем его
-						//	<-eventChan
-						eventChan_sport <- int(event.Sport)
-						fmt.Printf("State 1: заменен порт %d\n", event.Sport)
-					}
-					mu.Unlock()
-					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), event.Sport)
-					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
+   __u8 state=ctx->newstate;
 
-					if event.Proto == 6 {
+    
+    if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
 
-						proto = "TCP"
-					}
+bpf_printk("inet_sock_set_state PID=%d srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d PROTO=%d ",
+    
+    pid_tcp,
+    (srcip >> 24) & 0xff,
+    (srcip >> 16) & 0xff,
+    (srcip >> 8) & 0xff,
+    (srcip) & 0xff,
+    sport,
 
-					fmt.Printf("PID=%d %s %s <- %s \n", event.Pid, proto, srcAddr, dstAddr)
+    (dstip >> 24) & 0xff,
+    (dstip >> 16) & 0xff,
+    (dstip >> 8) & 0xff,
+    (dstip) & 0xff,
+    dport,
+    ctx->protocol
 
-				}
-				if event.State == 2 {
-					mu.Lock()
-					select {
-					case eventChan_pid <- int(event.Pid):
-					default:
-						fmt.Println("State 2: eventChan_pid заполнен, пропускаю запись PID")
-					}
-					mu.Unlock()
-				}
+);
 
-				select {
+struct trace_info info = {};
 
-				case xxx = <-eventChan_sport:
-					srcAddr := fmt.Sprintf("%s:%d", srcIP.String(), xxx)
-					dstAddr := fmt.Sprintf("%s:%d", dstIP.String(), event.Dport)
-
-					select {
-					case xxx_pid = <-eventChan_pid:
-						//fmt.Printf("State 2: получил PID %d\n", xxx_pid)
-					default:
-						fmt.Println("State 2: eventChan_pid пуст, PID неизвестен")
-					}
-
-					if event.Proto == 6 {
-
-						proto = "TCP"
-					}
-
-					fmt.Printf("PID=%d %s %s <- %s \n", xxx_pid, proto, srcAddr, dstAddr)
-
-				default:
-					fmt.Println("")
-				}
-
-			}
+info.src_ip=srcip;
+info.sport=sport;
+info.dst_ip=dstip;
+info.dport=dport;
+info.sysexit=6;
+info.proto=ctx->protocol;
+info.pid=pid_tcp;
+info.state=ctx->newstate;
+bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
 
-   [{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "go-staticcheck",
-	"severity": 4,
-	"message": "var xxx is unused (U1000)",
-	"source": "go-staticcheck",
-	"startLineNumber": 29,
-	"startColumn": 5,
-	"endLineNumber": 29,
-	"endColumn": 12
-}]
+    }
 
-
-
-
-
-
-
+    return 0;
+}
 
 
