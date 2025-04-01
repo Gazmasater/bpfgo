@@ -23,66 +23,9 @@ srcAddr := fmt.Sprintf("%s:%d (%s)", srcIP.String(), event.Sport, ResolveIP(srcI
 dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstIP))
 
 
-#include <linux/inet.h>
-#include <linux/udp.h>
-#include <linux/ip.h>
-#include <linux/tracepoint.h>
-#include <linux/bpf.h>
-
-SEC("tracepoint/udp/udp_rcv")
-int trace_udp_recv(struct __sk_buff *skb) {
-    // Буфер для хранения данных из пакета
-    unsigned char data[128];
-
-    // Читаем первые 128 байт данных
-    int len = bpf_skb_load_bytes(skb, 0, data, sizeof(data));
-    if (len < sizeof(struct iphdr)) {
-        return 0;  // Не хватает данных для чтения заголовка IP
-    }
-
-    struct iphdr *ip = (struct iphdr *)data;
-
-    // Проверка протокола UDP
-    if (ip->protocol == IPPROTO_UDP) {
-        // Смещение до UDP заголовка
-        struct udphdr *udp = (struct udphdr *)((char *)ip + (ip->ihl << 2));
-        bpf_trace_printk("Captured incoming UDP packet: src_ip=%d.%d.%d.%d dst_ip=%d.%d.%d.%d src_port=%d dst_port=%d length=%d\n",
-                         ((ip->saddr >> 0) & 0xFF), ((ip->saddr >> 8) & 0xFF),
-                         ((ip->saddr >> 16) & 0xFF), ((ip->saddr >> 24) & 0xFF),
-                         ((ip->daddr >> 0) & 0xFF), ((ip->daddr >> 8) & 0xFF),
-                         ((ip->daddr >> 16) & 0xFF), ((ip->daddr >> 24) & 0xFF),
-                         ntohs(udp->source), ntohs(udp->dest), skb->len);
-    }
-    return 0;
-}
-
-SEC("tracepoint/udp/udp_send")
-int trace_udp_send(struct __sk_buff *skb) {
-    // Буфер для хранения данных из пакета
-    unsigned char data[128];
-
-    // Читаем первые 128 байт данных
-    int len = bpf_skb_load_bytes(skb, 0, data, sizeof(data));
-    if (len < sizeof(struct iphdr)) {
-        return 0;  // Не хватает данных для чтения заголовка IP
-    }
-
-    struct iphdr *ip = (struct iphdr *)data;
-
-    // Проверка протокола UDP
-    if (ip->protocol == IPPROTO_UDP) {
-        // Смещение до UDP заголовка
-        struct udphdr *udp = (struct udphdr *)((char *)ip + (ip->ihl << 2));
-        bpf_trace_printk("Captured outgoing UDP packet: src_ip=%d.%d.%d.%d dst_ip=%d.%d.%d.%d src_port=%d dst_port=%d length=%d\n",
-                         ((ip->saddr >> 0) & 0xFF), ((ip->saddr >> 8) & 0xFF),
-                         ((ip->saddr >> 16) & 0xFF), ((ip->saddr >> 24) & 0xFF),
-                         ((ip->daddr >> 0) & 0xFF), ((ip->daddr >> 8) & 0xFF),
-                         ((ip->daddr >> 16) & 0xFF), ((ip->daddr >> 24) & 0xFF),
-                         ntohs(udp->source), ntohs(udp->dest), skb->len);
-    }
-    return 0;
-}
-
-char _license[] SEC("license") = "GPL";
+az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
+Дескриптор нового namespace: 6
+2025/04/01 15:50:20 opening tracepoint udp_rcv: reading file "/sys/kernel/tracing/events/udp/udp_rcv/id": open /sys/kernel/tracing/events/udp/udp_rcv/id: no such file or directory
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$
 
 
