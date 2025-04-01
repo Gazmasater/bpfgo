@@ -87,4 +87,28 @@ if (srcIP >> 24 & 0xff!=127)&(ctx->protocol==17){
     );
 }
 
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "158",
+	"severity": 8,
+	"message": "expression must be an lvalue or a function designator",
+	"source": "C/C++",
+	"startLineNumber": 431,
+	"startColumn": 30,
+	"endLineNumber": 431,
+	"endColumn": 31
+}]
 
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "65",
+	"severity": 8,
+	"message": "expected a ';'",
+	"source": "C/C++",
+	"startLineNumber": 431,
+	"startColumn": 49,
+	"endLineNumber": 431,
+	"endColumn": 50
+}]
