@@ -2,6 +2,8 @@ lsns -t net
 
 
 sudo ip netns list
+ls /sys/kernel/tracing/events/udp/
+
 
 
 bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=load -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
