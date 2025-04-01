@@ -70,6 +70,21 @@ sudo systemctl disable systemd-resolved
 ip route
 
 
-Socket Thread-3017    [006] ...21   447.662253: bpf_trace_printk: #####lookup sys_exit_recvfrom ADDRESS=192.0.73.2:443 Comm=Socket Thread 
+if (srcIP >> 24 & 0xff!=127)&(ctx->protocol==17){
+    bpf_printk("lookup src=%d.%d.%d.%d:%d dst=%d.%d.%d.%d:%d protocol=%d FAMILY=%d \n", 
+        (srcIP >> 24) & 0xff,
+        (srcIP >> 16) & 0xff, 
+        (srcIP >> 8) & 0xff, 
+        srcIP & 0xff,
+        srcPort,
+        (dstIP >> 24) & 0xff, 
+        (dstIP >> 16) & 0xff, 
+        (dstIP >> 8) & 0xff,
+        dstIP & 0xff,
+        dstPort,
+        proto,
+        ctx->family        
+    );
+}
 
 
