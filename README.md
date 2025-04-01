@@ -25,9 +25,36 @@ srcAddr := fmt.Sprintf("%s:%d (%s)", srcIP.String(), event.Sport, ResolveIP(srcI
 dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstIP))
 
 
-az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
-Дескриптор нового namespace: 6
-2025/04/01 15:50:20 opening tracepoint udp_rcv: reading file "/sys/kernel/tracing/events/udp/udp_rcv/id": open /sys/kernel/tracing/events/udp/udp_rcv/id: no such file or directory
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ls /sys/kernel/tracing/events
+alarmtimer        fs_dax          iwlwifi_msg    nvme            sof
+amd_cpu           ftrace          iwlwifi_ucode  oom             sof_intel
+asoc              gpio            jbd2           osnoise         spi
+avc               gpu_scheduler   kmem           page_isolation  swiotlb
+block             handshake       ksm            pagemap         sync_trace
+bpf_test_run      hda             kvm            page_pool       syscalls
+bpf_trace         hda_controller  kvmmmu         percpu          task
+bridge            hda_intel       libata         power           tcp
+cfg80211          header_event    lock           printk          thermal
+cgroup            header_page     mac80211       pwm             thermal_power_allocator
+clk               huge_memory     mac80211_msg   qdisc           thp
+compaction        hwmon           maple_tree     qrtr            timer
+context_tracking  hyperv          mce            ras             tlb
+cpuhp             i2c             mctp           raw_syscalls    udp
+cros_ec           i915            mdio           rcu             v4l2
+csd               initcall        mei            regmap          vb2
+dev               intel_iommu     migrate        regulator       vmalloc
+devfreq           interconnect    mmap           resctrl         vmscan
+devlink           iocost          mmap_lock      rpm             vsyscall
+dma_fence         iomap           mmc            rseq            watchdog
+drm               iommu           module         rtc             wbt
+enable            io_uring        mptcp          rv              workqueue
+error_report      ipi             msr            sched           writeback
+exceptions        irq             napi           scsi            x86_fpu
+ext4              irq_matrix      neigh          sd              xdp
+fib               irq_vectors     net            signal          xe
+fib6              iwlwifi         netlink        skb             xen
+filelock          iwlwifi_data    nmi            smbus           xhci-hcd
+filemap           iwlwifi_io      notifier       sock
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
