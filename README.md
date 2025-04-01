@@ -63,7 +63,12 @@ gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$
 systemctl is-active systemd-resolved
 
 sudo systemctl stop systemd-resolved
+sudo systemctl start systemd-resolved
+
 sudo systemctl disable systemd-resolved
+
+ip route
+
 
 Socket Thread-3017    [006] ...21   447.662253: bpf_trace_printk: #####lookup sys_exit_recvfrom ADDRESS=192.0.73.2:443 Comm=Socket Thread 
 
