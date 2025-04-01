@@ -69,28 +69,34 @@ sudo systemctl disable systemd-resolved
 
 ip route
 
-    if ((srcIP >> 24)!=127)&&(ctx->protocol==17) {
+			if event.Sysexit == 2 {
 
-        info.src_ip=srcIP;
-        info.sport = srcPort;
-        info.dst_ip=dstIP;
-        info.dport=dstPort;
-        info.sysexit=3;
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+				srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
+				pid := event.Pid
+				fmt.Printf("PID=%d STATE=2 srcIP=UDP:%s \n", srcAddr, pid)
 
-}
+			}
+
 
 [{
-	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
-	"owner": "C/C++: IntelliSense",
-	"code": "29",
-	"severity": 8,
-	"message": "expected an expression",
-	"source": "C/C++",
-	"startLineNumber": 386,
-	"startColumn": 28,
-	"endLineNumber": 386,
-	"endColumn": 30
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "default",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/go/analysis/passes/printf",
+			"scheme": "https",
+			"authority": "pkg.go.dev"
+		}
+	},
+	"severity": 4,
+	"message": "fmt.Printf format %d has arg srcAddr of wrong type string",
+	"source": "printf",
+	"startLineNumber": 158,
+	"startColumn": 5,
+	"endLineNumber": 158,
+	"endColumn": 63
 }]
 
 
