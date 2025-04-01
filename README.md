@@ -66,3 +66,6 @@ filter  inet_sock_set_state   sock_exceed_buf_limit  sock_recv_length
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
+sudo cat /sys/kernel/tracing/trace_pipe | grep sock_send_length
+
+
