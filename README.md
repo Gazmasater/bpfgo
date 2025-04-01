@@ -60,3 +60,9 @@ filemap           iwlwifi_io      notifier       sock
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
+az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ls /sys/kernel/tracing/events/sock/
+enable  inet_sk_error_report  sk_data_ready          sock_rcvqueue_full  sock_send_length
+filter  inet_sock_set_state   sock_exceed_buf_limit  sock_recv_length
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
+
