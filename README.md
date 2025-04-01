@@ -23,71 +23,12 @@ srcAddr := fmt.Sprintf("%s:%d (%s)", srcIP.String(), event.Sport, ResolveIP(srcI
 dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstIP))
 
 
-SEC("tracepoint/sock/inet_sock_set_state")
-int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
-
-    __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
-
-    __u32 srcip;
-    bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
-    srcip = bpf_ntohl(srcip);
-    
-    __u32 dstip;
-    bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
-    dstip = bpf_ntohl(dstip);
-       
-    __u16 sport=0;
-    
-    sport=ctx->sport;
-       
-    __u16 dport;
-    dport=ctx->dport;
-
-   __u8 state=ctx->newstate;
-
-    
-    if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
-
-bpf_printk("inet_sock_set_state PID=%d srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d PROTO=%d ",
-    
-    pid_tcp,
-    (srcip >> 24) & 0xff,
-    (srcip >> 16) & 0xff,
-    (srcip >> 8) & 0xff,
-    (srcip) & 0xff,
-    sport,
-
-    (dstip >> 24) & 0xff,
-    (dstip >> 16) & 0xff,
-    (dstip >> 8) & 0xff,
-    (dstip) & 0xff,
-    dport,
-    ctx->protocol
-
-);
-
-struct trace_info info = {};
-
-info.src_ip=srcip;
-info.sport=sport;
-info.dst_ip=dstip;
-info.dport=dport;
-info.sysexit=6;
-info.proto=ctx->protocol;
-info.pid=pid_tcp;
-info.state=ctx->newstate;
-bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-
-    }
-
-    return 0;
-}
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo tcpdump -i eth0 udp -nn
-[sudo] password for gaz358: 
-tcpdump: eth0: No such device exists
-(No such device exists)
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfg
-
+tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on wlp0s20f3, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+13:45:43.664185 IP 192.168.1.71.51550 > 192.168.1.1.53: 22424+ [1au] A? mozilla.cloudflare-dns.com. (55)
+13:45:43.664274 IP 192.168.1.71.56569 > 192.168.1.1.53: 23042+ [1au] AAAA? mozilla.cloudflare-dns.com. (55)
+13:45:43.676382 IP 192.168.1.1.53 > 192.168.1.71.51550: 22424 2/0/1 A 162.159.61.4, A 172.64.41.4 (87)
+13:45:43.676982 IP 192.168.1.1.53 > 192.168.1.71.56569: 23042 2/0/1 AAAA 2803:f800:53::4, AAAA 2a06:98c1:52::4 (111)
+13:45:43.890284 IP 192.168.1.71.57377 > 192.168.1.1.53: 57180+ [1au] A? detectportal.firefox.com. (53)
+13:45:43.890350 IP 192.168.1.71.37299 > 192.168.1.1.53: 50891+ [1au] AAAA? detectportal.firefox.com. (53)
 
