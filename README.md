@@ -27,16 +27,25 @@ dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstI
 #include <linux/udp.h>
 #include <linux/ip.h>
 #include <linux/tracepoint.h>
+#include <linux/bpf.h>
 
 SEC("tracepoint/udp/udp_rcv")
 int trace_udp_recv(struct __sk_buff *skb) {
-    struct iphdr *ip = bpf_hdr_pointer(skb, 0);
-    if (ip == NULL) {
-        return 0;
+    // Буфер для хранения данных из пакета
+    unsigned char data[128];
+
+    // Читаем первые 128 байт данных
+    int len = bpf_skb_load_bytes(skb, 0, data, sizeof(data));
+    if (len < sizeof(struct iphdr)) {
+        return 0;  // Не хватает данных для чтения заголовка IP
     }
 
-    struct udphdr *udp = (struct udphdr *)((char *)ip + (ip->ihl << 2));
+    struct iphdr *ip = (struct iphdr *)data;
+
+    // Проверка протокола UDP
     if (ip->protocol == IPPROTO_UDP) {
+        // Смещение до UDP заголовка
+        struct udphdr *udp = (struct udphdr *)((char *)ip + (ip->ihl << 2));
         bpf_trace_printk("Captured incoming UDP packet: src_ip=%d.%d.%d.%d dst_ip=%d.%d.%d.%d src_port=%d dst_port=%d length=%d\n",
                          ((ip->saddr >> 0) & 0xFF), ((ip->saddr >> 8) & 0xFF),
                          ((ip->saddr >> 16) & 0xFF), ((ip->saddr >> 24) & 0xFF),
@@ -47,27 +56,23 @@ int trace_udp_recv(struct __sk_buff *skb) {
     return 0;
 }
 
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir "$(pwd)" -tags linux -type trace_info -go-package=main -target amd64 bpf "$(pwd)/trace.c" -- -I"$(pwd)"
-/home/gaz358/myprog/bpfgo/trace.c:474:24: error: call to undeclared function 'bpf_hdr_pointer'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
-  474 |     struct iphdr *ip = bpf_hdr_pointer(skb, 0);
-      |                        ^
-/home/gaz358/myprog/bpfgo/trace.c:474:19: error: incompatible integer to pointer conversion initializing 'struct iphdr *' with an expression of type 'int' [-Wint-conversion]
-  474 |     struct iphdr *ip = bpf_hdr_pointer(skb, 0);
-      |                   ^    ~~~~~~~~~~~~~~~~~~~~~~~
-2 errors generated.
-Error: compile: exit status 1
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
-
 SEC("tracepoint/udp/udp_send")
 int trace_udp_send(struct __sk_buff *skb) {
-    struct iphdr *ip = bpf_hdr_pointer(skb, 0);
-    if (ip == NULL) {
-        return 0;
+    // Буфер для хранения данных из пакета
+    unsigned char data[128];
+
+    // Читаем первые 128 байт данных
+    int len = bpf_skb_load_bytes(skb, 0, data, sizeof(data));
+    if (len < sizeof(struct iphdr)) {
+        return 0;  // Не хватает данных для чтения заголовка IP
     }
 
-    struct udphdr *udp = (struct udphdr *)((char *)ip + (ip->ihl << 2));
+    struct iphdr *ip = (struct iphdr *)data;
+
+    // Проверка протокола UDP
     if (ip->protocol == IPPROTO_UDP) {
+        // Смещение до UDP заголовка
+        struct udphdr *udp = (struct udphdr *)((char *)ip + (ip->ihl << 2));
         bpf_trace_printk("Captured outgoing UDP packet: src_ip=%d.%d.%d.%d dst_ip=%d.%d.%d.%d src_port=%d dst_port=%d length=%d\n",
                          ((ip->saddr >> 0) & 0xFF), ((ip->saddr >> 8) & 0xFF),
                          ((ip->saddr >> 16) & 0xFF), ((ip->saddr >> 24) & 0xFF),
@@ -79,3 +84,5 @@ int trace_udp_send(struct __sk_buff *skb) {
 }
 
 char _license[] SEC("license") = "GPL";
+
+
