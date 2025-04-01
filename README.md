@@ -47,6 +47,18 @@ int trace_udp_recv(struct __sk_buff *skb) {
     return 0;
 }
 
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir "$(pwd)" -tags linux -type trace_info -go-package=main -target amd64 bpf "$(pwd)/trace.c" -- -I"$(pwd)"
+/home/gaz358/myprog/bpfgo/trace.c:474:24: error: call to undeclared function 'bpf_hdr_pointer'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  474 |     struct iphdr *ip = bpf_hdr_pointer(skb, 0);
+      |                        ^
+/home/gaz358/myprog/bpfgo/trace.c:474:19: error: incompatible integer to pointer conversion initializing 'struct iphdr *' with an expression of type 'int' [-Wint-conversion]
+  474 |     struct iphdr *ip = bpf_hdr_pointer(skb, 0);
+      |                   ^    ~~~~~~~~~~~~~~~~~~~~~~~
+2 errors generated.
+Error: compile: exit status 1
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
 SEC("tracepoint/udp/udp_send")
 int trace_udp_send(struct __sk_buff *skb) {
     struct iphdr *ip = bpf_hdr_pointer(skb, 0);
