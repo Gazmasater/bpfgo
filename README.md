@@ -12,6 +12,8 @@ sudo ss -tunp | grep 192.0.73.2:443
 
 
 sudo apt update && sudo apt install -y tcpdump
+sudo tcpdump -i eth0 udp -nn
+
 sudo tcpdump -i any -nn 'tcp[tcpflags] & (tcp-syn) != 0'
 
 ls /sys/kernel/debug/tracing/events/sock/udp_sendmsg
