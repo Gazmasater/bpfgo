@@ -23,7 +23,47 @@ srcAddr := fmt.Sprintf("%s:%d (%s)", srcIP.String(), event.Sport, ResolveIP(srcI
 dstAddr := fmt.Sprintf("%s:%d (%s)", dstIP.String(), event.Dport, ResolveIP(dstIP))
 
 
-5:14:33.646892 IP 192.168.1.71.50430 > 34.117.188.166.443: UDP, length 1252
-15:14:33.646928 IP 192.168.1.71.50430 > 34.117.188.166.443: UDP, length 1252
-15:14:33.671326 IP 34.117.188.166.443 > 192.168.1.71.50430: UDP, length 43
-15:14:33.671659 IP 34.117.188.166.443 > 192.168.1.71.50430: UDP, length 1252
+#include <linux/inet.h>
+#include <linux/udp.h>
+#include <linux/ip.h>
+#include <linux/tracepoint.h>
+
+SEC("tracepoint/udp/udp_rcv")
+int trace_udp_recv(struct __sk_buff *skb) {
+    struct iphdr *ip = bpf_hdr_pointer(skb, 0);
+    if (ip == NULL) {
+        return 0;
+    }
+
+    struct udphdr *udp = (struct udphdr *)((char *)ip + (ip->ihl << 2));
+    if (ip->protocol == IPPROTO_UDP) {
+        bpf_trace_printk("Captured incoming UDP packet: src_ip=%d.%d.%d.%d dst_ip=%d.%d.%d.%d src_port=%d dst_port=%d length=%d\n",
+                         ((ip->saddr >> 0) & 0xFF), ((ip->saddr >> 8) & 0xFF),
+                         ((ip->saddr >> 16) & 0xFF), ((ip->saddr >> 24) & 0xFF),
+                         ((ip->daddr >> 0) & 0xFF), ((ip->daddr >> 8) & 0xFF),
+                         ((ip->daddr >> 16) & 0xFF), ((ip->daddr >> 24) & 0xFF),
+                         ntohs(udp->source), ntohs(udp->dest), skb->len);
+    }
+    return 0;
+}
+
+SEC("tracepoint/udp/udp_send")
+int trace_udp_send(struct __sk_buff *skb) {
+    struct iphdr *ip = bpf_hdr_pointer(skb, 0);
+    if (ip == NULL) {
+        return 0;
+    }
+
+    struct udphdr *udp = (struct udphdr *)((char *)ip + (ip->ihl << 2));
+    if (ip->protocol == IPPROTO_UDP) {
+        bpf_trace_printk("Captured outgoing UDP packet: src_ip=%d.%d.%d.%d dst_ip=%d.%d.%d.%d src_port=%d dst_port=%d length=%d\n",
+                         ((ip->saddr >> 0) & 0xFF), ((ip->saddr >> 8) & 0xFF),
+                         ((ip->saddr >> 16) & 0xFF), ((ip->saddr >> 24) & 0xFF),
+                         ((ip->daddr >> 0) & 0xFF), ((ip->daddr >> 8) & 0xFF),
+                         ((ip->daddr >> 16) & 0xFF), ((ip->daddr >> 24) & 0xFF),
+                         ntohs(udp->source), ntohs(udp->dest), skb->len);
+    }
+    return 0;
+}
+
+char _license[] SEC("license") = "GPL";
