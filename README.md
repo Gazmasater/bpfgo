@@ -69,8 +69,11 @@ sudo systemctl disable systemd-resolved
 
 ip route
 
-PID=765 STATE=1 dstIP=UDP://[185.125.190.57]:123 
-STATE=3 srcIP=UDP://[192.168.1.71]:59517 dstIP=//prod-ntp-4.ntp1.ps5.canonical.com.[185.125.190.57]:123
+PID=765  dstIP=UDP://[185.125.190.57]:123 sendto
+srcIP=UDP://[192.168.1.71]:59517 dstIP=//prod-ntp-4.ntp1.ps5.canonical.com.[185.125.190.57]:123 lookup
+
+sudo iptables -L -v -n
+
 
 
 
