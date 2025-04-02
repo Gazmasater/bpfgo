@@ -81,8 +81,7 @@ echo "Hello, UDP!" | nc -u -w1 34.117.188.166 443
 echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 
 
-sudo strace -e sendto,send,sendmsg nc -u -w1 34.117.188.166 443
-
+Internet Protocol Version 6, Src: fe80::e73:29ff:feb7:d6e8, Dst: fe80::d6b2:9200:15bb:a0e8
 
 
 
