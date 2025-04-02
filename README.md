@@ -74,6 +74,17 @@ srcIP=UDP://[192.168.1.71]:59517 dstIP=//prod-ntp-4.ntp1.ps5.canonical.com.[185.
 
 sudo iptables -L -v -n
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo iptables -L -v -n
+Chain INPUT (policy ACCEPT 0 packets, 0 bytes)
+ pkts bytes target     prot opt in     out     source               destination         
+
+Chain FORWARD (policy ACCEPT 0 packets, 0 bytes)
+ pkts bytes target     prot opt in     out     source               destination         
+
+Chain OUTPUT (policy ACCEPT 0 packets, 0 bytes)
+ pkts bytes target     prot opt in     out     source               destination         
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
 
 
 
