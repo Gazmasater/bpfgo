@@ -69,34 +69,7 @@ sudo systemctl disable systemd-resolved
 
 ip route
 
-			if event.Sysexit == 2 {
-
-				srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
-				pid := event.Pid
-				fmt.Printf("PID=%d STATE=2 srcIP=UDP:%s \n", srcAddr, pid)
-
-			}
-
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#4",
-	"code": {
-		"value": "default",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/go/analysis/passes/printf",
-			"scheme": "https",
-			"authority": "pkg.go.dev"
-		}
-	},
-	"severity": 4,
-	"message": "fmt.Printf format %d has arg srcAddr of wrong type string",
-	"source": "printf",
-	"startLineNumber": 158,
-	"startColumn": 5,
-	"endLineNumber": 158,
-	"endColumn": 63
-}]
+11:23:56.526526 IP 192.168.1.71.44994 > 185.125.190.58.123: NTPv4, Client, length 48
+11:23:56.586874 IP 185.125.190.58.123 > 192.168.1.71.44994: NTPv4, Server, length 48
 
 
