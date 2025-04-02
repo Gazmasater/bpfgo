@@ -74,6 +74,7 @@ srcIP=UDP://[192.168.1.71]:59517 dstIP=//prod-ntp-4.ntp1.ps5.canonical.com.[185.
 
 STATE=3 srcIP=UDP://[192.168.1.71]:41090 dstIP=//alphyn.canonical.com.[91.189.91.157]:123
 
+sudo ufw allow in from 91.189.91.157 to any port 123 proto udp
 
 
 
