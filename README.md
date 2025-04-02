@@ -69,7 +69,60 @@ sudo systemctl disable systemd-resolved
 
 ip route
 
-12:34:04.649590 IP 192.168.1.1.53 > 192.168.1.71.34978: 42429 NXDomain* 0/1/1 (113)
-12:34:04.650684 IP 192.168.1.71.38424 > 192.168.1.1.53: 26517+ [1au] PTR? 26.114.82
+#include <linux/bpf.h>
+#include <linux/if_ether.h>
+#include <linux/ip.h>
+#include <linux/tcp.h>
+#include <linux/udp.h>
+#include <linux/in.h>
+#include <linux/ptrace.h>
+#include <linux/inet.h>
+#include <linux/types.h>
+#include <linux/bpf_common.h>
+#include <linux/bpf_verifier.h>
+#include <linux/netdevice.h>
+
+#include <bcc/proto.h>
+
+#define DNS_PORT 53
+
+// Эта секция будет отвечать за вставку программы в BPF
+SEC("filter_dns")
+int filter_dns(struct __sk_buff *skb) {
+    struct ethhdr *eth;
+    struct iphdr *ip;
+    struct udphdr *udp;
+    unsigned short sport, dport;
+    char src_ip[16], dst_ip[16];
+
+    // Извлечение Ethernet заголовка
+    eth = bpf_hdr_pointer(skb, 0);
+    ip = (struct iphdr *)(eth + 1);
+    
+    // Проверка, что пакет — это UDP, и мы работаем с IPv4
+    if (ip->protocol != IPPROTO_UDP) {
+        return 0; // Пропускаем все не-UDP пакеты
+    }
+
+    udp = (struct udphdr *)((char *)ip + ip->ihl * 4);
+    sport = ntohs(udp->source);
+    dport = ntohs(udp->dest);
+
+    // Если это DNS пакет (порт 53)
+    if (sport == DNS_PORT || dport == DNS_PORT) {
+        // Получаем исходный и целевой IP-адреса
+        bpf_probe_read_kernel(&src_ip, sizeof(src_ip), &ip->saddr);
+        bpf_probe_read_kernel(&dst_ip, sizeof(dst_ip), &ip->daddr);
+
+        // Печатаем информацию в формате, схожем с выводом tcpdump
+        bpf_trace_printk("DNS Request/Response: %s > %s %u -> %u\n", src_ip, dst_ip, sport, dport);
+    }
+
+    return 0;
+}
+
+// Эта секция будет отвечать за настройку программы
+char _license[] SEC("license") = "GPL";
+
 
 
