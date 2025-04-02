@@ -77,7 +77,7 @@ sudo dpkg-reconfigure wireshark-common //без sudo
 sudo usermod -aG wireshark $USER //добавить пользователя
 wireshark //запуск
 
-34.117.188.166:443 
+echo "Hello, UDP!" | nc -u -w1 34.117.188.166 443
 
 
 
