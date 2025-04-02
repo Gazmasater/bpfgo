@@ -86,6 +86,12 @@ gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo strace -e sendto,send,sendmsg nc -u 
 
 sudo tcpdump -i any udp port 443 -vv
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo tcpdump -i any udp port 443 -vv
+tcpdump: data link type LINUX_SLL2
+tcpdump: listening on any, link-type LINUX_SLL2 (Linux cooked v2), snapshot length 262144 bytes
+21:12:38.739068 wlp0s20f3 Out IP (tos 0x0, ttl 64, id 4227, offset 0, flags [DF], proto UDP (17), length 40)
+    gaz358-BOD-WXX9.58764 > 166.188.117.34.bc.googleusercontent.com.https: [bad udp cksum 0xa130 -> 0xcdc5!] UDP, length 12
+
 
 
 
