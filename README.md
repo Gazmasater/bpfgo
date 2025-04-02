@@ -101,26 +101,10 @@ Internet Protocol Version 6, Src: fe80::e73:29ff:feb7:d6e8, Dst: fe80::d6b2:9200
 
 
 
-        __u16 *srcIP6 = (__u16 *)ctx->local_ip6;
-__u16 *dstIP6 = (__u16 *)ctx->remote_ip6;
-__u32 srcPort = ctx->local_port;
-__u16 dstPort = bpf_ntohs(ctx->remote_port);
-
-// Преобразуем IP-адреса в строковый формат для хранения в info
-char srcIP[INET6_ADDRSTRLEN];
-char dstIP[INET6_ADDRSTRLEN];
-
-bpf_inet_ntop(AF_INET6, srcIP6, srcIP, sizeof(srcIP));
-bpf_inet_ntop(AF_INET6, dstIP6, dstIP, sizeof(dstIP));
-
-info.src_ip = srcIP;
-info.sport = srcPort;
-info.dst_ip = dstIP;
-info.dport = dstPort;
-info.sysexit = 3;
-info.proto = proto;
-
-bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+ __u16 *srcIP6 = (__u16 *)ctx->local_ip6;
+        __u16 *dstIP6 = (__u16 *)ctx->remote_ip6;
+        __u32 srcPort = ctx->local_port;
+        __u16 dstPort = bpf_ntohs(ctx->remote_port);
 
 
 
