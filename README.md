@@ -124,5 +124,16 @@ int filter_dns(struct __sk_buff *skb) {
 // Эта секция будет отвечать за настройку программы
 char _license[] SEC("license") = "GPL";
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir "$(pwd)" -tags linux -type trace_info -go-package=main -target amd64 bpf "$(pwd)/trace.c" -- -I"$(pwd)"
+/home/gaz358/myprog/bpfgo/trace.c:469:11: error: call to undeclared function 'bpf_hdr_pointer'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  469 |     eth = bpf_hdr_pointer(skb, 0);
+      |           ^
+/home/gaz358/myprog/bpfgo/trace.c:469:9: error: incompatible integer to pointer conversion assigning to 'struct ethhdr *' from 'int' [-Wint-conversion]
+  469 |     eth = bpf_hdr_pointer(skb, 0);
+      |         ^ ~~~~~~~~~~~~~~~~~~~~~~~
+2 errors generated.
+Error: compile: exit status 1
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
 
 
