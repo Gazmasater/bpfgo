@@ -118,18 +118,17 @@ int look_up(struct bpf_sk_lookup *ctx) {
 
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
-        bpf_printk("IPv6 lookup src=%x:%x:%x:%x:%x:%x:%x:%x:%d "
-            "dst=%x:%x:%x:%x:%x:%x:%x:%x:%d protocol=%d FAMILY=%d \n", 
-            bpf_ntohs(srcIP6[0]), bpf_ntohs(srcIP6[1]), bpf_ntohs(srcIP6[2]), bpf_ntohs(srcIP6[3]),
-            bpf_ntohs(srcIP6[4]), bpf_ntohs(srcIP6[5]), bpf_ntohs(srcIP6[6]), bpf_ntohs(srcIP6[7]),
-            srcPort,
-            bpf_ntohs(dstIP6[0]), bpf_ntohs(dstIP6[1]), bpf_ntohs(dstIP6[2]), bpf_ntohs(dstIP6[3]),
-            bpf_ntohs(dstIP6[4]), bpf_ntohs(dstIP6[5]), bpf_ntohs(dstIP6[6]), bpf_ntohs(dstIP6[7]),
-            dstPort,
+        bpf_printk("IPv6 lookup src=%x:%x::%x:%x:%x:%x:%d "
+            "dst=%x:%x::%x:%x:%x:%x:%d protocol=%d FAMILY=%d \n", 
+            bpf_ntohs(srcIP6[0]), bpf_ntohs(srcIP6[1]), bpf_ntohs(srcIP6[4]), bpf_ntohs(srcIP6[5]),
+            bpf_ntohs(srcIP6[6]), bpf_ntohs(srcIP6[7]), srcPort,
+            bpf_ntohs(dstIP6[0]), bpf_ntohs(dstIP6[1]), bpf_ntohs(dstIP6[4]), bpf_ntohs(dstIP6[5]),
+            bpf_ntohs(dstIP6[6]), bpf_ntohs(dstIP6[7]), dstPort,
             proto, ctx->family);
     }
     return SK_PASS;
 }
+
 
 
 
