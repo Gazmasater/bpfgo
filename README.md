@@ -129,6 +129,19 @@ int look_up(struct bpf_sk_lookup *ctx) {
     return SK_PASS;
 }
 
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "109",
+	"severity": 8,
+	"message": "expression preceding parentheses of apparent call must have (pointer-to-) function type",
+	"source": "C/C++",
+	"startLineNumber": 375,
+	"startColumn": 9,
+	"endLineNumber": 375,
+	"endColumn": 19
+}]
+
 
 
 
