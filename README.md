@@ -84,26 +84,18 @@ echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 Internet Protocol Version 6, Src: fe80::e73:29ff:feb7:d6e8, Dst: fe80::d6b2:9200:15bb:a0e8
 
 
-        bpf_printk("IPv6 lookup src=%x:%x::%x:%x:%x:%x:%d "
-            "dst=%x:%x::%x:%x:%x:%x:%d protocol=%d\n", 
-            bpf_ntohs(srcIP6[0]), bpf_ntohs(srcIP6[1]), bpf_ntohs(srcIP6[4]), bpf_ntohs(srcIP6[5]),
-            bpf_ntohs(srcIP6[6]), bpf_ntohs(srcIP6[7]), srcPort,
-            bpf_ntohs(dstIP6[0]), bpf_ntohs(dstIP6[1]), bpf_ntohs(dstIP6[4]), bpf_ntohs(dstIP6[5]),
-            bpf_ntohs(dstIP6[6]), bpf_ntohs(dstIP6[7]), dstPort,
-            proto);
+bpf_printk("IPv6 lookup src=%x:%x:%x:%x:%x:%x:%x:%x "
+           "dst=%x:%x:%x:%x:%x:%x:%x:%x protocol=%d\n", 
+           bpf_ntohs(srcIP6[0]), bpf_ntohs(srcIP6[1]),
+           bpf_ntohs(srcIP6[2]), bpf_ntohs(srcIP6[3]),
+           bpf_ntohs(srcIP6[4]), bpf_ntohs(srcIP6[5]),
+           bpf_ntohs(srcIP6[6]), bpf_ntohs(srcIP6[7]),
+           bpf_ntohs(dstIP6[0]), bpf_ntohs(dstIP6[1]),
+           bpf_ntohs(dstIP6[2]), bpf_ntohs(dstIP6[3]),
+           bpf_ntohs(dstIP6[4]), bpf_ntohs(dstIP6[5]),
+           bpf_ntohs(dstIP6[6]), bpf_ntohs(dstIP6[7]), 
+           proto);
 
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
-	"owner": "C/C++: IntelliSense",
-	"code": "109",
-	"severity": 8,
-	"message": "expression preceding parentheses of apparent call must have (pointer-to-) function type",
-	"source": "C/C++",
-	"startLineNumber": 375,
-	"startColumn": 9,
-	"endLineNumber": 375,
-	"endColumn": 19
-}]
 
 
 
