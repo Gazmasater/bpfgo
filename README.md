@@ -69,71 +69,9 @@ sudo systemctl disable systemd-resolved
 
 ip route
 
-#include <linux/bpf.h>
-#include <linux/if_ether.h>
-#include <linux/ip.h>
-#include <linux/tcp.h>
-#include <linux/udp.h>
-#include <linux/in.h>
-#include <linux/ptrace.h>
-#include <linux/inet.h>
-#include <linux/types.h>
-#include <linux/bpf_common.h>
-#include <linux/bpf_verifier.h>
-#include <linux/netdevice.h>
+PID=765 STATE=1 dstIP=UDP://[185.125.190.57]:123 
+STATE=3 srcIP=UDP://[192.168.1.71]:59517 dstIP=//prod-ntp-4.ntp1.ps5.canonical.com.[185.125.190.57]:123
 
-#include <bcc/proto.h>
-
-#define DNS_PORT 53
-
-// Эта секция будет отвечать за вставку программы в BPF
-SEC("filter_dns")
-int filter_dns(struct __sk_buff *skb) {
-    struct ethhdr *eth;
-    struct iphdr *ip;
-    struct udphdr *udp;
-    unsigned short sport, dport;
-    char src_ip[16], dst_ip[16];
-
-    // Извлечение Ethernet заголовка
-    eth = bpf_hdr_pointer(skb, 0);
-    ip = (struct iphdr *)(eth + 1);
-    
-    // Проверка, что пакет — это UDP, и мы работаем с IPv4
-    if (ip->protocol != IPPROTO_UDP) {
-        return 0; // Пропускаем все не-UDP пакеты
-    }
-
-    udp = (struct udphdr *)((char *)ip + ip->ihl * 4);
-    sport = ntohs(udp->source);
-    dport = ntohs(udp->dest);
-
-    // Если это DNS пакет (порт 53)
-    if (sport == DNS_PORT || dport == DNS_PORT) {
-        // Получаем исходный и целевой IP-адреса
-        bpf_probe_read_kernel(&src_ip, sizeof(src_ip), &ip->saddr);
-        bpf_probe_read_kernel(&dst_ip, sizeof(dst_ip), &ip->daddr);
-
-        // Печатаем информацию в формате, схожем с выводом tcpdump
-        bpf_trace_printk("DNS Request/Response: %s > %s %u -> %u\n", src_ip, dst_ip, sport, dport);
-    }
-
-    return 0;
-}
-
-// Эта секция будет отвечать за настройку программы
-char _license[] SEC("license") = "GPL";
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir "$(pwd)" -tags linux -type trace_info -go-package=main -target amd64 bpf "$(pwd)/trace.c" -- -I"$(pwd)"
-/home/gaz358/myprog/bpfgo/trace.c:469:11: error: call to undeclared function 'bpf_hdr_pointer'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
-  469 |     eth = bpf_hdr_pointer(skb, 0);
-      |           ^
-/home/gaz358/myprog/bpfgo/trace.c:469:9: error: incompatible integer to pointer conversion assigning to 'struct ethhdr *' from 'int' [-Wint-conversion]
-  469 |     eth = bpf_hdr_pointer(skb, 0);
-      |         ^ ~~~~~~~~~~~~~~~~~~~~~~~
-2 errors generated.
-Error: compile: exit status 1
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
 
