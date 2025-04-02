@@ -84,17 +84,21 @@ echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 Internet Protocol Version 6, Src: fe80::e73:29ff:feb7:d6e8, Dst: fe80::d6b2:9200:15bb:a0e8
 
 
-bpf_printk("IPv6 lookup src=%x:%x:%x:%x:%x:%x:%x:%x "
-           "dst=%x:%x:%x:%x:%x:%x:%x:%x protocol=%d\n", 
-           bpf_ntohs(srcIP6[0]), bpf_ntohs(srcIP6[1]),
-           bpf_ntohs(srcIP6[2]), bpf_ntohs(srcIP6[3]),
-           bpf_ntohs(srcIP6[4]), bpf_ntohs(srcIP6[5]),
-           bpf_ntohs(srcIP6[6]), bpf_ntohs(srcIP6[7]),
-           bpf_ntohs(dstIP6[0]), bpf_ntohs(dstIP6[1]),
-           bpf_ntohs(dstIP6[2]), bpf_ntohs(dstIP6[3]),
-           bpf_ntohs(dstIP6[4]), bpf_ntohs(dstIP6[5]),
-           bpf_ntohs(dstIP6[6]), bpf_ntohs(dstIP6[7]), 
-           proto);
+        __u16 *srcIP6 = (__u16 *)ctx->local_ip6;
+        __u16 *dstIP6 = (__u16 *)ctx->remote_ip6;
+        __u32 srcPort = ctx->local_port;
+        __u16 dstPort = bpf_ntohs(ctx->remote_port);
+
+
+        info.src_ip = srcIP;
+        info.sport = srcPort;
+        info.dst_ip = dstIP;
+        info.dport = dstPort;
+        info.sysexit = 3;
+        info.proto = proto;
+
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
 
 
 
