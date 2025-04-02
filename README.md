@@ -69,12 +69,17 @@ sudo systemctl disable systemd-resolved
 
 ip route
 
-PID=765  dstIP=UDP://[185.125.190.57]:123 sendto
-srcIP=UDP://[192.168.1.71]:59517 dstIP=//prod-ntp-4.ntp1.ps5.canonical.com.[185.125.190.57]:123 lookup
+Установка wireshark
 
-STATE=3 srcIP=UDP://[192.168.1.71]:41090 dstIP=//alphyn.canonical.com.[91.189.91.157]:123
+sudo apt update
+sudo apt install wireshark
+sudo dpkg-reconfigure wireshark-common //без sudo
+sudo usermod -aG wireshark $USER //добавить пользователя
+wireshark //запуск
 
-sudo ufw allow in from 91.189.91.157 to any port 123 proto udp
+
+
+
 
 
 
