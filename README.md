@@ -84,6 +84,9 @@ sudo strace -e sendto,send,sendmsg nc -u -w1 34.117.188.166 443
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo strace -e sendto,send,sendmsg nc -u -w1 34.117.188.166 443
 +++ exited with 0 +++
 
+sudo tcpdump -i any udp port 443 -vv
+
+
 
 
 
