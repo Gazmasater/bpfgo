@@ -79,6 +79,9 @@ wireshark //запуск
 
 echo "Hello, UDP!" | nc -u -w1 34.117.188.166 443
 
+sudo strace -e sendto,send,sendmsg nc -u -w1 34.117.188.166 443
+
+
 
 
 
