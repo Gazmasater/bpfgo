@@ -84,6 +84,52 @@ echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 Internet Protocol Version 6, Src: fe80::e73:29ff:feb7:d6e8, Dst: fe80::d6b2:9200:15bb:a0e8
 
 
+SEC("sk_lookup")
+int look_up(struct bpf_sk_lookup *ctx) {
+    struct trace_info info = {};
+    __u32 proto = ctx->protocol;
+
+    if (ctx->family == AF_INET) {
+        __u32 srcIP = bpf_ntohl(ctx->local_ip4);
+        __u32 dstIP = bpf_ntohl(ctx->remote_ip4);
+        __u32 srcPort = ctx->local_port;
+        __u16 dstPort = bpf_ntohs(ctx->remote_port);
+
+        info.src_ip = srcIP;
+        info.sport = srcPort;
+        info.dst_ip = dstIP;
+        info.dport = dstPort;
+        info.sysexit = 3;
+        info.proto = proto;
+
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+        bpf_printk("IPv4 lookup src=%d.%d.%d.%d:%d dst=%d.%d.%d.%d:%d protocol=%d FAMILY=%d \n", 
+            (srcIP >> 24) & 0xff, (srcIP >> 16) & 0xff, (srcIP >> 8) & 0xff, srcIP & 0xff,
+            srcPort,
+            (dstIP >> 24) & 0xff, (dstIP >> 16) & 0xff, (dstIP >> 8) & 0xff, dstIP & 0xff,
+            dstPort,
+            proto, ctx->family);
+    } else if (ctx->family == AF_INET6) {
+        __u16 *srcIP6 = (__u16 *)ctx->local_ip6;
+        __u16 *dstIP6 = (__u16 *)ctx->remote_ip6;
+        __u32 srcPort = ctx->local_port;
+        __u16 dstPort = bpf_ntohs(ctx->remote_port);
+
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+        bpf_printk("IPv6 lookup src=%x:%x:%x:%x:%x:%x:%x:%x:%d "
+            "dst=%x:%x:%x:%x:%x:%x:%x:%x:%d protocol=%d FAMILY=%d \n", 
+            bpf_ntohs(srcIP6[0]), bpf_ntohs(srcIP6[1]), bpf_ntohs(srcIP6[2]), bpf_ntohs(srcIP6[3]),
+            bpf_ntohs(srcIP6[4]), bpf_ntohs(srcIP6[5]), bpf_ntohs(srcIP6[6]), bpf_ntohs(srcIP6[7]),
+            srcPort,
+            bpf_ntohs(dstIP6[0]), bpf_ntohs(dstIP6[1]), bpf_ntohs(dstIP6[2]), bpf_ntohs(dstIP6[3]),
+            bpf_ntohs(dstIP6[4]), bpf_ntohs(dstIP6[5]), bpf_ntohs(dstIP6[6]), bpf_ntohs(dstIP6[7]),
+            dstPort,
+            proto, ctx->family);
+    }
+    return SK_PASS;
+}
 
 
 
