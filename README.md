@@ -84,6 +84,7 @@ echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 Internet Protocol Version 6, Src: fe80::e73:29ff:feb7:d6e8, Dst: fe80::d6b2:9200:15bb:a0e8
 
 
+
 package main
 
 import (
@@ -107,27 +108,14 @@ import (
 var objs bpfObjects
 
 var eventChan_sport = make(chan int, 1)
+
 var eventChan_pid = make(chan int, 1)
 
 var mu sync.Mutex
+
 var xxx, xxx_pid int
 
 var proto, srchost, dsthost string
-
-type bpfTraceInfo struct {
-	Pid    uint32
-	Family uint16
-	Proto  uint8
-	State  uint8
-	Sysexit uint8
-	Sport  uint16
-	Dport  uint16
-	SrcIp  uint32 // IPv4
-	DstIp  uint32 // IPv4
-	SrcIp6 [16]byte // IPv6
-	DstIp6 [16]byte // IPv6
-	Comm   [16]byte
-}
 
 func init() {
 	// Снимаем ограничение на память
@@ -188,6 +176,7 @@ func main() {
 	}
 	defer skLookupLink.Close()
 
+	// Создаем perf.Reader для чтения событий eBPF
 	const buffLen = 4096
 	rd, err := perf.NewReader(objs.TraceEvents, buffLen)
 	if err != nil {
@@ -195,10 +184,17 @@ func main() {
 	}
 	defer rd.Close()
 
+	// Канал для завершения работы
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
+
+		executableName := os.Args[0]
+		if len(executableName) > 2 {
+			executableName = executableName[2:]
+		}
+
 		for {
 			record := new(perf.Record)
 			err := rd.ReadInto(record)
@@ -215,16 +211,18 @@ func main() {
 				continue
 			}
 
+			// Приводим прочитанные данные к структуре bpfTraceInfo
 			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
 
-			var srcAddr, dstAddr string
-			if event.Family == 2 { // IPv4
+			if event.Family == 2 {
+
 				srcIP := net.IPv4(
 					byte(event.SrcIp>>24),
 					byte(event.SrcIp>>16),
 					byte(event.SrcIp>>8),
 					byte(event.SrcIp),
 				)
+
 				dstIP := net.IPv4(
 					byte(event.DstIp>>24),
 					byte(event.DstIp>>16),
@@ -232,53 +230,110 @@ func main() {
 					byte(event.DstIp),
 				)
 
-				srcAddr = fmt.Sprintf("[%s]:%d", srcIP.String(), event.Sport)
-				dstAddr = fmt.Sprintf("[%s]:%d", dstIP.String(), event.Dport)
-
-			} else if event.Family == 10 { // IPv6
-				srcIP := net.IP(event.SrcIp6[:])
-				dstIP := net.IP(event.DstIp6[:])
-
-				srcAddr = fmt.Sprintf("[%s]:%d", srcIP.String(), event.Sport)
-				dstAddr = fmt.Sprintf("[%s]:%d", dstIP.String(), event.Dport)
-			}
-
-			if event.Sysexit == 1 {
-				fmt.Printf("STATE=1 PID=%d dstIP=%s FAMILY=%d \n", event.Pid, dstAddr, event.Family)
-			}
-
-			if event.Sysexit == 2 {
-				fmt.Printf("STATE=2 PID=%d srcIP=%s \n", event.Pid, srcAddr)
-			}
-
-			if event.Sysexit == 3 {
-				fmt.Printf("STATE=3 srcIP=%s dstIP=%s PROTO=%d FAMILY=%d\n", srcAddr, dstAddr, event.Proto, event.Family)
-			}
-
-			if event.Sysexit == 5 {
-				if event.State == 1 {
-					fmt.Printf("PID=%d %s <- %s \n", event.Pid, dstAddr, srcAddr)
+				if pkg.Int8ToString(event.Comm) == executableName {
+					continue
 				}
-				if event.State == 2 {
-					fmt.Printf("State 2 detected for PID=%d\n", event.Pid)
+
+				if event.Sysexit == 1 {
+
+					dstAddr := fmt.Sprintf("//[%s]:%d", dstIP.String(), event.Dport)
+					pid := event.Pid
+					family := event.Family
+					fmt.Printf("STATE=1 PID=%d  dstIP=%s FAMILY=%d \n", pid, dstAddr, family)
+
+				}
+
+				if event.Sysexit == 2 {
+
+					srcAddr := fmt.Sprintf("//[%s]:%d", srcIP.String(), event.Sport)
+					pid := event.Pid
+					fmt.Printf("STATE=2 PID=%d srcIP=%s \n", pid, srcAddr)
+
+				}
+
+				if event.Sysexit == 3 {
+
+					family := event.Family
+
+					dstAddr := fmt.Sprintf("//%s[%s]:%d", pkg.ResolveIP(dstIP), dstIP.String(), event.Dport)
+					srcAddr := fmt.Sprintf("//[%s]:%d", srcIP.String(), event.Sport)
+					fmt.Printf("STATE=3 srcIP=%s dstIP=%s PROTO=%d FAMILY=%d\n", srcAddr, dstAddr, event.Proto, int(family))
+
+				}
+
+				if event.Sysexit == 6 {
+
+					if event.State == 1 {
+
+						mu.Lock()
+						select {
+						case eventChan_sport <- int(event.Sport):
+						default:
+							eventChan_sport <- int(event.Sport)
+							fmt.Printf("State 1: заменен порт %d\n", event.Sport)
+						}
+						mu.Unlock()
+
+						srchost = pkg.ResolveIP(srcIP)
+						dsthost = pkg.ResolveIP(dstIP)
+
+						srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
+						dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
+
+						if event.Proto == 6 {
+
+							proto = "TCP"
+						}
+
+						fmt.Printf("PID=%d %s:%s <- %s:%s \n", event.Pid, proto, srcAddr, proto, dstAddr)
+
+					}
+					if event.State == 2 {
+						mu.Lock()
+						select {
+						case eventChan_pid <- int(event.Pid):
+						default:
+							//fmt.Println("State 2: eventChan_pid заполнен, пропускаю запись PID")
+						}
+						mu.Unlock()
+					}
+
+					select {
+
+					case xxx = <-eventChan_sport:
+
+						srchost = pkg.ResolveIP(srcIP)
+						dsthost = pkg.ResolveIP(dstIP)
+
+						srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), xxx)
+						dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
+
+						select {
+						case xxx_pid = <-eventChan_pid:
+							//fmt.Printf("State 2: получил PID %d\n", xxx_pid)
+						default:
+							//fmt.Println("State 2: eventChan_pid пуст, PID неизвестен")
+						}
+
+						if event.Proto == 6 {
+
+							proto = "TCP"
+						}
+
+						fmt.Printf("PID=%d %s:%s -> %s:%s \n", xxx_pid, proto, srcAddr, proto, dstAddr)
+
+					default:
+						fmt.Println("")
+					}
+
 				}
 			}
+
 		}
+
 	}()
 
 	fmt.Println("Press Ctrl+C to exit")
 	<-stop
 	fmt.Println("Exiting...")
 }
-
-
-
-
-
-
-
-
-
-
-
-
