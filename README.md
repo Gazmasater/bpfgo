@@ -106,6 +106,15 @@ bpf_probe_read_kernel(event->dstIP6, sizeof(event->dstIP6), ctx->remote_ip6);
 u32 ip = bpf_ntohl(addr_in6.sin6_addr.in6_u);
 
 
+__u32 ip6[4];
+
+ip6[0] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.s6_addr[0]);
+ip6[1] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.s6_addr[4]);
+ip6[2] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.s6_addr[8]);
+ip6[3] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.s6_addr[12]);
+
+
+
 
 
 
