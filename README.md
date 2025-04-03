@@ -341,4 +341,11 @@ func main() {
         ip6[3] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[12]);
 
 
+ printf("IPv6 Address: %x:%x:%x:%x:%x:%x:%x:%x\n",
+           (ip6[0] >> 16) & 0xFFFF, ip6[0] & 0xFFFF,
+           (ip6[1] >> 16) & 0xFFFF, ip6[1] & 0xFFFF,
+           (ip6[2] >> 16) & 0xFFFF, ip6[2] & 0xFFFF,
+           (ip6[3] >> 16) & 0xFFFF, ip6[3] & 0xFFFF);
+
+
 
