@@ -84,24 +84,7 @@ echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 Internet Protocol Version 6, Src: fe80::e73:29ff:feb7:d6e8, Dst: fe80::d6b2:9200:15bb:a0e8
 
 
-        __u16 *srcIP6 = (__u16 *)ctx->local_ip6;
-        __u16 *dstIP6 = (__u16 *)ctx->remote_ip6;
-        __u32 srcPort = ctx->local_port;
-        __u16 dstPort = bpf_ntohs(ctx->remote_port);
-
-
-        info.src_ip = srcIP;
-        info.sport = srcPort;
-        info.dst_ip = dstIP;
-        info.dport = dstPort;
-        info.sysexit = 3;
-        info.proto = proto;
-
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-
-
- __u16 *srcIP6 = (__u16 *)ctx->local_ip6;
+__u16 *srcIP6 = (__u16 *)ctx->local_ip6;
         __u16 *dstIP6 = (__u16 *)ctx->remote_ip6;
         __u32 srcPort = ctx->local_port;
         __u16 dstPort = bpf_ntohs(ctx->remote_port);
