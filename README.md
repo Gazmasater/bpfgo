@@ -347,5 +347,7 @@ func main() {
            (ip6[2] >> 16) & 0xFFFF, ip6[2] & 0xFFFF,
            (ip6[3] >> 16) & 0xFFFF, ip6[3] & 0xFFFF);
 
+    NetworkManager-965     [006] ...21   926.523491: bpf_trace_printk: IPv6 Address: ff02:0:0:0:0:0:1:2
+
 
 
