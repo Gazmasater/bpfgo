@@ -100,10 +100,9 @@ struct event_t {
     __u16 dstPort;
 };
 
-  __builtin_memcpy(event->srcIP6, ctx->local_ip6, sizeof(event->srcIP6));
-    __builtin_memcpy(event->dstIP6, ctx->remote_ip6, sizeof(event->dstIP6));
-    event->srcPort = ctx->local_port;
-    event->dstPort = bpf_ntohs(ctx->remote_port);
+bpf_probe_read_kernel(event->srcIP6, sizeof(event->srcIP6), ctx->local_ip6);
+bpf_probe_read_kernel(event->dstIP6, sizeof(event->dstIP6), ctx->remote_ip6);
+
 
 
 
