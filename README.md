@@ -335,4 +335,10 @@ func main() {
 	fmt.Println("Exiting...")
 }
 
+        ip6[0] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[0]);
+        ip6[1] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[4]);
+        ip6[2] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[8]);
+        ip6[3] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[12]);
+
+
 
