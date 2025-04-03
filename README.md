@@ -103,6 +103,9 @@ struct event_t {
 bpf_probe_read_kernel(event->srcIP6, sizeof(event->srcIP6), ctx->local_ip6);
 bpf_probe_read_kernel(event->dstIP6, sizeof(event->dstIP6), ctx->remote_ip6);
 
+u32 ip = bpf_ntohl(addr_in6.sin6_addr.in6_u);
+
+
 
 
 
