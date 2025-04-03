@@ -93,7 +93,17 @@ __u16 *srcIP6 = (__u16 *)ctx->local_ip6;
 
 
 
+struct event_t {
+    __u16 srcIP6[8];  // IPv6-адрес состоит из 8 блоков по 16 бит
+    __u16 dstIP6[8];
+    __u32 srcPort;
+    __u16 dstPort;
+};
 
+  __builtin_memcpy(event->srcIP6, ctx->local_ip6, sizeof(event->srcIP6));
+    __builtin_memcpy(event->dstIP6, ctx->remote_ip6, sizeof(event->dstIP6));
+    event->srcPort = ctx->local_port;
+    event->dstPort = bpf_ntohs(ctx->remote_port);
 
 
 
