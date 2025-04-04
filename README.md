@@ -81,35 +81,10 @@ echo "Hello, UDP!" | nc -u -w1 34.117.188.166 443
 echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 
 
-else if (family==10){
-					fmt.Printf("IPv6=%x:%x:%x:%x:%x:%x:%x:%x\n",
-					(event.dstIP6[0] >> 16) & 0xFFFF, event.dstIP6[0] & 0xFFFF,
-					(event.dstIP6[1] >> 16) & 0xFFFF, event.dstIP6[1] & 0xFFFF,
-					(event.dstIP6[2] >> 16) & 0xFFFF, event.dstIP6[2] & 0xFFFF,
-					(event.dstIP6[3] >> 16) & 0xFFFF, event.dstIP6[3] & 0xFFFF),
-				
-				}
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#1",
-	"severity": 8,
-	"message": "expected 1 expression",
-	"source": "syntax",
-	"startLineNumber": 196,
-	"startColumn": 6,
-	"endLineNumber": 196,
-	"endColumn": 6
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "go-staticcheck",
-	"severity": 4,
-	"message": "syntax error: unexpected }, expected expression (compile)",
-	"source": "go-staticcheck",
-	"startLineNumber": 202,
-	"startColumn": 5,
-	"endLineNumber": 202,
-	"endColumn": 6
-}]
+else if family == 10 {
+    fmt.Printf("IPv6=%x:%x:%x:%x:%x:%x:%x:%x\n",
+        (event.dstIP6[0]>>16)&0xFFFF, event.dstIP6[0]&0xFFFF,
+        (event.dstIP6[1]>>16)&0xFFFF, event.dstIP6[1]&0xFFFF,
+        (event.dstIP6[2]>>16)&0xFFFF, event.dstIP6[2]&0xFFFF,
+        (event.dstIP6[3]>>16)&0xFFFF, event.dstIP6[3]&0xFFFF)
+}
