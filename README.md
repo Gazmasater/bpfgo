@@ -81,11 +81,60 @@ echo "Hello, UDP!" | nc -u -w1 34.117.188.166 443
 echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo cat /sys/kernel/debug/tracing/trace_pipe|grep "IPv6 UDP "
-            code-3227    [002] b..21   992.521591: bpf_trace_printk: IPv6 UDP net_dev_queue dport=3299 sport=52253
- irq/147-iwlwifi-534     [004] ..s21  1028.564378: bpf_trace_printk: IPv6 UDP lookup SRC Address: 0:0:c777:4800:8662:9fec:9697:e8c0 PROTO=17
- irq/147-iwlwifi-534     [004] ..s21  1028.564392: bpf_trace_printk: IPv6 UDP lookup DST Address: ffff:9e90:430c:96c4:ffff:9e90:0:0
- irq/147-iwlwifi-534     [004] ..s21  1028.564395: bpf_trace_printk: IPv6 UDP lookup sport=546   dport=49832
+SEC("tracepoint/net/net_dev_queue")
+int trace_net_dev_queue(struct trace_event_raw_net_dev_template *ctx) {
+    struct sk_buff *skb = (void *)ctx->skbaddr;
+    struct ipv6hdr *ip6h;
+    struct udphdr *udph;
+    void *data;
+    u32 nh_off;
+
+    // Получаем сетевой заголовок
+    bpf_probe_read_kernel(&nh_off, sizeof(nh_off), &skb->network_header);
+    data = (void *)(long)skb->data;
+
+    ip6h = data;
+    if (ip6h->nexthdr != IPPROTO_UDP)
+        return 0;
+
+    // Смещаемся на заголовок UDP
+    udph = (struct udphdr *)(ip6h + 1);
+
+    // Логируем только порты
+    bpf_printk("Outgoing UDP - sport: %d, dport: %d\n",
+        ntohs(udph->source), ntohs(udph->dest)
+    );
+
+    return 0;
+}
+
+SEC("tracepoint/net/netif_receive_skb")
+int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
+    struct sk_buff *skb = (void *)ctx->skbaddr;
+    struct ipv6hdr *ip6h;
+    struct udphdr *udph;
+    void *data;
+    u32 nh_off;
+
+    // Получаем сетевой заголовок
+    bpf_probe_read_kernel(&nh_off, sizeof(nh_off), &skb->network_header);
+    data = (void *)(long)skb->data;
+
+    ip6h = data;
+    if (ip6h->nexthdr != IPPROTO_UDP)
+        return 0;
+
+    // Смещаемся на заголовок UDP
+    udph = (struct udphdr *)(ip6h + 1);
+
+    // Логируем только порты
+    bpf_printk("Incoming UDP - sport: %d, dport: %d\n",
+        ntohs(udph->source), ntohs(udph->dest)
+    );
+
+    return 0;
+}
+
 
 
 
