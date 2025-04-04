@@ -83,11 +83,22 @@ echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 
 Internet Protocol Version 6, Src: fe80::e73:29ff:feb7:d6e8, Dst: fe80::d6b2:9200:15bb:a0e8
 
+_exit
+napi_gro_frags_exit     net_dev_xmit           netif_receive_skb_list_entry
+napi_gro_receive_entry  net_dev_xmit_timeout   netif_receive_skb_list_exit
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo cat /sys/kernel/debug/tracing/events/net/net_dev_queue
+/format
+name: net_dev_queue
+ID: 1623
+format:
+        field:unsigned short common_type;       offset:0;       size:2; signed:0;
+        field:unsigned char common_flags;       offset:2;       size:1; signed:0;
+        field:unsigned char common_preempt_count;       offset:3;       size:1; signed:0;
+        field:int common_pid;   offset:4;       size:4; signed:1;
+
+        field:void * skbaddr;   offset:8;   
 
 
-SRC Address: 0:0:e7e:6b00:1163:bd8:a177:e8c0 PROTO=17
- irq/150-iwlwifi-520     [007] ..s21  4257.924939: bpf_trace_printk: IPv6lookup DST Address: ffff:9253:538:d6c4:ffff:9253:0:0
- irq/150-iwlwifi-520     [007] ..s21  4257.924941: bpf_trace_printk: IPv6lookup sport=546   dport=49832
 
 
 
