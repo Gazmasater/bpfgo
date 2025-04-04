@@ -81,56 +81,35 @@ echo "Hello, UDP!" | nc -u -w1 34.117.188.166 443
 echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 
 
-#include <linux/bpf.h>
-#include <linux/pkt_cls.h>
-#include <linux/ip.h>
-#include <linux/udp.h>
-#include <linux/if_ether.h>
-#include <bpf/bpf_helpers.h>
+else if (family==10){
+					fmt.Printf("IPv6=%x:%x:%x:%x:%x:%x:%x:%x\n",
+					(event.dstIP6[0] >> 16) & 0xFFFF, event.dstIP6[0] & 0xFFFF,
+					(event.dstIP6[1] >> 16) & 0xFFFF, event.dstIP6[1] & 0xFFFF,
+					(event.dstIP6[2] >> 16) & 0xFFFF, event.dstIP6[2] & 0xFFFF,
+					(event.dstIP6[3] >> 16) & 0xFFFF, event.dstIP6[3] & 0xFFFF),
+				
+				}
 
-// === 🧱 КОНСТАНТЫ ===
-#define ETH_P_IP_BE   0x0008   // htons(0x0800) -> big-endian IP proto
-#define IPPROTO_UDP   17       // Протокол UDP в IP заголовке
-#define BLOCK_PORT    53       // Порт, который блокируем (например, DNS)
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"severity": 8,
+	"message": "expected 1 expression",
+	"source": "syntax",
+	"startLineNumber": 196,
+	"startColumn": 6,
+	"endLineNumber": 196,
+	"endColumn": 6
+}]
 
-#define TC_OK         0        // Пропустить пакет
-#define TC_SHOT       2        // Отбросить пакет
-
-SEC("tc")
-int handle_udp(struct __sk_buff *skb) {
-    void *data = (void *)(long)skb->data;
-    void *data_end = (void *)(long)skb->data_end;
-
-    // Ethernet
-    struct ethhdr *eth = data;
-    if ((void *)(eth + 1) > data_end)
-        return TC_OK;
-
-    // Проверка на IPv4
-    if (eth->h_proto != __builtin_bswap16(ETH_P_IP_BE))
-        return TC_OK;
-
-    // IP заголовок
-    struct iphdr *iph = data + sizeof(*eth);
-    if ((void *)(iph + 1) > data_end)
-        return TC_OK;
-
-    // Только UDP
-    if (iph->protocol != IPPROTO_UDP)
-        return TC_OK;
-
-    // UDP заголовок
-    struct udphdr *udph = (void *)iph + (iph->ihl * 4);
-    if ((void *)(udph + 1) > data_end)
-        return TC_OK;
-
-    // Проверка порта
-    if (udph->dest == __builtin_bswap16(BLOCK_PORT)) {
-        bpf_printk("Dropped UDP packet to port %d\n", BLOCK_PORT);
-        return TC_SHOT;
-    }
-
-    return TC_OK;
-}
-
-char _license[] SEC("license") = "GPL";
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "go-staticcheck",
+	"severity": 4,
+	"message": "syntax error: unexpected }, expected expression (compile)",
+	"source": "go-staticcheck",
+	"startLineNumber": 202,
+	"startColumn": 5,
+	"endLineNumber": 202,
+	"endColumn": 6
+}]
