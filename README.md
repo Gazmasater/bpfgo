@@ -191,34 +191,45 @@ func main() {
 [{
 	"resource": "/home/gaz358/myprog/bpfgo/main.go",
 	"owner": "_generated_diagnostic_collection_name_#1",
+	"code": {
+		"value": "WrongAssignCount",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "WrongAssignCount"
+		}
+	},
 	"severity": 8,
-	"message": "missing ',' in composite literal",
-	"source": "syntax",
-	"startLineNumber": 59,
-	"startColumn": 9,
+	"message": "assignment mismatch: 2 variables but link.RawAttachProgram returns 1 value",
+	"source": "compiler",
+	"startLineNumber": 55,
+	"startColumn": 15,
 	"endLineNumber": 59,
-	"endColumn": 9
+	"endColumn": 4
 }]
 
 [{
 	"resource": "/home/gaz358/myprog/bpfgo/main.go",
 	"owner": "_generated_diagnostic_collection_name_#1",
 	"code": {
-		"value": "default",
+		"value": "IncompatibleAssign",
 		"target": {
 			"$mid": 1,
-			"path": "/golang.org/x/tools/go/analysis/passes/composite",
+			"path": "/golang.org/x/tools/internal/typesinternal",
 			"scheme": "https",
-			"authority": "pkg.go.dev"
+			"authority": "pkg.go.dev",
+			"fragment": "IncompatibleAssign"
 		}
 	},
-	"severity": 4,
-	"message": "github.com/cilium/ebpf/link.RawAttachProgramOptions struct literal uses unkeyed fields",
-	"source": "composites",
+	"severity": 8,
+	"message": "cannot use uint32(iface.Index) (value of type uint32) as int value in struct literal",
+	"source": "compiler",
 	"startLineNumber": 56,
-	"startColumn": 37,
-	"endLineNumber": 60,
-	"endColumn": 3
+	"startColumn": 12,
+	"endLineNumber": 56,
+	"endColumn": 31
 }]
 
 
