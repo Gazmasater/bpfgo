@@ -85,21 +85,28 @@ Internet Protocol Version 6, Src: fe80::e73:29ff:feb7:d6e8, Dst: fe80::d6b2:9200
 
 
 
-else if family == 10 {
-					// ip6_0:=event.DstIP6[0];
-					// ip6_1:=event.DstIP6[1];
-					// ip6_2:=event.DstIP6[2];
-					// ip6_3:=event.DstIP6[3];
+					ip6_0:=event.DstIP6[0]
+					ip6_1:=event.DstIP6[1]
+					ip6_2:=event.DstIP6[2]
+					ip6_3:=event.DstIP6[3]
 
-					//fmt.Printf("IPv6=%d:%d:%d:d",
+					fmt.Printf("IPv6=%x:%x:%x:%x",
 
-					// (ip6[0] >> 16) & 0xFFFF, ip6[0] & 0xFFFF,
-					// (ip6[1] >> 16) & 0xFFFF, ip6[1] & 0xFFFF,
-					// (ip6[2] >> 16) & 0xFFFF, ip6[2] & 0xFFFF,
-					// (ip6[3] >> 16) & 0xFFFF, ip6[3] & 0xFFFF
-					//)
-
-				}
-
+					(ip6[0] >> 16) & 0xFFFF, ip6[0] & 0xFFFF,
+					(ip6[1] >> 16) & 0xFFFF, ip6[1] & 0xFFFF,
+					(ip6[2] >> 16) & 0xFFFF, ip6[2] & 0xFFFF,
+					(ip6[3] >> 16) & 0xFFFF, ip6[3] & 0xFFFF
+					)
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#3",
+	"severity": 8,
+	"message": "missing ',' before newline in argument list",
+	"source": "syntax",
+	"startLineNumber": 173,
+	"startColumn": 46,
+	"endLineNumber": 173,
+	"endColumn": 46
+}]
 
 
