@@ -81,58 +81,30 @@ echo "Hello, UDP!" | nc -u -w1 34.117.188.166 443
 echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 
 
-Internet Protocol Version 6, Src: fe80::e73:29ff:feb7:d6e8, Dst: fe80::d6b2:9200:15bb:a0e8
-
-_exit
-napi_gro_frags_exit     net_dev_xmit           netif_receive_skb_list_entry
-napi_gro_receive_entry  net_dev_xmit_timeout   netif_receive_skb_list_exit
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo cat /sys/kernel/debug/tracing/events/net/net_dev_queue
-/format
-name: net_dev_queue
-ID: 1623
-format:
-        field:unsigned short common_type;       offset:0;       size:2; signed:0;
-        field:unsigned char common_flags;       offset:2;       size:1; signed:0;
-        field:unsigned char common_preempt_count;       offset:3;       size:1; signed:0;
-        field:int common_pid;   offset:4;       size:4; signed:1;
-
-        field:void * skbaddr;   offset:8;   
-
-
-
-#include <linux/skbuff.h>
-#include <linux/ipv6.h>
-#include <linux/udp.h>
-
 SEC("tracepoint/net/net_dev_queue")
-int trace_dev_queue(struct trace_event_raw_net_dev_template *ctx) {
-    struct sk_buff *skb = (struct sk_buff *)ctx->skbaddr;
+int trace_net_dev_queue(struct trace_event_raw_net_dev_template *ctx)
+{
+    struct sk_buff *skb = (void *)ctx->skbaddr;
+    struct ipv6hdr ip6h = {};
+    struct udphdr udph = {};
+    void *head;
+    u32 nh_off;
 
-    // извлечение данных из skb (предварительно нужен доступ к структурам ядра)
-    struct ipv6hdr *ip6h;
-    struct udphdr *udph;
+    // читаем head
+    bpf_probe_read_kernel(&head, sizeof(head), &skb->head);
+    // читаем network_header
+    bpf_probe_read_kernel(&nh_off, sizeof(nh_off), &skb->network_header);
 
-    void *data = (void *)(long)skb->data;
-    void *data_end = (void *)(long)skb->data_end;
-
-    ip6h = data;
-    if ((void*)(ip6h + 1) > data_end)
+    // читаем IPv6
+    bpf_probe_read_kernel(&ip6h, sizeof(ip6h), head + nh_off);
+    if (ip6h.nexthdr != IPPROTO_UDP)
         return 0;
 
-    if (ip6h->nexthdr != IPPROTO_UDP)
-        return 0;
+    // читаем UDP
+    bpf_probe_read_kernel(&udph, sizeof(udph), head + nh_off + sizeof(ip6h));
 
-    udph = (struct udphdr *)(ip6h + 1);
-    if ((void*)(udph + 1) > data_end)
-        return 0;
-
-    bpf_printk("IPv6 UDP send to: %x:%x:%x:%x:%x:%x:%x:%x sport=%d dport=%d\n",
-        ntohs(ip6h->daddr.s6_addr16[0]), ntohs(ip6h->daddr.s6_addr16[1]),
-        ntohs(ip6h->daddr.s6_addr16[2]), ntohs(ip6h->daddr.s6_addr16[3]),
-        ntohs(ip6h->daddr.s6_addr16[4]), ntohs(ip6h->daddr.s6_addr16[5]),
-        ntohs(ip6h->daddr.s6_addr16[6]), ntohs(ip6h->daddr.s6_addr16[7]),
-        ntohs(udph->source), ntohs(udph->dest)
-    );
+    // печатаем
+    bpf_printk("IPv6 UDP dport=%d sport=%d\n", ntohs(udph.dest), ntohs(udph.source));
 
     return 0;
 }
