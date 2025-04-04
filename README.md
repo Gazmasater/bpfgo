@@ -81,13 +81,13 @@ echo "Hello, UDP!" | nc -u -w1 34.117.188.166 443
 echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 
 
- Src: fe80::e73:29ff:feb7:d6e8, Dst: fe80::d6b2:9200:15bb:a0e8
- Src: fe80::d6b2:9200:15bb:a0e8, Dst: ff02::1:2
+        __u16 *srcIP6 = (__u16 *)bpf_ntohl(ctx->local_ip6);
+        __u16 *dstIP6 = (__u16 *)bpf_ntohl(ctx->remote_ip6);
+        __u32 srcPort = ctx->local_port;
+        __u16 dstPort = bpf_ntohs(ctx->remote_port);
 
- STATE=3 DST IPv6=ffff:9b42:44ea:cc4:ffff:9b42:0:0
-STATE=3 SRC IPv6=0:0:20dc:3200:88b8:cf41:8b97:e8c0
+        bpf_probe_read_kernel(info.srcIP6, sizeof(info.srcIP6), ctx->local_ip6);
+        bpf_probe_read_kernel(info.dstIP6, sizeof(info.dstIP6), ctx->remote_ip6);
+        info.sport = ctx->local_port;
+        info.dport = bpf_ntohs(ctx->remote_port);
 
-STATE1 IPv6 PID=967 IPv6=ff02:0:0:0:0:0:1:2:547
-STATE=3 DST IPv6=ffff:8fd8:aac:79c4:ffff:8fd8:0:0
-STATE=3 SRC IPv6=0:0:6cc5:b400:ff8e:969f:8e77:e8c0
-STATE=3 SPORT=546  DPORT=49832
