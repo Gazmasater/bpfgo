@@ -100,6 +100,42 @@ format:
 
 
 
+#include <linux/skbuff.h>
+#include <linux/ipv6.h>
+#include <linux/udp.h>
+
+SEC("tracepoint/net/net_dev_queue")
+int trace_dev_queue(struct trace_event_raw_net_dev_template *ctx) {
+    struct sk_buff *skb = (struct sk_buff *)ctx->skbaddr;
+
+    // извлечение данных из skb (предварительно нужен доступ к структурам ядра)
+    struct ipv6hdr *ip6h;
+    struct udphdr *udph;
+
+    void *data = (void *)(long)skb->data;
+    void *data_end = (void *)(long)skb->data_end;
+
+    ip6h = data;
+    if ((void*)(ip6h + 1) > data_end)
+        return 0;
+
+    if (ip6h->nexthdr != IPPROTO_UDP)
+        return 0;
+
+    udph = (struct udphdr *)(ip6h + 1);
+    if ((void*)(udph + 1) > data_end)
+        return 0;
+
+    bpf_printk("IPv6 UDP send to: %x:%x:%x:%x:%x:%x:%x:%x sport=%d dport=%d\n",
+        ntohs(ip6h->daddr.s6_addr16[0]), ntohs(ip6h->daddr.s6_addr16[1]),
+        ntohs(ip6h->daddr.s6_addr16[2]), ntohs(ip6h->daddr.s6_addr16[3]),
+        ntohs(ip6h->daddr.s6_addr16[4]), ntohs(ip6h->daddr.s6_addr16[5]),
+        ntohs(ip6h->daddr.s6_addr16[6]), ntohs(ip6h->daddr.s6_addr16[7]),
+        ntohs(udph->source), ntohs(udph->dest)
+    );
+
+    return 0;
+}
 
 
 
