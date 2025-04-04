@@ -178,5 +178,48 @@ func main() {
 	}
 	defer skLookupLink.Close()
 
+ 	sock, err := link.RawAttachProgram(link.RawAttachProgramOptions{
+		Target:  uint32(iface.Index),
+		Program: objs.
+		Attach:  ebpf.AttachSkSKBStreamParser,
+	})
+	if err != nil {
+		log.Fatalf("failed to attach: %v", err)
+	}
+	defer sock.Close()
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"severity": 8,
+	"message": "missing ',' in composite literal",
+	"source": "syntax",
+	"startLineNumber": 59,
+	"startColumn": 9,
+	"endLineNumber": 59,
+	"endColumn": 9
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"code": {
+		"value": "default",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/go/analysis/passes/composite",
+			"scheme": "https",
+			"authority": "pkg.go.dev"
+		}
+	},
+	"severity": 4,
+	"message": "github.com/cilium/ebpf/link.RawAttachProgramOptions struct literal uses unkeyed fields",
+	"source": "composites",
+	"startLineNumber": 56,
+	"startColumn": 37,
+	"endLineNumber": 60,
+	"endColumn": 3
+}]
+
 
 
