@@ -94,5 +94,26 @@ fmt.Printf("IPv6=%x:%x:%x:%x:%x:%x:%x:%x\n",
     (ip6[3]>>16)&0xFFFF, ip6[3]&0xFFFF,
 )
 
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"code": {
+		"value": "default",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/go/analysis/passes/shift",
+			"scheme": "https",
+			"authority": "pkg.go.dev"
+		}
+	},
+	"severity": 4,
+	"message": "ip6[0] (16 bits) too small for shift of 16",
+	"source": "shift",
+	"startLineNumber": 166,
+	"startColumn": 8,
+	"endLineNumber": 166,
+	"endColumn": 18
+}]
+
 
 
