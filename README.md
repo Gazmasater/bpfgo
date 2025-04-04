@@ -81,71 +81,94 @@ echo "Hello, UDP!" | nc -u -w1 34.117.188.166 443
 echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 
 
-SEC("tracepoint/net/net_dev_queue")
-int trace_net_dev_queue(struct trace_event_raw_net_dev_template *ctx)
-{
-    struct sk_buff *skb = (void *)ctx->skbaddr;
-    struct ipv6hdr ip6h = {};
-    struct udphdr udph = {};
-    void *head;
-    u32 nh_off;
+#define ETH_P_IPV6 0x86DD
+#include <linux/bpf.h>
+#include <linux/if_ether.h>
+#include <linux/ipv6.h>
+#include <linux/udp.h>
+#include <bpf/bpf_helpers.h>
 
-    bpf_printk("IPv6 UDP net_dev_queue ");
+SEC("socket/udp")
+int udp_filter(struct __sk_buff *skb) {
+    void *data = (void *)(long)skb->data;
+    void *data_end = (void *)(long)skb->data_end;
 
-
-    // читаем head
-    bpf_probe_read_kernel(&head, sizeof(head), &skb->head);
-    // читаем network_header
-    bpf_probe_read_kernel(&nh_off, sizeof(nh_off), &skb->network_header);
-
-    // читаем IPv6
-    bpf_probe_read_kernel(&ip6h, sizeof(ip6h), head + nh_off);
-    if (ip6h.nexthdr != IPPROTO_UDP)
+    struct ethhdr *eth = data;
+    if ((void *)(eth + 1) > data_end)
         return 0;
 
-    // читаем UDP
-    bpf_probe_read_kernel(&udph, sizeof(udph), head + nh_off + sizeof(ip6h));
+    if (eth->h_proto != __bpf_constant_htons(ETH_P_IPV6))
+        return 0;
 
+    struct ipv6hdr *ip6h = (void *)(eth + 1);
+    if ((void *)(ip6h + 1) > data_end)
+        return 0;
 
-    // логируем порты UDP
-    bpf_printk("IPv6 UDP net_dev_queue dport=%d sport=%d\n", bpf_ntohs(udph.dest), bpf_ntohs(udph.source));
+    if (ip6h->nexthdr != IPPROTO_UDP)
+        return 0;
+
+    struct udphdr *udph = (void *)(ip6h + 1);
+    if ((void *)(udph + 1) > data_end)
+        return 0;
+
+    bpf_printk("IPv6 UDP packet: sport=%d dport=%d\n", 
+        bpf_ntohs(udph->source), bpf_ntohs(udph->dest));
 
     return 0;
 }
 
-SEC("tracepoint/net/netif_receive_skb")
-int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
-    struct sk_buff *skb = (void *)ctx->skbaddr;
-    struct ipv6hdr ip6h = {};
-    struct udphdr udph = {};
-    void *head;
-    u32 nh_off;
-
-    bpf_printk("IPv6 UDP netif_receive_skb");
+char LICENSE[] SEC("license") = "GPL";
 
 
-    // читаем head
-    bpf_probe_read_kernel(&head, sizeof(head), &skb->head);
-    // читаем network_header
-    bpf_probe_read_kernel(&nh_off, sizeof(nh_off), &skb->network_header);
+package main
 
-    // читаем IPv6
-    bpf_probe_read_kernel(&ip6h, sizeof(ip6h), head + nh_off);
-    if (ip6h.nexthdr != IPPROTO_UDP)
-        return 0;
+import (
+	"log"
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/rlimit"
+	"os"
+)
 
-    // читаем UDP
-    bpf_probe_read_kernel(&udph, sizeof(udph), head + nh_off + sizeof(ip6h));
+func main() {
+	// Повышаем лимит памяти для eBPF
+	if err := rlimit.RemoveMemlock(); err != nil {
+		log.Fatalf("remove memlock: %v", err)
+	}
 
-    // Логируем только порты
-    bpf_printk("IPv6 UDP netif_receive_skb sport: %d, dport: %d\n",
-        bpf_ntohs(udph.source), bpf_ntohs(udph.dest)
-    );
+	// Загружаем BPF объект
+	spec, err := ebpf.LoadCollectionSpec("udp_filter.o")
+	if err != nil {
+		log.Fatalf("failed to load spec: %v", err)
+	}
 
-    return 0;
+	objs := struct {
+		UdpFilter *ebpf.Program `ebpf:"udp_filter"`
+	}{}
+	if err := spec.LoadAndAssign(&objs, nil); err != nil {
+		log.Fatalf("failed to load objs: %v", err)
+	}
+
+	// Создаем raw socket
+	ifaceName := "eth0" // замени на свой интерфейс!
+	iface, err := net.InterfaceByName(ifaceName)
+	if err != nil {
+		log.Fatalf("failed to get iface: %v", err)
+	}
+
+	// Привязываем eBPF-программу к сокету
+	sock, err := link.RawAttachProgram(link.RawAttachProgramOptions{
+		Target:  uint32(iface.Index),
+		Program: objs.UdpFilter,
+		Attach:  ebpf.AttachSkSKBStreamParser, // или другой AttachType
+	})
+	if err != nil {
+		log.Fatalf("failed to attach: %v", err)
+	}
+	defer sock.Close()
+
+	log.Println("eBPF UDP фильтр загружен. Читай dmesg или trace_pipe.")
+	select {}
 }
-
-
-
 
 
