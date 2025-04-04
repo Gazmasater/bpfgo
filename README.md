@@ -103,8 +103,16 @@ int trace_net_dev_queue(struct trace_event_raw_net_dev_template *ctx)
     // читаем UDP
     bpf_probe_read_kernel(&udph, sizeof(udph), head + nh_off + sizeof(ip6h));
 
-    // печатаем
-    bpf_printk("IPv6 UDP dport=%d sport=%d\n", ntohs(udph.dest), ntohs(udph.source));
+    // логируем IPv6 адрес назначения
+    bpf_printk("IPv6 destination address: %x:%x:%x:%x:%x:%x:%x:%x\n",
+        ip6h.daddr.s6_addr16[0], ip6h.daddr.s6_addr16[1],
+        ip6h.daddr.s6_addr16[2], ip6h.daddr.s6_addr16[3],
+        ip6h.daddr.s6_addr16[4], ip6h.daddr.s6_addr16[5],
+        ip6h.daddr.s6_addr16[6], ip6h.daddr.s6_addr16[7]
+    );
+
+    // логируем порты UDP
+    bpf_printk("IPv6 UDP dport=%d sport=%d\n", bpf_ntohs(udph.dest), bpf_ntohs(udph.source));
 
     return 0;
 }
