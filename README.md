@@ -188,6 +188,16 @@ func main() {
 	}
 	defer sock.Close()
 
+
+	sock, err := link.RawAttachProgram(link.RawAttachProgramOptions{
+		Target:  uint32(iface.Index),
+		Program: objs.UdpFilter,
+		Attach:  ebpf.AttachSkSKBStreamParser,
+	})
+
+
+ 
+
 [{
 	"resource": "/home/gaz358/myprog/bpfgo/main.go",
 	"owner": "_generated_diagnostic_collection_name_#1",
