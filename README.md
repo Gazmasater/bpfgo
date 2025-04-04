@@ -90,6 +90,28 @@ fmt.Printf("IPv6=%x:%x:%x:%x:%x:%x:%x:%x\n",
     ip6[4], ip6[5], ip6[6], ip6[7],
 )
 
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"code": {
+		"value": "InvalidIndex",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "InvalidIndex"
+		}
+	},
+	"severity": 8,
+	"message": "invalid argument: index 4 out of bounds [0:4]",
+	"source": "compiler",
+	"startLineNumber": 167,
+	"startColumn": 11,
+	"endLineNumber": 167,
+	"endColumn": 12
+}]
+
 
 
 
