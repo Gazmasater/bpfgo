@@ -81,10 +81,7 @@ echo "Hello, UDP!" | nc -u -w1 34.117.188.166 443
 echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 
 
-else if family == 10 {
-    fmt.Printf("IPv6=%x:%x:%x:%x:%x:%x:%x:%x\n",
-        (event.dstIP6[0]>>16)&0xFFFF, event.dstIP6[0]&0xFFFF,
-        (event.dstIP6[1]>>16)&0xFFFF, event.dstIP6[1]&0xFFFF,
-        (event.dstIP6[2]>>16)&0xFFFF, event.dstIP6[2]&0xFFFF,
-        (event.dstIP6[3]>>16)&0xFFFF, event.dstIP6[3]&0xFFFF)
-}
+ Src: fe80::e73:29ff:feb7:d6e8, Dst: fe80::d6b2:9200:15bb:a0e8
+
+ STATE=3 DST IPv6=ffff:9b42:44ea:cc4:ffff:9b42:0:0
+STATE=3 SRC IPv6=0:0:20dc:3200:88b8:cf41:8b97:e8c0
