@@ -91,3 +91,24 @@ echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
         info.sport = ctx->local_port;
         info.dport = bpf_ntohs(ctx->remote_port);
 
+        [{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "default",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/go/analysis/passes/shift",
+			"scheme": "https",
+			"authority": "pkg.go.dev"
+		}
+	},
+	"severity": 4,
+	"message": "event.DstIP6[0] (16 bits) too small for shift of 16",
+	"source": "shift",
+	"startLineNumber": 168,
+	"startColumn": 8,
+	"endLineNumber": 168,
+	"endColumn": 27
+}]
+
