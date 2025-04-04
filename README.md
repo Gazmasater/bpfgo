@@ -81,166 +81,56 @@ echo "Hello, UDP!" | nc -u -w1 34.117.188.166 443
 echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 
 
-#define ETH_P_IPV6 0x86DD
 #include <linux/bpf.h>
-#include <linux/if_ether.h>
-#include <linux/ipv6.h>
+#include <linux/pkt_cls.h>
+#include <linux/ip.h>
 #include <linux/udp.h>
+#include <linux/if_ether.h>
 #include <bpf/bpf_helpers.h>
 
-SEC("socket/udp")
-int udp_filter(struct __sk_buff *skb) {
+// === 🧱 КОНСТАНТЫ ===
+#define ETH_P_IP_BE   0x0008   // htons(0x0800) -> big-endian IP proto
+#define IPPROTO_UDP   17       // Протокол UDP в IP заголовке
+#define BLOCK_PORT    53       // Порт, который блокируем (например, DNS)
+
+#define TC_OK         0        // Пропустить пакет
+#define TC_SHOT       2        // Отбросить пакет
+
+SEC("tc")
+int handle_udp(struct __sk_buff *skb) {
     void *data = (void *)(long)skb->data;
     void *data_end = (void *)(long)skb->data_end;
 
+    // Ethernet
     struct ethhdr *eth = data;
     if ((void *)(eth + 1) > data_end)
-        return 0;
+        return TC_OK;
 
-    if (eth->h_proto != __bpf_constant_htons(ETH_P_IPV6))
-        return 0;
+    // Проверка на IPv4
+    if (eth->h_proto != __builtin_bswap16(ETH_P_IP_BE))
+        return TC_OK;
 
-    struct ipv6hdr *ip6h = (void *)(eth + 1);
-    if ((void *)(ip6h + 1) > data_end)
-        return 0;
+    // IP заголовок
+    struct iphdr *iph = data + sizeof(*eth);
+    if ((void *)(iph + 1) > data_end)
+        return TC_OK;
 
-    if (ip6h->nexthdr != IPPROTO_UDP)
-        return 0;
+    // Только UDP
+    if (iph->protocol != IPPROTO_UDP)
+        return TC_OK;
 
-    struct udphdr *udph = (void *)(ip6h + 1);
+    // UDP заголовок
+    struct udphdr *udph = (void *)iph + (iph->ihl * 4);
     if ((void *)(udph + 1) > data_end)
-        return 0;
+        return TC_OK;
 
-    bpf_printk("IPv6 UDP packet: sport=%d dport=%d\n", 
-        bpf_ntohs(udph->source), bpf_ntohs(udph->dest));
+    // Проверка порта
+    if (udph->dest == __builtin_bswap16(BLOCK_PORT)) {
+        bpf_printk("Dropped UDP packet to port %d\n", BLOCK_PORT);
+        return TC_SHOT;
+    }
 
-    return 0;
+    return TC_OK;
 }
 
-char LICENSE[] SEC("license") = "GPL";
-
-
-package main
-
-import (
-	"log"
-	"github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/link"
-	"github.com/cilium/ebpf/rlimit"
-	"os"
-)
-
-func main() {
-	// Повышаем лимит памяти для eBPF
-	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatalf("remove memlock: %v", err)
-	}
-
-	// Загружаем BPF объект
-	spec, err := ebpf.LoadCollectionSpec("udp_filter.o")
-	if err != nil {
-		log.Fatalf("failed to load spec: %v", err)
-	}
-
-	objs := struct {
-		UdpFilter *ebpf.Program `ebpf:"udp_filter"`
-	}{}
-	if err := spec.LoadAndAssign(&objs, nil); err != nil {
-		log.Fatalf("failed to load objs: %v", err)
-	}
-
-	// Создаем raw socket
-	ifaceName := "eth0" // замени на свой интерфейс!
-	iface, err := net.InterfaceByName(ifaceName)
-	if err != nil {
-		log.Fatalf("failed to get iface: %v", err)
-	}
-
-	// Привязываем eBPF-программу к сокету
-	sock, err := link.RawAttachProgram(link.RawAttachProgramOptions{
-		Target:  uint32(iface.Index),
-		Program: objs.UdpFilter,
-		Attach:  ebpf.AttachSkSKBStreamParser, // или другой AttachType
-	})
-	if err != nil {
-		log.Fatalf("failed to attach: %v", err)
-	}
-	defer sock.Close()
-
-	log.Println("eBPF UDP фильтр загружен. Читай dmesg или trace_pipe.")
-	select {}
-}
-
-
-	skLookupLink, err := link.AttachNetNs(int(netns.Fd()), objs.LookUp)
-	if err != nil {
-		log.Fatalf("failed to attach sk_lookup program: %v", err)
-	}
-	defer skLookupLink.Close()
-
- 	sock, err := link.RawAttachProgram(link.RawAttachProgramOptions{
-		Target:  uint32(iface.Index),
-		Program: objs.
-		Attach:  ebpf.AttachSkSKBStreamParser,
-	})
-	if err != nil {
-		log.Fatalf("failed to attach: %v", err)
-	}
-	defer sock.Close()
-
-
-	sock, err := link.RawAttachProgram(link.RawAttachProgramOptions{
-		Target:  uint32(iface.Index),
-		Program: objs.UdpFilter,
-		Attach:  ebpf.AttachSkSKBStreamParser,
-	})
-
-
- 
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#1",
-	"code": {
-		"value": "WrongAssignCount",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "WrongAssignCount"
-		}
-	},
-	"severity": 8,
-	"message": "assignment mismatch: 2 variables but link.RawAttachProgram returns 1 value",
-	"source": "compiler",
-	"startLineNumber": 55,
-	"startColumn": 15,
-	"endLineNumber": 59,
-	"endColumn": 4
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#1",
-	"code": {
-		"value": "IncompatibleAssign",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "IncompatibleAssign"
-		}
-	},
-	"severity": 8,
-	"message": "cannot use uint32(iface.Index) (value of type uint32) as int value in struct literal",
-	"source": "compiler",
-	"startLineNumber": 56,
-	"startColumn": 12,
-	"endLineNumber": 56,
-	"endColumn": 31
-}]
-
-
-
+char _license[] SEC("license") = "GPL";
