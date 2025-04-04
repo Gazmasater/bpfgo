@@ -85,14 +85,9 @@ Internet Protocol Version 6, Src: fe80::e73:29ff:feb7:d6e8, Dst: fe80::d6b2:9200
 
 
 
-ip6 := event.DstIP6 // []uint32 длиной 4
-
-fmt.Printf("IPv6=%x:%x:%x:%x:%x:%x:%x:%x\n",
-    (ip6[0]>>16)&0xFFFF, ip6[0]&0xFFFF,
-    (ip6[1]>>16)&0xFFFF, ip6[1]&0xFFFF,
-    (ip6[2]>>16)&0xFFFF, ip6[2]&0xFFFF,
-    (ip6[3]>>16)&0xFFFF, ip6[3]&0xFFFF,
-)
+SRC Address: 0:0:e7e:6b00:1163:bd8:a177:e8c0 PROTO=17
+ irq/150-iwlwifi-520     [007] ..s21  4257.924939: bpf_trace_printk: IPv6lookup DST Address: ffff:9253:538:d6c4:ffff:9253:0:0
+ irq/150-iwlwifi-520     [007] ..s21  4257.924941: bpf_trace_printk: IPv6lookup sport=546   dport=49832
 
 
 
