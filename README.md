@@ -82,28 +82,33 @@ echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 
 
 SEC("tracepoint/net/net_dev_queue")
-int trace_net_dev_queue(struct trace_event_raw_net_dev_template *ctx) {
+int trace_net_dev_queue(struct trace_event_raw_net_dev_template *ctx)
+{
     struct sk_buff *skb = (void *)ctx->skbaddr;
-    struct ipv6hdr *ip6h;
-    struct udphdr *udph;
-    void *data;
+    struct ipv6hdr ip6h = {};
+    struct udphdr udph = {};
+    void *head;
     u32 nh_off;
 
-    // Получаем сетевой заголовок
-    bpf_probe_read_kernel(&nh_off, sizeof(nh_off), &skb->network_header);
-    data = (void *)(long)skb->data;
+    bpf_printk("IPv6 UDP net_dev_queue ");
 
-    ip6h = data;
-    if (ip6h->nexthdr != IPPROTO_UDP)
+
+    // читаем head
+    bpf_probe_read_kernel(&head, sizeof(head), &skb->head);
+    // читаем network_header
+    bpf_probe_read_kernel(&nh_off, sizeof(nh_off), &skb->network_header);
+
+    // читаем IPv6
+    bpf_probe_read_kernel(&ip6h, sizeof(ip6h), head + nh_off);
+    if (ip6h.nexthdr != IPPROTO_UDP)
         return 0;
 
-    // Смещаемся на заголовок UDP
-    udph = (struct udphdr *)(ip6h + 1);
+    // читаем UDP
+    bpf_probe_read_kernel(&udph, sizeof(udph), head + nh_off + sizeof(ip6h));
 
-    // Логируем только порты
-    bpf_printk("Outgoing UDP - sport: %d, dport: %d\n",
-        ntohs(udph->source), ntohs(udph->dest)
-    );
+
+    // логируем порты UDP
+    bpf_printk("IPv6 UDP net_dev_queue dport=%d sport=%d\n", bpf_ntohs(udph.dest), bpf_ntohs(udph.source));
 
     return 0;
 }
@@ -111,29 +116,35 @@ int trace_net_dev_queue(struct trace_event_raw_net_dev_template *ctx) {
 SEC("tracepoint/net/netif_receive_skb")
 int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
     struct sk_buff *skb = (void *)ctx->skbaddr;
-    struct ipv6hdr *ip6h;
-    struct udphdr *udph;
-    void *data;
+    struct ipv6hdr ip6h = {};
+    struct udphdr udph = {};
+    void *head;
     u32 nh_off;
 
-    // Получаем сетевой заголовок
-    bpf_probe_read_kernel(&nh_off, sizeof(nh_off), &skb->network_header);
-    data = (void *)(long)skb->data;
+    bpf_printk("IPv6 UDP netif_receive_skb");
 
-    ip6h = data;
-    if (ip6h->nexthdr != IPPROTO_UDP)
+
+    // читаем head
+    bpf_probe_read_kernel(&head, sizeof(head), &skb->head);
+    // читаем network_header
+    bpf_probe_read_kernel(&nh_off, sizeof(nh_off), &skb->network_header);
+
+    // читаем IPv6
+    bpf_probe_read_kernel(&ip6h, sizeof(ip6h), head + nh_off);
+    if (ip6h.nexthdr != IPPROTO_UDP)
         return 0;
 
-    // Смещаемся на заголовок UDP
-    udph = (struct udphdr *)(ip6h + 1);
+    // читаем UDP
+    bpf_probe_read_kernel(&udph, sizeof(udph), head + nh_off + sizeof(ip6h));
 
     // Логируем только порты
-    bpf_printk("Incoming UDP - sport: %d, dport: %d\n",
-        ntohs(udph->source), ntohs(udph->dest)
+    bpf_printk("IPv6 UDP netif_receive_skb sport: %d, dport: %d\n",
+        bpf_ntohs(udph.source), bpf_ntohs(udph.dest)
     );
 
     return 0;
 }
+
 
 
 
