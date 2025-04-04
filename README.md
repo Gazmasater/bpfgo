@@ -81,41 +81,11 @@ echo "Hello, UDP!" | nc -u -w1 34.117.188.166 443
 echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 
 
-SEC("tracepoint/net/net_dev_queue")
-int trace_net_dev_queue(struct trace_event_raw_net_dev_template *ctx)
-{
-    struct sk_buff *skb = (void *)ctx->skbaddr;
-    struct ipv6hdr ip6h = {};
-    struct udphdr udph = {};
-    void *head;
-    u32 nh_off;
-
-    // читаем head
-    bpf_probe_read_kernel(&head, sizeof(head), &skb->head);
-    // читаем network_header
-    bpf_probe_read_kernel(&nh_off, sizeof(nh_off), &skb->network_header);
-
-    // читаем IPv6
-    bpf_probe_read_kernel(&ip6h, sizeof(ip6h), head + nh_off);
-    if (ip6h.nexthdr != IPPROTO_UDP)
-        return 0;
-
-    // читаем UDP
-    bpf_probe_read_kernel(&udph, sizeof(udph), head + nh_off + sizeof(ip6h));
-
-    // логируем IPv6 адрес назначения
-    bpf_printk("IPv6 destination address: %x:%x:%x:%x:%x:%x:%x:%x\n",
-        ip6h.daddr.s6_addr16[0], ip6h.daddr.s6_addr16[1],
-        ip6h.daddr.s6_addr16[2], ip6h.daddr.s6_addr16[3],
-        ip6h.daddr.s6_addr16[4], ip6h.daddr.s6_addr16[5],
-        ip6h.daddr.s6_addr16[6], ip6h.daddr.s6_addr16[7]
-    );
-
-    // логируем порты UDP
-    bpf_printk("IPv6 UDP dport=%d sport=%d\n", bpf_ntohs(udph.dest), bpf_ntohs(udph.source));
-
-    return 0;
-}
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo cat /sys/kernel/debug/tracing/trace_pipe|grep "IPv6 UDP "
+            code-3227    [002] b..21   992.521591: bpf_trace_printk: IPv6 UDP net_dev_queue dport=3299 sport=52253
+ irq/147-iwlwifi-534     [004] ..s21  1028.564378: bpf_trace_printk: IPv6 UDP lookup SRC Address: 0:0:c777:4800:8662:9fec:9697:e8c0 PROTO=17
+ irq/147-iwlwifi-534     [004] ..s21  1028.564392: bpf_trace_printk: IPv6 UDP lookup DST Address: ffff:9e90:430c:96c4:ffff:9e90:0:0
+ irq/147-iwlwifi-534     [004] ..s21  1028.564395: bpf_trace_printk: IPv6 UDP lookup sport=546   dport=49832
 
 
 
