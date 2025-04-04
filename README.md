@@ -172,3 +172,11 @@ func main() {
 }
 
 
+	skLookupLink, err := link.AttachNetNs(int(netns.Fd()), objs.LookUp)
+	if err != nil {
+		log.Fatalf("failed to attach sk_lookup program: %v", err)
+	}
+	defer skLookupLink.Close()
+
+
+
