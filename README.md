@@ -99,8 +99,7 @@ bpf_probe_read_kernel(info.srcIP6, sizeof(info.srcIP6), (__u16 *)ctx->local_ip6)
 bpf_probe_read_kernel(info.dstIP6, sizeof(info.dstIP6), (__u16 *)ctx->remote_ip6);
 
 
-curl -6 http://[2606:4700:4700::1111]/
+curl -6 -v https://cloudflare.com
+*   Trying 2606:4700::6810:1341:443...
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ curl -6 http://[2606:4700:4700::1111]/
-curl: (7) Failed to connect to 2606:4700:4700::1111 port 80 after 0 ms: Couldn't connect to server
 
