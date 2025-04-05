@@ -102,21 +102,20 @@ else if (ctx->family == AF_INET6) {
     }
 
 
-    else if family == 10 {
+else if family == 10 {
 
 					fmt.Printf("STATE=3 DST IPv6=%x:%x:%x:%x:%x:%x:%x:%x\n",
-						event.DstIP6[0], event.DstIP6[0],
-						event.DstIP6[1], event.DstIP6[1],
-						event.DstIP6[2], event.DstIP6[2],
-						event.DstIP6[3], event.DstIP6[3])
+						event.DstIP6[0], event.DstIP6[1],
+						event.DstIP6[2], event.DstIP6[3],
+						event.DstIP6[4], event.DstIP6[5],
+						event.DstIP6[6], event.DstIP6[7])
 
 					fmt.Printf("STATE=3 SRC IPv6=%x:%x:%x:%x:%x:%x:%x:%x\n",
-						event.SrcIP6[0], event.SrcIP6[0],
-						event.SrcIP6[1], event.SrcIP6[1],
-						event.SrcIP6[2], event.SrcIP6[2],
-						event.SrcIP6[3], event.SrcIP6[3])
+						event.SrcIP6[0], event.SrcIP6[1],
+						event.SrcIP6[2], event.SrcIP6[3],
+						event.SrcIP6[4], event.SrcIP6[5],
+						event.SrcIP6[6], event.SrcIP6[7])
 
 					fmt.Printf("STATE=3 SPORT=%d  DPORT=%d\n", event.Sport, event.Dport)
 
 				}
-
