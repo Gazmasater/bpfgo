@@ -81,4 +81,12 @@ echo "Hello, UDP!" | nc -u -w1 34.117.188.166 443
 echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 
 
-0:0:0:2:0:0:0:0:547
+u16 *srcIP6=(u16*)ctx->local_ip6;
+        u16 *dstIP6 = (u16*)ctx->remote_ip6;
+        __u32 srcPort = ctx->local_port;
+        __u16 dstPort = bpf_ntohs(ctx->remote_port);
+
+        bpf_probe_read_kernel(info.srcIP6, sizeof(info.srcIP6), ctx->local_ip6);
+        bpf_probe_read_kernel(info.dstIP6, sizeof(info.dstIP6), ctx->remote_ip6);
+        info.sport = ctx->local_port;
+        info.dport = bpf_ntohs(ctx->remote_port);
