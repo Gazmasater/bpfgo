@@ -90,3 +90,11 @@ u16 *srcIP6=(u16*)ctx->local_ip6;
         bpf_probe_read_kernel(info.dstIP6, sizeof(info.dstIP6), ctx->remote_ip6);
         info.sport = ctx->local_port;
         info.dport = bpf_ntohs(ctx->remote_port);
+
+
+        info.sport = ctx->local_port;
+info.dport = bpf_ntohs(ctx->remote_port);
+
+bpf_probe_read_kernel(info.srcIP6, sizeof(info.srcIP6), (__u16 *)ctx->local_ip6);
+bpf_probe_read_kernel(info.dstIP6, sizeof(info.dstIP6), (__u16 *)ctx->remote_ip6);
+
