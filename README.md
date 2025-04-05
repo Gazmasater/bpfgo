@@ -81,8 +81,11 @@ echo "Hello, UDP!" | nc -u -w1 34.117.188.166 443
 echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 
 
-        __u16 *srcIP6 = (__u16 *)bpf_ntohl(ctx->local_ip6);
-        __u16 *dstIP6 = (__u16 *)bpf_ntohl(ctx->remote_ip6);
+else if (ctx->family == AF_INET6) {
+
+
+        __u16 *srcIP6 = (__u16 *)ctx->local_ip6;
+        __u16 *dstIP6 = (__u16 *)ctx->remote_ip6;
         __u32 srcPort = ctx->local_port;
         __u16 dstPort = bpf_ntohs(ctx->remote_port);
 
@@ -90,25 +93,30 @@ echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
         bpf_probe_read_kernel(info.dstIP6, sizeof(info.dstIP6), ctx->remote_ip6);
         info.sport = ctx->local_port;
         info.dport = bpf_ntohs(ctx->remote_port);
+        info.family=AF_INET6;
+        info.sysexit = 3;
 
-        [{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#4",
-	"code": {
-		"value": "default",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/go/analysis/passes/shift",
-			"scheme": "https",
-			"authority": "pkg.go.dev"
-		}
-	},
-	"severity": 4,
-	"message": "event.DstIP6[0] (16 bits) too small for shift of 16",
-	"source": "shift",
-	"startLineNumber": 168,
-	"startColumn": 8,
-	"endLineNumber": 168,
-	"endColumn": 27
-}]
+
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+    }
+
+
+    else if family == 10 {
+
+					fmt.Printf("STATE=3 DST IPv6=%x:%x:%x:%x:%x:%x:%x:%x\n",
+						event.DstIP6[0], event.DstIP6[0],
+						event.DstIP6[1], event.DstIP6[1],
+						event.DstIP6[2], event.DstIP6[2],
+						event.DstIP6[3], event.DstIP6[3])
+
+					fmt.Printf("STATE=3 SRC IPv6=%x:%x:%x:%x:%x:%x:%x:%x\n",
+						event.SrcIP6[0], event.SrcIP6[0],
+						event.SrcIP6[1], event.SrcIP6[1],
+						event.SrcIP6[2], event.SrcIP6[2],
+						event.SrcIP6[3], event.SrcIP6[3])
+
+					fmt.Printf("STATE=3 SPORT=%d  DPORT=%d\n", event.Sport, event.Dport)
+
+				}
 
