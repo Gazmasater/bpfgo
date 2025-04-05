@@ -97,13 +97,32 @@ STATE=3 DST IPv6=fe800000:0:e7329ff:feb7d6e8
 STATE=3 SRC IPv6=fe800000:0:d6b29200:15bba0e8
 STATE=3 SPORT=546  DPORT=49832 PROTO=17
 
-SEC("tracepoint/syscalls/sys_enter_recvmsg")
-int trace_recvmsg(struct trace_event_raw_sys_enter *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    bpf_printk("📥 tracepoint recvmsg by PID=%d\n", pid);
-    return 0;
+
+struct sys_enter_recvmsg_args {
+        unsigned short common_type;       offset:0;       size:2; 
+        unsigned char common_flags;       offset:2;       size:1; 
+        unsigned char common_preempt_count;       offset:3;       size:1; 
+        int common_pid;   offset:4;       size:4; 
+
+        int __syscall_nr; offset:8;       size:4; 
+        int fd;   offset:16;      size:8; 
+        struct user_msghdr * msg; offset:24;      size:8; 
+        unsigned int flags;       offset:32;      size:8; 
+
 }
 
+
+struct sys_exit_recvmsg_args{
+
+        unsigned short common_type;       offset:0;       size:2; 
+        unsigned char common_flags;       offset:2;       size:1; 
+        unsigned char common_preempt_count;       offset:3;       size:1; 
+        int common_pid;   offset:4;       size:4; signed:1;
+
+        int __syscall_nr; offset:8;       size:4; 
+        long ret; offset:16;      size:8;
+
+}
 
 
 
