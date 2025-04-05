@@ -98,3 +98,9 @@ info.dport = bpf_ntohs(ctx->remote_port);
 bpf_probe_read_kernel(info.srcIP6, sizeof(info.srcIP6), (__u16 *)ctx->local_ip6);
 bpf_probe_read_kernel(info.dstIP6, sizeof(info.dstIP6), (__u16 *)ctx->remote_ip6);
 
+
+Src: fe80::e73:29ff:feb7:d6e8, 
+Dst: fe80::d6b2:9200:15bb:a0e8
+SRC: ffff99ba:cbd89e44:ffff99ba:0
+DST: 0:a5c39600:25514e9d:8ff7e8c0
+
