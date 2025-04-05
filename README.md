@@ -80,16 +80,17 @@ wireshark //запуск
 echo "Hello, UDP!" | nc -u -w1 34.117.188.166 443
 echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 
+Frame 108: 149 bytes on wire (1192 bits), 149 bytes captured (1192 bits) on interface wlp0s20f3, id 0
+Ethernet II, Src: Intel_a8:ec:0b (e4:fd:45:a8:ec:0b), Dst: IPv6mcast_01:00:02 (33:33:00:01:00:02)
+Internet Protocol Version 6, Src: fe80::d6b2:9200:15bb:a0e8, Dst: ff02::1:2
+User Datagram Protocol, Src Port: 546, Dst Port: 547
+DHCPv6
 
-        info.srcIP6[0]=bpf_ntohl(ctx->local_ip6[0]);
-        info.srcIP6[1]=bpf_ntohl(ctx->local_ip6[1]);
-        info.srcIP6[2]=bpf_ntohl(ctx->local_ip6[2]);
-        info.srcIP6[3]=bpf_ntohl(ctx->local_ip6[3]);
-
-        info.dstIP6[0]=bpf_ntohl(ctx->remote_ip6[0]);
-        info.dstIP6[1]=bpf_ntohl(ctx->remote_ip6[1]);
-        info.dstIP6[2]=bpf_ntohl(ctx->remote_ip6[2]);
-        info.dstIP6[3]=bpf_ntohl(ctx->remote_ip6[3]);
+Frame 1024: 121 bytes on wire (968 bits), 121 bytes captured (968 bits) on interface wlp0s20f3, id 0
+Ethernet II, Src: Sercomm_b7:d6:e8 (0c:73:29:b7:d6:e8), Dst: Intel_a8:ec:0b (e4:fd:45:a8:ec:0b)
+Internet Protocol Version 6, Src: fe80::e73:29ff:feb7:d6e8, Dst: fe80::d6b2:9200:15bb:a0e8
+User Datagram Protocol, Src Port: 49832, Dst Port: 546
+DHCPv6
 
 
 
