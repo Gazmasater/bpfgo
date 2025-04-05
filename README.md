@@ -92,5 +92,11 @@ Internet Protocol Version 6, Src: fe80::e73:29ff:feb7:d6e8, Dst: fe80::d6b2:9200
 User Datagram Protocol, Src Port: 49832, Dst Port: 546
 DHCPv6
 
+STATE1 IPv6 PID=982 IPv6=ff020000:0:0:10002:547
+STATE=3 DST IPv6=fe800000:0:e7329ff:feb7d6e8
+STATE=3 SRC IPv6=fe800000:0:d6b29200:15bba0e8
+STATE=3 SPORT=546  DPORT=49832 PROTO=17
+
+
 
 
