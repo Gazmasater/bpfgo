@@ -182,6 +182,20 @@ int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
     return 0;
 }
 
+msg_control
+msg_control_is_user
+msg_control_user
+msg_controllen
+msg_flags
+msg_gen_inq
+msg_inq
+msg_iocb
+msg_iter
+msg_name
+msg_namelen
+msg_ubuf
+
+
 
 
 
