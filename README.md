@@ -80,49 +80,33 @@ wireshark //запуск
 echo "Hello, UDP!" | nc -u -w1 34.117.188.166 443
 echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 
-Frame 108: 149 bytes on wire (1192 bits), 149 bytes captured (1192 bits) on interface wlp0s20f3, id 0
-Ethernet II, Src: Intel_a8:ec:0b (e4:fd:45:a8:ec:0b), Dst: IPv6mcast_01:00:02 (33:33:00:01:00:02)
-Internet Protocol Version 6, Src: fe80::d6b2:9200:15bb:a0e8, Dst: ff02::1:2
-User Datagram Protocol, Src Port: 546, Dst Port: 547
-DHCPv6
+sys_enter_recvmsg_args {
+        unsigned short common_type;      
+        unsigned char common_flags;      
+        unsigned char common_preempt_count;     
+        int common_pid;   
 
-Frame 1024: 121 bytes on wire (968 bits), 121 bytes captured (968 bits) on interface wlp0s20f3, id 0
-Ethernet II, Src: Sercomm_b7:d6:e8 (0c:73:29:b7:d6:e8), Dst: Intel_a8:ec:0b (e4:fd:45:a8:ec:0b)
-Internet Protocol Version 6, Src: fe80::e73:29ff:feb7:d6e8, Dst: fe80::d6b2:9200:15bb:a0e8
-User Datagram Protocol, Src Port: 49832, Dst Port: 546
-DHCPv6
+        int __syscall_nr; 
+        int fd;
+        int  pad;   
+        struct user_msghdr * msg; 
+        unsigned int flags;      
 
-STATE1 IPv6 PID=982 IPv6=ff020000:0:0:10002:547
-STATE=3 DST IPv6=fe800000:0:e7329ff:feb7d6e8
-STATE=3 SRC IPv6=fe800000:0:d6b29200:15bba0e8
-STATE=3 SPORT=546  DPORT=49832 PROTO=17
-
-
-struct sys_enter_recvmsg_args {
-        unsigned short common_type;       offset:0;       size:2; 
-        unsigned char common_flags;       offset:2;       size:1; 
-        unsigned char common_preempt_count;       offset:3;       size:1; 
-        int common_pid;   offset:4;       size:4; 
-
-        int __syscall_nr; offset:8;       size:4; 
-        int fd;   offset:16;      size:8; 
-        struct user_msghdr * msg; offset:24;      size:8; 
-        unsigned int flags;       offset:32;      size:8; 
-
-}
+};
 
 
 struct sys_exit_recvmsg_args{
 
-        unsigned short common_type;       offset:0;       size:2; 
-        unsigned char common_flags;       offset:2;       size:1; 
-        unsigned char common_preempt_count;       offset:3;       size:1; 
-        int common_pid;   offset:4;       size:4; signed:1;
+        unsigned short common_type;       
+        unsigned char common_flags;    
+        unsigned char common_preempt_count;    
+        int common_pid;   
 
-        int __syscall_nr; offset:8;       size:4; 
-        long ret; offset:16;      size:8;
+        int __syscall_nr; 
+        int pad;
+        long ret; 
 
-}
+};
 
 SEC("tracepoint/syscalls/sys_enter_recvmsg")
 int trace_recvmsg_enter(struct sys_enter_recvmsg_args *ctx) {
@@ -136,41 +120,52 @@ int trace_recvmsg_enter(struct sys_enter_recvmsg_args *ctx) {
     struct user_msghdr msg = {};
     bpf_probe_read_user(&msg, sizeof(msg), (void *)ctx->msg);
 
-    struct sockaddr_storage addr = {};
+    struct sockaddr addr = {};
     if (msg.msg_name != NULL) {
         bpf_probe_read_user(&addr, sizeof(addr), msg.msg_name);
+      //  bpf_printk("recvmsg_enter addr=%p",addr);
         bpf_map_update_elem(&addrRecv_map, &pid, &addr, BPF_ANY);
     }
 
     return 0;
 }
 
-
-
-
 SEC("tracepoint/syscalls/sys_exit_recvmsg")
 int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
+
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
     if (!conn_info)
         return 0;
 
+
+
     if (ret < 0) {
-        bpf_printk("sys_exit_recvmsg failed for PID=%d\n", pid);
+      //  bpf_printk("sys_exit_recvmsg failed for PID=%d\n", pid);
         bpf_map_delete_elem(&conn_info_map, &pid);
         return 0;
     }
 
+
+
     struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addrRecv_map, &pid);
+
     if (!addr_ptr)
         return 0;
 
+
     struct sockaddr addr = {};
+
     bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);
 
+    bpf_printk("!!!!!sys_exit_recvmsg  FAMILY=%d ",addr.sa_family);
+
+
     if (addr.sa_family == AF_INET) {
+      //s  bpf_printk("!!!!!sys_exit_recvmsg FAMILY=%d",addr.sa_family);
+
         struct sockaddr_in addr_in = {};
         bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
 
@@ -211,6 +206,7 @@ int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
 
     return 0;
 }
+
 
 
 
