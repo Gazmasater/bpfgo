@@ -141,43 +141,15 @@ struct {
     __type(value, struct msghdr *);
 } addrRecv_map SEC(".maps");
 
-SEC("tracepoint/syscalls/sys_exit_recvmsg")
-int trace_recvfrom_exit(struct sys_exit_recvmsg_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
+struct msghdr *msg;
+bpf_probe_read_user(&msg, sizeof(msg), *addr_ptr);
 
-    bpf_printk("sys_exit_recvmsg ");
+void *name_ptr = NULL;
+bpf_probe_read_user(&name_ptr, sizeof(name_ptr), &msg->msg_name);
 
+struct sockaddr_in sa = {};
+bpf_probe_read_user(&sa, sizeof(sa), name_ptr);
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
-    if (!conn_info) return 0;
-
-    if (ret < 0) {
-        bpf_printk("sys_exit_recvfrom failed for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map, &pid);
-        return 0;
-    }
-
-
-
-    struct msghdr **addr_ptr = bpf_map_lookup_elem(&addrRecv_map, &pid);
-    if (!addr_ptr) {
-        return 0;
-    }
-
-    struct msghdr *msg ;
-    bpf_probe_read_user(&msg, sizeof(msg), *addr_ptr);  
-
-    struct sockaddr_in sa = {};
-   bpf_probe_read_user(&sa, sizeof(sa), &msg->msg_name);
-
-    bpf_printk("sys_exit_recvmsg FAMILY=%d",sa.sin_family);
-
-
- 
-    return 0;
-
-}
 
 
 
