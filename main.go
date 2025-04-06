@@ -26,11 +26,9 @@ var eventChan_pid = make(chan int, 1)
 
 var mu sync.Mutex
 
-var xxx int
-var xxx_pid int
-var proto string
-var srchost string
-var dsthost string
+var xxx, xxx_pid int
+
+var proto, srchost, dsthost string
 
 func init() {
 	// Снимаем ограничение на память
@@ -54,12 +52,6 @@ func main() {
 	defer netns.Close()
 
 	fmt.Printf("Дескриптор нового namespace: %d\n", netns.Fd())
-
-	skLookupLink, err := link.AttachNetNs(int(netns.Fd()), objs.LookUp)
-	if err != nil {
-		log.Fatalf("failed to attach sk_lookup program: %v", err)
-	}
-	defer skLookupLink.Close()
 
 	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
 	if err != nil {
@@ -85,47 +77,17 @@ func main() {
 	}
 	defer RExit.Close()
 
-	// Accept4Enter, err := link.Tracepoint("syscalls", "sys_enter_accept4", objs.TraceAccept4Enter, nil)
-	// if err != nil {
-	// 	log.Fatalf("opening tracepoint sys_enter_accept4: %s", err)
-	// }
-	// defer Accept4Enter.Close()
-
-	// Accept4Exit, err := link.Tracepoint("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit, nil)
-	// if err != nil {
-	// 	log.Fatalf("opening tracepoint sys_exit_accept4: %s", err)
-	// }
-	// defer Accept4Exit.Close()
-
-	ConnectEnter, err := link.Tracepoint("syscalls", "sys_enter_connect", objs.TraceConnectEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_connect: %s", err)
-	}
-	defer ConnectEnter.Close()
-
-	ConnectExit, err := link.Tracepoint("syscalls", "sys_exit_connect", objs.TraceConnectExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_connect: %s", err)
-	}
-	defer ConnectExit.Close()
-
-	BindEnter, err := link.Tracepoint("syscalls", "sys_enter_bind", objs.TraceBindEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_bind: %s", err)
-	}
-	defer BindEnter.Close()
-
-	BindExit, err := link.Tracepoint("syscalls", "sys_exit_bind", objs.TraceBindExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_bind: %s", err)
-	}
-	defer BindExit.Close()
-
 	InetSock, err := link.Tracepoint("sock", "inet_sock_set_state", objs.TraceTcpEst, nil)
 	if err != nil {
 		log.Fatalf("opening tracepoint inet_sock_set_state: %s", err)
 	}
 	defer InetSock.Close()
+
+	skLookupLink, err := link.AttachNetNs(int(netns.Fd()), objs.LookUp)
+	if err != nil {
+		log.Fatalf("failed to attach sk_lookup program: %v", err)
+	}
+	defer skLookupLink.Close()
 
 	// Создаем perf.Reader для чтения событий eBPF
 	const buffLen = 4096
@@ -138,9 +100,7 @@ func main() {
 	// Канал для завершения работы
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-	//portChan := make(chan int, 1)
 
-	// Запускаем цикл чтения событий eBPF
 	go func() {
 
 		executableName := os.Args[0]
@@ -167,7 +127,6 @@ func main() {
 			// Приводим прочитанные данные к структуре bpfTraceInfo
 			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
 
-			// Преобразуем IP-адреса в строковый формат
 			srcIP := net.IPv4(
 				byte(event.SrcIp>>24),
 				byte(event.SrcIp>>16),
@@ -186,6 +145,76 @@ func main() {
 				continue
 			}
 
+			if event.Sysexit == 1 {
+
+				family := event.Family
+
+				if family == 2 {
+
+					dstAddr := fmt.Sprintf("//[%s]:%d", dstIP.String(), event.Dport)
+					pid := event.Pid
+					fmt.Printf("STATE=1 PID=%d  dstIP=%s FAMILY=%d \n", pid, dstAddr, family)
+				} else if family == 10 {
+					port := event.Dport
+
+					pid := event.Pid
+					fmt.Printf("STATE1 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d\n",
+						pid,
+						event.DstIP6[0], event.DstIP6[1],
+						event.DstIP6[2], event.DstIP6[3],
+
+						port,
+					)
+
+				}
+
+			}
+
+			if event.Sysexit == 2 {
+
+				fmt.Printf("STATE=2!!!!!!FAMILY=%d\n", event.Family)
+
+				if event.Family == 2 {
+					srcAddr := fmt.Sprintf("//[%s]:%d", srcIP.String(), event.Sport)
+					pid := event.Pid
+					fmt.Printf("STATE=2 IP4 PID=%d srcIP=%s \n", pid, srcAddr)
+				} else if event.Family == 10 {
+					port := event.Dport
+					pid := event.Pid
+					fmt.Printf("STATE2 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d\n",
+						pid,
+						event.DstIP6[0], event.DstIP6[1],
+						event.DstIP6[2], event.DstIP6[3],
+						port,
+					)
+
+				}
+
+			}
+
+			if event.Sysexit == 3 {
+
+				family := event.Family
+				if family == 7 {
+					dstAddr := fmt.Sprintf("//%s[%s]:%d", pkg.ResolveIP(dstIP), dstIP.String(), event.Dport)
+					srcAddr := fmt.Sprintf("//[%s]:%d", srcIP.String(), event.Sport)
+					fmt.Printf("STATE=3 srcIP=%s dstIP=%s PROTO=%d FAMILY=%d\n", srcAddr, dstAddr, event.Proto, int(family))
+				} else if family == 10 {
+
+					fmt.Printf("STATE=3 DST IPv6=%x:%x:%x:%x\n",
+						event.DstIP6[0], event.DstIP6[1],
+						event.DstIP6[2], event.DstIP6[3])
+
+					fmt.Printf("STATE=3 SRC IPv6=%x:%x:%x:%x\n",
+						event.SrcIP6[0], event.SrcIP6[1],
+						event.SrcIP6[2], event.SrcIP6[3])
+
+					fmt.Printf("STATE=3 SPORT=%d  DPORT=%d PROTO=%d\n", event.Sport, event.Dport, event.Proto)
+
+				}
+
+			}
+
 			if event.Sysexit == 6 {
 
 				if event.State == 1 {
@@ -194,15 +223,10 @@ func main() {
 					select {
 					case eventChan_sport <- int(event.Sport):
 					default:
-						// Если канал уже содержит значение, заменяем его
-						//	<-eventChan
 						eventChan_sport <- int(event.Sport)
 						fmt.Printf("State 1: заменен порт %d\n", event.Sport)
 					}
 					mu.Unlock()
-
-					// var srchost string
-					// var dsthost string
 
 					srchost = pkg.ResolveIP(srcIP)
 					dsthost = pkg.ResolveIP(dstIP)
@@ -212,10 +236,10 @@ func main() {
 
 					if event.Proto == 6 {
 
-						proto = "TCP:"
+						proto = "TCP"
 					}
 
-					fmt.Printf("PID=%d %s%s <- %s%s \n", event.Pid, proto, srcAddr, proto, dstAddr)
+					fmt.Printf("PID=%d %s:%s <- %s:%s \n", event.Pid, proto, srcAddr, proto, dstAddr)
 
 				}
 				if event.State == 2 {
@@ -231,8 +255,6 @@ func main() {
 				select {
 
 				case xxx = <-eventChan_sport:
-					var srchost string
-					var dsthost string
 
 					srchost = pkg.ResolveIP(srcIP)
 					dsthost = pkg.ResolveIP(dstIP)
@@ -252,7 +274,7 @@ func main() {
 						proto = "TCP"
 					}
 
-					fmt.Printf("PID=%d %s%s -> %s%s \n", xxx_pid, proto, srcAddr, proto, dstAddr)
+					fmt.Printf("PID=%d %s:%s -> %s:%s \n", xxx_pid, proto, srcAddr, proto, dstAddr)
 
 				default:
 					fmt.Println("")
