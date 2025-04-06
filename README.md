@@ -111,101 +111,59 @@ struct sys_exit_recvmsg_args{
 SEC("tracepoint/syscalls/sys_enter_recvmsg")
 int trace_recvmsg_enter(struct sys_enter_recvmsg_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-
     struct conn_info_t conn_info = {};
+    
+
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
-    struct user_msghdr msg = {};
-    bpf_probe_read_user(&msg, sizeof(msg), (void *)ctx->msg);
+    struct msghdr *addr = (struct msghdr *)ctx->msg;  
 
-    struct sockaddr addr = {};
-    if (msg.msg_name != NULL) {
-        bpf_probe_read_user(&addr, sizeof(addr), msg.msg_name);
-      //  bpf_printk("recvmsg_enter addr=%p",addr);
-        bpf_map_update_elem(&addrRecv_map, &pid, &addr, BPF_ANY);
-    }
+    bpf_printk("sys_enter_recvmsg addr=%p",addr);
+    bpf_map_update_elem(&addrRecv_map, &pid, &addr, BPF_ANY);
+
 
     return 0;
 }
 
+
 SEC("tracepoint/syscalls/sys_exit_recvmsg")
-int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
+int trace_recvfrom_exit(struct sys_exit_recvmsg_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
+    bpf_printk("sys_exit_recvmsg ");
+
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
-    if (!conn_info)
-        return 0;
-
-
+    if (!conn_info) return 0;
 
     if (ret < 0) {
-      //  bpf_printk("sys_exit_recvmsg failed for PID=%d\n", pid);
+        bpf_printk("sys_exit_recvfrom failed for PID=%d\n", pid);
         bpf_map_delete_elem(&conn_info_map, &pid);
         return 0;
     }
 
 
 
-    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addrRecv_map, &pid);
-
-    if (!addr_ptr)
+    struct msghdr **addr_ptr = bpf_map_lookup_elem(&addrRecv_map, &pid);
+    if (!addr_ptr) {
         return 0;
-
-
-    struct sockaddr addr = {};
-
-    bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);
-
-    bpf_printk("!!!!!sys_exit_recvmsg  FAMILY=%d ",addr.sa_family);
-
-
-    if (addr.sa_family == AF_INET) {
-      //s  bpf_printk("!!!!!sys_exit_recvmsg FAMILY=%d",addr.sa_family);
-
-        struct sockaddr_in addr_in = {};
-        bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
-
-        u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
-        u16 port = bpf_ntohs(addr_in.sin_port);
-
-        struct trace_info info = {};
-        info.pid = pid;
-        __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
-
-        info.src_ip  = ip;
-        info.sport   = port;
-        info.family  = AF_INET;
-        info.dst_ip  = 0;
-        info.dport   = 0;
-        info.sysexit = 2;
-
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    } else if (addr.sa_family == AF_INET6) {
-        struct sockaddr_in6 addr_in6 = {};
-        bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr);
-
-        struct trace_info info = {};
-        info.sysexit = 2;
-        info.family  = AF_INET6;
-
-        info.dstIP6[0] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[0]);
-        info.dstIP6[1] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[4]);
-        info.dstIP6[2] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[8]);
-        info.dstIP6[3] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[12]);
-
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
     }
 
-    bpf_map_delete_elem(&addrRecv_map, &pid);
-    bpf_map_delete_elem(&conn_info_map, &pid);
-    bpf_map_delete_elem(&addr_map, &pid); // если используется
 
+    
+
+    bpf_printk("sys_exit_recvmsg addr=%p",addr_ptr);
+
+
+ 
     return 0;
+
 }
+
 
 
 
