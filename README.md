@@ -108,47 +108,57 @@ struct sys_exit_recvmsg_args{
 
 };
 
-#include <linux/bpf.h>
-#include <linux/ptrace.h>
-#include <linux/in.h>
-#include <linux/in6.h>
-#include <linux/sched.h>
-#include <linux/types.h>
-#include <linux/socket.h>
-#include <linux/uio.h>
-#include <linux/version.h>
-#include <bpf/bpf_helpers.h>
-#include <bpf/bpf_tracing.h>
+SEC("tracepoint/syscalls/sys_exit_recvmsg")
+int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    long ret = ctx->ret;
 
-char LICENSE[] SEC("license") = "GPL";
+    bpf_printk("sys_exit_recvmsg pid=%d ret=%ld", pid, ret);
 
-struct conn_info_t {
-    u32 pid;
-    char comm[16];
-};
+    // Проверяем, есть ли данные для PID
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
+    if (!conn_info) {
+        bpf_printk("No conn_info for pid=%d", pid);
+        return 0;
+    }
 
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 1024);
-    __type(key, u32);
-    __type(value, struct conn_info_t);
-} conn_info_map SEC(".maps");
+    if (ret < 0) {
+        bpf_printk("recvmsg failed for PID=%d", pid);
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        return 0;
+    }
 
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 1024);
-    __type(key, u32);
-    __type(value, struct msghdr *);
-} addrRecv_map SEC(".maps");
+    // Получаем адрес и читаем его
+    struct msghdr **addr_ptr = bpf_map_lookup_elem(&addrRecv_map, &pid);
+    if (!addr_ptr) {
+        bpf_printk("No addr_ptr for pid=%d", pid);
+        return 0;
+    }
 
-struct msghdr *msg;
-bpf_probe_read_user(&msg, sizeof(msg), *addr_ptr);
+    struct msghdr *msg;
+    bpf_probe_read_user(&msg, sizeof(msg), *addr_ptr);
 
-void *name_ptr = NULL;
-bpf_probe_read_user(&name_ptr, sizeof(name_ptr), &msg->msg_name);
+    if (!msg) {
+        bpf_printk("msg is NULL for pid=%d", pid);
+        return 0;
+    }
 
-struct sockaddr_in sa = {};
-bpf_probe_read_user(&sa, sizeof(sa), name_ptr);
+    // Проверяем msg_name
+    void *name_ptr = NULL;
+    bpf_probe_read_user(&name_ptr, sizeof(name_ptr), &msg->msg_name);
+
+    if (!name_ptr) {
+        bpf_printk("msg_name is NULL for pid=%d", pid);
+        return 0;
+    }
+
+    struct sockaddr_in sa = {};
+    bpf_probe_read_user(&sa, sizeof(sa), name_ptr);
+
+    bpf_printk("sys_exit_recvmsg pid=%d FAMILY=%d", pid, sa.sin_family);
+
+    return 0;
+}
 
 
 
