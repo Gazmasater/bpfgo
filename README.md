@@ -127,26 +127,26 @@ struct sys_exit_recvmsg_args{
 SEC("tracepoint/syscalls/sys_enter_recvmsg")
 int trace_recvmsg_enter(struct sys_enter_recvmsg_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    struct conn_info_t conn_info = {};
 
+    struct conn_info_t conn_info = {};
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
-    struct user_msghdr *msg = ctx->msg;
+    struct user_msghdr msg = {};
+    bpf_probe_read_user(&msg, sizeof(msg), (void *)ctx->msg);
 
-    if (!msg)
-        return 0;
-
-    struct sockaddr *addr = NULL;
-    bpf_probe_read_user(&addr, sizeof(addr), &msg->msg_name);
-
-    if (addr)
+    struct sockaddr_storage addr = {};
+    if (msg.msg_name != NULL) {
+        bpf_probe_read_user(&addr, sizeof(addr), msg.msg_name);
         bpf_map_update_elem(&addrRecv_map, &pid, &addr, BPF_ANY);
+    }
 
     return 0;
 }
+
+
+
 
 SEC("tracepoint/syscalls/sys_exit_recvmsg")
 int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
