@@ -180,6 +180,8 @@ msg_name
 msg_namelen
 msg_ubuf
 
+IPv6=fe800000:80000000:0:0:49832
+
 
 
 
