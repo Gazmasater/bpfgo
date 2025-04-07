@@ -180,8 +180,8 @@ msg_name
 msg_namelen
 msg_ubuf
 
-IPv6=fe800000:80000000:0:0:49832
-
+STATE=12 IP4 PID=4994 dstIP=//[192.168.1.1]:53 
+STATE=11 IP4 PID=4994  dstIP=//[127.0.0.1]:36152 FAMILY=2 
 
 
 
