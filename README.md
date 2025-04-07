@@ -180,17 +180,21 @@ msg_name
 msg_namelen
 msg_ubuf
 
-STATE=12 IP4 PID=6603 dstIP=//[127.0.0.1]:60142 NAME=systemd-resolve
-STATE=12 IP4 PID=6603 dstIP=//[192.168.1.1]:53 NAME=systemd-resolve
-STATE=11 IP4 PID=6603  dstIP=//[127.0.0.1]:60142 FAMILY=2 NAME=systemd-resolve 
-STATE=12 IP4 PID=6603 dstIP=//[127.0.0.1]:53347 NAME=systemd-resolve
-STATE=12 IP4 PID=6603 dstIP=//[192.168.1.1]:53 NAME=systemd-resolve
-STATE=11 IP4 PID=6603  dstIP=//[127.0.0.1]:53347 FAMILY=2 NAME=systemd-resolve 
-STATE=12 IP4 PID=6603 dstIP=//[127.0.0.1]:36366 NAME=systemd-resolve
-STATE=12 IP4 PID=6603 dstIP=//[192.168.1.1]:53 NAME=systemd-resolve
-STATE=11 IP4 PID=6603  dstIP=//[127.0.0.1]:36366 FAMILY=2 NAME=systemd-resolve 
-STATE=12 IP4 PID=6603 dstIP=//[127.0.0.1]:36003 NAME=systemd-resolve
-STATE=11 IP4 PID=6603  dstIP=//[127.0.0.1]:36003 FAMILY=2 NAME=systemd-resolve 
+STATE=12 IP4 PID=3374 dstIP=//[127.0.0.1]:41010 NAME=systemd-resolve
+STATE=12 IP4 PID=3374 dstIP=//[192.168.1.1]:53 NAME=systemd-resolve
+STATE=11 IP4 PID=3374  dstIP=//[127.0.0.1]:41010 FAMILY=2 NAME=systemd-resolve 
+STATE=12 IP4 PID=3374 dstIP=//[192.168.1.1]:53 NAME=systemd-resolve
+STATE=11 IP4 PID=3374  dstIP=//[127.0.0.1]:60525 FAMILY=2 NAME=systemd-resolve 
+STATE=12 IP4 PID=3374 dstIP=//[127.0.0.1]:37096 NAME=systemd-resolve
+STATE=12 IP4 PID=3374 dstIP=//[192.168.1.1]:53 NAME=systemd-resolve
+STATE=11 IP4 PID=3374  dstIP=//[127.0.0.1]:37096 FAMILY=2 NAME=systemd-resolve 
+STATE=12 IP4 PID=3374 dstIP=//[127.0.0.1]:52689 NAME=systemd-resolve
+STATE=12 IP4 PID=3374 dstIP=//[192.168.1.1]:53 NAME=systemd-resolve
+STATE=11 IP4 PID=3374  dstIP=//[127.0.0.1]:52689 FAMILY=2 NAME=systemd-resolve 
+STATE=12 IP4 PID=3374 dstIP=//[127.0.0.1]:49469 NAME=systemd-resolve
+STATE=12 IP4 PID=3374 dstIP=//[192.168.1.1]:53 NAME=systemd-resolve
+STATE=11 IP4 PID=3374  dstIP=//[127.0.0.1]:49469 FAMILY=2 NAME=systemd-resolve 
+STATE=12 IP4 PID=3374 dstIP=//[127.0.0.1]:60525 NAME=systemd-resolve
 
 
 
