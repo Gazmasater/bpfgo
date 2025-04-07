@@ -183,6 +183,10 @@ msg_ubuf
 STATE=12 IP4 PID=4994 dstIP=//[192.168.1.1]:53 
 STATE=11 IP4 PID=4994  dstIP=//[127.0.0.1]:36152 FAMILY=2 
 
+    char comm[64];
+	Comm    [64]int8
+
+
 
 
 
