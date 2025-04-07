@@ -93,7 +93,8 @@ type bpfSpecs struct {
 type bpfProgramSpecs struct {
 	LookUp             *ebpf.ProgramSpec `ebpf:"look_up"`
 	TraceRecvfromEnter *ebpf.ProgramSpec `ebpf:"trace_recvfrom_enter"`
-	TraceRecvfromExit  *ebpf.ProgramSpec `ebpf:"trace_recvfrom_exit"`
+	TraceRecvmsgEnter  *ebpf.ProgramSpec `ebpf:"trace_recvmsg_enter"`
+	TraceRecvmsgExit   *ebpf.ProgramSpec `ebpf:"trace_recvmsg_exit"`
 	TraceSendtoEnter   *ebpf.ProgramSpec `ebpf:"trace_sendto_enter"`
 	TraceSendtoExit    *ebpf.ProgramSpec `ebpf:"trace_sendto_exit"`
 	TraceTcpEst        *ebpf.ProgramSpec `ebpf:"trace_tcp_est"`
@@ -170,7 +171,8 @@ type bpfVariables struct {
 type bpfPrograms struct {
 	LookUp             *ebpf.Program `ebpf:"look_up"`
 	TraceRecvfromEnter *ebpf.Program `ebpf:"trace_recvfrom_enter"`
-	TraceRecvfromExit  *ebpf.Program `ebpf:"trace_recvfrom_exit"`
+	TraceRecvmsgEnter  *ebpf.Program `ebpf:"trace_recvmsg_enter"`
+	TraceRecvmsgExit   *ebpf.Program `ebpf:"trace_recvmsg_exit"`
 	TraceSendtoEnter   *ebpf.Program `ebpf:"trace_sendto_enter"`
 	TraceSendtoExit    *ebpf.Program `ebpf:"trace_sendto_exit"`
 	TraceTcpEst        *ebpf.Program `ebpf:"trace_tcp_est"`
@@ -180,7 +182,8 @@ func (p *bpfPrograms) Close() error {
 	return _BpfClose(
 		p.LookUp,
 		p.TraceRecvfromEnter,
-		p.TraceRecvfromExit,
+		p.TraceRecvmsgEnter,
+		p.TraceRecvmsgExit,
 		p.TraceSendtoEnter,
 		p.TraceSendtoExit,
 		p.TraceTcpEst,

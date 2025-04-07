@@ -65,17 +65,29 @@ func main() {
 	}
 	defer SExit.Close()
 
-	REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
+	RmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter, nil)
 	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
+		log.Fatalf("opening tracepoint sys_enter_recvmsg: %s", err)
 	}
-	defer REnter.Close()
+	defer RmsgEnter.Close()
 
-	RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
+	RmsgExit, err := link.Tracepoint("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit, nil)
 	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
+		log.Fatalf("opening tracepoint sys_exit_recvmsg: %s", err)
 	}
-	defer RExit.Close()
+	defer RmsgExit.Close()
+
+	// REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
+	// }
+	// defer REnter.Close()
+
+	// RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
+	// }
+	// defer RExit.Close()
 
 	InetSock, err := link.Tracepoint("sock", "inet_sock_set_state", objs.TraceTcpEst, nil)
 	if err != nil {
@@ -172,12 +184,10 @@ func main() {
 
 			if event.Sysexit == 2 {
 
-				fmt.Printf("STATE=2!!!!!!FAMILY=%d\n", event.Family)
-
 				if event.Family == 2 {
-					srcAddr := fmt.Sprintf("//[%s]:%d", srcIP.String(), event.Sport)
+					dstAddr := fmt.Sprintf("//[%s]:%d", dstIP.String(), event.Dport)
 					pid := event.Pid
-					fmt.Printf("STATE=2 IP4 PID=%d srcIP=%s \n", pid, srcAddr)
+					fmt.Printf("STATE=2 IP4 PID=%d dstIP=%s \n", pid, dstAddr)
 				} else if event.Family == 10 {
 					port := event.Dport
 					pid := event.Pid
