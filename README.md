@@ -143,44 +143,29 @@ int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
         return 0;
     }
 
-    // Логируем поля msg_name и msg_namelen
+    // Чтение msg_name
     void *name_ptr = NULL;
     bpf_probe_read_user(&name_ptr, sizeof(name_ptr), &msg->msg_name);
-    socklen_t namelen = 0;
-    bpf_probe_read_user(&namelen, sizeof(namelen), &msg->msg_namelen);
 
-    bpf_printk("msg_name=%p msg_namelen=%d", name_ptr, namelen);
-
-    // Логируем msg_iov и msg_iovlen
-    struct iovec *iov_ptr = NULL;
-    size_t iovlen = 0;
-    bpf_probe_read_user(&iov_ptr, sizeof(iov_ptr), &msg->msg_iov);
-    bpf_probe_read_user(&iovlen, sizeof(iovlen), &msg->msg_iovlen);
-
-    bpf_printk("msg_iov=%p msg_iovlen=%d", iov_ptr, iovlen);
-
-    // Логируем msg_control и msg_controllen
-    void *control_ptr = NULL;
-    socklen_t controllen = 0;
-    bpf_probe_read_user(&control_ptr, sizeof(control_ptr), &msg->msg_control);
-    bpf_probe_read_user(&controllen, sizeof(controllen), &msg->msg_controllen);
-
-    bpf_printk("msg_control=%p msg_controllen=%d", control_ptr, controllen);
-
-    // Логируем msg_flags
-    int flags = 0;
-    bpf_probe_read_user(&flags, sizeof(flags), &msg->msg_flags);
-    bpf_printk("msg_flags=%d", flags);
-
-    // Проверяем msg_name
+    // Если msg_name не NULL, проверяем его содержимое
     if (name_ptr) {
+        // Мы предполагаем, что это sockaddr_in (IPv4)
         struct sockaddr_in sa = {};
-        bpf_probe_read_user(&sa, sizeof(sa), name_ptr);
-        bpf_printk("sys_exit_recvmsg FAMILY=%d", sa.sin_family);
+
+        // Чтение только sin_family из адреса
+        bpf_probe_read_user(&sa, sizeof(sa.sin_family), name_ptr);
+
+        // Проверяем семейство адресов
+        if (sa.sin_family == AF_INET) {
+            bpf_printk("sys_exit_recvmsg FAMILY=AF_INET");
+        } else {
+            bpf_printk("Unknown family: %d", sa.sin_family);
+        }
     }
 
     return 0;
 }
+
 
 msg_control
 msg_control_is_user
