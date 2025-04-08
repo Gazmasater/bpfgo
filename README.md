@@ -108,6 +108,11 @@ func main() {
 }
 
 
+event.DstIP6[0], event.DstIP6[1],
+						event.DstIP6[2], event.DstIP6[3],
+
+						port,
+
 
 
 
