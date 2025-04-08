@@ -140,6 +140,10 @@ func main() {
 }
 
 
+STATE=12 IPv6 PID=925 srcIPv6=fe800000:80000000:0:0:5353
+STATE=12 SHRT IPv6:=fe80:0:8000:::5353
+
+
 
 
 
