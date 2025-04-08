@@ -140,8 +140,15 @@ func main() {
 }
 
 
-STATE=12 IPv6 PID=925 srcIPv6=fe800000:80000000:0:0:5353
-STATE=12 SHRT IPv6:=fe80:0:8000:::5353
+STATE=1 IPv6 PID=981 IPv6=ff020000:0:0:10002:547 NAME=
+STATE=12 IPv6 PID=981 srcIPv6=fe800000:80000000:0:0:52645
+STATE=12 SHRT IPv6:=fe80:0:8000::52645
+STATE=3 DST IPv6=fe800000:0:e7329ff:feb7d6e8
+STATE=3 SRC IPv6=fe800000:0:d6b29200:15bba0e8
+
+Ethernet II, Src: Intel_a8:ec:0b (e4:fd:45:a8:ec:0b), Dst: IPv6mcast_01:00:02 (33:33:00:01:00:02)
+Internet Protocol Version 6, Src: fe80::d6b2:9200:15bb:a0e8, Dst: ff02::1:2
+User Datagram Protocol, Src Port: 546, Dst Port: 547
 
 
 
