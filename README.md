@@ -108,7 +108,36 @@ func main() {
 }
 
 
-event.DstIP6[0], event.DstIP6[1],event.DstIP6[2], event.DstIP6[3],port,
+package main
+
+import (
+	"fmt"
+	"net"
+)
+
+func main() {
+	// Пример данных из event.DstIP6
+	eventDstIP6 := [4]uint32{
+		0xff020000, // часть 1
+		0x00000000, // часть 2
+		0x00010000, // часть 3
+		0x00000002, // часть 4
+	}
+
+	// Преобразуем данные в 16-байтовый массив
+	ipBytes := []byte{
+		byte(eventDstIP6[0] >> 24), byte(eventDstIP6[0] >> 16), byte(eventDstIP6[0] >> 8), byte(eventDstIP6[0]),
+		byte(eventDstIP6[1] >> 24), byte(eventDstIP6[1] >> 16), byte(eventDstIP6[1] >> 8), byte(eventDstIP6[1]),
+		byte(eventDstIP6[2] >> 24), byte(eventDstIP6[2] >> 16), byte(eventDstIP6[2] >> 8), byte(eventDstIP6[2]),
+		byte(eventDstIP6[3] >> 24), byte(eventDstIP6[3] >> 16), byte(eventDstIP6[3] >> 8), byte(eventDstIP6[3]),
+	}
+
+	// Создаем объект net.IP из массива байтов
+	ip := net.IP(ipBytes)
+
+	// Получаем строковое представление IPv6-адреса
+	fmt.Println("IPv6:", ip.String()) // Выведет: ff02::1:2
+}
 
 
 
