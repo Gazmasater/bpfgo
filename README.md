@@ -86,6 +86,28 @@ STATE=3 DST IPv6=fe800000:0:e7329ff:feb7d6e8
 STATE=3 SRC IPv6=fe800000:0:d6b29200:15bba0e8
 STATE=3 SPORT=546  DPORT=52645 PROTO=17
 STATE=12 IPv6 PID=945 srcIPv6=fe800000:80000000:0:0:52645
+STATE=1-sendto
+STATE=3-lookup
+STATE=12-recvmsg
+
+package main
+
+import (
+	"fmt"
+	"net"
+)
+
+func main() {
+	raw := "ff02:0000:0000:0000:0001:0000:0000:0002"
+	ip := net.ParseIP(raw)
+	if ip == nil {
+		fmt.Println("Invalid IP")
+		return
+	}
+	fmt.Println(ip.String()) // Выведет: ff02::1:2
+}
+
+
 
 
 
