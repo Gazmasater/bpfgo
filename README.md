@@ -253,6 +253,14 @@ sudo update-grub
 sudo reboot
 После перезагрузки в Advanced options появится пункт с ядром 5.15.0-100.
 
+___________________________________________________________
+
+sudo apt update
+sudo apt install linux-image-5.15.0-91-generic linux-headers-5.15.0-91-generic
+
+sudo update-grub
+sudo reboot
+
 
 
 
