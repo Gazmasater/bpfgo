@@ -218,10 +218,8 @@ sudo reboot
 
 uname -r
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo grep menuentry /boot/grub/grub.cfg | grep 5.15
-        menuentry 'Ubuntu, with Linux 5.15.0-111-generic' --class ubuntu --class gnu-linux --class gnu --class os $menuentry_id_option 'gnulinux-5.15.0-111-generic-advanced-203efa69-34e3-4d47-9f4c-bd68a0cbb9b6' {
-        menuentry 'Ubuntu, with Linux 5.15.0-111-generic (recovery mode)' --class ubuntu --class gnu-linux --class gnu --class os $menuentry_id_option 'gnulinux-5.15.0-111-generic-recovery-203efa69-34e3-4d47-9f4c-bd68a0cbb9b6' {
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+GRUB_DEFAULT="Advanced options for Ubuntu>Ubuntu, with Linux 5.15.0-111-generic"
+
 
 
 
