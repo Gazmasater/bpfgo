@@ -120,116 +120,69 @@ sudo apt-get install linux-modules-5.15.0-111-generic
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$  sudo dpkg --configure -a
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo apt-get install linux-modules-5.15.0-111-generic
-Reading package lists... Done
-Building dependency tree... Done
-Reading state information... Done
-The following packages were automatically installed and are no longer required:
-  amd64-microcode bpfcc-tools bpftrace ieee-data intel-microcode iucode-tool libbpfcc
-  libllvm17t64 linux-headers-6.11.0-21-generic linux-headers-6.8.0-57
-  linux-headers-generic-hwe-24.04 linux-hwe-6.11-headers-6.11.0-21 python3-bpfcc
-  python3-netaddr thermald ubuntu-kernel-accessories
-Use 'sudo apt autoremove' to remove them.
-The following additional packages will be installed:
-  linux-image-5.15.0-111-generic
-Suggested packages:
-  fdutils linux-doc | linux-source-5.15.0 linux-tools linux-headers-5.15.0-111-generic
-  linux-modules-extra-5.15.0-111-generic
-The following NEW packages will be installed:
-  linux-image-5.15.0-111-generic linux-modules-5.15.0-111-generic
-0 upgraded, 2 newly installed, 0 to remove and 235 not upgraded.
-1 not fully installed or removed.
-Need to get 34.2 MB of archives.
-After this operation, 127 MB of additional disk space will be used.
-Do you want to continue? [Y/n] Y
-Get:1 http://archive.ubuntu.com/ubuntu jammy-proposed/main amd64 linux-modules-5.15.0-111-generic amd64 5.15.0-111.121 [22.6 MB]
-Get:2 http://archive.ubuntu.com/ubuntu jammy-proposed/main amd64 linux-image-5.15.0-111-generic amd64 5.15.0-111.121 [11.5 MB]
-Fetched 34.2 MB in 4s (8,516 kB/s)                         
-debconf: unable to initialize frontend: Dialog
-debconf: (Dialog frontend requires a screen at least 13 lines tall and 31 columns wide.)
-debconf: falling back to frontend: Readline
-Selecting previously unselected package linux-modules-5.15.0-111-generic.
-(Reading database ... 212582 files and directories currently installed.)
-Preparing to unpack .../linux-modules-5.15.0-111-generic_5.15.0-111.121_amd64.deb ...
-Unpacking linux-modules-5.15.0-111-generic (5.15.0-111.121) ...
-Selecting previously unselected package linux-image-5.15.0-111-generic.
-Preparing to unpack .../linux-image-5.15.0-111-generic_5.15.0-111.121_amd64.deb ...
-Unpacking linux-image-5.15.0-111-generic (5.15.0-111.121) ...
-Setting up linux-image-6.8.0-47-generic (6.8.0-47.47) ...
-I: /boot/vmlinuz.old is now a symlink to vmlinuz-5.15.0-111-generic
-Setting up linux-image-5.15.0-111-generic (5.15.0-111.121) ...
-I: /boot/vmlinuz.old is now a symlink to vmlinuz-6.8.0-47-generic
-I: /boot/initrd.img.old is now a symlink to initrd.img-6.8.0-47-generic
-I: /boot/vmlinuz is now a symlink to vmlinuz-5.15.0-111-generic
-I: /boot/initrd.img is now a symlink to initrd.img-5.15.0-111-generic
-Setting up linux-modules-5.15.0-111-generic (5.15.0-111.121) ...
-Processing triggers for linux-image-6.8.0-47-generic (6.8.0-47.47) ...
-/etc/kernel/postinst.d/initramfs-tools:
-update-initramfs: Generating /boot/initrd.img-6.8.0-47-generic
-/etc/kernel/postinst.d/zz-update-grub:
-Sourcing file `/etc/default/grub'
-Generating grub configuration file ...
-Found linux image: /boot/vmlinuz-6.8.0-47-generic
-Found initrd image: /boot/initrd.img-6.8.0-47-generic
-Found linux image: /boot/vmlinuz-5.15.0-111-generic
-Found memtest86+ 64bit EFI image: /boot/memtest86+x64.efi
-Warning: os-prober will be executed to detect other bootable partitions.
-Its output will be used to detect bootable binaries on them and create new boot entries.
-Found Windows Boot Manager on /dev/nvme0n1p1@/EFI/Microsoft/Boot/bootmgfw.efi
-Found Ubuntu 24.04.1 LTS (24.04) on /dev/nvme0n1p8
-Found Ubuntu 24.04.1 LTS (24.04) on /dev/nvme0n1p9
-Adding boot menu entry for UEFI Firmware Settings ...
-done
-Processing triggers for linux-image-5.15.0-111-generic (5.15.0-111.121) ...
-/etc/kernel/postinst.d/initramfs-tools:
-update-initramfs: Generating /boot/initrd.img-5.15.0-111-generic
-/etc/kernel/postinst.d/zz-update-grub:
-Sourcing file `/etc/default/grub'
-Generating grub configuration file ...
-Found linux image: /boot/vmlinuz-6.8.0-47-generic
-Found initrd image: /boot/initrd.img-6.8.0-47-generic
-Found linux image: /boot/vmlinuz-5.15.0-111-generic
-Found initrd image: /boot/initrd.img-5.15.0-111-generic
-Found memtest86+ 64bit EFI image: /boot/memtest86+x64.efi
-Warning: os-prober will be executed to detect other bootable partitions.
-Its output will be used to detect bootable binaries on them and create new boot entries.
-Found Windows Boot Manager on /dev/nvme0n1p1@/EFI/Microsoft/Boot/bootmgfw.efi
-Found Ubuntu 24.04.1 LTS (24.04) on /dev/nvme0n1p8
-Found Ubuntu 24.04.1 LTS (24.04) on /dev/nvme0n1p9
-Adding boot menu entry for UEFI Firmware Settings ...
-done
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo sed -i '/jammy-proposed/d' /etc/apt/sources.list
-^C
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ^C
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ^C
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ uname -r
-6.8.0-47-generic
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo apt-get install linux-image-5.15.0-111-generic
-Reading package lists... Done
-Building dependency tree... Done
-Reading state information... Done
-linux-image-5.15.0-111-generic is already the newest version (5.15.0-111.121).
-linux-image-5.15.0-111-generic set to manually installed.
-The following packages were automatically installed and are no longer required:
-  amd64-microcode bpfcc-tools bpftrace ieee-data intel-microcode iucode-tool libbpfcc
-  libllvm17t64 linux-headers-6.11.0-21-generic linux-headers-6.8.0-57
-  linux-headers-generic-hwe-24.04 linux-hwe-6.11-headers-6.11.0-21 python3-bpfcc
-  python3-netaddr thermald ubuntu-kernel-accessories
-Use 'sudo apt autoremove' to remove them.
-0 upgraded, 0 newly installed, 0 to remove and 235 not upgraded.
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ uname -r
-6.8.0-47-generic
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo sed -i '/jammy-proposed/d' /etc/apt/sources.list
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo apt-get update
-Hit:1 http://ru.archive.ubuntu.com/ubuntu noble InRelease
-Hit:2 http://ru.archive.ubuntu.com/ubuntu noble-updates InRelease
-Hit:3 http://ru.archive.ubuntu.com/ubuntu noble-backports InRelease
-Hit:4 http://security.ubuntu.com/ubuntu noble-security InRelease
-Reading package lists... Done
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ uname -r
-6.8.0-47-generic
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+Если в GRUB меню не отображается ядро 5.15.0-111-generic, хотя ты его установил, это может быть связано с тем, что оно:
+
+Установлено, но не попало в загрузочное меню;
+
+Скрыто из-за особенностей grub.cfg;
+
+Грузится через initrd с другим ядром;
+
+Не подходит к текущей версии Ubuntu (у тебя — Ubuntu 24.04 noble, а ядро 5.15 — от Ubuntu 22.04 jammy).
+
+🚀 Проверь, что ядро действительно установлено:
+
+ls -l /boot/vmlinuz*
+Если ты видишь:
+
+
+/boot/vmlinuz-5.15.0-111-generic
+значит, оно на месте.
+
+🛠 Обновим GRUB вручную:
+
+sudo update-grub
+После этого перезагрузи систему:
+
+
+sudo reboot
+И снова в GRUB нажми Shift или Esc → Advanced options for Ubuntu → смотри, появилось ли ядро 5.15.0-111-generic.
+
+❗️Если снова не появилось:
+Можешь вручную прописать его в GRUB:
+
+Открой файл:
+
+
+sudo nano /etc/default/grub
+Найди строку:
+
+
+GRUB_DEFAULT=0
+И замени на:
+
+GRUB_DEFAULT="Advanced options for Ubuntu>Ubuntu, with Linux 5.15.0-111-generic"
+Сохрани (Ctrl+O, Enter) и выйди (Ctrl+X), затем:
+
+
+sudo update-grub
+Перезагрузи:
+
+
+sudo reboot
+Если хочешь, я могу помочь точно указать, какой индекс использовать для GRUB_DEFAULT, чтобы не писать полное имя вручную — просто скинь сюда результат:
+
+
+grep menuentry /boot/grub/grub.cfg
+Так мы найдем нужную позицию в списке загрузки.
+
+
+
+
+
+
+
+
 
 
 
