@@ -218,9 +218,11 @@ sudo reboot
 
 uname -r
 
-cat /etc/default/grub | grep GRUB_DEFAULT
 
-GRUB_DEFAULT="Advanced options for Ubuntu>Ubuntu, with Linux 5.15.0-111-generic"
+
+
+grep menuentry /boot/grub/grub.cfg
+
 
 
 
