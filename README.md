@@ -266,6 +266,44 @@ GRUB_SAVEDEFAULT=true
 
 
 
+✅ 1. Добавить jammy-proposed в sources.list
+Открой файл:
+
+sudo nano /etc/apt/sources.list
+Добавь в конец:
+
+
+deb http://archive.ubuntu.com/ubuntu/ jammy-proposed main
+Сохрани (Ctrl + O, Enter) и выйди (Ctrl + X).
+
+✅ 2. Обнови индексы пакетов
+
+sudo apt-get update
+✅ 3. Установи нужную версию headers
+
+sudo apt-get install linux-headers-5.15.0-100-generic
+Если тебе нужно ещё и ядро (image):
+
+
+sudo apt-get install linux-image-5.15.0-100-generic
+ℹ️ Проверка установленного ядра
+После установки можешь проверить:
+
+
+dpkg -l | grep linux-image
+🔁 Обнови GRUB и перезагрузи
+
+sudo update-grub
+sudo reboot
+После перезагрузки в Advanced options появится пункт с ядром 5.15.0-100.
+
+
+
+
+
+
+
+
 
 
 
