@@ -82,45 +82,35 @@ echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 
 
 
-🔽 Установка старого ядра (например, 5.15.146-generic)
-Перейди в каталог:
+✅ Установка ядра 5.15.0-111-generic через jammy-proposed
+Добавь jammy-proposed в sources.list:
 
 
-mkdir ~/kernel && cd ~/kernel
-Скачай нужные .deb пакеты ядра (пример — 5.15.146, LTS и проверенное):
+echo "deb http://archive.ubuntu.com/ubuntu/ jammy-proposed main" | sudo tee -a /etc/apt/sources.list
+Это откроет доступ к тестовым (предварительным) пакетам для Ubuntu 22.04 (Jammy).
+
+Обнови индекс пакетов:
 
 
-wget https://kernel.ubuntu.com/~kernel-ppa/mainline/v5.15.146/amd64/linux-headers-5.15.146-0515146_5.15.146-0515146.202403121036_all.deb
-wget https://kernel.ubuntu.com/~kernel-ppa/mainline/v5.15.146/amd64/linux-headers-5.15.146-0515146-generic_5.15.146-0515146.202403121036_amd64.deb
-wget https://kernel.ubuntu.com/~kernel-ppa/mainline/v5.15.146/amd64/linux-image-unsigned-5.15.146-0515146-generic_5.15.146-0515146.202403121036_amd64.deb
-wget https://kernel.ubuntu.com/~kernel-ppa/mainline/v5.15.146/amd64/linux-modules-5.15.146-0515146-generic_5.15.146-0515146.202403121036_amd64.deb
-Установи:
+sudo apt-get update
+Установи модули ядра:
 
 
-sudo dpkg -i *.deb
-Обнови grub (если не обновится автоматически):
+sudo apt-get install linux-modules-5.15.0-111-generic
+Также при необходимости можно установить и само ядро:
 
 
-sudo update-grub
-Перезагрузи:
+sudo apt-get install linux-image-5.15.0-111-generic
+Перезагрузка (если устанавливал ядро):
 
 
-reboot
-На старте (если несколько ядер) — выбери нужное ядро через GRUB (обычно в меню «Advanced options for Ubuntu» → нужная версия ядра).
+sudo reboot
+⚠️ Совет:
+После установки можно удалить jammy-proposed, чтобы случайно не обновить другие пакеты из нестабильной ветки:
 
-cd ~/kernel
+sudo sed -i '/jammy-proposed/d' /etc/apt/sources.list
+sudo apt-get update
 
-wget https://kernel.ubuntu.com/mainline/v5.15.146/amd64/linux-headers-5.15.146-0515146_5.15.146-0515146.202403121036_all.deb
-wget https://kernel.ubuntu.com/mainline/v5.15.146/amd64/linux-headers-5.15.146-0515146-generic_5.15.146-0515146.202403121036_amd64.deb
-wget https://kernel.ubuntu.com/mainline/v5.15.146/amd64/linux-image-unsigned-5.15.146-0515146-generic_5.15.146-0515146.202403121036_amd64.deb
-wget https://kernel.ubuntu.com/mainline/v5.15.146/amd64/linux-modules-5.15.146-0515146-generic_5.15.146-0515146.202403121036_amd64.deb
-
-gaz358@gaz358-BOD-WXX9:~/kernel$ wget https://kernel.ubuntu.com/mainline/v5.15.146/amd64/linux-modules-5.15.146-0515146-generic_5.15.146-0515146.202403121036_amd64.deb
---2025-04-09 16:11:04--  https://kernel.ubuntu.com/mainline/v5.15.146/amd64/linux-modules-5.15.146-0515146-generic_5.15.146-0515146.202403121036_amd64.deb
-Resolving kernel.ubuntu.com (kernel.ubuntu.com)... 185.125.189.76, 185.125.189.74, 185.125.189.75
-Connecting to kernel.ubuntu.com (kernel.ubuntu.com)|185.125.189.76|:443... connected.
-HTTP request sent, awaiting response... 404 Not Found
-2025-04-09 16:11:05 ERROR 404: Not Found.
 
 
 
