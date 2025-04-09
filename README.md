@@ -81,74 +81,8 @@ echo "Hello, UDP!" | nc -u -w1 34.117.188.166 443
 echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 
 
-STATE=1 IPv6 PID=945 IPv6=ff020000:0:0:10002:547 NAME=
-STATE=3 DST IPv6=fe800000:0:e7329ff:feb7d6e8
-STATE=3 SRC IPv6=fe800000:0:d6b29200:15bba0e8
-STATE=3 SPORT=546  DPORT=52645 PROTO=17
-STATE=12 IPv6 PID=945 srcIPv6=fe800000:80000000:0:0:52645
-STATE=1-sendto
-STATE=3-lookup
-STATE=12-recvmsg
-
-package main
-
-import (
-	"fmt"
-	"net"
-)
-
-func main() {
-	raw := "ff02:0000:0000:0000:0001:0000:0000:0002"
-	ip := net.ParseIP(raw)
-	if ip == nil {
-		fmt.Println("Invalid IP")
-		return
-	}
-	fmt.Println(ip.String()) // Выведет: ff02::1:2
-}
-
-
-package main
-
-import (
-	"fmt"
-	"net"
-)
-
-func main() {
-	// Пример данных из event.DstIP6
-	eventDstIP6 := [4]uint32{
-		0xff020000, // часть 1
-		0x00000000, // часть 2
-		0x00010000, // часть 3
-		0x00000002, // часть 4
-	}
-
-	// Преобразуем данные в 16-байтовый массив
-	ipBytes := []byte{
-		byte(eventDstIP6[0] >> 24), byte(eventDstIP6[0] >> 16), byte(eventDstIP6[0] >> 8), byte(eventDstIP6[0]),
-		byte(eventDstIP6[1] >> 24), byte(eventDstIP6[1] >> 16), byte(eventDstIP6[1] >> 8), byte(eventDstIP6[1]),
-		byte(eventDstIP6[2] >> 24), byte(eventDstIP6[2] >> 16), byte(eventDstIP6[2] >> 8), byte(eventDstIP6[2]),
-		byte(eventDstIP6[3] >> 24), byte(eventDstIP6[3] >> 16), byte(eventDstIP6[3] >> 8), byte(eventDstIP6[3]),
-	}
-
-	// Создаем объект net.IP из массива байтов
-	ip := net.IP(ipBytes)
-
-	// Получаем строковое представление IPv6-адреса
-	fmt.Println("IPv6:", ip.String()) // Выведет: ff02::1:2
-}
-
-
-STATE=1 IPv6 PID=981 IPv6=ff020000:0:0:10002:547 NAME=
-STATE=12 IPv6 PID=981 srcIPv6=fe800000:80000000:0:0:52645
-STATE=12 SHRT IPv6:=fe80:0:8000::52645
-STATE=3 DST IPv6=fe800000:0:e7329ff:feb7d6e8
-STATE=3 SRC IPv6=fe800000:0:d6b29200:15bba0e8
-
-Ethernet II, Src: Intel_a8:ec:0b (e4:fd:45:a8:ec:0b), Dst: IPv6mcast_01:00:02 (33:33:00:01:00:02)
-Internet Protocol Version 6, Src: fe80::d6b2:9200:15bb:a0e8, Dst: ff02::1:2
-User Datagram Protocol, Src Port: 546, Dst Port: 547
+az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ uname -r
+6.8.0-47-generic
 
 
 
