@@ -88,3 +88,34 @@ ubuntu-mainline-kernel.sh
 ubuntu-mainline-kernel.sh -l
 ubuntu-mainline-kernel.sh -i v5.15.132
 ubuntu-mainline-kernel.sh -u
+
+
+
+        menuentry 'Ubuntu, with Linux 6.1.0-060100-generic' --class ubuntu --class gnu-linux --class gnu --class os $menuentry_id_option 'gnulinux-6.1.0-060100-generic-advanced-203efa69-34e3-4d47-9f4c-bd68a0cbb9b6' {
+                recordfail
+        savedefault
+                load_video
+                gfxmode $linux_gfx_mode
+                insmod gzio
+                if [ x$grub_platform = xxen ]; then insmod xzio; insmod lzopio; fi
+                insmod part_gpt
+                insmod ext2
+                search --no-floppy --fs-uuid --set=root 203efa69-34e3-4d47-9f4c-bd68a0cbb9b6
+                echo    'Loading Linux 6.1.0-060100-generic ...'
+                linux   /boot/vmlinuz-6.1.0-060100-generic root=UUID=203efa69-34e3-4d47-9f4c-bd68a0cbb9b6 ro  quiet splash $vt_handoff
+                echo    'Loading initial ramdisk ...'
+                initrd  /boot/initrd.img-6.1.0-060100-generic
+        }
+        menuentry 'Ubuntu, with Linux 6.1.0-060100-generic (recovery mode)' --class ubuntu --class gnu-linux --class gnu --class os $menuentry_id_option 'gnulinux-6.1.0-060100-generic-recovery-203efa69-34e3-4d47-9f4c-bd68a0cbb9b6' {
+                recordfail
+                load_video
+                insmod gzio
+                if [ x$grub_platform = xxen ]; then insmod xzio; insmod lzopio; fi
+                insmod part_gpt
+                insmod ext2
+                search --no-floppy --fs-uuid --set=root 203efa69-34e3-4d47-9f4c-bd68a0cbb9b6
+                echo    'Loading Linux 6.1.0-060100-generic ...'
+                linux   /boot/vmlinuz-6.1.0-060100-generic root=UUID=203efa69-34e3-4d47-9f4c-bd68a0cbb9b6 ro recovery nomodeset dis_ucode_ldr 
+                echo    'Loading initial ramdisk ...'
+                initrd  /boot/initrd.img-6.1.0-060100-generic
+        }
