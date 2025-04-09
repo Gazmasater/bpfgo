@@ -223,6 +223,41 @@ uname -r
 
 grep menuentry /boot/grub/grub.cfg
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo grep menuentry /boot/grub/grub.cfg
+if [ x"${feature_menuentry_id}" = xy ]; then
+  menuentry_id_option="--id"
+  menuentry_id_option=""
+export menuentry_id_option
+menuentry 'Ubuntu' --class ubuntu --class gnu-linux --class gnu --class os $menuentry_id_option 'gnulinux-simple-203efa69-34e3-4d47-9f4c-bd68a0cbb9b6' {
+submenu 'Advanced options for Ubuntu' $menuentry_id_option 'gnulinux-advanced-203efa69-34e3-4d47-9f4c-bd68a0cbb9b6' {
+        menuentry 'Ubuntu, with Linux 6.8.0-47-generic' --class ubuntu --class gnu-linux --class gnu --class os $menuentry_id_option 'gnulinux-6.8.0-47-generic-advanced-203efa69-34e3-4d47-9f4c-bd68a0cbb9b6' {
+        menuentry 'Ubuntu, with Linux 6.8.0-47-generic (recovery mode)' --class ubuntu --class gnu-linux --class gnu --class os $menuentry_id_option 'gnulinux-6.8.0-47-generic-recovery-203efa69-34e3-4d47-9f4c-bd68a0cbb9b6' {
+        menuentry 'Ubuntu, with Linux 5.15.0-111-generic' --class ubuntu --class gnu-linux --class gnu --class os $menuentry_id_option 'gnulinux-5.15.0-111-generic-advanced-203efa69-34e3-4d47-9f4c-bd68a0cbb9b6' {
+        menuentry 'Ubuntu, with Linux 5.15.0-111-generic (recovery mode)' --class ubuntu --class gnu-linux --class gnu --class os $menuentry_id_option 'gnulinux-5.15.0-111-generic-recovery-203efa69-34e3-4d47-9f4c-bd68a0cbb9b6' {
+menuentry "Memory test (memtest86+x64.efi)" --class memtest $menuentry_id_option 'memtest86+' {
+menuentry 'Memory test (memtest86+x64.efi, serial console)' --class memtest $menuentry_id_option 'memtest86+-serial' {
+menuentry 'Windows Boot Manager (on /dev/nvme0n1p1)' --class windows --class os $menuentry_id_option 'osprober-efi-CE12-E24B' {
+menuentry 'Ubuntu 24.04.1 LTS (24.04) (on /dev/nvme0n1p8)' --class ubuntu --class gnu-linux --class gnu --class os $menuentry_id_option 'osprober-gnulinux-simple-726c3c21-bed7-45dd-9ac0-784afade5b5d' {
+submenu 'Advanced options for Ubuntu 24.04.1 LTS (24.04) (on /dev/nvme0n1p8)' $menuentry_id_option 'osprober-gnulinux-advanced-726c3c21-bed7-45dd-9ac0-784afade5b5d' {
+        menuentry 'Ubuntu (on /dev/nvme0n1p8)' --class gnu-linux --class gnu --class os $menuentry_id_option 'osprober-gnulinux-/boot/vmlinuz-6.8.0-48-generic--726c3c21-bed7-45dd-9ac0-784afade5b5d' {
+        menuentry 'Ubuntu, with Linux 6.8.0-48-generic (on /dev/nvme0n1p8)' --class gnu-linux --class gnu --class os $menuentry_id_option 'osprober-gnulinux-/boot/vmlinuz-6.8.0-48-generic--726c3c21-bed7-45dd-9ac0-784afade5b5d' {
+        menuentry 'Ubuntu, with Linux 6.8.0-48-generic (recovery mode) (on /dev/nvme0n1p8)' --class gnu-linux --class gnu --class os $menuentry_id_option 'osprober-gnulinux-/boot/vmlinuz-6.8.0-48-generic-root=UUID=726c3c21-bed7-45dd-9ac0-784afade5b5d ro recovery nomodeset dis_ucode_ldr-726c3c21-bed7-45dd-9ac0-784afade5b5d' {
+        menuentry 'Ubuntu, with Linux 6.8.0-47-generic (on /dev/nvme0n1p8)' --class gnu-linux --class gnu --class os $menuentry_id_option 'osprober-gnulinux-/boot/vmlinuz-6.8.0-47-generic--726c3c21-bed7-45dd-9ac0-784afade5b5d' {
+        menuentry 'Ubuntu, with Linux 6.8.0-47-generic (recovery mode) (on /dev/nvme0n1p8)' --class gnu-linux --class gnu --class os $menuentry_id_option 'osprober-gnulinux-/boot/vmlinuz-6.8.0-47-generic-root=UUID=726c3c21-bed7-45dd-9ac0-784afade5b5d ro recovery nomodeset dis_ucode_ldr-726c3c21-bed7-45dd-9ac0-784afade5b5d' {
+        menuentry 'Memory test (memtest86+x64.efi) (on /dev/nvme0n1p8)' --class gnu-linux --class gnu --class os $menuentry_id_option 'osprober-gnulinux-/boot/memtest86+x64.efi--726c3c21-bed7-45dd-9ac0-784afade5b5d' {
+        menuentry 'Memory test (memtest86+x64.efi, serial console) (on /dev/nvme0n1p8)' --class gnu-linux --class gnu --class os $menuentry_id_option 'osprober-gnulinux-/boot/memtest86+x64.efi--726c3c21-bed7-45dd-9ac0-784afade5b5d' {
+menuentry 'Ubuntu 24.04.1 LTS (24.04) (on /dev/nvme0n1p9)' --class ubuntu --class gnu-linux --class gnu --class os $menuentry_id_option 'osprober-gnulinux-simple-7ac4c3a2-cbf7-446f-a0a9-81c1d6f5d47a' {
+submenu 'Advanced options for Ubuntu 24.04.1 LTS (24.04) (on /dev/nvme0n1p9)' $menuentry_id_option 'osprober-gnulinux-advanced-7ac4c3a2-cbf7-446f-a0a9-81c1d6f5d47a' {
+        menuentry 'Ubuntu (on /dev/nvme0n1p9)' --class gnu-linux --class gnu --class os $menuentry_id_option 'osprober-gnulinux-/boot/vmlinuz-6.8.0-49-generic--7ac4c3a2-cbf7-446f-a0a9-81c1d6f5d47a' {
+        menuentry 'Ubuntu, with Linux 6.8.0-49-generic (on /dev/nvme0n1p9)' --class gnu-linux --class gnu --class os $menuentry_id_option 'osprober-gnulinux-/boot/vmlinuz-6.8.0-49-generic--7ac4c3a2-cbf7-446f-a0a9-81c1d6f5d47a' {
+        menuentry 'Ubuntu, with Linux 6.8.0-49-generic (recovery mode) (on /dev/nvme0n1p9)' --class gnu-linux --class gnu --class os $menuentry_id_option 'osprober-gnulinux-/boot/vmlinuz-6.8.0-49-generic-root=UUID=7ac4c3a2-cbf7-446f-a0a9-81c1d6f5d47a ro recovery nomodeset dis_ucode_ldr-7ac4c3a2-cbf7-446f-a0a9-81c1d6f5d47a' {
+        menuentry 'Ubuntu, with Linux 6.8.0-48-generic (on /dev/nvme0n1p9)' --class gnu-linux --class gnu --class os $menuentry_id_option 'osprober-gnulinux-/boot/vmlinuz-6.8.0-48-generic--7ac4c3a2-cbf7-446f-a0a9-81c1d6f5d47a' {
+        menuentry 'Ubuntu, with Linux 6.8.0-48-generic (recovery mode) (on /dev/nvme0n1p9)' --class gnu-linux --class gnu --class os $menuentry_id_option 'osprober-gnulinux-/boot/vmlinuz-6.8.0-48-generic-root=UUID=7ac4c3a2-cbf7-446f-a0a9-81c1d6f5d47a ro recovery nomodeset dis_ucode_ldr-7ac4c3a2-cbf7-446f-a0a9-81c1d6f5d47a' {
+        menuentry 'Memory test (memtest86+x64.efi) (on /dev/nvme0n1p9)' --class gnu-linux --class gnu --class os $menuentry_id_option 'osprober-gnulinux-/boot/memtest86+x64.efi--7ac4c3a2-cbf7-446f-a0a9-81c1d6f5d47a' {
+        menuentry 'Memory test (memtest86+x64.efi, serial console) (on /dev/nvme0n1p9)' --class gnu-linux --class gnu --class os $menuentry_id_option 'osprober-gnulinux-/boot/memtest86+x64.efi--7ac4c3a2-cbf7-446f-a0a9-81c1d6f5d47a' {
+                menuentry 'UEFI Firmware Settings' $menuentry_id_option 'uefi-firmware' {
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
 
 
 
