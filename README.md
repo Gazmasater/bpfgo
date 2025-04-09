@@ -176,6 +176,47 @@ sudo reboot
 grep menuentry /boot/grub/grub.cfg
 Так мы найдем нужную позицию в списке загрузки.
 
+grep menuentry /boot/grub/grub.cfg | grep 5.15
+
+
+✅ Шаг 1: Убедимся, как именно оно называется в GRUB
+Покажи, пожалуйста, точный вывод команды:
+
+
+grep menuentry /boot/grub/grub.cfg | grep 5.15
+Например, ты можешь увидеть что-то вроде:
+
+
+menuentry 'Ubuntu, with Linux 5.15.0-111-generic' --class ubuntu ...
+Или:
+
+
+menuentry 'Advanced options for Ubuntu>Ubuntu, with Linux 5.15.0-111-generic' ...
+✅ Шаг 2: Укажи это в GRUB правильно
+Если ты хочешь по умолчанию загружаться с ядром 5.15, тебе нужно сделать следующее:
+
+Открой /etc/default/grub:
+
+
+sudo nano /etc/default/grub
+Найди строку GRUB_DEFAULT=... и замени её на:
+
+
+GRUB_DEFAULT="Advanced options for Ubuntu>Ubuntu, with Linux 5.15.0-111-generic"
+(Подставь точное имя из вывода команды grep)
+
+Сохрани файл и выйди из nano (Ctrl + O → Enter, затем Ctrl + X).
+
+✅ Шаг 3: Обнови конфигурацию GRUB
+
+sudo update-grub
+✅ Шаг 4: Перезагрузи
+
+sudo reboot
+После перезагрузки проверь:
+
+
+uname -r
 
 
 
