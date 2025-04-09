@@ -81,3 +81,32 @@ echo "Hello, UDP!" | nc -u -w1 34.117.188.166 443
 echo "Hello, UDP!" | socat - UDP:34.117.188.166:443
 
 
+
+🔽 Установка старого ядра (например, 5.15.146-generic)
+Перейди в каталог:
+
+
+mkdir ~/kernel && cd ~/kernel
+Скачай нужные .deb пакеты ядра (пример — 5.15.146, LTS и проверенное):
+
+
+wget https://kernel.ubuntu.com/~kernel-ppa/mainline/v5.15.146/amd64/linux-headers-5.15.146-0515146_5.15.146-0515146.202403121036_all.deb
+wget https://kernel.ubuntu.com/~kernel-ppa/mainline/v5.15.146/amd64/linux-headers-5.15.146-0515146-generic_5.15.146-0515146.202403121036_amd64.deb
+wget https://kernel.ubuntu.com/~kernel-ppa/mainline/v5.15.146/amd64/linux-image-unsigned-5.15.146-0515146-generic_5.15.146-0515146.202403121036_amd64.deb
+wget https://kernel.ubuntu.com/~kernel-ppa/mainline/v5.15.146/amd64/linux-modules-5.15.146-0515146-generic_5.15.146-0515146.202403121036_amd64.deb
+Установи:
+
+
+sudo dpkg -i *.deb
+Обнови grub (если не обновится автоматически):
+
+
+sudo update-grub
+Перезагрузи:
+
+
+reboot
+На старте (если несколько ядер) — выбери нужное ядро через GRUB (обычно в меню «Advanced options for Ubuntu» → нужная версия ядра).
+
+
+
