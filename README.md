@@ -258,6 +258,10 @@ submenu 'Advanced options for Ubuntu 24.04.1 LTS (24.04) (on /dev/nvme0n1p9)' $m
                 menuentry 'UEFI Firmware Settings' $menuentry_id_option 'uefi-firmware' {
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
+GRUB_DEFAULT=3
+GRUB_SAVEDEFAULT=true
+
+
 
 
 
