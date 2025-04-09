@@ -115,6 +115,13 @@ wget https://kernel.ubuntu.com/mainline/v5.15.146/amd64/linux-headers-5.15.146-0
 wget https://kernel.ubuntu.com/mainline/v5.15.146/amd64/linux-image-unsigned-5.15.146-0515146-generic_5.15.146-0515146.202403121036_amd64.deb
 wget https://kernel.ubuntu.com/mainline/v5.15.146/amd64/linux-modules-5.15.146-0515146-generic_5.15.146-0515146.202403121036_amd64.deb
 
+gaz358@gaz358-BOD-WXX9:~/kernel$ wget https://kernel.ubuntu.com/mainline/v5.15.146/amd64/linux-modules-5.15.146-0515146-generic_5.15.146-0515146.202403121036_amd64.deb
+--2025-04-09 16:11:04--  https://kernel.ubuntu.com/mainline/v5.15.146/amd64/linux-modules-5.15.146-0515146-generic_5.15.146-0515146.202403121036_amd64.deb
+Resolving kernel.ubuntu.com (kernel.ubuntu.com)... 185.125.189.76, 185.125.189.74, 185.125.189.75
+Connecting to kernel.ubuntu.com (kernel.ubuntu.com)|185.125.189.76|:443... connected.
+HTTP request sent, awaiting response... 404 Not Found
+2025-04-09 16:11:05 ERROR 404: Not Found.
+
 
 
 
