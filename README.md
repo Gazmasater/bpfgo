@@ -111,8 +111,11 @@ sudo reboot
 sudo sed -i '/jammy-proposed/d' /etc/apt/sources.list
 sudo apt-get update
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo apt-get install linux-modules-5.15.0-111-generic
-E: dpkg was interrupted, you must manually run 'sudo dpkg --configure -a' to correct the problem. 
+
+
+ sudo dpkg --configure -a
+sudo apt-get install linux-modules-5.15.0-111-generic
+
 
 
 
