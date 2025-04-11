@@ -292,14 +292,14 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
 
             return 0;
         }
-            bpf_printk("!!lookup sys_exit_sendto FAMILY=%d ADDRESS=%d.%d.%d.%d:%d Comm=%s ",
-                addr.sa_family,
-                (ip>>24)&0xff,
-                (ip>>16)&0xff,
-                (ip>>8)&0xff,
-                (ip)&0xff,
-                port,
-                conn_info->comm);
+           // bpf_printk("!!lookup sys_exit_sendto FAMILY=%d ADDRESS=%d.%d.%d.%d:%d Comm=%s ",
+               // addr.sa_family,
+               // (ip>>24)&0xff,
+               // (ip>>16)&0xff,
+               // (ip>>8)&0xff,
+              //  (ip)&0xff,
+              //  port,
+               // conn_info->comm);
 
 
                 info.pid = pid;
@@ -716,12 +716,12 @@ int look_up(struct bpf_sk_lookup *ctx) {
 
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
-        bpf_printk("IPv4 lookup src=%d.%d.%d.%d:%d dst=%d.%d.%d.%d:%d protocol=%d FAMILY=%d \n", 
-            (srcIP >> 24) & 0xff, (srcIP >> 16) & 0xff, (srcIP >> 8) & 0xff, srcIP & 0xff,
-            srcPort,
-            (dstIP >> 24) & 0xff, (dstIP >> 16) & 0xff, (dstIP >> 8) & 0xff, dstIP & 0xff,
-            dstPort,
-            proto, ctx->family);
+       // bpf_printk("IPv4 lookup src=%d.%d.%d.%d:%d dst=%d.%d.%d.%d:%d protocol=%d FAMILY=%d \n", 
+          //  (srcIP >> 24) & 0xff, (srcIP >> 16) & 0xff, (srcIP >> 8) & 0xff, srcIP & 0xff,
+          //  srcPort,
+          //  (dstIP >> 24) & 0xff, (dstIP >> 16) & 0xff, (dstIP >> 8) & 0xff, dstIP & 0xff,
+          //  dstPort,
+          //  proto, ctx->family);
     } else if (ctx->family == AF_INET6) {
 
         info.srcIP6[0]=bpf_ntohl(ctx->local_ip6[0]);
@@ -773,23 +773,23 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
     if (ctx->family==AF_INET) {
     if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
 
-bpf_printk("inet_sock_set_state PID=%d srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d PROTO=%d ",
+//bpf_printk("inet_sock_set_state PID=%d srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d PROTO=%d ",
     
-    pid_tcp,
-    (srcip >> 24) & 0xff,
-    (srcip >> 16) & 0xff,
-    (srcip >> 8) & 0xff,
-    (srcip) & 0xff,
-    sport,
+  //  pid_tcp,
+  //  (srcip >> 24) & 0xff,
+  //  (srcip >> 16) & 0xff,
+  //  (srcip >> 8) & 0xff,
+  //  (srcip) & 0xff,
+  //  sport,
 
-    (dstip >> 24) & 0xff,
-    (dstip >> 16) & 0xff,
-    (dstip >> 8) & 0xff,
-    (dstip) & 0xff,
-    dport,
-    ctx->protocol
+  //  (dstip >> 24) & 0xff,
+   // (dstip >> 16) & 0xff,
+   // (dstip >> 8) & 0xff,
+   // (dstip) & 0xff,
+   // dport,
+   // ctx->protocol
 
-);
+//);
 
 struct trace_info info = {};
 
