@@ -8,7 +8,7 @@ ls /sys/kernel/tracing/events/net/
 
 
 
-bpf2go -output-dir $(pwd)/generated -tags linux -type trace_info -go-package=load -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+bpf2go -output-dir . -tags linux -type trace_info -go-package=load -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
 
 bpftrace -l
 
