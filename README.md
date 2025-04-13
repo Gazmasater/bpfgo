@@ -122,36 +122,7 @@ sudo systemctl start postgresql
 psql --version
 Вы должны увидеть версию PostgreSQL, например: psql (PostgreSQL) 13.3.
 
-2. Установка PostgreSQL на CentOS/RHEL
-Установите репозиторий PostgreSQL:
 
-Для CentOS/RHEL, сначала нужно установить репозиторий PostgreSQL:
-
-
-sudo yum install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-x86_64/pgdg-redhat-repo-latest.noarch.rpm
-Установите PostgreSQL:
-
-Затем установите PostgreSQL:
-
-
-sudo yum install -y postgresql13-server postgresql13-contrib
-Инициализация базы данных PostgreSQL:
-
-Инициализируйте базу данных:
-
-
-sudo /usr/pgsql-13/bin/postgresql-13-setup initdb
-Запустите PostgreSQL:
-
-Запустите службу PostgreSQL:
-
-
-sudo systemctl start postgresql-13
-Убедитесь, что PostgreSQL работает:
-
-Проверьте статус службы:
-
-sudo systemctl status postgresql-13
 3. Основные команды для работы с PostgreSQL:
 Подключение к базе данных PostgreSQL:
 
