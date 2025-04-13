@@ -172,6 +172,7 @@ sudo systemctl restart postgresql
 \list
 
 sudo -u postgres psql syscalls
+\du
 \dt
 SELECT * FROM events;
 
