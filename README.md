@@ -386,3 +386,15 @@ CREATE TABLE structures (
     format TEXT
 );
 
+
+formatPath := filepath.Join(categoryPath, eventName, "format")
+fmt.Printf("Проверка файла: %s\n", formatPath)
+
+formatBytes, err := ioutil.ReadFile(formatPath)
+if err != nil {
+	fmt.Printf("Не удалось прочитать формат для %s/%s: %v\n", categoryName, eventName, err)
+	continue
+}
+fmt.Printf("Формат считан для %s/%s\n", categoryName, eventName)
+
+
