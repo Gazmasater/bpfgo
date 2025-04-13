@@ -287,12 +287,12 @@ func processEvents(eventsDir string, db *sql.DB) error {
 				return err
 			}
 
-			fmt.Printf("Добавлено событие: %s\n", eventName)
-
 			formatPath := filepath.Join(categoryPath, eventName, "format")
+
 			formatBytes, err := ioutil.ReadFile(formatPath)
+
 			if err != nil {
-				// Просто пропускаем, если format не существует
+				fmt.Printf("Не удалось прочитать формат для %s/%s: %v\n", categoryName, eventName, err)
 				continue
 			}
 
@@ -352,15 +352,19 @@ func addStructure(eventID int, name string, format string, db *sql.DB) error {
 	).Scan(&id)
 
 	if err == sql.ErrNoRows {
+		fmt.Printf("🟢 Добавляем структуру в БД для события %s (event_id = %d)\n", name, eventID)
+		fmt.Printf("📋 Содержимое format:\n%s\n", format)
+
 		_, err := db.Exec(
 			"INSERT INTO structures(event_id, name, format) VALUES($1, $2, $3)",
 			eventID, name, format,
 		)
 		if err != nil {
-			return fmt.Errorf("не удалось добавить структуру для события %s: %v", name, err)
+			return fmt.Errorf("❌ не удалось добавить структуру для события %s: %v", name, err)
 		}
+		fmt.Println("✅ Успешно добавлено!")
 	} else if err != nil {
-		return fmt.Errorf("не удалось проверить структуру события %s: %v", name, err)
+		return fmt.Errorf("❌ не удалось проверить структуру события %s: %v", name, err)
 	}
 
 	return nil
@@ -385,32 +389,3 @@ CREATE TABLE structures (
     name TEXT,
     format TEXT
 );
-
-
-
-
-func addStructure(eventID int, name string, format string, db *sql.DB) error {
-	var id int
-	err := db.QueryRow(
-		"SELECT id FROM structures WHERE event_id = $1 AND name = $2",
-		eventID, name,
-	).Scan(&id)
-
-	if err == sql.ErrNoRows {
-		fmt.Printf("🟢 Добавляем структуру в БД для события %s (event_id = %d)\n", name, eventID)
-		fmt.Printf("📋 Содержимое format:\n%s\n", format)
-
-		_, err := db.Exec(
-			"INSERT INTO structures(event_id, name, format) VALUES($1, $2, $3)",
-			eventID, name, format,
-		)
-		if err != nil {
-			return fmt.Errorf("❌ не удалось добавить структуру для события %s: %v", name, err)
-		}
-		fmt.Println("✅ Успешно добавлено!")
-	} else if err != nil {
-		return fmt.Errorf("❌ не удалось проверить структуру события %s: %v", name, err)
-	}
-
-	return nil
-}
