@@ -387,19 +387,28 @@ CREATE TABLE structures (
 );
 
 
+
 formatPath := filepath.Join(categoryPath, eventName, "format")
 fmt.Printf("Проверка файла: %s\n", formatPath)
 
 formatBytes, err := ioutil.ReadFile(formatPath)
 if err != nil {
-	fmt.Printf("Не удалось прочитать формат для %s/%s: %v\n", categoryName, eventName, err)
+	fmt.Printf("❌ Не удалось прочитать формат для %s/%s: %v\n", categoryName, eventName, err)
 	continue
 }
-fmt.Printf("Формат считан для %s/%s\n", categoryName, eventName)
 
-id  | event_id |                   name                   |                    
-                                                                                 
-                                                                                 
-                                                                                 
-                                                                                                                                                                                                                                                                                                                                    
-:
+formatStr := string(formatBytes)
+if len(formatStr) == 0 {
+	fmt.Printf("⚠️  Файл format для %s/%s пуст\n", categoryName, eventName)
+	continue
+}
+
+// Выводим содержимое структуры в консоль
+fmt.Printf("📄 Структура события %s/%s:\n%s\n", categoryName, eventName, formatStr)
+
+err = addStructure(eventID, eventName, formatStr, db)
+if err != nil {
+	fmt.Printf("‼️ Ошибка сохранения структуры для %s: %v\n", eventName, err)
+}
+
+
