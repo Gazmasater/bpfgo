@@ -335,3 +335,91 @@ func addEvent(name string, categoryID int, db *sql.DB) (int, error) {
 
 
 
+
+🧱 1. Создание таблицы structures
+sql
+
+CREATE TABLE structures (
+    id SERIAL PRIMARY KEY,
+    event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+    name TEXT,
+    format TEXT
+);
+🧠 2. Дополним Go-код: добавим парсинг и сохранение format
+Добавим в processEvents блок, который:
+
+Читает файл format внутри каждого события
+
+Сохраняет name и format-данные в таблицу structures
+
+✅ Дополненный Go-код (вставь после fmt.Printf("Добавлено событие: %s\n", eventName)):
+go
+
+			// Путь к файлу format
+			formatPath := filepath.Join(categoryPath, eventName, "format")
+			formatBytes, err := ioutil.ReadFile(formatPath)
+			if err != nil {
+				// Просто пропускаем, если format не существует
+				continue
+			}
+
+			// Сохраняем структуру
+			err = addStructure(eventID, eventName, string(formatBytes), db)
+			if err != nil {
+				return err
+			}
+✅ Функция addStructure:
+go
+Копировать
+Редактировать
+// Функция для добавления структуры события
+func addStructure(eventID int, name string, format string, db *sql.DB) error {
+	var id int
+	err := db.QueryRow(
+		"SELECT id FROM structures WHERE event_id = $1 AND name = $2",
+		eventID, name,
+	).Scan(&id)
+
+	if err == sql.ErrNoRows {
+		_, err := db.Exec(
+			"INSERT INTO structures(event_id, name, format) VALUES($1, $2, $3)",
+			eventID, name, format,
+		)
+		if err != nil {
+			return fmt.Errorf("не удалось добавить структуру для события %s: %v", name, err)
+		}
+	} else if err != nil {
+		return fmt.Errorf("не удалось проверить структуру события %s: %v", name, err)
+	}
+
+	return nil
+}
+🔄 Обновлённый порядок действий:
+Создай таблицу structures в PostgreSQL (SQL выше).
+
+Обнови Go-код.
+
+Выполни sudo go run main.go.
+
+База будет автоматически заполнена:
+
+Категории (syscalls, sched, и т.д.)
+
+События (sys_enter_accept, и т.п.)
+
+Форматы событий (common_pid, fd, и т.п.)
+
+Если хочешь — сделаю SQL-запросы для просмотра структуры в иерархии или добавлю поиск по полю (local_port, fd и др.).
+
+
+
+
+
+
+
+
+
+
+
+
+
