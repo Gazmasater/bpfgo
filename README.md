@@ -388,48 +388,29 @@ CREATE TABLE structures (
 
 
 
-formatPath := filepath.Join(categoryPath, eventName, "format")
-fmt.Printf("Проверка файла: %s\n", formatPath)
 
-formatBytes, err := ioutil.ReadFile(formatPath)
-if err != nil {
-	fmt.Printf("❌ Не удалось прочитать формат для %s/%s: %v\n", categoryName, eventName, err)
-	continue
+func addStructure(eventID int, name string, format string, db *sql.DB) error {
+	var id int
+	err := db.QueryRow(
+		"SELECT id FROM structures WHERE event_id = $1 AND name = $2",
+		eventID, name,
+	).Scan(&id)
+
+	if err == sql.ErrNoRows {
+		fmt.Printf("🟢 Добавляем структуру в БД для события %s (event_id = %d)\n", name, eventID)
+		fmt.Printf("📋 Содержимое format:\n%s\n", format)
+
+		_, err := db.Exec(
+			"INSERT INTO structures(event_id, name, format) VALUES($1, $2, $3)",
+			eventID, name, format,
+		)
+		if err != nil {
+			return fmt.Errorf("❌ не удалось добавить структуру для события %s: %v", name, err)
+		}
+		fmt.Println("✅ Успешно добавлено!")
+	} else if err != nil {
+		return fmt.Errorf("❌ не удалось проверить структуру события %s: %v", name, err)
+	}
+
+	return nil
 }
-
-formatStr := string(formatBytes)
-if len(formatStr) == 0 {
-	fmt.Printf("⚠️  Файл format для %s/%s пуст\n", categoryName, eventName)
-	continue
-}
-
-// Выводим содержимое структуры в консоль
-fmt.Printf("📄 Структура события %s/%s:\n%s\n", categoryName, eventName, formatStr)
-
-err = addStructure(eventID, eventName, formatStr, db)
-if err != nil {
-	fmt.Printf("‼️ Ошибка сохранения структуры для %s: %v\n", eventName, err)
-}
-
-
-
-
-
-
-Добавлено событие: sys_enter_exit
-Проверка файла: /sys/kernel/debug/tracing/events/syscalls/sys_enter_exit/format
-📄 Структура события syscalls/sys_enter_exit:
-name: sys_enter_exit
-ID: 147
-format:
-        field:unsigned short common_type;       offset:0;       size:2; signed:0;
-        field:unsigned char common_flags;       offset:2;       size:1; signed:0;
-        field:unsigned char common_preempt_count;       offset:3;       size:1; signed:0;
-        field:int common_pid;   offset:4;       size:4; signed:1;
-
-        field:int __syscall_nr; offset:8;       size:4; signed:1;
-        field:int error_code;   offset:16;      size:8; signed:0;
-
-print fmt: "error_code: 0x%08lx", ((unsigned long)(REC->error_code))
-
-
