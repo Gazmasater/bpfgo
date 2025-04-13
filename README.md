@@ -197,3 +197,17 @@ sudo systemctl stop postgresql
 
 
 sudo systemctl restart postgresql
+
+
+CREATE TABLE categories (
+    id SERIAL PRIMARY KEY,
+    name TEXT UNIQUE NOT NULL
+);
+
+CREATE TABLE events (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    category_id INT REFERENCES categories(id),
+    UNIQUE(name, category_id)
+);
+
