@@ -171,7 +171,7 @@ sudo systemctl restart postgresql
 
 \list
 
-sudo -u postgres psql syscalls
+sudo -u gaz358 psql events_ebpf
 \du
 psql -U myuser -d syscalls
 
