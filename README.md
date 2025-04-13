@@ -412,3 +412,24 @@ if err != nil {
 }
 
 
+
+
+
+
+Добавлено событие: sys_enter_exit
+Проверка файла: /sys/kernel/debug/tracing/events/syscalls/sys_enter_exit/format
+📄 Структура события syscalls/sys_enter_exit:
+name: sys_enter_exit
+ID: 147
+format:
+        field:unsigned short common_type;       offset:0;       size:2; signed:0;
+        field:unsigned char common_flags;       offset:2;       size:1; signed:0;
+        field:unsigned char common_preempt_count;       offset:3;       size:1; signed:0;
+        field:int common_pid;   offset:4;       size:4; signed:1;
+
+        field:int __syscall_nr; offset:8;       size:4; signed:1;
+        field:int error_code;   offset:16;      size:8; signed:0;
+
+print fmt: "error_code: 0x%08lx", ((unsigned long)(REC->error_code))
+
+
