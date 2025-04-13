@@ -397,4 +397,9 @@ if err != nil {
 }
 fmt.Printf("Формат считан для %s/%s\n", categoryName, eventName)
 
-
+id  | event_id |                   name                   |                    
+                                                                                 
+                                                                                 
+                                                                                 
+                                                                                                                                                                                                                                                                                                                                    
+:
