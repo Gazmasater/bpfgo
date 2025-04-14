@@ -331,6 +331,17 @@ int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
 }
 
 
+struct iphdr ip;
+if (bpf_probe_read(&ip, sizeof(ip), head + nh_off) < 0)
+    return 0;
+
+if (ip.version != 4)
+    return 0;
+
+__u8 proto = ip.protocol;
+
+
+
 
 
 
