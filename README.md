@@ -176,6 +176,8 @@ sudo -u gaz358 psql events_ebpf
 psql -U myuser -d syscalls
 
 \dt
+DELETE FROM structures;
+
 SELECT * FROM events;
 
 
