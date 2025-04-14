@@ -247,5 +247,8 @@ func addStructure(eventID int, name string, format string, db *sql.DB) error {
 SELECT id FROM struct WHERE text_column LIKE '%local_port%';
 
 
+4605 |     4605 | alarmtimer_cancel                        | name: alarmtimer_cancel ID: 400 format: field:unsigned short common_type; offset:0; size:2; signed:0; field:unsigned char common_flags; offset:2; size:1; signed:0; field:unsigned char common_preempt_count; offset:3; size:1; signed:0; field:int common_pid; offset:4; size:4; signed:1; field:void * alarm; offset:8; size:8; signed:0; field:unsigned char alarm_type; offset:16; size:1; signed:0; field:s64 expires; offset:24; size:8; signed:1; field:s64 now; offset:32; size:8; signed:1; print fmt: "alarmtimer:%p type:%s expires:%llu now:%llu", REC->alarm, __print_flags((1 << REC->alarm_type), " | ", { 1 << 0, "REALTIME" }, { 1 << 1, "BOOTTIME" }, { 1 << 3, "REALTIME Freezer" }, { 1 << 4, "BOOTTIME Freezer" }), REC->expires, REC->now
+
+
 
 
