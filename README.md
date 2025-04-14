@@ -362,51 +362,12 @@ int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
 }
 
 
-struct netif_receive_skb_entry_args
-{
 
-
-    unsigned short common_type;     
-    unsigned char common_flags;     
-    unsigned char common_preempt_count;    
-    int common_pid;  
-    __data_loc char[] name;  
-    unsigned int napi_id;   
-    u16 queue_mapping;      
-    const void * skbaddr; 
-    bool vlan_tagged; 
-    u16 vlan_proto;   
-    u16 vlan_tci;     
-    u16 protocol;   
-    u8 ip_summed;    
-    u32 hash; 
-    bool l4_hash;    
-    unsigned int len; 
-    unsigned int data_len;   
-    unsigned int truesize;   
-    bool mac_header_valid;    
-    int mac_header;   
-    unsigned char nr_frags;   
-    u16 gso_size;     
-    u16 gso_type;     
-
-
-
-};
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
-	"owner": "C/C++: IntelliSense",
-	"code": "65",
-	"severity": 8,
-	"message": "expected a ';'",
-	"source": "C/C++",
-	"startLineNumber": 33,
-	"startColumn": 16,
-	"endLineNumber": 33,
-	"endColumn": 20
-}]
-
+SEC("tracepoint/net/netif_receive_skb_entry")
+int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
+    bpf_printk("skbaddr: %p\n", ctx->skbaddr);
+    return 0;
+}
 
 
 
