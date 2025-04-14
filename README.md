@@ -183,20 +183,6 @@ SELECT * FROM events;
 
 
 
- id  
-------
- 5101
- 5102
- 5103
- 5876
- 5877
- 6622
- 6623
- 6624
- 6625
- 6626
-:
-
 
 SELECT id, name FROM structures
 WHERE id IN (5101, 5102, 5103, 5876, 5877, 6622, 6623, 6624, 6625, 6626);
@@ -318,66 +304,62 @@ format:
         field:u16 gso_type;     offset:62;      size:2; signed:0;
 
 
+// SPDX-License-Identifier: GPL-2.0
+#include "vmlinux.h"
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_tracing.h>
+#include <bpf/bpf_core_read.h>
+
+struct event_t {
+    __u32 saddr;
+    __u32 daddr;
+    __u16 sport;
+    __u16 dport;
+    __u8 protocol;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_RINGBUF);
+    __uint(max_entries, 1 << 24);
+} events SEC(".maps");
+
 SEC("tracepoint/net/netif_receive_skb_entry")
 int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
     struct sk_buff *skb = (struct sk_buff *)ctx->skbaddr;
+    struct event_t *event;
 
-    // Вычисление границ данных пакета
-    void *data = (void *)(long)skb->head + skb->mac_header;
-    void *data_end = (void *)(long)skb->head + skb->end;
+    void *head = BPF_CORE_READ(skb, head);
+    __u64 nh_off = BPF_CORE_READ(skb, network_header);
+    struct iphdr *ip = head + nh_off;
 
-    // Проверка минимальной длины IP-заголовка
-    if (data + sizeof(struct iphdr) > data_end) return 0;
+    if (ip->version != 4) return 0;
 
-    struct iphdr *ip = data;
+    __u8 protocol = ip->protocol;
+    if (protocol != IPPROTO_TCP && protocol != IPPROTO_UDP) return 0;
 
-    // Безопасная проверка версии IP (через первый байт)
-    u8 ver_ihl = *(u8 *)data;
-    u8 version = ver_ihl >> 4;
-    if (version != 4) return 0;
+    event = bpf_ringbuf_reserve(&events, sizeof(*event), 0);
+    if (!event) return 0;
 
-    // Проверка доступа к полям saddr и daddr
-    if ((void *)&ip->daddr + sizeof(ip->daddr) > data_end) return 0;
+    event->saddr = ip->saddr;
+    event->daddr = ip->daddr;
+    event->protocol = protocol;
 
-    bpf_printk("SRC IP: %d.%d.%d.%d", 
-        ((unsigned char *) &ip->saddr)[0],
-        ((unsigned char *) &ip->saddr)[1],
-        ((unsigned char *) &ip->saddr)[2],
-        ((unsigned char *) &ip->saddr)[3]);
-
-    bpf_printk("DST IP: %d.%d.%d.%d", 
-        ((unsigned char *) &ip->daddr)[0],
-        ((unsigned char *) &ip->daddr)[1],
-        ((unsigned char *) &ip->daddr)[2],
-        ((unsigned char *) &ip->daddr)[3]);
-
-    // Вычисление начала TCP/UDP заголовка
-    void *l4_hdr = data + ip->ihl * 4;
-    if (l4_hdr > data_end) return 0;
-
-    if (ip->protocol == IPPROTO_TCP) {
-        if (l4_hdr + sizeof(struct tcphdr) > data_end) return 0;
-        struct tcphdr *tcp = l4_hdr;
-        bpf_printk("PROTO: TCP, SRC PORT: %d, DST PORT: %d", 
-            bpf_ntohs(tcp->source), bpf_ntohs(tcp->dest));
-    } else if (ip->protocol == IPPROTO_UDP) {
-        if (l4_hdr + sizeof(struct udphdr) > data_end) return 0;
-        struct udphdr *udp = l4_hdr;
-        bpf_printk("PROTO: UDP, SRC PORT: %d, DST PORT: %d", 
-            bpf_ntohs(udp->source), bpf_ntohs(udp->dest));
+    if (protocol == IPPROTO_TCP) {
+        struct tcphdr *tcp = (void *)(ip + 1);
+        event->sport = tcp->source;
+        event->dport = tcp->dest;
+    } else if (protocol == IPPROTO_UDP) {
+        struct udphdr *udp = (void *)(ip + 1);
+        event->sport = udp->source;
+        event->dport = udp->dest;
     }
 
+    bpf_ringbuf_submit(event, 0);
     return 0;
 }
 
+char LICENSE[] SEC("license") = "GPL";
 
-
-struct iphdr ip_hdr;
-if (bpf_probe_read_kernel(&ip_hdr, sizeof(ip_hdr), data) < 0)
-    return 0;
-
-if (ip_hdr.version != 4)
-    return 0;
 
 
 
