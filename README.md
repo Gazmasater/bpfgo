@@ -180,228 +180,64 @@ SELECT * FROM events;
 
 
 
-CREATE TABLE categories (
-    id SERIAL PRIMARY KEY,
-    name TEXT UNIQUE NOT NULL
-);
 
-CREATE TABLE events (
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL,
-    category_id INT REFERENCES categories(id),
-    UNIQUE(name, category_id)
-);
+import "strings"
 
+// Функция для очистки строки от лишних пробелов и символов
+func cleanString(input string) string {
+    // Убираем лишние пробелы в начале и в конце строки
+    cleaned := strings.TrimSpace(input)
 
-package main
+    // Если нужно, можно добавить дополнительные очистки, например:
+    // Убираем все лишние пробелы между словами
+    cleaned = strings.Join(strings.Fields(cleaned), " ")
 
-import (
-	"database/sql"
-	"fmt"
-	"io/ioutil"
-	"log"
-	"path/filepath"
-
-	_ "github.com/lib/pq" // PostgreSQL driver
-)
-
-const (
-	host     = "localhost"
-	port     = 5432
-	user     = "gaz358"
-	password = "qwert"
-	dbname   = "events_ebpf"
-)
-
-func main() {
-	// Строка подключения к базе данных
-	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
-
-	// Открытие подключения
-	db, err := sql.Open("postgres", psqlInfo)
-	if err != nil {
-		log.Fatal("Ошибка подключения к базе данных: ", err)
-	}
-	defer db.Close()
-
-	// Проверка подключения
-	err = db.Ping()
-	if err != nil {
-		log.Fatal("Не удалось подключиться к базе данных: ", err)
-	}
-
-	// Путь к папке с событиями
-	eventsDir := "/sys/kernel/debug/tracing/events/"
-
-	// Обработка событий
-	err = processEvents(eventsDir, db)
-	if err != nil {
-		log.Fatal("Ошибка при обработке событий: ", err)
-	}
-
-	fmt.Println("База данных успешно заполнена событиями!")
-}
-
-// Функция для обработки событий
-func processEvents(eventsDir string, db *sql.DB) error {
-	// Сканируем все категории (папки в /events/)
-	categories, err := ioutil.ReadDir(eventsDir)
-	if err != nil {
-		return fmt.Errorf("ошибка при сканировании каталога %s: %v", eventsDir, err)
-	}
-
-	// Обрабатываем каждую категорию
-	for _, category := range categories {
-		if !category.IsDir() {
-			continue
-		}
-
-		categoryName := category.Name()
-
-		// Добавление категории в базу данных
-		categoryID, err := addCategory(categoryName, db)
-		if err != nil {
-			return err
-		}
-
-		// Путь к папке категории
-		categoryPath := filepath.Join(eventsDir, categoryName)
-
-		// Сканируем события в категории
-		events, err := ioutil.ReadDir(categoryPath)
-		if err != nil {
-			return fmt.Errorf("ошибка при сканировании каталога %s: %v", categoryPath, err)
-		}
-
-		// Обрабатываем каждое событие
-		for _, event := range events {
-			if !event.IsDir() {
-				continue
-			}
-
-			eventName := event.Name()
-
-			// Добавление события в базу данных
-			eventID, err := addEvent(eventName, categoryID, db)
-			if err != nil {
-				return err
-			}
-
-			formatPath := filepath.Join(categoryPath, eventName, "format")
-
-			formatBytes, err := ioutil.ReadFile(formatPath)
-
-			if err != nil {
-				fmt.Printf("Не удалось прочитать формат для %s/%s: %v\n", categoryName, eventName, err)
-				continue
-			}
-
-			// Сохраняем структуру
-			err = addStructure(eventID, eventName, string(formatBytes), db)
-			if err != nil {
-				return err
-			}
-
-		}
-	}
-
-	return nil
-}
-
-// Функция для добавления категории в базу данных
-func addCategory(name string, db *sql.DB) (int, error) {
-	var categoryID int
-	err := db.QueryRow("SELECT id FROM categories WHERE name = $1", name).Scan(&categoryID)
-
-	// Если категория не найдена, добавляем её
-	if err == sql.ErrNoRows {
-		err = db.QueryRow("INSERT INTO categories(name) VALUES($1) RETURNING id", name).Scan(&categoryID)
-		if err != nil {
-			return 0, fmt.Errorf("не удалось добавить категорию %s: %v", name, err)
-		}
-	} else if err != nil {
-		return 0, fmt.Errorf("не удалось проверить категорию %s: %v", name, err)
-	}
-
-	return categoryID, nil
-}
-
-// Функция для добавления события в базу данных
-func addEvent(name string, categoryID int, db *sql.DB) (int, error) {
-	var eventID int
-	err := db.QueryRow("SELECT id FROM events WHERE name = $1 AND category_id = $2", name, categoryID).Scan(&eventID)
-
-	// Если событие не найдено, добавляем его
-	if err == sql.ErrNoRows {
-		err = db.QueryRow("INSERT INTO events(name, category_id) VALUES($1, $2) RETURNING id", name, categoryID).Scan(&eventID)
-		if err != nil {
-			return 0, fmt.Errorf("не удалось добавить событие %s: %v", name, err)
-		}
-	} else if err != nil {
-		return 0, fmt.Errorf("не удалось проверить событие %s: %v", name, err)
-	}
-
-	return eventID, nil
+    return cleaned
 }
 
 func addStructure(eventID int, name string, format string, db *sql.DB) error {
-	var id int
+    var id int
 
-	// Логируем начало проверки структуры
-	fmt.Printf("🔍 Проверка наличия структуры для события: %s (event_id = %d)\n", name, eventID)
-	err := db.QueryRow(
-		"SELECT id FROM structures WHERE event_id = $1 AND name = $2",
-		eventID, name,
-	).Scan(&id)
+    // Очистка строк от лишних пробелов и символов
+    name = cleanString(name)
+    format = cleanString(format)
 
-	if err == sql.ErrNoRows {
-		// Логируем, что структура не найдена
-		fmt.Printf("❌ Структура не найдена, добавляем новую для события %s (event_id = %d)\n", name, eventID)
+    // Логируем начало проверки структуры
+    fmt.Printf("🔍 Проверка наличия структуры для события: %s (event_id = %d)\n", name, eventID)
+    err := db.QueryRow(
+        "SELECT id FROM structures WHERE event_id = $1 AND name = $2",
+        eventID, name,
+    ).Scan(&id)
 
-		// Логируем данные для вставки
-		fmt.Printf("📋 Данные для вставки в структуру: event_id = %d, name = %s, format = %s\n", eventID, name, format)
+    if err == sql.ErrNoRows {
+        // Логируем, что структура не найдена
+        fmt.Printf("❌ Структура не найдена, добавляем новую для события %s (event_id = %d)\n", name, eventID)
 
-		_, err := db.Exec(
-			"INSERT INTO structures(event_id, name, format) VALUES($1, $2, $3)",
-			eventID, name, format,
-		)
-		if err != nil {
-			// Логируем ошибку, если вставка не удалась
-			fmt.Printf("❌ Ошибка при добавлении структуры для события %s: %v\n", name, err)
-			return fmt.Errorf("не удалось добавить структуру для события %s: %v", name, err)
-		}
+        // Логируем данные для вставки
+        fmt.Printf("📋 Данные для вставки в структуру: event_id = %d, name = %s, format = %s\n", eventID, name, format)
 
-		// Логируем успешное добавление
-		fmt.Printf("✅ Успешно добавлена структура для события %s (event_id = %d)\n", name, eventID)
-	} else if err != nil {
-		// Логируем ошибку, если при проверке структуры произошла ошибка
-		fmt.Printf("❌ Ошибка при проверке структуры события %s: %v\n", name, err)
-		return fmt.Errorf("не удалось проверить структуру события %s: %v", name, err)
-	} else {
-		// Логируем, что структура уже существует
-		fmt.Printf("✔️ Структура для события %s уже существует\n", name)
-	}
+        _, err := db.Exec(
+            "INSERT INTO structures(event_id, name, format) VALUES($1, $2, $3)",
+            eventID, name, format,
+        )
+        if err != nil {
+            // Логируем ошибку, если вставка не удалась
+            fmt.Printf("❌ Ошибка при добавлении структуры для события %s: %v\n", name, err)
+            return fmt.Errorf("не удалось добавить структуру для события %s: %v", name, err)
+        }
 
-	return nil
+        // Логируем успешное добавление
+        fmt.Printf("✅ Успешно добавлена структура для события %s (event_id = %d)\n", name, eventID)
+    } else if err != nil {
+        // Логируем ошибку, если при проверке структуры произошла ошибка
+        fmt.Printf("❌ Ошибка при проверке структуры события %s: %v\n", name, err)
+        return fmt.Errorf("не удалось проверить структуру события %s: %v", name, err)
+    } else {
+        // Логируем, что структура уже существует
+        fmt.Printf("✔️ Структура для события %s уже существует\n", name)
+    }
+
+    return nil
 }
 
 
-
-CREATE TABLE categories (
-    id SERIAL PRIMARY KEY,
-    name TEXT UNIQUE NOT NULL
-);
-
-CREATE TABLE events (
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL,
-    category_id INT REFERENCES categories(id),
-    UNIQUE(name, category_id)
-);
-
-CREATE TABLE structures (
-    id SERIAL PRIMARY KEY,
-    event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
-    name TEXT,
-    format TEXT
-);
