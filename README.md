@@ -290,3 +290,30 @@ format:
 print fmt: "ret=%d", REC->ret
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
+
+name: net_dev_start_xmit
+ID: 1626
+format:
+        field:unsigned short common_type;       offset:0;       size:2; signed:0;
+        field:unsigned char common_flags;       offset:2;       size:1; signed:0;
+        field:unsigned char common_preempt_count;       offset:3;       size:1; signed:0;
+        field:int common_pid;   offset:4;       size:4; signed:1;
+
+        field:__data_loc char[] name;   offset:8;       size:4; signed:0;
+        field:u16 queue_mapping;        offset:12;      size:2; signed:0;
+        field:const void * skbaddr;     offset:16;      size:8; signed:0;
+        field:bool vlan_tagged; offset:24;      size:1; signed:0;
+        field:u16 vlan_proto;   offset:26;      size:2; signed:0;
+        field:u16 vlan_tci;     offset:28;      size:2; signed:0;
+        field:u16 protocol;     offset:30;      size:2; signed:0;
+        field:u8 ip_summed;     offset:32;      size:1; signed:0;
+        field:unsigned int len; offset:36;      size:4; signed:0;
+        field:unsigned int data_len;    offset:40;      size:4; signed:0;
+        field:int network_offset;       offset:44;      size:4; signed:1;
+        field:bool transport_offset_valid;      offset:48;      size:1; signed:0;
+        field:int transport_offset;     offset:52;      size:4; signed:1;
+        field:u8 tx_flags;      offset:56;      size:1; signed:0;
+        field:u16 gso_size;     offset:58;      size:2; signed:0;
+        field:u16 gso_segs;     offset:60;      size:2; signed:0;
+        field:u16 gso_type;     offset:62;      size:2; signed:0;
+
