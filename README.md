@@ -331,6 +331,56 @@ int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
 
 
 
+#include <linux/ip.h>
+#include <linux/tcp.h>
+#include <linux/udp.h>
+
+SEC("tracepoint/net/netif_receive_skb_entry")
+int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
+    struct sk_buff *skb = (struct sk_buff *)ctx->skbaddr;
+
+    void *head = BPF_CORE_READ(skb, head);
+    __u64 nh_off = BPF_CORE_READ(skb, network_header);
+
+    struct iphdr ip;
+    if (bpf_probe_read(&ip, sizeof(ip), head + nh_off) < 0)
+        return 0;
+
+    if (ip.version != 4)
+        return 0;
+
+    __u8 proto = ip.protocol;
+    __u32 saddr = ip.saddr;
+    __u32 daddr = ip.daddr;
+
+    // TCP
+    if (proto == IPPROTO_TCP) {
+        struct tcphdr tcp;
+        if (bpf_probe_read(&tcp, sizeof(tcp), head + nh_off + ip.ihl * 4) < 0)
+            return 0;
+
+        __u16 sport = tcp.source;
+        __u16 dport = tcp.dest;
+
+        // тут можно сохранить в map или отправить в perf
+
+    } else if (proto == IPPROTO_UDP) {
+        struct udphdr udp;
+        if (bpf_probe_read(&udp, sizeof(udp), head + nh_off + ip.ihl * 4) < 0)
+            return 0;
+
+        __u16 sport = udp.source;
+        __u16 dport = udp.dest;
+
+        // тоже можно логировать или передать
+    }
+
+    return 0;
+}
+
+
+
+
 
 
 
