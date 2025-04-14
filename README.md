@@ -198,4 +198,9 @@ SELECT * FROM events;
 :
 
 
+SELECT id, name FROM structures
+WHERE id IN (5101, 5102, 5103, 5876, 5877, 6622, 6623, 6624, 6625, 6626);
+
+
+
 
