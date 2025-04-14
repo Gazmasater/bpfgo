@@ -247,8 +247,32 @@ func addStructure(eventID int, name string, format string, db *sql.DB) error {
 SELECT id FROM struct WHERE text_column LIKE '%local_port%';
 
 
-4605 |     4605 | alarmtimer_cancel                        | name: alarmtimer_cancel ID: 400 format: field:unsigned short common_type; offset:0; size:2; signed:0; field:unsigned char common_flags; offset:2; size:1; signed:0; field:unsigned char common_preempt_count; offset:3; size:1; signed:0; field:int common_pid; offset:4; size:4; signed:1; field:void * alarm; offset:8; size:8; signed:0; field:unsigned char alarm_type; offset:16; size:1; signed:0; field:s64 expires; offset:24; size:8; signed:1; field:s64 now; offset:32; size:8; signed:1; print fmt: "alarmtimer:%p type:%s expires:%llu now:%llu", REC->alarm, __print_flags((1 << REC->alarm_type), " | ", { 1 << 0, "REALTIME" }, { 1 << 1, "BOOTTIME" }, { 1 << 3, "REALTIME Freezer" }, { 1 << 4, "BOOTTIME Freezer" }), REC->expires, REC->now
+1. Посмотри структуру таблицы
+Выполни:
 
+
+PRAGMA table_info(struct);
+Или если PostgreSQL:
+
+
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_name = 'struct';
+Там найди колонку, где хранятся вот такие большие текстовые блоки. Обычно она называется типа text, details, format, raw, info, message и т.п.
+
+2. Когда найдёшь нужную колонку — подставь её вместо name
+Например, если она называется format, то:
+
+
+SELECT id FROM struct WHERE format LIKE '%field:%';
+3. Альтернатива: посмотреть 1 строку целиком (вдруг у тебя только одна колонка содержит field:)
+
+SELECT * FROM struct WHERE CAST(column_name AS TEXT) LIKE '%field:%';
+Или для SQLite:
+
+
+SELECT * FROM struct WHERE CAST(rowid AS TEXT) LIKE '%field:%';
+Если хочешь — скинь вывод PRAGMA table_info(struct);, и я точно скажу, какую колонку использовать.
 
 
 
