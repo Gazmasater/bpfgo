@@ -311,14 +311,13 @@ int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
     void *head = BPF_CORE_READ(skb, head);
     __u64 nh_off = BPF_CORE_READ(skb, network_header);
 
-    struct iphdr *ip = head + nh_off;
-    __u8 vers=ip->version;
+    struct iphdr ip;
+    if (bpf_probe_read(&ip, sizeof(ip), head + nh_off) < 0)
+        return 0;
 
-    if (vers != 4) return 0;
-
-  //  __u8 protocol = ip->protocol;
-  //  if (protocol != IPPROTO_UDP) return 0;
-
+        if (ip.version != 4)
+    return 0;
+    __u8 proto = ip.protocol;
 
 
 
@@ -330,15 +329,6 @@ int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
     return 0;
 }
 
-
-struct iphdr ip;
-if (bpf_probe_read(&ip, sizeof(ip), head + nh_off) < 0)
-    return 0;
-
-if (ip.version != 4)
-    return 0;
-
-__u8 proto = ip.protocol;
 
 
 
