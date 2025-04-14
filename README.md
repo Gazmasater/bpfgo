@@ -201,6 +201,16 @@ SELECT * FROM events;
 SELECT id, name FROM structures
 WHERE id IN (5101, 5102, 5103, 5876, 5877, 6622, 6623, 6624, 6625, 6626);
 
+5101 | tls_alert_recv
+ 5102 | tls_alert_send
+ 5103 | tls_contenttype
+ 5876 | inet_sk_error_report
+ 5877 | inet_sock_set_state
+ 6622 | tcp_bad_csum
+ 6623 | tcp_cong_state_set
+ 6624 | tcp_destroy_sock
+ 6625 | tcp_probe
+ 6626 | tcp_rcv_space_adjust
 
 
 
