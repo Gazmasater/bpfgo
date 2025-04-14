@@ -304,61 +304,33 @@ format:
         field:u16 gso_type;     offset:62;      size:2; signed:0;
 
 
-// SPDX-License-Identifier: GPL-2.0
-#include "vmlinux.h"
-#include <bpf/bpf_helpers.h>
-#include <bpf/bpf_tracing.h>
-#include <bpf/bpf_core_read.h>
-
-struct event_t {
-    __u32 saddr;
-    __u32 daddr;
-    __u16 sport;
-    __u16 dport;
-    __u8 protocol;
-};
-
-struct {
-    __uint(type, BPF_MAP_TYPE_RINGBUF);
-    __uint(max_entries, 1 << 24);
-} events SEC(".maps");
-
 SEC("tracepoint/net/netif_receive_skb_entry")
 int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
     struct sk_buff *skb = (struct sk_buff *)ctx->skbaddr;
-    struct event_t *event;
 
     void *head = BPF_CORE_READ(skb, head);
     __u64 nh_off = BPF_CORE_READ(skb, network_header);
+
     struct iphdr *ip = head + nh_off;
+    __u8 vers=ip->version;
 
-    if (ip->version != 4) return 0;
+    if (vers != 4) return 0;
 
-    __u8 protocol = ip->protocol;
-    if (protocol != IPPROTO_TCP && protocol != IPPROTO_UDP) return 0;
+  //  __u8 protocol = ip->protocol;
+  //  if (protocol != IPPROTO_UDP) return 0;
 
-    event = bpf_ringbuf_reserve(&events, sizeof(*event), 0);
-    if (!event) return 0;
 
-    event->saddr = ip->saddr;
-    event->daddr = ip->daddr;
-    event->protocol = protocol;
 
-    if (protocol == IPPROTO_TCP) {
-        struct tcphdr *tcp = (void *)(ip + 1);
-        event->sport = tcp->source;
-        event->dport = tcp->dest;
-    } else if (protocol == IPPROTO_UDP) {
-        struct udphdr *udp = (void *)(ip + 1);
-        event->sport = udp->source;
-        event->dport = udp->dest;
-    }
 
-    bpf_ringbuf_submit(event, 0);
+
+
+
+
+
     return 0;
 }
 
-char LICENSE[] SEC("license") = "GPL";
+
 
 
 
