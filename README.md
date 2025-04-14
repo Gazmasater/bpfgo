@@ -201,6 +201,8 @@ SELECT * FROM events;
 SELECT id, name FROM structures
 WHERE id IN (5101, 5102, 5103, 5876, 5877, 6622, 6623, 6624, 6625, 6626);
 
+
+saddr
 5101 | tls_alert_recv
  5102 | tls_alert_send
  5103 | tls_contenttype
@@ -212,7 +214,7 @@ WHERE id IN (5101, 5102, 5103, 5876, 5877, 6622, 6623, 6624, 6625, 6626);
  6625 | tcp_probe
  6626 | tcp_rcv_space_adjust
 
-
+sprort
  5033 | fib_table_lookup
  5034 | fib6_table_lookup
  5689 | net_dev_start_xmit
@@ -224,5 +226,21 @@ WHERE id IN (5101, 5102, 5103, 5876, 5877, 6622, 6623, 6624, 6625, 6626);
  6626 | tcp_rcv_space_adjust
  6627 | tcp_receive_reset
 
-
+protocol
+ 5438 | kvm_vmgexit_msr_protocol_enter
+ 5439 | kvm_vmgexit_msr_protocol_exit
+ 5484 | ata_sff_hsm_command_complete
+ 5485 | ata_sff_hsm_state
+ 5487 | ata_sff_port_intr
+ 5684 | napi_gro_frags_entry
+ 5686 | napi_gro_receive_entry
+ 5689 | net_dev_start_xmit
+ 5693 | netif_receive_skb_entry
+ 5695 | netif_receive_skb_list_entry
+ 5698 | netif_rx_entry
+ 5870 | kfree_skb
+ 5872 | smbus_read
+ 5873 | smbus_reply
+ 5874 | smbus_result
+ 5875 | smbus_write
 
