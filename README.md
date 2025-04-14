@@ -304,32 +304,14 @@ format:
         field:u16 gso_type;     offset:62;      size:2; signed:0;
 
 
-SEC("tracepoint/net/netif_receive_skb_entry")
-int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
-    struct sk_buff *skb = (struct sk_buff *)ctx->skbaddr;
+#include <vmlinux.h>
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_core_read.h>
+#include <linux/ip.h>
+#include <linux/tcp.h>
+#include <linux/udp.h>
 
-    void *head = BPF_CORE_READ(skb, head);
-    __u64 nh_off = BPF_CORE_READ(skb, network_header);
-
-    struct iphdr ip;
-    if (bpf_probe_read(&ip, sizeof(ip), head + nh_off) < 0)
-        return 0;
-
-        if (ip.version != 4)
-    return 0;
-    __u8 proto = ip.protocol;
-
-
-
-
-
-
-
-
-    return 0;
-}
-
-
+char LICENSE[] SEC("license") = "GPL";
 
 SEC("tracepoint/net/netif_receive_skb_entry")
 int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
@@ -342,32 +324,39 @@ int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
     if (bpf_probe_read(&ip, sizeof(ip), head + nh_off) < 0)
         return 0;
 
-        if (ip.version != 4)
-    return 0;
+    if (ip.version != 4)
+        return 0;
+
     __u8 proto = ip.protocol;
     __u32 saddr = ip.saddr;
     __u32 daddr = ip.daddr;
 
-        // TCP
-        if (proto == IPPROTO_TCP) {
-            struct tcphdr tcp;
-            if (bpf_probe_read(&tcp, sizeof(tcp), head + nh_off + ip.ihl * 4) < 0)
-                return 0;
-    
-            __u16 sport = tcp.source;
-            __u16 dport = tcp.dest;
-    
-    
-        } else if (proto == IPPROTO_UDP) {
-            struct udphdr udp;
-            if (bpf_probe_read(&udp, sizeof(udp), head + nh_off + ip.ihl * 4) < 0)
-                return 0;
-    
-            __u16 sport = udp.source;
-            __u16 dport = udp.dest;
-    
-        }
+    // Печатаем IP-адреса
+    bpf_printk("IP: src=%d.%d.%d.%d dst=%d.%d.%d.%d proto=%d\n",
+        saddr & 0xff, (saddr >> 8) & 0xff, (saddr >> 16) & 0xff, (saddr >> 24) & 0xff,
+        daddr & 0xff, (daddr >> 8) & 0xff, (daddr >> 16) & 0xff, (daddr >> 24) & 0xff,
+        proto);
 
+    if (proto == IPPROTO_TCP) {
+        struct tcphdr tcp;
+        if (bpf_probe_read(&tcp, sizeof(tcp), head + nh_off + ip.ihl * 4) < 0)
+            return 0;
+
+        __u16 sport = bpf_ntohs(tcp.source);
+        __u16 dport = bpf_ntohs(tcp.dest);
+
+        bpf_printk("TCP sport=%d dport=%d\n", sport, dport);
+
+    } else if (proto == IPPROTO_UDP) {
+        struct udphdr udp;
+        if (bpf_probe_read(&udp, sizeof(udp), head + nh_off + ip.ihl * 4) < 0)
+            return 0;
+
+        __u16 sport = bpf_ntohs(udp.source);
+        __u16 dport = bpf_ntohs(udp.dest);
+
+        bpf_printk("UDP sport=%d dport=%d\n", sport, dport);
+    }
 
     return 0;
 }
