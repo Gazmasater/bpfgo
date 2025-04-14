@@ -65,6 +65,12 @@ func main() {
 	}
 	defer SmsgExit.Close()
 
+	Netif_recieve, err := link.Tracepoint("net", "netif_receive_skb_entry", objs.TraceNetifReceiveSkb, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint netif_receive_skb_entry: %s", err)
+	}
+	defer Netif_recieve.Close()
+
 	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
 	if err != nil {
 		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)

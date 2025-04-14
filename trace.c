@@ -215,16 +215,11 @@ const struct trace_info *unused __attribute__((unused));
 #define AF_INET 2
 #define AF_INET6 10
 #define TCP_ESTABLISHED 1
-#define TCP_SYN_SENT 2
-#define INET6_ADDRSTRLEN 46
-#define ETH_P_IPV6 0x86DD
 
-#define ETH_P_IP_BE   0x0008   // htons(0x0800) -> big-endian IP proto
 #define IPPROTO_UDP   17       // Протокол UDP в IP заголовке
-#define BLOCK_PORT    53       // Порт, который блокируем (например, DNS)
+#define IPPROTO_TCP    6
+#define  BLOCK_PORT    53       // Порт, который блокируем (например, DNS)
 
-#define TC_OK         0        // Пропустить пакет
-#define TC_SHOT       2        // Отбросить пакет
 
 
 
@@ -699,6 +694,8 @@ int look_up(struct bpf_sk_lookup *ctx) {
     struct trace_info info = {};
     __u32 proto = ctx->protocol;
 
+
+
     if (ctx->family == AF_INET) {
         __u32 srcIP = bpf_ntohl(ctx->local_ip4);
         __u32 dstIP = bpf_ntohl(ctx->remote_ip4);
@@ -756,7 +753,7 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
     __u32 srcip;
     bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
     srcip = bpf_ntohl(srcip);
-    
+
     __u32 dstip;
     bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
     dstip = bpf_ntohl(dstip);
@@ -810,6 +807,53 @@ bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info)
 
 
     }
+
+    return 0;
+}
+
+
+SEC("tracepoint/net/netif_receive_skb_entry")
+int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
+    struct sk_buff *skb = (struct sk_buff *)ctx->skbaddr;
+
+    bpf_printk("netif_receive_skb_entry ");
+
+
+    void *head = BPF_CORE_READ(skb, head);
+    __u64 nh_off = BPF_CORE_READ(skb, network_header);
+
+    struct iphdr ip;
+    if (bpf_probe_read(&ip, sizeof(ip), head + nh_off) < 0)
+        return 0;
+
+        if (ip.version != 4)
+    return 0;
+
+    __u8 proto = ip.protocol;
+    __u32 saddr = ip.saddr;
+    __u32 daddr = ip.daddr;
+
+        // TCP
+        if (proto == IPPROTO_TCP) {
+            struct tcphdr tcp;
+            if (bpf_probe_read(&tcp, sizeof(tcp), head + nh_off + ip.ihl * 4) < 0)
+                return 0;
+    
+            __u16 sport = tcp.source;
+            __u16 dport = tcp.dest;
+
+            bpf_printk("netif_receive_skb_entry SPORT=%d DPORT=%d ",sport,dport);
+    
+        } else if (proto == IPPROTO_UDP) {
+            struct udphdr udp;
+            if (bpf_probe_read(&udp, sizeof(udp), head + nh_off + ip.ihl * 4) < 0)
+                return 0;
+    
+            __u16 sport = udp.source;
+            __u16 dport = udp.dest;
+    
+        }
+
 
     return 0;
 }
