@@ -22,6 +22,38 @@ struct conn_info_t
     char comm[64];
 };
 
+struct netif_receive_skb_entry_args
+{
+
+
+    unsigned short common_type;     
+    unsigned char common_flags;     
+    unsigned char common_preempt_count;    
+    int common_pid;  
+    char  name [64];
+    unsigned int napi_id;   
+    u16 queue_mapping;      
+    const void * skbaddr; 
+    bool vlan_tagged; 
+    u16 vlan_proto;   
+    u16 vlan_tci;     
+    u16 protocol;   
+    u8 ip_summed;    
+    u32 hash; 
+    bool l4_hash;    
+    unsigned int len; 
+    unsigned int data_len;   
+    unsigned int truesize;   
+    bool mac_header_valid;    
+    int mac_header;   
+    unsigned char nr_frags;   
+    u16 gso_size;     
+    u16 gso_type;     
+
+
+
+};
+
 
 struct sys_enter_sendto_args
 {
@@ -813,46 +845,48 @@ bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info)
 
 
 SEC("tracepoint/net/netif_receive_skb_entry")
-int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
-    struct sk_buff *skb = (struct sk_buff *)ctx->skbaddr;
+int trace_netif_receive_skb(struct netif_receive_skb_entry_args *ctx) {
 
     bpf_printk("netif_receive_skb_entry ");
 
+    struct sk_buff *skb = (struct sk_buff *)ctx->skbaddr;
 
-    void *head = BPF_CORE_READ(skb, head);
-    __u64 nh_off = BPF_CORE_READ(skb, network_header);
 
-    struct iphdr ip;
-    if (bpf_probe_read(&ip, sizeof(ip), head + nh_off) < 0)
-        return 0;
 
-        if (ip.version != 4)
-    return 0;
+    // void *head = BPF_CORE_READ(skb, head);
+    // __u64 nh_off = BPF_CORE_READ(skb, network_header);
 
-    __u8 proto = ip.protocol;
-    __u32 saddr = ip.saddr;
-    __u32 daddr = ip.daddr;
+    // struct iphdr ip;
+    // if (bpf_probe_read(&ip, sizeof(ip), head + nh_off) < 0)
+    //     return 0;
 
-        // TCP
-        if (proto == IPPROTO_TCP) {
-            struct tcphdr tcp;
-            if (bpf_probe_read(&tcp, sizeof(tcp), head + nh_off + ip.ihl * 4) < 0)
-                return 0;
+    //     if (ip.version != 4)
+    // return 0;
+
+    // __u8 proto = ip.protocol;
+    // __u32 saddr = ip.saddr;
+    // __u32 daddr = ip.daddr;
+
+    //     // TCP
+    //     if (proto == IPPROTO_TCP) {
+    //         struct tcphdr tcp;
+    //         if (bpf_probe_read(&tcp, sizeof(tcp), head + nh_off + ip.ihl * 4) < 0)
+    //             return 0;
     
-            __u16 sport = tcp.source;
-            __u16 dport = tcp.dest;
+    //         __u16 sport = tcp.source;
+    //         __u16 dport = tcp.dest;
 
-            bpf_printk("netif_receive_skb_entry SPORT=%d DPORT=%d ",sport,dport);
+    //         bpf_printk("netif_receive_skb_entry SPORT=%d DPORT=%d ",sport,dport);
     
-        } else if (proto == IPPROTO_UDP) {
-            struct udphdr udp;
-            if (bpf_probe_read(&udp, sizeof(udp), head + nh_off + ip.ihl * 4) < 0)
-                return 0;
+    //     } else if (proto == IPPROTO_UDP) {
+    //         struct udphdr udp;
+    //         if (bpf_probe_read(&udp, sizeof(udp), head + nh_off + ip.ihl * 4) < 0)
+    //             return 0;
     
-            __u16 sport = udp.source;
-            __u16 dport = udp.dest;
+    //         __u16 sport = udp.source;
+    //         __u16 dport = udp.dest;
     
-        }
+    //     }
 
 
     return 0;
