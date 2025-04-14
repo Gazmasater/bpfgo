@@ -243,3 +243,17 @@ func addStructure(eventID int, name string, format string, db *sql.DB) error {
 }
 
 
+SELECT 
+    c.name AS category,
+    e.name AS event
+FROM 
+    structures s
+JOIN 
+    events e ON s.event_id = e.id
+JOIN 
+    categories c ON e.category_id = c.id
+WHERE 
+    s.format ILIKE '%local_port%';
+
+
+
