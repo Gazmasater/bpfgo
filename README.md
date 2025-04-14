@@ -318,16 +318,26 @@ format:
         field:u16 gso_type;     offset:62;      size:2; signed:0;
 
 
-        SEC("tracepoint/net/netif_receive_skb_entry")
+SEC("tracepoint/net/netif_receive_skb_entry")
 int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
     struct sk_buff *skb = (struct sk_buff *)ctx->skbaddr;
+
+    // Вычисление границ данных пакета
     void *data = (void *)(long)skb->head + skb->mac_header;
     void *data_end = (void *)(long)skb->head + skb->end;
 
-    // IPv4 check
+    // Проверка минимальной длины IP-заголовка
+    if (data + sizeof(struct iphdr) > data_end) return 0;
+
     struct iphdr *ip = data;
-    if ((void *)(ip + 1) > data_end) return 0;
-    if (ip->version != 4) return 0;
+
+    // Безопасная проверка версии IP (через первый байт)
+    u8 ver_ihl = *(u8 *)data;
+    u8 version = ver_ihl >> 4;
+    if (version != 4) return 0;
+
+    // Проверка доступа к полям saddr и daddr
+    if ((void *)&ip->daddr + sizeof(ip->daddr) > data_end) return 0;
 
     bpf_printk("SRC IP: %d.%d.%d.%d", 
         ((unsigned char *) &ip->saddr)[0],
@@ -341,15 +351,20 @@ int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
         ((unsigned char *) &ip->daddr)[2],
         ((unsigned char *) &ip->daddr)[3]);
 
-    // TCP or UDP check
+    // Вычисление начала TCP/UDP заголовка
+    void *l4_hdr = data + ip->ihl * 4;
+    if (l4_hdr > data_end) return 0;
+
     if (ip->protocol == IPPROTO_TCP) {
-        struct tcphdr *tcp = (void *)ip + ip->ihl * 4;
-        if ((void *)(tcp + 1) > data_end) return 0;
-        bpf_printk("PROTO: TCP, SRC PORT: %d, DST PORT: %d", bpf_ntohs(tcp->source), bpf_ntohs(tcp->dest));
+        if (l4_hdr + sizeof(struct tcphdr) > data_end) return 0;
+        struct tcphdr *tcp = l4_hdr;
+        bpf_printk("PROTO: TCP, SRC PORT: %d, DST PORT: %d", 
+            bpf_ntohs(tcp->source), bpf_ntohs(tcp->dest));
     } else if (ip->protocol == IPPROTO_UDP) {
-        struct udphdr *udp = (void *)ip + ip->ihl * 4;
-        if ((void *)(udp + 1) > data_end) return 0;
-        bpf_printk("PROTO: UDP, SRC PORT: %d, DST PORT: %d", bpf_ntohs(udp->source), bpf_ntohs(udp->dest));
+        if (l4_hdr + sizeof(struct udphdr) > data_end) return 0;
+        struct udphdr *udp = l4_hdr;
+        bpf_printk("PROTO: UDP, SRC PORT: %d, DST PORT: %d", 
+            bpf_ntohs(udp->source), bpf_ntohs(udp->dest));
     }
 
     return 0;
