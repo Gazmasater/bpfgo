@@ -371,3 +371,26 @@ int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
 }
 
 
+
+void *iph_ptr = data;
+
+// Проверка, что IP-заголовок помещается в data
+if (iph_ptr + sizeof(struct iphdr) > data_end)
+    return 0;
+
+struct iphdr ip;
+__builtin_memcpy(&ip, iph_ptr, sizeof(ip));
+
+// Проверка, что это IPv4
+if ((ip.version >> 4) != 4) // или (ip.version != 4), если уверен в доступе
+    return 0;
+
+// Доступ к полям безопасный — через локальную копию
+bpf_printk("SRC IP: %d.%d.%d.%d",
+    ((unsigned char *) &ip.saddr)[0],
+    ((unsigned char *) &ip.saddr)[1],
+    ((unsigned char *) &ip.saddr)[2],
+    ((unsigned char *) &ip.saddr)[3]);
+
+
+
