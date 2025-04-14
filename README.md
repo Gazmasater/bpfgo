@@ -213,4 +213,16 @@ WHERE id IN (5101, 5102, 5103, 5876, 5877, 6622, 6623, 6624, 6625, 6626);
  6626 | tcp_rcv_space_adjust
 
 
+ 5033 | fib_table_lookup
+ 5034 | fib6_table_lookup
+ 5689 | net_dev_start_xmit
+ 5876 | inet_sk_error_report
+ 5877 | inet_sock_set_state
+ 6623 | tcp_cong_state_set
+ 6624 | tcp_destroy_sock
+ 6625 | tcp_probe
+ 6626 | tcp_rcv_space_adjust
+ 6627 | tcp_receive_reset
+
+
 
