@@ -317,3 +317,42 @@ format:
         field:u16 gso_segs;     offset:60;      size:2; signed:0;
         field:u16 gso_type;     offset:62;      size:2; signed:0;
 
+
+        SEC("tracepoint/net/netif_receive_skb_entry")
+int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
+    struct sk_buff *skb = (struct sk_buff *)ctx->skbaddr;
+    void *data = (void *)(long)skb->head + skb->mac_header;
+    void *data_end = (void *)(long)skb->head + skb->end;
+
+    // IPv4 check
+    struct iphdr *ip = data;
+    if ((void *)(ip + 1) > data_end) return 0;
+    if (ip->version != 4) return 0;
+
+    bpf_printk("SRC IP: %d.%d.%d.%d", 
+        ((unsigned char *) &ip->saddr)[0],
+        ((unsigned char *) &ip->saddr)[1],
+        ((unsigned char *) &ip->saddr)[2],
+        ((unsigned char *) &ip->saddr)[3]);
+
+    bpf_printk("DST IP: %d.%d.%d.%d", 
+        ((unsigned char *) &ip->daddr)[0],
+        ((unsigned char *) &ip->daddr)[1],
+        ((unsigned char *) &ip->daddr)[2],
+        ((unsigned char *) &ip->daddr)[3]);
+
+    // TCP or UDP check
+    if (ip->protocol == IPPROTO_TCP) {
+        struct tcphdr *tcp = (void *)ip + ip->ihl * 4;
+        if ((void *)(tcp + 1) > data_end) return 0;
+        bpf_printk("PROTO: TCP, SRC PORT: %d, DST PORT: %d", bpf_ntohs(tcp->source), bpf_ntohs(tcp->dest));
+    } else if (ip->protocol == IPPROTO_UDP) {
+        struct udphdr *udp = (void *)ip + ip->ihl * 4;
+        if ((void *)(udp + 1) > data_end) return 0;
+        bpf_printk("PROTO: UDP, SRC PORT: %d, DST PORT: %d", bpf_ntohs(udp->source), bpf_ntohs(udp->dest));
+    }
+
+    return 0;
+}
+
+
