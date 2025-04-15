@@ -312,6 +312,12 @@ ping 8.8.8.8
 ls /sys/kernel/debug/tracing/events/net/netif_receive_skb_entry/
 
 
+az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ls /sys/kernel/debug/tracing/events/net/netif_receive_skb_entry/
+[sudo] password for gaz358: 
+enable  filter  format  hist  id  inject  trigger
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
+
 
 
 
