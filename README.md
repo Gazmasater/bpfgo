@@ -330,6 +330,32 @@ int trace_netif_receive_skb_entry(struct trace_event_raw_net_dev_template *ctx)
 }
 
 
+struct netif_receive_skb_entry_t {
+    u64 __pad;             // общий префикс tracepoint (common_type + flags + preempt + pid)
+    u32 name;              // __data_loc char[] name
+    u32 napi_id;
+    u16 queue_mapping;
+    u16 __pad2;            // выравнивание до 8 байт
+    const void *skbaddr;
+    bool vlan_tagged;
+    u16 vlan_proto;
+    u16 vlan_tci;
+    u16 protocol;
+    u8 ip_summed;
+    u32 hash;
+    bool l4_hash;
+    u32 len;
+    u32 data_len;
+    u32 truesize;
+    bool mac_header_valid;
+    int mac_header;
+    u8 nr_frags;
+    u16 gso_size;
+    u16 gso_type;
+};
+
+
+
 
 
 
