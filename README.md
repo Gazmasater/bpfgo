@@ -402,8 +402,37 @@ Auto-detecting system features:
 ...                                  libcap: [ OFF ]
 ...                                  libbfd: [ OFF ]
 
-    __data_loc char[] name;  // Динамическое поле для имени интерфейса
 
+
+  __u16 common_type;
+    __u8  common_flags;
+    __u8  common_preempt_count;
+    __s32 common_pid;
+
+    __char name[64];
+    __u32 napi_id;
+    __u16 queue_mapping;
+    const void *skbaddr;
+
+    bool vlan_tagged;
+    __u16 vlan_proto;
+    __u16 vlan_tci;
+    __u16 protocol;
+
+    __u8 ip_summed;
+    __u32 hash;
+    bool l4_hash;
+
+    __u32 len;
+    __u32 data_len;
+    __u32 truesize;
+
+    bool mac_header_valid;
+    __s32 mac_header;
+
+    __u8 nr_frags;
+    __u16 gso_size;
+    __u16 gso_type;
 
 
 
