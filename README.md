@@ -341,7 +341,7 @@ int trace_netif_receive_skb(struct netif_receive_skb_entry_args *ctx)
 
 struct netif_receive_skb_entry_args {
     u64 __pad;             // общий префикс tracepoint (common_type + flags + preempt + pid)
-    u32 name;              // __data_loc char[] name
+     __data_loc char[] name
     u32 napi_id;
     u16 queue_mapping;
     u16 __pad2;            // выравнивание до 8 байт
@@ -435,6 +435,64 @@ Auto-detecting system features:
     __u16 gso_type;
 
     char[] __data[0]; 
+
+
+
+#include <linux/bpf.h>
+#include <bpf/bpf_helpers.h>
+#include <linux/ptrace.h>
+
+struct netif_receive_skb_entry_args {
+    u64 __pad;
+    u32 __data_loc_name;  // __data_loc превращается в обычное u32/int (смещение)
+    u32 napi_id;
+    u16 queue_mapping;
+    u16 __pad2;
+    const void *skbaddr;
+    bool vlan_tagged;
+    u16 vlan_proto;
+    u16 vlan_tci;
+    u16 protocol;
+    u8 ip_summed;
+    u32 hash;
+    bool l4_hash;
+    u32 len;
+    u32 data_len;
+    u32 truesize;
+    bool mac_header_valid;
+    int mac_header;
+    u8 nr_frags;
+    u16 gso_size;
+    u16 gso_type;
+};
+
+struct trace_info {
+    char ifname[64];
+    int sysexit;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+} trace_events SEC(".maps");
+
+SEC("tracepoint/net/netif_receive_skb_entry")
+int trace_netif_receive_skb(struct netif_receive_skb_entry_args *ctx)
+{
+    struct trace_info info = {};
+    info.sysexit = 13;
+
+    // Извлечь имя интерфейса из __data_loc
+    u32 offset = ctx->__data_loc_name & 0xFFFF;  // только младшие 16 бит — смещение
+    const char *name_ptr = (const char *)ctx + offset;
+    bpf_probe_read_str(&info.ifname, sizeof(info.ifname), name_ptr);
+
+    bpf_printk("skb received from %s\n", info.ifname);
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    return 0;
+}
+
+char LICENSE[] SEC("license") = "GPL";
 
 
 
