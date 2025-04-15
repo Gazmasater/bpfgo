@@ -362,6 +362,10 @@ struct netif_receive_skb_entry_args {
     u16 gso_type;
 };
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo perf trace -e net:netif_receive_skb_entry
+[sudo] password for gaz358: 
+perf: 'trace' is not a perf-command. See 'perf --help'.
+
 
 
 
