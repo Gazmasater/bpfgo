@@ -385,31 +385,8 @@ perf list | grep netif_receive_skb_entry
   net:netif_receive_skb_entry [Tracepoint]
 
 
-  sudo cat /sys/kernel/debug/tracing/available_events | grep net
+bpftool gen trace > trace_helpers.h
 
-  gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$   sudo cat /sys/kernel/debug/tracing/available_events | grep net
-mac80211:drv_net_fill_forward_path
-mac80211:drv_net_setup_tc
-sock:inet_sk_error_report
-sock:inet_sock_set_state
-net:netif_receive_skb_list_exit
-net:netif_rx_exit
-net:netif_receive_skb_exit
-net:napi_gro_receive_exit
-net:napi_gro_frags_exit
-net:netif_rx_entry
-net:netif_receive_skb_list_entry
-net:netif_receive_skb_entry
-net:napi_gro_receive_entry
-net:napi_gro_frags_entry
-net:netif_rx
-net:netif_receive_skb
-net:net_dev_queue
-net:net_dev_xmit_timeout
-net:net_dev_xmit
-net:net_dev_start_xmit
-netlink:netlink_extack
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
 
