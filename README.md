@@ -394,6 +394,29 @@ make
 sudo make install
 bpftool gen trace > trace_helpers.h
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/linux/tools/bpf/bpftool$ sudo make install
+
+Auto-detecting system features:
+...                         clang-bpf-co-re: [ on  ]
+...                                    llvm: [ on  ]
+...                                  libcap: [ OFF ]
+...                                  libbfd: [ OFF ]
+
+  INSTALL bpftool
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/linux/tools/bpf/bpftool$ cd ..
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/linux/tools/bpf$ cd ..
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/linux/tools$ cd ..
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/linux$ cd ..
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpftool gen trace > trace_helpers.h
+Usage: bpftool gen object OUTPUT_FILE INPUT_FILE [INPUT_FILE...]
+       bpftool gen skeleton FILE [name OBJECT_NAME]
+       bpftool gen subskeleton FILE [name OBJECT_NAME]
+       bpftool gen min_core_btf INPUT OUTPUT OBJECT [OBJECT...]
+       bpftool gen help
+
+       OPTIONS := { {-j|--json} [{-p|--pretty}] | {-d|--debug} |
+                    {-L|--use-loader} }
+
 
 
 
