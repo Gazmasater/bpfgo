@@ -386,6 +386,16 @@ perf list | grep netif_receive_skb_entry
 
 
 bpftool gen trace > trace_helpers.h
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo bpftool gen trace > trace_helpers.h
+Usage: bpftool gen object OUTPUT_FILE INPUT_FILE [INPUT_FILE...]
+       bpftool gen skeleton FILE [name OBJECT_NAME]
+       bpftool gen subskeleton FILE [name OBJECT_NAME]
+       bpftool gen min_core_btf INPUT OUTPUT OBJECT [OBJECT...]
+       bpftool gen help
+
+       OPTIONS := { {-j|--json} [{-p|--pretty}] | {-d|--debug} |
+                    {-L|--use-loader} }
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
 
