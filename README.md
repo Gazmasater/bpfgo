@@ -434,6 +434,8 @@ Auto-detecting system features:
     __u16 gso_size;
     __u16 gso_type;
 
+    char[] __data[0]; 
+
 
 
 
