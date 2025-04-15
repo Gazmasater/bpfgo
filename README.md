@@ -320,13 +320,14 @@ echo "hello UDP" | nc -u 192.168.1.100 9999
 ip a
 echo "test" | nc -u 192.168.1.42 9999
 
-SEC("tracepoint/net/netif_receive_skb")
-int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx)
+
+SEC("tracepoint/net/netif_receive_skb_entry")
+int trace_netif_receive_skb_entry(struct trace_event_raw_net_dev_template *ctx)
 {
-    bpf_printk("skb received: addr=0x%p len=%u proto=0x%x\n", ctx->skbaddr, ctx->len, ctx->protocol);
+    // Печать адреса пакета, длины и протокола
+    bpf_printk("Received skb: addr=0x%p, len=%u, proto=0x%x\n", ctx->skbaddr, ctx->len, ctx->protocol);
     return 0;
 }
-
 
 
 
