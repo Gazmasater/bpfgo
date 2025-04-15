@@ -309,6 +309,7 @@ sudo cat /sys/kernel/debug/tracing/trace_pipe
 
 ping 8.8.8.8
 
+ls /sys/kernel/debug/tracing/events/net/netif_receive_skb_entry/
 
 
 
