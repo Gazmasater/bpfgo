@@ -385,9 +385,11 @@ perf list | grep netif_receive_skb_entry
   net:netif_receive_skb_entry [Tracepoint]
 
 
-  az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ perf list | grep netif_receive_skb_entry
-Error: failed to open tracing events directory
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+  sudo cat /sys/kernel/debug/tracing/available_events | grep net
+
+
+
+ 
 
 
 
