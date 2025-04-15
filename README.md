@@ -363,18 +363,27 @@ struct netif_receive_skb_entry_args {
     u16 gso_type;
 };
 
-az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo perf record -e net:netif_receive_skb_entry -a
-event syntax error: 'net:netif_receive_skb_entry'
-                     \___ unsupported tracepoint
 
-libtraceevent is necessary for tracepoint support
-Run 'perf list' for a list of valid events
 
- Usage: perf record [<options>] [<command>]
-    or: perf record [<options>] -- <command> [<options>]
 
-    -e, --event <event>   event selector. use 'perf list' to list available events
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+1. Установи libtraceevent:
+Если ты на Ubuntu / Debian:
+
+
+sudo apt update
+sudo apt install libtraceevent1 libtraceevent-dev
+А чтобы perf пересобрался с поддержкой tracepoint, можно установить:
+
+
+sudo apt install linux-tools-$(uname -r)
+2. Проверь после установки:
+
+perf list | grep netif_receive_skb_entry
+Если всё ок, ты увидишь:
+
+
+  net:netif_receive_skb_entry [Tracepoint]
+
 
 
 
