@@ -315,19 +315,24 @@ ls /sys/kernel/debug/tracing/events/net/netif_receive_skb_entry/
 nc -u -l 9999
 
 
-echo "hello UDP" | nc -u 192.168.1.100 9999
+echo "hello UDP" | nc -u 192.168.1.71 9999
 
 ip a
-echo "test" | nc -u 192.168.1.42 9999
+echo "test" | nc -u 192.168.1.71 9999
 
 
 SEC("tracepoint/net/netif_receive_skb_entry")
-int trace_netif_receive_skb_entry(struct trace_event_raw_net_dev_template *ctx)
+int trace_netif_receive_skb(struct netif_receive_skb_entry_args *ctx)
 {
-    // Печать адреса пакета, длины и протокола
-    bpf_printk("Received skb: addr=0x%p, len=%u, proto=0x%x\n", ctx->skbaddr, ctx->len, ctx->protocol);
+    bpf_printk("skb received:\n");
+    struct trace_info info = {};
+
+    info.sysexit=13;
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
     return 0;
 }
+
 
 
 struct netif_receive_skb_entry_t {
