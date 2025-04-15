@@ -304,7 +304,8 @@ format:
         field:u16 gso_type;     offset:62;      size:2; signed:0;
 
 
-sudo perf record -e net:netif_receive_skb_entry -a
+echo 1 | sudo tee /sys/kernel/debug/tracing/events/net/netif_receive_skb_entry/enable
+sudo cat /sys/kernel/debug/tracing/trace_pipe
 
 ping 8.8.8.8
 
