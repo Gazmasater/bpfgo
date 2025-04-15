@@ -309,7 +309,8 @@ sudo cat /sys/kernel/debug/tracing/trace_pipe
 
 ping 8.8.8.8
 
-sudo perf trace -e net:netif_receive_skb_entry
+sudo perf record -e net:netif_receive_skb_entry -a
+
 
 
 ls /sys/kernel/debug/tracing/events/net/netif_receive_skb_entry/
@@ -362,9 +363,7 @@ struct netif_receive_skb_entry_args {
     u16 gso_type;
 };
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo perf trace -e net:netif_receive_skb_entry
-[sudo] password for gaz358: 
-perf: 'trace' is not a perf-command. See 'perf --help'.
+
 
 
 
