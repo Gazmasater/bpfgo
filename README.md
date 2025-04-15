@@ -309,6 +309,9 @@ sudo cat /sys/kernel/debug/tracing/trace_pipe
 
 ping 8.8.8.8
 
+sudo perf trace -e net:netif_receive_skb_entry
+
+
 ls /sys/kernel/debug/tracing/events/net/netif_receive_skb_entry/
 
 
@@ -335,7 +338,7 @@ int trace_netif_receive_skb(struct netif_receive_skb_entry_args *ctx)
 
 
 
-struct netif_receive_skb_entry_t {
+struct netif_receive_skb_entry_args {
     u64 __pad;             // общий префикс tracepoint (common_type + flags + preempt + pid)
     u32 name;              // __data_loc char[] name
     u32 napi_id;
