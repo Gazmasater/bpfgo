@@ -394,90 +394,40 @@ make
 sudo make install
 bpftool gen trace > trace_helpers.h
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/linux/tools/bpf/bpftool$ sudo make install
 
-Auto-detecting system features:
-...                         clang-bpf-co-re: [ on  ]
-...                                    llvm: [ on  ]
-...                                  libcap: [ OFF ]
-...                                  libbfd: [ OFF ]
+struct netif_receive_skb_entry_args
+{
 
 
-
-  __u16 common_type;
-    __u8  common_flags;
-    __u8  common_preempt_count;
-    __s32 common_pid;
-
-    __char name[64];
+    __u64 __pad;             // общий префикс tracepoint (common_type + flags + preempt + pid)
+    u32 __data_loc_name; 
     __u32 napi_id;
     __u16 queue_mapping;
+    __u16 __pad2;            // выравнивание до 8 байт
     const void *skbaddr;
-
     bool vlan_tagged;
     __u16 vlan_proto;
     __u16 vlan_tci;
     __u16 protocol;
-
     __u8 ip_summed;
     __u32 hash;
     bool l4_hash;
-
     __u32 len;
     __u32 data_len;
     __u32 truesize;
-
     bool mac_header_valid;
     __s32 mac_header;
-
     __u8 nr_frags;
     __u16 gso_size;
     __u16 gso_type;
 
-    char[] __data[0]; 
 
-
-
-#include <linux/bpf.h>
-#include <bpf/bpf_helpers.h>
-#include <linux/ptrace.h>
-
-struct netif_receive_skb_entry_args {
-    u64 __pad;
-    u32 __data_loc_name;  // __data_loc превращается в обычное u32/int (смещение)
-    u32 napi_id;
-    u16 queue_mapping;
-    u16 __pad2;
-    const void *skbaddr;
-    bool vlan_tagged;
-    u16 vlan_proto;
-    u16 vlan_tci;
-    u16 protocol;
-    u8 ip_summed;
-    u32 hash;
-    bool l4_hash;
-    u32 len;
-    u32 data_len;
-    u32 truesize;
-    bool mac_header_valid;
-    int mac_header;
-    u8 nr_frags;
-    u16 gso_size;
-    u16 gso_type;
 };
-
-struct trace_info {
-    char ifname[64];
-    int sysexit;
-};
-
-struct {
-    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-} trace_events SEC(".maps");
-
 SEC("tracepoint/net/netif_receive_skb_entry")
 int trace_netif_receive_skb(struct netif_receive_skb_entry_args *ctx)
 {
+
+    bpf_printk("skb received from ");
     struct trace_info info = {};
     info.sysexit = 13;
 
@@ -491,16 +441,5 @@ int trace_netif_receive_skb(struct netif_receive_skb_entry_args *ctx)
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
     return 0;
 }
-
-char LICENSE[] SEC("license") = "GPL";
-
-
-
-
-
-
-
-
-
 
 
