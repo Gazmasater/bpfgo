@@ -445,6 +445,49 @@ int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
 }
 
 
+SEC("tracepoint/net/net_dev_xmit")
+int trace_net_dev_xmit(struct trace_event_raw_net_dev_template *ctx) {
+    struct sk_buff skb = {};
+    struct iphdr iph = {};
+    struct tcphdr tcph = {};
+    struct udphdr udph = {};
+
+    // Прочитать структуру skb по адресу
+    bpf_probe_read(&skb, sizeof(skb), ctx->skbaddr);
+
+    // Проверка на Ethernet (сдвиг до IP)
+    void *ip_start = (void *)skb.data + ETH_HLEN;
+
+    // Прочитать IP-заголовок
+    bpf_probe_read(&iph, sizeof(iph), ip_start);
+
+    if (iph.protocol == IPPROTO_TCP) {
+        void *tcp_start = ip_start + iph.ihl * 4;
+        bpf_probe_read(&tcph, sizeof(tcph), tcp_start);
+
+        __u16 sport = bpf_ntohs(tcph.source);
+        __u16 dport = bpf_ntohs(tcph.dest);
+
+        bpf_printk("Outgoing TCP packet: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",
+            iph.saddr & 0xff, (iph.saddr >> 8) & 0xff, (iph.saddr >> 16) & 0xff, (iph.saddr >> 24) & 0xff, sport,
+            iph.daddr & 0xff, (iph.daddr >> 8) & 0xff, (iph.daddr >> 16) & 0xff, (iph.daddr >> 24) & 0xff, dport);
+    } else if (iph.protocol == IPPROTO_UDP) {
+        void *udp_start = ip_start + iph.ihl * 4;
+        bpf_probe_read(&udph, sizeof(udph), udp_start);
+
+        __u16 sport = bpf_ntohs(udph.source);
+        __u16 dport = bpf_ntohs(udph.dest);
+
+        bpf_printk("Outgoing UDP packet: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",
+            iph.saddr & 0xff, (iph.saddr >> 8) & 0xff, (iph.saddr >> 16) & 0xff, (iph.saddr >> 24) & 0xff, sport,
+            iph.daddr & 0xff, (iph.daddr >> 8) & 0xff, (iph.daddr >> 16) & 0xff, (iph.daddr >> 24) & 0xff, dport);
+    }
+
+    return 0;
+}
+
+
+
 
 
 
