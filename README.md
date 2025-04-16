@@ -443,3 +443,12 @@ int trace_netif_receive_skb(struct netif_receive_skb_entry_args *ctx)
 }
 
 
+SEC("kprobe/netif_receive_skb")
+int bpf_prog(struct pt_regs *ctx)
+{
+    bpf_printk("skb received via kprobe!\n");
+    return 0;
+}
+
+
+
