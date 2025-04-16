@@ -396,22 +396,54 @@ bpftool gen trace > trace_helpers.h
 
 
 SEC("tracepoint/net/netif_receive_skb")
-int netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
-    // Attempt to read socket buffer from kernel structure.
-    struct sk_buff skb;
-    
-    bpf_probe_read(&skb, sizeof(skb), ctx->skbaddr);
-    // Retrieve IP header.
-    struct iphdr iph;
-    
-    bpf_probe_read(&iph, sizeof(struct iphdr), skb.data);
+int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
+    struct sk_buff skb = {};
+    struct iphdr iph = {};
+    struct tcphdr tcph = {};
+    struct udphdr udph = {};
 
-    if (iph.protocol==IPPROTO_TCP) {
-    bpf_printk("Got here in netif_receive_skb with proto: %d\n", iph.protocol);
+    // Прочитать skb
+    bpf_probe_read(&skb, sizeof(skb), ctx->skbaddr);
+
+    // Прочитать IP-заголовок
+    bpf_probe_read(&iph, sizeof(iph), skb.data);
+
+    if (iph.protocol == IPPROTO_TCP) {
+        // Указатель на TCP-заголовок
+        void *tcp_start = (void *)skb.data + iph.ihl * 4;
+
+        // Прочитать TCP-заголовок
+        bpf_probe_read(&tcph, sizeof(tcph), tcp_start);
+
+        // Преобразовать порты из сетевого порядка в хост
+        __u16 sport = bpf_ntohs(tcph.source);
+        __u16 dport = bpf_ntohs(tcph.dest);
+
+        // Напечатать читаемый лог для TCP
+        bpf_printk("Incoming TCP packet: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",
+            iph.saddr & 0xff, (iph.saddr >> 8) & 0xff, (iph.saddr >> 16) & 0xff, (iph.saddr >> 24) & 0xff, sport,
+            iph.daddr & 0xff, (iph.daddr >> 8) & 0xff, (iph.daddr >> 16) & 0xff, (iph.daddr >> 24) & 0xff, dport);
     }
-    
+    else if (iph.protocol == IPPROTO_UDP) {
+        // Указатель на UDP-заголовок
+        void *udp_start = (void *)skb.data + iph.ihl * 4;
+
+        // Прочитать UDP-заголовок
+        bpf_probe_read(&udph, sizeof(udph), udp_start);
+
+        // Преобразовать порты из сетевого порядка в хост
+        __u16 sport = bpf_ntohs(udph.source);
+        __u16 dport = bpf_ntohs(udph.dest);
+
+        // Напечатать читаемый лог для UDP
+        bpf_printk("Incoming UDP packet: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",
+            iph.saddr & 0xff, (iph.saddr >> 8) & 0xff, (iph.saddr >> 16) & 0xff, (iph.saddr >> 24) & 0xff, sport,
+            iph.daddr & 0xff, (iph.daddr >> 8) & 0xff, (iph.daddr >> 16) & 0xff, (iph.daddr >> 24) & 0xff, dport);
+    }
+
     return 0;
 }
+
 
 
 
