@@ -467,13 +467,15 @@ int trace_net_dev_start_xmit(struct trace_event_raw_net_dev_template *ctx) {
     // Читаем IP-заголовок
     bpf_probe_read(&iph, sizeof(iph), ip_start);
 
+    bpf_printk("Outgoing IP protocol: %d", iph.protocol);
+
+
     // Проверка версии IP и протокола
     if (iph.version != 4) {
         bpf_printk("Not IPv4: version=%d", iph.version);
         return 0;
     }
 
-    bpf_printk("Outgoing IP protocol: %d", iph.protocol);
 
     if (iph.protocol == IPPROTO_TCP) {
         void *tcp_start = ip_start + iph.ihl * 4;
