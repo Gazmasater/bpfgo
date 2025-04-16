@@ -495,8 +495,8 @@ bpf_printk("Outgoing UDP packet: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",
     (saddr >> 24) & 0xff, (saddr >> 16) & 0xff, (saddr >> 8) & 0xff, saddr & 0xff, sport,
     (daddr >> 24) & 0xff, (daddr >> 16) & 0xff, (daddr >> 8) & 0xff, daddr & 0xff, dport);
 
-     irq/146-iwlwifi-522     [003] b.s51   335.019168: bpf_trace_printk: Outgoing TCP packet: 0.3.170.170:48544 -> 0.8.0.0:5303
- irq/146-iwlwifi-522     [003] b.s51   335.094224: bpf_trace_printk: Outgoing UDP packet: 0.3.170.170:48550 -> 0.8.0.0:9143
+systemd-resolve-4318    [004] b..21  1038.454295: bpf_trace_printk: Outgoing UDP packet: 255.4.206.207:53 -> 129.128.0.1:32512
+ systemd-resolve-4318    [004] b..21  1038.468279: bpf_trace_printk: Outgoing UDP packet: 255.65.136.198:53 -> 129.128.0.1:32512
 
 
 
