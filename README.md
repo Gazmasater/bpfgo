@@ -445,58 +445,79 @@ int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
 }
 
 
-SEC("tracepoint/net/net_dev_xmit")
-int trace_net_dev_xmit(struct trace_event_raw_net_dev_template *ctx) {
+
+
+SEC("tracepoint/net/net_dev_start_xmit")
+int trace_net_dev_start_xmit(struct trace_event_raw_net_dev_template *ctx) {
     struct sk_buff skb = {};
     struct iphdr iph = {};
     struct tcphdr tcph = {};
     struct udphdr udph = {};
 
+
+
     // Прочитать структуру skb по адресу
     bpf_probe_read(&skb, sizeof(skb), ctx->skbaddr);
 
+
+
     // Проверка на Ethernet (сдвиг до IP)
-    void *ip_start = (void *)skb.data + ETH_HLEN;
+    void *ip_start = (void *)skb.data + 14;
 
     // Прочитать IP-заголовок
     bpf_probe_read(&iph, sizeof(iph), ip_start);
+
+    bpf_printk("!!!!!!!!!!!!!!!!!!Outgoing=%d",iph.protocol);
+
+
+
 
     if (iph.protocol == IPPROTO_TCP) {
         void *tcp_start = ip_start + iph.ihl * 4;
         bpf_probe_read(&tcph, sizeof(tcph), tcp_start);
 
-        __u16 sport = bpf_ntohs(tcph.source);
-        __u16 dport = bpf_ntohs(tcph.dest);
+        // __u16 sport = bpf_ntohs(tcph.source);
+        // __u16 dport = bpf_ntohs(tcph.dest);
+        __u16 sport = tcph.source;
+        __u16 dport = tcph.dest;
+        __u32 saddr = bpf_ntohl(iph.saddr);
+        __u32 daddr = bpf_ntohl(iph.daddr);
 
         bpf_printk("Outgoing TCP packet: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",
-            iph.saddr & 0xff, (iph.saddr >> 8) & 0xff, (iph.saddr >> 16) & 0xff, (iph.saddr >> 24) & 0xff, sport,
-            iph.daddr & 0xff, (iph.daddr >> 8) & 0xff, (iph.daddr >> 16) & 0xff, (iph.daddr >> 24) & 0xff, dport);
+             (saddr>>24) & 0xff,
+            (saddr >> 16) & 0xff, 
+            (saddr >> 8) & 0xff, 
+            (saddr ) & 0xff, sport,
+            (daddr>>24) & 0xff, 
+            (daddr >> 16) & 0xff, 
+            (daddr >> 8) & 0xff, 
+            (daddr ) & 0xff, 
+            dport);
     } else if (iph.protocol == IPPROTO_UDP) {
         void *udp_start = ip_start + iph.ihl * 4;
         bpf_probe_read(&udph, sizeof(udph), udp_start);
 
         __u16 sport = bpf_ntohs(udph.source);
         __u16 dport = bpf_ntohs(udph.dest);
+        __u32 saddr = bpf_ntohl(iph.saddr);
+        __u32 daddr = bpf_ntohl(iph.daddr);
+
 
         bpf_printk("Outgoing UDP packet: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",
-            iph.saddr & 0xff, (iph.saddr >> 8) & 0xff, (iph.saddr >> 16) & 0xff, (iph.saddr >> 24) & 0xff, sport,
-            iph.daddr & 0xff, (iph.daddr >> 8) & 0xff, (iph.daddr >> 16) & 0xff, (iph.daddr >> 24) & 0xff, dport);
+            (saddr>>24) & 0xff, 
+            (saddr >> 16) & 0xff, 
+            (saddr >> 8) & 0xff, 
+            (saddr ) & 0xff, 
+            sport,
+            (daddr>>24) & 0xff, 
+            (daddr >> 16) & 0xff, 
+            (daddr >> 8) & 0xff, 
+            (daddr >> 0) & 0xff, 
+            dport);
     }
 
     return 0;
 }
-
-irq/148-iwlwifi-471     [005] b.s51  1889.024626: bpf_trace_printk: Outgoing UDP packet: 170.170.3.0:24837 -> 0.0.8.0:50783
-
-__u32 saddr = bpf_ntohl(iph.saddr);
-__u32 daddr = bpf_ntohl(iph.daddr);
-
-bpf_printk("Outgoing UDP packet: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",
-    (saddr >> 24) & 0xff, (saddr >> 16) & 0xff, (saddr >> 8) & 0xff, saddr & 0xff, sport,
-    (daddr >> 24) & 0xff, (daddr >> 16) & 0xff, (daddr >> 8) & 0xff, daddr & 0xff, dport);
-
-systemd-resolve-4318    [004] b..21  1038.454295: bpf_trace_printk: Outgoing UDP packet: 255.4.206.207:53 -> 129.128.0.1:32512
- systemd-resolve-4318    [004] b..21  1038.468279: bpf_trace_printk: Outgoing UDP packet: 255.65.136.198:53 -> 129.128.0.1:32512
 
 
 
