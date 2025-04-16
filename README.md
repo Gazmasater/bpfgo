@@ -488,6 +488,14 @@ int trace_net_dev_xmit(struct trace_event_raw_net_dev_template *ctx) {
 
 irq/148-iwlwifi-471     [005] b.s51  1889.024626: bpf_trace_printk: Outgoing UDP packet: 170.170.3.0:24837 -> 0.0.8.0:50783
 
+__u32 saddr = bpf_ntohl(iph.saddr);
+__u32 daddr = bpf_ntohl(iph.daddr);
+
+bpf_printk("Outgoing UDP packet: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",
+    (saddr >> 24) & 0xff, (saddr >> 16) & 0xff, (saddr >> 8) & 0xff, saddr & 0xff, sport,
+    (daddr >> 24) & 0xff, (daddr >> 16) & 0xff, (daddr >> 8) & 0xff, daddr & 0xff, dport);
+
+
 
 
 
