@@ -449,58 +449,56 @@ int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
 
 SEC("tracepoint/net/net_dev_start_xmit")
 int trace_net_dev_start_xmit(struct trace_event_raw_net_dev_template *ctx) {
-    struct sk_buff skb = {};
-    void *data = NULL;
     struct iphdr iph = {};
     struct tcphdr tcph = {};
     struct udphdr udph = {};
 
-    // Читаем skb по указателю
-    bpf_probe_read(&skb, sizeof(skb), (void *)ctx->skbaddr);
+    // IP-заголовок начинается после Ethernet — 14 байт
+    int ip_offset = ETH_HLEN;
 
-    // Получаем указатель на skb->data
-    bpf_probe_read(&data, sizeof(data), &skb.data);
+    // Считываем IP заголовок из skb
+    if (bpf_skb_load_bytes(ctx->skbaddr, ip_offset, &iph, sizeof(iph)) < 0) {
+        bpf_printk("Failed to read IP header");
+        return 0;
+    }
 
-    // IP начинается после Ethernet заголовка (обычно 14 байт)
-    void *ip_start = data + ETH_HLEN;
-
-    // Читаем IP-заголовок
-    bpf_probe_read(&iph, sizeof(iph), ip_start);
-
-    bpf_printk("Outgoing IP protocol: %d", iph.protocol);
-
-
-    // Проверка версии IP и протокола
     if (iph.version != 4) {
         bpf_printk("Not IPv4: version=%d", iph.version);
         return 0;
     }
 
+    bpf_printk("Protocol: %d", iph.protocol);
+
+    __u32 saddr = bpf_ntohl(iph.saddr);
+    __u32 daddr = bpf_ntohl(iph.daddr);
 
     if (iph.protocol == IPPROTO_TCP) {
-        void *tcp_start = ip_start + iph.ihl * 4;
-        bpf_probe_read(&tcph, sizeof(tcph), tcp_start);
+        int tcp_offset = ip_offset + iph.ihl * 4;
+        if (bpf_skb_load_bytes(ctx->skbaddr, tcp_offset, &tcph, sizeof(tcph)) < 0) {
+            bpf_printk("Failed to read TCP header");
+            return 0;
+        }
 
         __u16 sport = bpf_ntohs(tcph.source);
         __u16 dport = bpf_ntohs(tcph.dest);
-        __u32 saddr = bpf_ntohl(iph.saddr);
-        __u32 daddr = bpf_ntohl(iph.daddr);
 
-        bpf_printk("TCP: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",
+        bpf_printk("TCP: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d",
             (saddr >> 24) & 0xff, (saddr >> 16) & 0xff,
             (saddr >> 8) & 0xff, saddr & 0xff, sport,
             (daddr >> 24) & 0xff, (daddr >> 16) & 0xff,
             (daddr >> 8) & 0xff, daddr & 0xff, dport);
+
     } else if (iph.protocol == IPPROTO_UDP) {
-        void *udp_start = ip_start + iph.ihl * 4;
-        bpf_probe_read(&udph, sizeof(udph), udp_start);
+        int udp_offset = ip_offset + iph.ihl * 4;
+        if (bpf_skb_load_bytes(ctx->skbaddr, udp_offset, &udph, sizeof(udph)) < 0) {
+            bpf_printk("Failed to read UDP header");
+            return 0;
+        }
 
         __u16 sport = bpf_ntohs(udph.source);
         __u16 dport = bpf_ntohs(udph.dest);
-        __u32 saddr = bpf_ntohl(iph.saddr);
-        __u32 daddr = bpf_ntohl(iph.daddr);
 
-        bpf_printk("UDP: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",
+        bpf_printk("UDP: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d",
             (saddr >> 24) & 0xff, (saddr >> 16) & 0xff,
             (saddr >> 8) & 0xff, saddr & 0xff, sport,
             (daddr >> 24) & 0xff, (daddr >> 16) & 0xff,
