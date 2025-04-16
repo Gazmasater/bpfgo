@@ -486,6 +486,8 @@ int trace_net_dev_xmit(struct trace_event_raw_net_dev_template *ctx) {
     return 0;
 }
 
+irq/148-iwlwifi-471     [005] b.s51  1889.024626: bpf_trace_printk: Outgoing UDP packet: 170.170.3.0:24837 -> 0.0.8.0:50783
+
 
 
 
