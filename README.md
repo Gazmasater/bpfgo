@@ -510,6 +510,16 @@ int trace_net_dev_start_xmit(struct trace_event_raw_net_dev_template *ctx) {
 
 
 
-STATE=11 IP4 PID=3549  dstIP=//[127.0.0.1]:57213 FAMILY=2 NAME=systemd-resolve 
-STATE=3 srcIP=//[127.0.0.53]:53 dstIP=//localhost[127.0.0.1]:57213 PROTO=17 FAMILY=2
-STATE=12 IP4 PID=3549 srcIP=//[127.0.0.1]:57213 NAME=systemd-resolve
+STATE=12 IP4 PID=3580 srcIP=//[192.168.1.1]:53 NAME=systemd-resolve   recvmsg
+STATE=3 srcIP=//[127.0.0.53]:53 dstIP=//localhost[127.0.0.1]:38979 PROTO=17 FAMILY=2  sk_loookup
+STATE=3 srcIP=//[127.0.0.53]:53 dstIP=//localhost[127.0.0.1]:38979 PROTO=17 FAMILY=2  sk_loookup
+STATE=12 IP4 PID=3580 srcIP=//[127.0.0.1]:38979 NAME=systemd-resolve    recvmsg               
+STATE=12 IP4 PID=3580 srcIP=//[127.0.0.1]:38979 NAME=systemd-resolve    recvmsg
+STATE=12 IP4 PID=3580 srcIP=//[192.168.1.1]:53 NAME=systemd-resolve     recvmsg
+STATE=11 IP4 PID=3580  dstIP=//[127.0.0.1]:38979 FAMILY=2 NAME=systemd-resolve  sendmsg
+STATE=2 IP4 PID=3941 srcIP=//[127.0.0.53]:53 NAME=DNS Resolver #5     sendto
+STATE=12 IP4 PID=3580 srcIP=//[192.168.1.1]:53 NAME=systemd-resolve   recvmsg
+STATE=11 IP4 PID=3580  dstIP=//[127.0.0.1]:38979 FAMILY=2 NAME=systemd-resolve   sendmsg 
+STATE=2 IP4 PID=3941 srcIP=//[127.0.0.53]:53 NAME=DNS Resolver #5   sendto
+
+
