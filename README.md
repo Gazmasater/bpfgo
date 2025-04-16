@@ -395,66 +395,19 @@ sudo make install
 bpftool gen trace > trace_helpers.h
 
 
-struct netif_receive_skb_entry_args
-{
-
-
-    __u64 __pad;             // общий префикс tracepoint (common_type + flags + preempt + pid)
-    u32 __data_loc_name; 
-    __u32 napi_id;
-    __u16 queue_mapping;
-    __u16 __pad2;            // выравнивание до 8 байт
-    const void *skbaddr;
-    bool vlan_tagged;
-    __u16 vlan_proto;
-    __u16 vlan_tci;
-    __u16 protocol;
-    __u8 ip_summed;
-    __u32 hash;
-    bool l4_hash;
-    __u32 len;
-    __u32 data_len;
-    __u32 truesize;
-    bool mac_header_valid;
-    __s32 mac_header;
-    __u8 nr_frags;
-    __u16 gso_size;
-    __u16 gso_type;
-
-
-};
-SEC("tracepoint/net/netif_receive_skb_entry")
-int trace_netif_receive_skb(struct netif_receive_skb_entry_args *ctx)
-{
-
-    bpf_printk("skb received from ");
-    struct trace_info info = {};
-    info.sysexit = 13;
-
-    // Извлечь имя интерфейса из __data_loc
-    u32 offset = ctx->__data_loc_name & 0xFFFF;  // только младшие 16 бит — смещение
-    const char *name_ptr = (const char *)ctx + offset;
-    bpf_probe_read_str(&info.ifname, sizeof(info.ifname), name_ptr);
-
-    bpf_printk("skb received from %s\n", info.ifname);
-
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+SEC("tracepoint/net/netif_receive_skb")
+int netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
+    // Attempt to read socket buffer from kernel structure.
+    struct sk_buff skb;
+    bpf_probe_read(&skb, sizeof(skb), ctx->skbaddr);
+    // Retrieve IP header.
+    struct iphdr iph;
+    bpf_probe_read(&iph, sizeof(struct iphdr), skb.data);
+    bpf_printk("Got here in netif_receive_skb with proto: %d\n", iph.protocol);
     return 0;
 }
 
 
-SEC("kprobe/netif_receive_skb")
-int bpf_prog(struct pt_regs *ctx)
-{
-    bpf_printk("skb received via kprobe!\n");
-    return 0;
-}
-
-	Netif_recieve, err := link.Tracepoint("net", "netif_receive_skb_entry", objs.TraceNetifReceiveSkb, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint netif_receive_skb_entry: %s", err)
-	}
-	defer Netif_recieve.Close()
 
 
 
