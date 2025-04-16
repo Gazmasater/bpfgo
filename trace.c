@@ -26,30 +26,27 @@ struct netif_receive_skb_entry_args
 {
 
 
-    unsigned short common_type;     
-    unsigned char common_flags;     
-    unsigned char common_preempt_count;    
-    int common_pid;  
-    char  name [64];
-    unsigned int napi_id;   
-    u16 queue_mapping;      
-    const void * skbaddr; 
-    bool vlan_tagged; 
-    u16 vlan_proto;   
-    u16 vlan_tci;     
-    u16 protocol;   
-    u8 ip_summed;    
-    u32 hash; 
-    bool l4_hash;    
-    unsigned int len; 
-    unsigned int data_len;   
-    unsigned int truesize;   
-    bool mac_header_valid;    
-    int mac_header;   
-    unsigned char nr_frags;   
-    u16 gso_size;     
-    u16 gso_type;     
-
+    __u64 __pad;             // общий префикс tracepoint (common_type + flags + preempt + pid)
+    u32 __data_loc_name; 
+    __u32 napi_id;
+    __u16 queue_mapping;
+    __u16 __pad2;            // выравнивание до 8 байт
+    const void *skbaddr;
+    bool vlan_tagged;
+    __u16 vlan_proto;
+    __u16 vlan_tci;
+    __u16 protocol;
+    __u8 ip_summed;
+    __u32 hash;
+    bool l4_hash;
+    __u32 len;
+    __u32 data_len;
+    __u32 truesize;
+    bool mac_header_valid;
+    __s32 mac_header;
+    __u8 nr_frags;
+    __u16 gso_size;
+    __u16 gso_type;
 
 
 };
@@ -239,6 +236,7 @@ struct trace_info {
     u16 dport;
    
     char comm[64];
+    char ifname[64];
 
 };
 
@@ -844,51 +842,126 @@ bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info)
 }
 
 
-SEC("tracepoint/net/netif_receive_skb_entry")
-int trace_netif_receive_skb(struct netif_receive_skb_entry_args *ctx) {
-
-    bpf_printk("netif_receive_skb_entry ");
-
-    struct sk_buff *skb = (struct sk_buff *)ctx->skbaddr;
+// SEC("tracepoint/net/netif_receive_skb_entry")
+// //trace_event_raw_net_dev_template
+// int trace_netif_receive_skb(struct netif_receive_skb_entry_args *ctx) {
+//     bpf_printk("netif_receive_skb_entry  ");
 
 
+//      struct sk_buff *skb = (struct sk_buff *)ctx->skbaddr;
 
-    // void *head = BPF_CORE_READ(skb, head);
-    // __u64 nh_off = BPF_CORE_READ(skb, network_header);
 
-    // struct iphdr ip;
-    // if (bpf_probe_read(&ip, sizeof(ip), head + nh_off) < 0)
-    //     return 0;
 
-    //     if (ip.version != 4)
-    // return 0;
+//      void *head = BPF_CORE_READ(skb, head);
+//     __u64 nh_off = BPF_CORE_READ(skb, network_header);
 
-    // __u8 proto = ip.protocol;
-    // __u32 saddr = ip.saddr;
-    // __u32 daddr = ip.daddr;
+//     struct iphdr ip;
+//     if (bpf_probe_read(&ip, sizeof(ip), head + nh_off) < 0)
+//         return 0;
 
-    //     // TCP
-    //     if (proto == IPPROTO_TCP) {
-    //         struct tcphdr tcp;
-    //         if (bpf_probe_read(&tcp, sizeof(tcp), head + nh_off + ip.ihl * 4) < 0)
-    //             return 0;
+//         if (ip.version != 4)
+//     return 0;
+
+//     __u8 proto = ip.protocol;
+//     __u32 saddr = ip.saddr;
+//     __u32 daddr = ip.daddr;
+
+
+
+//     struct trace_info info = {};
+
+//     info.sysexit=13;
+//     info.proto=proto;
+//     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+           
+//         if (proto == IPPROTO_TCP) {
+//             struct tcphdr tcp;
+//             if (bpf_probe_read(&tcp, sizeof(tcp), head + nh_off + ip.ihl * 4) < 0)
+//                 return 0;
     
-    //         __u16 sport = tcp.source;
-    //         __u16 dport = tcp.dest;
+//             __u16 sport = tcp.source;
+//             __u16 dport = tcp.dest;
 
-    //         bpf_printk("netif_receive_skb_entry SPORT=%d DPORT=%d ",sport,dport);
+//             bpf_printk("netif_receive_skb_entry SPORT=%d DPORT=%d ",sport,dport);
     
-    //     } else if (proto == IPPROTO_UDP) {
-    //         struct udphdr udp;
-    //         if (bpf_probe_read(&udp, sizeof(udp), head + nh_off + ip.ihl * 4) < 0)
-    //             return 0;
+//         } else if (proto == IPPROTO_UDP) {
+//             struct udphdr udp;
+//             if (bpf_probe_read(&udp, sizeof(udp), head + nh_off + ip.ihl * 4) < 0)
+//                 return 0;
     
-    //         __u16 sport = udp.source;
-    //         __u16 dport = udp.dest;
+//             __u16 sport = udp.source;
+//             __u16 dport = udp.dest;
     
-    //     }
+//         }
 
+
+//     return 0;
+// }
+
+// SEC("tracepoint/net/netif_receive_skb_entry")
+// int trace_netif_receive_skb(struct netif_receive_skb_entry_args *ctx)
+// {
+
+//     bpf_printk("skb received from ");
+//     struct trace_info info = {};
+//     info.sysexit = 13;
+
+//     // Извлечь имя интерфейса из __data_loc
+//     u32 offset = ctx->__data_loc_name & 0xFFFF;  // только младшие 16 бит — смещение
+//     const char *name_ptr = (const char *)ctx + offset;
+//     bpf_probe_read_str(&info.ifname, sizeof(info.ifname), name_ptr);
+
+//     bpf_printk("skb received from %s\n", info.ifname);
+
+//     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+//     return 0;
+// }
+
+SEC("tracepoint/net/netif_receive_skb")
+int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
+    struct sk_buff skb = {};
+    struct iphdr iph = {};
+    struct tcphdr tcph = {};
+    struct udphdr udph = {};
+
+    // Прочитать skb
+    bpf_probe_read(&skb, sizeof(skb), ctx->skbaddr);
+
+    // Прочитать IP-заголовок
+    bpf_probe_read(&iph, sizeof(iph), skb.data);
+
+    if (iph.protocol == IPPROTO_TCP) {
+        // Указатель на TCP-заголовок
+        void *tcp_start = (void *)skb.data + iph.ihl * 4;
+
+        // Прочитать TCP-заголовок
+        bpf_probe_read(&tcph, sizeof(tcph), tcp_start);
+
+        // Преобразовать порты из сетевого порядка в хост
+        __u16 sport = bpf_ntohs(tcph.source);
+        __u16 dport = bpf_ntohs(tcph.dest);
+
+        // Напечатать читаемый лог для TCP
+        bpf_printk("Incoming TCP packet: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",
+            iph.saddr & 0xff, (iph.saddr >> 8) & 0xff, (iph.saddr >> 16) & 0xff, (iph.saddr >> 24) & 0xff, sport,
+            iph.daddr & 0xff, (iph.daddr >> 8) & 0xff, (iph.daddr >> 16) & 0xff, (iph.daddr >> 24) & 0xff, dport);
+    }
+    else if (iph.protocol == IPPROTO_UDP) {
+        // Указатель на UDP-заголовок
+        void *udp_start = (void *)skb.data + iph.ihl * 4;
+
+        // Прочитать UDP-заголовок
+        bpf_probe_read(&udph, sizeof(udph), udp_start);
+
+        // Преобразовать порты из сетевого порядка в хост
+        __u16 sport = bpf_ntohs(udph.source);
+        __u16 dport = bpf_ntohs(udph.dest);
+
+        // Напечатать читаемый лог для UDP
+        bpf_printk("Incoming UDP packet: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",
+            iph.saddr & 0xff, (iph.saddr >> 8) & 0xff, (iph.saddr >> 16) & 0xff, (iph.saddr >> 24) & 0xff, sport,
+            iph.daddr & 0xff, (iph.daddr >> 8) & 0xff, (iph.daddr >> 16) & 0xff, (iph.daddr >> 24) & 0xff, dport);
+    }
 
     return 0;
 }
-

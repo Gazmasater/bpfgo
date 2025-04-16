@@ -46,6 +46,7 @@ type bpfTraceInfo struct {
 	DstIP6  [4]uint32
 	Dport   uint16
 	Comm    [64]int8
+	Ifname  [64]int8
 	_       [2]byte
 }
 

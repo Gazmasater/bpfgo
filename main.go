@@ -65,7 +65,7 @@ func main() {
 	}
 	defer SmsgExit.Close()
 
-	Netif_recieve, err := link.Tracepoint("net", "netif_receive_skb_entry", objs.TraceNetifReceiveSkb, nil)
+	Netif_recieve, err := link.Tracepoint("net", "netif_receive_skb", objs.TraceNetifReceiveSkb, nil)
 	if err != nil {
 		log.Fatalf("opening tracepoint netif_receive_skb_entry: %s", err)
 	}
@@ -287,6 +287,11 @@ func main() {
 
 				}
 
+			}
+
+			if event.Sysexit == 13 {
+
+				fmt.Println("!!!!!!!!!!!!!!!!!!!$$$$$$$$$$$$$$$$$$s")
 			}
 
 			if event.Sysexit == 3 {
