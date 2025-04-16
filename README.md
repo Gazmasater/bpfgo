@@ -510,6 +510,21 @@ int trace_net_dev_start_xmit(struct trace_event_raw_net_dev_template *ctx) {
 
 
 
+STATE=11 IP4 PID=6904  dstIP=//[127.0.0.1]:36389 FAMILY=2 NAME=systemd-resolve 
+STATE=3 srcIP=//[127.0.0.53]:53 dstIP=//localhost[127.0.0.1]:49605 PROTO=17 FAMILY=2
+STATE=12 IP4 PID=6904 srcIP=//[127.0.0.1]:49605 NAME=systemd-resolve
+STATE=11 IP4 PID=6904  dstIP=//[127.0.0.1]:49605 FAMILY=2 NAME=systemd-resolve 
+STATE=12 IP4 PID=6904 srcIP=//[127.0.0.1]:49018 NAME=systemd-resolve
+STATE=12 IP4 PID=6904 srcIP=//[192.168.1.1]:53 NAME=systemd-resolve
+STATE=11 IP4 PID=6904  dstIP=//[127.0.0.1]:49018 FAMILY=2 NAME=systemd-resolve 
+STATE=3 srcIP=//[127.0.0.53]:53 dstIP=//localhost[127.0.0.1]:34182 PROTO=17 FAMILY=2
+STATE=12 IP4 PID=6904 srcIP=//[127.0.0.1]:34182 NAME=systemd-resolve
+STATE=12 IP4 PID=6904 srcIP=//[192.168.1.1]:53 NAME=systemd-resolve
+STATE=11 IP4 PID=6904  dstIP=//[127.0.0.1]:34182 FAMILY=2 NAME=systemd-resolve 
+STATE=12 IP4 PID=6904 srcIP=//[127.0.0.1]:36389 NAME=systemd-resolve
+
+
+
 
 
 
