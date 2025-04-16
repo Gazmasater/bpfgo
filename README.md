@@ -450,5 +450,12 @@ int bpf_prog(struct pt_regs *ctx)
     return 0;
 }
 
+	Netif_recieve, err := link.Tracepoint("net", "netif_receive_skb_entry", objs.TraceNetifReceiveSkb, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint netif_receive_skb_entry: %s", err)
+	}
+	defer Netif_recieve.Close()
+
+
 
 
