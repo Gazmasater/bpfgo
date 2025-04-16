@@ -399,13 +399,20 @@ SEC("tracepoint/net/netif_receive_skb")
 int netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
     // Attempt to read socket buffer from kernel structure.
     struct sk_buff skb;
+    
     bpf_probe_read(&skb, sizeof(skb), ctx->skbaddr);
     // Retrieve IP header.
     struct iphdr iph;
+    
     bpf_probe_read(&iph, sizeof(struct iphdr), skb.data);
+
+    if (iph.protocol==IPPROTO_TCP) {
     bpf_printk("Got here in netif_receive_skb with proto: %d\n", iph.protocol);
+    }
+    
     return 0;
 }
+
 
 
 
