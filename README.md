@@ -395,6 +395,19 @@ func ResolveIP(ctx context.Context, ip net.IP, retries int, delay time.Duration)
 
 
 
+func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	ip := net.ParseIP("8.8.8.8")
+	hostname := ResolveIP(ctx, ip, 2, time.Second)
+
+	println("Resolved hostname:", hostname)
+}
+
+
+
+
 
 
 
