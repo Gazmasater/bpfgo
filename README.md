@@ -374,6 +374,27 @@ STATE=12 IP4 PID=758 srcIP=//[127.0.0.1]:35855 NAME=systemd-resolve
 STATE=11 IP4 PID=758  dstIP=//[127.0.0.1]:35855 FAMILY=2 NAME=systemd-resolve 
 
 
+struct trace_info {
+    u32 src_ip;
+    u32 dst_ip;
+    u32 sport;
+    u32 pid;
+    u32 proto;
+    u32 sysexit;
+    u32 fd;
+    u32 state;
+    u16 family;
+    u16 __padding1;       // <--- добавить!
+    __u32 srcIP6[4];
+    __u32 dstIP6[4];
+    u16 dport;
+    u16 __padding2;       // <--- добавить!
+    char comm[64];
+    char ifname[64];
+};
+
+
+
 
 
 
