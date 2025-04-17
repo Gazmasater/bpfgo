@@ -369,52 +369,17 @@ sudo make install
 bpftool gen trace > trace_helpers.h
 
 
-SEC("tracepoint/sock/inet_sock_set_state")
-int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
+ID=468 TCP://gaz358-BOD-WXX9[192.168.1.71]:43036 <- TCP://Unknown[94.100.180.211]:443 
+PID=6947 TCP://gaz358-BOD-WXX9[192.168.1.71]:43036 -> TCP://limgsko.mail.ru.[94.100.180.211]:443 
 
-    __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
-
-    __u32 srcip;
-    bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
-    srcip = bpf_ntohl(srcip);
-
-    __u32 dstip;
-    bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
-    dstip = bpf_ntohl(dstip);
-       
-    __u16 sport=0;
-    
-    sport=ctx->sport;
-       
-    __u16 dport;
-    dport=ctx->dport;
-
-   __u8 state=ctx->newstate;
-
-    if (ctx->family==AF_INET) {
-    if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
-
-        struct trace_info info = {};
-        info.src_ip=srcip;
-        info.sport=sport;
-        info.dst_ip=dstip;
-        info.dport=dport;
-        info.sysexit=6;
-        info.proto=ctx->protocol;
-        info.pid=pid_tcp;
-        info.state=ctx->newstate;
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    }
-
-    } else if (ctx->family==AF_INET6) {
-
-        bpf_printk("IPV6!!!!!!!inet_sock_set_state");
-
-
-    }
-
-    return 0;
+func ResolveIP(ip net.IP) string {
+	names, err := net.LookupAddr(ip.String())
+	if err != nil || len(names) == 0 {
+		return "Unknown"
+	}
+	return names[0]
 }
+
 
 
 
