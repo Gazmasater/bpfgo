@@ -339,32 +339,6 @@ int trace_netif_receive_skb(struct netif_receive_skb_entry_args *ctx)
 
 
 
-struct netif_receive_skb_entry_args {
-    u64 __pad;             // общий префикс tracepoint (common_type + flags + preempt + pid)
-     __data_loc char[] name
-    u32 napi_id;
-    u16 queue_mapping;
-    u16 __pad2;            // выравнивание до 8 байт
-    const void *skbaddr;
-    bool vlan_tagged;
-    u16 vlan_proto;
-    u16 vlan_tci;
-    u16 protocol;
-    u8 ip_summed;
-    u32 hash;
-    bool l4_hash;
-    u32 len;
-    u32 data_len;
-    u32 truesize;
-    bool mac_header_valid;
-    int mac_header;
-    u8 nr_frags;
-    u16 gso_size;
-    u16 gso_type;
-};
-
-
-
 
 1. Установи libtraceevent:
 Если ты на Ubuntu / Debian:
@@ -395,50 +369,48 @@ sudo make install
 bpftool gen trace > trace_helpers.h
 
 
-SEC("tracepoint/net/netif_receive_skb")
-int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
-    struct sk_buff skb = {};
-    struct iphdr iph = {};
-    struct tcphdr tcph = {};
-    struct udphdr udph = {};
+SEC("tracepoint/sock/inet_sock_set_state")
+int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 
-    // Прочитать skb
-    bpf_probe_read(&skb, sizeof(skb), ctx->skbaddr);
+    __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
 
-    // Прочитать IP-заголовок
-    bpf_probe_read(&iph, sizeof(iph), skb.data);
+    __u32 srcip;
+    bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
+    srcip = bpf_ntohl(srcip);
 
-    if (iph.protocol == IPPROTO_TCP) {
-        // Указатель на TCP-заголовок
-        void *tcp_start = (void *)skb.data + iph.ihl * 4;
+    __u32 dstip;
+    bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
+    dstip = bpf_ntohl(dstip);
+       
+    __u16 sport=0;
+    
+    sport=ctx->sport;
+       
+    __u16 dport;
+    dport=ctx->dport;
 
-        // Прочитать TCP-заголовок
-        bpf_probe_read(&tcph, sizeof(tcph), tcp_start);
+   __u8 state=ctx->newstate;
 
-        // Преобразовать порты из сетевого порядка в хост
-        __u16 sport = bpf_ntohs(tcph.source);
-        __u16 dport = bpf_ntohs(tcph.dest);
+    if (ctx->family==AF_INET) {
+    if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
 
-        // Напечатать читаемый лог для TCP
-        bpf_printk("Incoming TCP packet: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",
-            iph.saddr & 0xff, (iph.saddr >> 8) & 0xff, (iph.saddr >> 16) & 0xff, (iph.saddr >> 24) & 0xff, sport,
-            iph.daddr & 0xff, (iph.daddr >> 8) & 0xff, (iph.daddr >> 16) & 0xff, (iph.daddr >> 24) & 0xff, dport);
+        struct trace_info info = {};
+        info.src_ip=srcip;
+        info.sport=sport;
+        info.dst_ip=dstip;
+        info.dport=dport;
+        info.sysexit=6;
+        info.proto=ctx->protocol;
+        info.pid=pid_tcp;
+        info.state=ctx->newstate;
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
     }
-    else if (iph.protocol == IPPROTO_UDP) {
-        // Указатель на UDP-заголовок
-        void *udp_start = (void *)skb.data + iph.ihl * 4;
 
-        // Прочитать UDP-заголовок
-        bpf_probe_read(&udph, sizeof(udph), udp_start);
+    } else if (ctx->family==AF_INET6) {
 
-        // Преобразовать порты из сетевого порядка в хост
-        __u16 sport = bpf_ntohs(udph.source);
-        __u16 dport = bpf_ntohs(udph.dest);
+        bpf_printk("IPV6!!!!!!!inet_sock_set_state");
 
-        // Напечатать читаемый лог для UDP
-        bpf_printk("Incoming UDP packet: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",
-            iph.saddr & 0xff, (iph.saddr >> 8) & 0xff, (iph.saddr >> 16) & 0xff, (iph.saddr >> 24) & 0xff, sport,
-            iph.daddr & 0xff, (iph.daddr >> 8) & 0xff, (iph.daddr >> 16) & 0xff, (iph.daddr >> 24) & 0xff, dport);
+
     }
 
     return 0;
@@ -447,69 +419,6 @@ int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
 
 
 
-SEC("tracepoint/net/net_dev_start_xmit")
-int trace_net_dev_start_xmit(struct trace_event_raw_net_dev_template *ctx) {
-    struct iphdr iph = {};
-    struct tcphdr tcph = {};
-    struct udphdr udph = {};
-
-    // IP-заголовок начинается после Ethernet — 14 байт
-    int ip_offset = ETH_HLEN;
-
-    // Считываем IP заголовок из skb
-    if (bpf_skb_load_bytes(ctx->skbaddr, ip_offset, &iph, sizeof(iph)) < 0) {
-        bpf_printk("Failed to read IP header");
-        return 0;
-    }
-
-    if (iph.version != 4) {
-        bpf_printk("Not IPv4: version=%d", iph.version);
-        return 0;
-    }
-
-    bpf_printk("Protocol: %d", iph.protocol);
-
-    __u32 saddr = bpf_ntohl(iph.saddr);
-    __u32 daddr = bpf_ntohl(iph.daddr);
-
-    if (iph.protocol == IPPROTO_TCP) {
-        int tcp_offset = ip_offset + iph.ihl * 4;
-        if (bpf_skb_load_bytes(ctx->skbaddr, tcp_offset, &tcph, sizeof(tcph)) < 0) {
-            bpf_printk("Failed to read TCP header");
-            return 0;
-        }
-
-        __u16 sport = bpf_ntohs(tcph.source);
-        __u16 dport = bpf_ntohs(tcph.dest);
-
-        bpf_printk("TCP: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d",
-            (saddr >> 24) & 0xff, (saddr >> 16) & 0xff,
-            (saddr >> 8) & 0xff, saddr & 0xff, sport,
-            (daddr >> 24) & 0xff, (daddr >> 16) & 0xff,
-            (daddr >> 8) & 0xff, daddr & 0xff, dport);
-
-    } else if (iph.protocol == IPPROTO_UDP) {
-        int udp_offset = ip_offset + iph.ihl * 4;
-        if (bpf_skb_load_bytes(ctx->skbaddr, udp_offset, &udph, sizeof(udph)) < 0) {
-            bpf_printk("Failed to read UDP header");
-            return 0;
-        }
-
-        __u16 sport = bpf_ntohs(udph.source);
-        __u16 dport = bpf_ntohs(udph.dest);
-
-        bpf_printk("UDP: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d",
-            (saddr >> 24) & 0xff, (saddr >> 16) & 0xff,
-            (saddr >> 8) & 0xff, saddr & 0xff, sport,
-            (daddr >> 24) & 0xff, (daddr >> 16) & 0xff,
-            (daddr >> 8) & 0xff, daddr & 0xff, dport);
-    }
-
-    return 0;
-}
 
 
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ systemctl is-active systemd-resolved
-inactive
 
