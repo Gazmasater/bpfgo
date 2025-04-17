@@ -369,20 +369,28 @@ sudo make install
 bpftool gen trace > trace_helpers.h
 
 
-ID=468 TCP://gaz358-BOD-WXX9[192.168.1.71]:43036 <- TCP://Unknown[94.100.180.211]:443 
-PID=6947 TCP://gaz358-BOD-WXX9[192.168.1.71]:43036 -> TCP://limgsko.mail.ru.[94.100.180.211]:443 
+func ResolveIP(ctx context.Context, ip net.IP, retries int, delay time.Duration) string {
+	ipStr := ip.String()
 
-func ResolveIP(ip net.IP) string {
-	names, err := net.LookupAddr(ip.String())
-	if err != nil || len(names) == 0 {
-		// Retry once after short delay
-		time.Sleep(200 * time.Millisecond)
-		names, err = net.LookupAddr(ip.String())
-		if err != nil || len(names) == 0 {
+	for i := 0; i <= retries; i++ {
+		names, err := net.DefaultResolver.LookupAddr(ctx, ipStr)
+		if err == nil && len(names) > 0 {
+			return names[0]
+		}
+
+		// если последний ретрай — выходим
+		if i == retries {
+			break
+		}
+
+		// задержка между повторами или выход по отмене контекста
+		select {
+		case <-ctx.Done():
 			return "Unknown"
+		case <-time.After(delay):
 		}
 	}
-	return names[0]
+	return "Unknown"
 }
 
 
