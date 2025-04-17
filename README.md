@@ -369,41 +369,9 @@ sudo make install
 bpftool gen trace > trace_helpers.h
 
 
-func ResolveIP(ctx context.Context, ip net.IP, retries int, delay time.Duration) string {
-	ipStr := ip.String()
-
-	for i := 0; i <= retries; i++ {
-		names, err := net.DefaultResolver.LookupAddr(ctx, ipStr)
-		if err == nil && len(names) > 0 {
-			return names[0]
-		}
-
-		// если последний ретрай — выходим
-		if i == retries {
-			break
-		}
-
-		// задержка между повторами или выход по отмене контекста
-		select {
-		case <-ctx.Done():
-			return "Unknown"
-		case <-time.After(delay):
-		}
-	}
-	return "Unknown"
-}
-
-
-
-func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	ip := net.ParseIP("8.8.8.8")
-	hostname := ResolveIP(ctx, ip, 2, time.Second)
-
-	println("Resolved hostname:", hostname)
-}
+TATE=3 srcIP=//[127.0.0.53]:53 dstIP=//localhost[127.0.0.1]:35855 PROTO=17 FAMILY=2
+STATE=12 IP4 PID=758 srcIP=//[127.0.0.1]:35855 NAME=systemd-resolve
+STATE=11 IP4 PID=758  dstIP=//[127.0.0.1]:35855 FAMILY=2 NAME=systemd-resolve 
 
 
 
