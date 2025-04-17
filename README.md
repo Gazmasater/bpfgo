@@ -375,10 +375,16 @@ PID=6947 TCP://gaz358-BOD-WXX9[192.168.1.71]:43036 -> TCP://limgsko.mail.ru.[94.
 func ResolveIP(ip net.IP) string {
 	names, err := net.LookupAddr(ip.String())
 	if err != nil || len(names) == 0 {
-		return "Unknown"
+		// Retry once after short delay
+		time.Sleep(200 * time.Millisecond)
+		names, err = net.LookupAddr(ip.String())
+		if err != nil || len(names) == 0 {
+			return "Unknown"
+		}
 	}
 	return names[0]
 }
+
 
 
 
