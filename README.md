@@ -402,7 +402,9 @@ struct trace_info {
 
 
 
-
+STATE=3 srcIP=//[127.0.0.53]:53 dstIP=//localhost[127.0.0.1]:38699 PROTO=17 FAMILY=2
+STATE=11 IP4 PID=855  dstIP=//[127.0.0.1]:38699 FAMILY=2 NAME=systemd-resolve 
+STATE=12 IP4 PID=855 srcIP=//[127.0.0.1]:38699 NAME=systemd-resolve
 
 
 
