@@ -22,36 +22,6 @@ struct conn_info_t
     char comm[64];
 };
 
-struct netif_receive_skb_entry_args
-{
-
-
-    __u64 __pad;             // общий префикс tracepoint (common_type + flags + preempt + pid)
-    u32 __data_loc_name; 
-    __u32 napi_id;
-    __u16 queue_mapping;
-    __u16 __pad2;            // выравнивание до 8 байт
-    const void *skbaddr;
-    bool vlan_tagged;
-    __u16 vlan_proto;
-    __u16 vlan_tci;
-    __u16 protocol;
-    __u8 ip_summed;
-    __u32 hash;
-    bool l4_hash;
-    __u32 len;
-    __u32 data_len;
-    __u32 truesize;
-    bool mac_header_valid;
-    __s32 mac_header;
-    __u8 nr_frags;
-    __u16 gso_size;
-    __u16 gso_type;
-
-
-};
-
-
 struct sys_enter_sendto_args
 {
     unsigned short common_type;
@@ -86,7 +56,6 @@ struct sys_enter_sendmsg_args {
     unsigned char common_flags;      
     unsigned char common_preempt_count;     
     int common_pid;   
-
     int __syscall_nr; 
     int fd;
     int  pad;   
@@ -102,7 +71,6 @@ struct sys_exit_sendmsg_args {
     unsigned char common_flags;    
     unsigned char common_preempt_count;    
     int common_pid;   
-
     int __syscall_nr; 
     int pad;
     long ret; 
@@ -131,16 +99,11 @@ struct sys_exit_recvmsg_args{
         unsigned char common_flags;    
         unsigned char common_preempt_count;    
         int common_pid;   
-
         int __syscall_nr; 
         int pad;
         long ret; 
 
 };
-
-
-
-
 
 struct sys_enter_recvfrom_args {
     unsigned short common_type;
@@ -168,15 +131,6 @@ struct sys_exit_recvfrom_args {
     int pad1;
     int ret;
 };
-
-
-struct
-{
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 1024);
-    __type(key, u32);
-    __type(value, struct sockaddr);
-} addr_map SEC(".maps");
 
 
 struct
@@ -226,35 +180,25 @@ struct trace_info {
     u32 sport;
     u32 pid;
     u32 proto;
-    u32  sysexit;
+    u32 sysexit;
     u32 fd;
     u32 state;
     u16 family;
-    __u32 srcIP6[4];  
+    u16 __padding1;       // <--- добавить!
+    __u32 srcIP6[4];
     __u32 dstIP6[4];
-   
     u16 dport;
-   
+    u16 __padding2;       // <--- добавить!
     char comm[64];
-    char ifname[64];
-
 };
-
 // Размещение переменной с атрибутом unused
 const struct trace_info *unused __attribute__((unused));
 #define AF_INET 2
 #define AF_INET6 10
 #define TCP_ESTABLISHED 1
-
-#define IPPROTO_UDP   17       // Протокол UDP в IP заголовке
+#define IPPROTO_UDP   17     
 #define IPPROTO_TCP    6
-#define  BLOCK_PORT    53       // Порт, который блокируем (например, DNS)
-
-
-
-
-
-
+#define  BLOCK_PORT    53      
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
@@ -317,14 +261,6 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
 
             return 0;
         }
-           // bpf_printk("!!lookup sys_exit_sendto FAMILY=%d ADDRESS=%d.%d.%d.%d:%d Comm=%s ",
-               // addr.sa_family,
-               // (ip>>24)&0xff,
-               // (ip>>16)&0xff,
-               // (ip>>8)&0xff,
-              //  (ip)&0xff,
-              //  port,
-               // conn_info->comm);
 
 
                 info.pid = pid;
@@ -357,7 +293,6 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
 
     }
 
-    bpf_map_delete_elem(&addr_map, &pid);  
     bpf_map_delete_elem(&addrSend_map, &pid);  
     bpf_map_delete_elem(&conn_info_map, &pid);
 
@@ -409,13 +344,7 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
 
     struct sockaddr_in addr_in = {};
     bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
-
-
-
-
     bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
-
-
 
     if (addr.sa_family == AF_INET) {
         struct sockaddr_in addr_in = {};
@@ -428,11 +357,9 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
         info.pid = pid;
         __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
 
-
             info.src_ip=ip;
             info.sport = port;
-            info.family=AF_INET;
-            
+            info.family=AF_INET;           
             info.sysexit=2;
             info.pid=pid;
 
@@ -463,7 +390,6 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
 
     bpf_map_delete_elem(&addrRecv_map, &pid);
     bpf_map_delete_elem(&conn_info_map, &pid);
-    bpf_map_delete_elem(&addr_map, &pid);
 
  
     return 0;
@@ -550,12 +476,6 @@ int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
      bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
 
-    // bpf_printk("sys_exit_sendmsg name_ptr FAMIY=%d IP=%d:%d:%d:%d:%d",sa.sin_family,
-    //     (ip>>24)&0xff,
-    //     (ip>>16)&0xff,
-    //     (ip>>8)&0xff,
-    //     ip&0xff,   
-    //     port);
     } else if (sa.sin_family==AF_INET6) {
 
         u32 port=bpf_ntohs(sa6.sin6_port);
@@ -580,14 +500,10 @@ int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
         info.dstIP6[3] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[3]);
          bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
-        // bpf_printk("sys_exit_recvmsg IP6=%d:%d:%d:%d",
-        //     info.dstIP6[0],
-        //     info.dstIP6[1],
-        //     info.dstIP6[2],
-        //     info.dstIP6[3]);
     }
 
-
+    bpf_map_delete_elem(&addrSend_map, &pid);
+    bpf_map_delete_elem(&conn_info_map, &pid);
     return 0;
 }
 
@@ -620,9 +536,6 @@ int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
-  //  bpf_printk("sys_exit_recvmsg pid=%d ret=%ld", pid, ret);
-
-    // Проверяем, есть ли данные для PID
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
     if (!conn_info) {
         bpf_printk("No conn_info for pid=%d", pid);
@@ -635,16 +548,11 @@ int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
         return 0;
     }
 
-
-
-    // Получаем указатель на msghdr
     struct msghdr **addr_ptr = bpf_map_lookup_elem(&addrRecv_map, &pid);
     if (!addr_ptr) {
         bpf_printk("No addr_ptr for pid=%d", pid);
         return 0;
     }
-
-
 
     struct msghdr *msg;
     bpf_probe_read_user(&msg, sizeof(msg), *addr_ptr);
@@ -677,12 +585,6 @@ int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
      bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
 
-    // bpf_printk("sys_exit_recvmsg name_ptr FAMIY=%d IP=%d:%d:%d:%d:%d",sa.sin_family,
-    //     (ip>>24)&0xff,
-    //     (ip>>16)&0xff,
-    //     (ip>>8)&0xff,
-    //     ip&0xff,   
-    //     port);
     } else if (sa.sin_family==AF_INET6) {
 
         u32 port=bpf_ntohs(sa6.sin6_port);
@@ -707,12 +609,10 @@ int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
         info.srcIP6[3] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[3]);
          bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
-        // bpf_printk("sys_exit_recvmsg IP6=%d:%d:%d:%d",
-        //     info.dstIP6[0],
-        //     info.dstIP6[1],
-        //     info.dstIP6[2],
-        //     info.dstIP6[3]);
     }
+
+    bpf_map_delete_elem(&addrRecv_map, &pid);
+    bpf_map_delete_elem(&conn_info_map, &pid);
 
     return 0;
 }
@@ -723,8 +623,6 @@ SEC("sk_lookup")
 int look_up(struct bpf_sk_lookup *ctx) {
     struct trace_info info = {};
     __u32 proto = ctx->protocol;
-
-
 
     if (ctx->family == AF_INET) {
         __u32 srcIP = bpf_ntohl(ctx->local_ip4);
@@ -743,12 +641,6 @@ int look_up(struct bpf_sk_lookup *ctx) {
 
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
-       // bpf_printk("IPv4 lookup src=%d.%d.%d.%d:%d dst=%d.%d.%d.%d:%d protocol=%d FAMILY=%d \n", 
-          //  (srcIP >> 24) & 0xff, (srcIP >> 16) & 0xff, (srcIP >> 8) & 0xff, srcIP & 0xff,
-          //  srcPort,
-          //  (dstIP >> 24) & 0xff, (dstIP >> 16) & 0xff, (dstIP >> 8) & 0xff, dstIP & 0xff,
-          //  dstPort,
-          //  proto, ctx->family);
     } else if (ctx->family == AF_INET6) {
 
         info.srcIP6[0]=bpf_ntohl(ctx->local_ip6[0]);
@@ -800,35 +692,16 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
     if (ctx->family==AF_INET) {
     if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
 
-//bpf_printk("inet_sock_set_state PID=%d srcip=%d.%d.%d.%d:%d   dstip=%d.%d.%d.%d:%d PROTO=%d ",
-    
-  //  pid_tcp,
-  //  (srcip >> 24) & 0xff,
-  //  (srcip >> 16) & 0xff,
-  //  (srcip >> 8) & 0xff,
-  //  (srcip) & 0xff,
-  //  sport,
-
-  //  (dstip >> 24) & 0xff,
-   // (dstip >> 16) & 0xff,
-   // (dstip >> 8) & 0xff,
-   // (dstip) & 0xff,
-   // dport,
-   // ctx->protocol
-
-//);
-
-struct trace_info info = {};
-
-info.src_ip=srcip;
-info.sport=sport;
-info.dst_ip=dstip;
-info.dport=dport;
-info.sysexit=6;
-info.proto=ctx->protocol;
-info.pid=pid_tcp;
-info.state=ctx->newstate;
-bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+        struct trace_info info = {};
+        info.src_ip=srcip;
+        info.sport=sport;
+        info.dst_ip=dstip;
+        info.dport=dport;
+        info.sysexit=6;
+        info.proto=ctx->protocol;
+        info.pid=pid_tcp;
+        info.state=ctx->newstate;
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
     }
 
     } else if (ctx->family==AF_INET6) {
@@ -842,126 +715,49 @@ bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info)
 }
 
 
-// SEC("tracepoint/net/netif_receive_skb_entry")
-// //trace_event_raw_net_dev_template
-// int trace_netif_receive_skb(struct netif_receive_skb_entry_args *ctx) {
-//     bpf_printk("netif_receive_skb_entry  ");
 
-
-//      struct sk_buff *skb = (struct sk_buff *)ctx->skbaddr;
-
-
-
-//      void *head = BPF_CORE_READ(skb, head);
-//     __u64 nh_off = BPF_CORE_READ(skb, network_header);
-
-//     struct iphdr ip;
-//     if (bpf_probe_read(&ip, sizeof(ip), head + nh_off) < 0)
-//         return 0;
-
-//         if (ip.version != 4)
-//     return 0;
-
-//     __u8 proto = ip.protocol;
-//     __u32 saddr = ip.saddr;
-//     __u32 daddr = ip.daddr;
-
-
-
-//     struct trace_info info = {};
-
-//     info.sysexit=13;
-//     info.proto=proto;
-//     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-           
-//         if (proto == IPPROTO_TCP) {
-//             struct tcphdr tcp;
-//             if (bpf_probe_read(&tcp, sizeof(tcp), head + nh_off + ip.ihl * 4) < 0)
-//                 return 0;
-    
-//             __u16 sport = tcp.source;
-//             __u16 dport = tcp.dest;
-
-//             bpf_printk("netif_receive_skb_entry SPORT=%d DPORT=%d ",sport,dport);
-    
-//         } else if (proto == IPPROTO_UDP) {
-//             struct udphdr udp;
-//             if (bpf_probe_read(&udp, sizeof(udp), head + nh_off + ip.ihl * 4) < 0)
-//                 return 0;
-    
-//             __u16 sport = udp.source;
-//             __u16 dport = udp.dest;
-    
-//         }
-
-
-//     return 0;
-// }
-
-// SEC("tracepoint/net/netif_receive_skb_entry")
-// int trace_netif_receive_skb(struct netif_receive_skb_entry_args *ctx)
-// {
-
-//     bpf_printk("skb received from ");
-//     struct trace_info info = {};
-//     info.sysexit = 13;
-
-//     // Извлечь имя интерфейса из __data_loc
-//     u32 offset = ctx->__data_loc_name & 0xFFFF;  // только младшие 16 бит — смещение
-//     const char *name_ptr = (const char *)ctx + offset;
-//     bpf_probe_read_str(&info.ifname, sizeof(info.ifname), name_ptr);
-
-//     bpf_printk("skb received from %s\n", info.ifname);
-
-//     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-//     return 0;
-// }
 
 SEC("tracepoint/net/netif_receive_skb")
 int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+
     struct sk_buff skb = {};
     struct iphdr iph = {};
     struct tcphdr tcph = {};
     struct udphdr udph = {};
 
-    // Прочитать skb
     bpf_probe_read(&skb, sizeof(skb), ctx->skbaddr);
 
-    // Прочитать IP-заголовок
     bpf_probe_read(&iph, sizeof(iph), skb.data);
+    
 
-    if (iph.protocol == IPPROTO_TCP) {
-        // Указатель на TCP-заголовок
+    if (iph.protocol == 33) {
         void *tcp_start = (void *)skb.data + iph.ihl * 4;
 
-        // Прочитать TCP-заголовок
         bpf_probe_read(&tcph, sizeof(tcph), tcp_start);
 
-        // Преобразовать порты из сетевого порядка в хост
         __u16 sport = bpf_ntohs(tcph.source);
         __u16 dport = bpf_ntohs(tcph.dest);
 
-        // Напечатать читаемый лог для TCP
-        bpf_printk("Incoming TCP packet: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",
+        bpf_printk("Incoming TCP packet:PID=%d %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",pid,
             iph.saddr & 0xff, (iph.saddr >> 8) & 0xff, (iph.saddr >> 16) & 0xff, (iph.saddr >> 24) & 0xff, sport,
             iph.daddr & 0xff, (iph.daddr >> 8) & 0xff, (iph.daddr >> 16) & 0xff, (iph.daddr >> 24) & 0xff, dport);
     }
     else if (iph.protocol == IPPROTO_UDP) {
-        // Указатель на UDP-заголовок
         void *udp_start = (void *)skb.data + iph.ihl * 4;
 
-        // Прочитать UDP-заголовок
         bpf_probe_read(&udph, sizeof(udph), udp_start);
 
-        // Преобразовать порты из сетевого порядка в хост
         __u16 sport = bpf_ntohs(udph.source);
         __u16 dport = bpf_ntohs(udph.dest);
 
-        // Напечатать читаемый лог для UDP
-        bpf_printk("Incoming UDP packet: %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",
+        bpf_printk("Incoming UDP packet:PID=%d %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",pid,
             iph.saddr & 0xff, (iph.saddr >> 8) & 0xff, (iph.saddr >> 16) & 0xff, (iph.saddr >> 24) & 0xff, sport,
             iph.daddr & 0xff, (iph.daddr >> 8) & 0xff, (iph.daddr >> 16) & 0xff, (iph.daddr >> 24) & 0xff, dport);
     }
 
     return 0;
 }
+
+
+

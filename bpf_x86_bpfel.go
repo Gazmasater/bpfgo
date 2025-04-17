@@ -32,22 +32,21 @@ type bpfSockaddr struct {
 }
 
 type bpfTraceInfo struct {
-	SrcIp   uint32
-	DstIp   uint32
-	Sport   uint32
-	Pid     uint32
-	Proto   uint32
-	Sysexit uint32
-	Fd      uint32
-	State   uint32
-	Family  uint16
-	_       [2]byte
-	SrcIP6  [4]uint32
-	DstIP6  [4]uint32
-	Dport   uint16
-	Comm    [64]int8
-	Ifname  [64]int8
-	_       [2]byte
+	SrcIp    uint32
+	DstIp    uint32
+	Sport    uint32
+	Pid      uint32
+	Proto    uint32
+	Sysexit  uint32
+	Fd       uint32
+	State    uint32
+	Family   uint16
+	Padding1 uint16
+	SrcIP6   [4]uint32
+	DstIP6   [4]uint32
+	Dport    uint16
+	Padding2 uint16
+	Comm     [64]int8
 }
 
 // loadBpf returns the embedded CollectionSpec for bpf.
@@ -112,7 +111,6 @@ type bpfMapSpecs struct {
 	AddrRecvMap     *ebpf.MapSpec `ebpf:"addrRecv_map"`
 	AddrSendMap     *ebpf.MapSpec `ebpf:"addrSend_map"`
 	AddrSockNameMap *ebpf.MapSpec `ebpf:"addrSockName_map"`
-	AddrMap         *ebpf.MapSpec `ebpf:"addr_map"`
 	ConnInfoMap     *ebpf.MapSpec `ebpf:"conn_info_map"`
 	TraceEvents     *ebpf.MapSpec `ebpf:"trace_events"`
 }
@@ -147,7 +145,6 @@ type bpfMaps struct {
 	AddrRecvMap     *ebpf.Map `ebpf:"addrRecv_map"`
 	AddrSendMap     *ebpf.Map `ebpf:"addrSend_map"`
 	AddrSockNameMap *ebpf.Map `ebpf:"addrSockName_map"`
-	AddrMap         *ebpf.Map `ebpf:"addr_map"`
 	ConnInfoMap     *ebpf.Map `ebpf:"conn_info_map"`
 	TraceEvents     *ebpf.Map `ebpf:"trace_events"`
 }
@@ -157,7 +154,6 @@ func (m *bpfMaps) Close() error {
 		m.AddrRecvMap,
 		m.AddrSendMap,
 		m.AddrSockNameMap,
-		m.AddrMap,
 		m.ConnInfoMap,
 		m.TraceEvents,
 	)

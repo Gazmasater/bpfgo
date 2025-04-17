@@ -289,11 +289,6 @@ func main() {
 
 			}
 
-			if event.Sysexit == 13 {
-
-				fmt.Println("!!!!!!!!!!!!!!!!!!!$$$$$$$$$$$$$$$$$$s")
-			}
-
 			if event.Sysexit == 3 {
 
 				family := event.Family
@@ -341,6 +336,7 @@ func main() {
 						proto = "TCP"
 					}
 
+					fmt.Println("")
 					fmt.Printf("PID=%d %s:%s <- %s:%s \n", event.Pid, proto, srcAddr, proto, dstAddr)
 
 				}
@@ -350,6 +346,16 @@ func main() {
 					case eventChan_pid <- int(event.Pid):
 					default:
 						//fmt.Println("State 2: eventChan_pid заполнен, пропускаю запись PID")
+					}
+					mu.Unlock()
+				}
+
+				if event.State == 10 {
+					mu.Lock()
+					select {
+					case eventChan_pid <- int(event.Pid):
+					default:
+						//fmt.Println("State 10: eventChan_pid заполнен, пропускаю запись PID")
 					}
 					mu.Unlock()
 				}
@@ -377,6 +383,7 @@ func main() {
 					}
 
 					fmt.Printf("PID=%d %s:%s -> %s:%s \n", xxx_pid, proto, srcAddr, proto, dstAddr)
+					fmt.Println("")
 
 				default:
 					fmt.Println("")
