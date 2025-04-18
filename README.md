@@ -465,12 +465,13 @@ STATE=12 IP4 PID=720 srcIP=//[192.168.1.1]:53 NAME=systemd-resolve
 STATE=12 IP4 PID=720 srcIP=//[192.168.1.1]:53 NAME=systemd-resolve
 
 
-func FastBytes2String(b []byte) string {
-  if len(b) == 0 {
-    return ""
-  }
-  return unsafe.String(unsafe.SliceData(b), len(b))
+func Int8ToStringFast(arr [64]int8) string {
+    // Преобразуем [64]int8 к []byte без копирования
+    b := unsafe.Slice((*byte)(unsafe.Pointer(&arr[0])), len(arr))
+    // Обрезаем по \x00
+    return FastBytes2String(bytes.Trim(b, "\x00"))
 }
+
 
 
 
