@@ -507,3 +507,88 @@ int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
 
 
 
+
+
+
+
+
+
+SEC("tracepoint/syscalls/sys_exit_sendmsg")
+int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    long ret = ctx->ret;
+
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
+    if (!conn_info) {
+        bpf_printk("No conn_info for pid=%d", pid);
+        return 0;
+    }
+
+    if (ret < 0) {
+        bpf_printk("sendmsg failed for PID=%d", pid);
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        return 0;
+    }
+
+    // Получаем указатель на msghdr
+    struct msghdr **addr_ptr = bpf_map_lookup_elem(&addrSend_map, &pid);
+    if (!addr_ptr) {
+        bpf_printk("No addr_ptr for pid=%d", pid);
+        return 0;
+    }
+
+    struct msghdr *msg;
+    bpf_probe_read_user(&msg, sizeof(msg), *addr_ptr);
+
+    if (!msg) {
+        bpf_printk("msg is NULL for pid=%d", pid);
+        return 0;
+    }
+
+    struct sockaddr_storage ss = {};
+    bpf_probe_read_user(&ss, sizeof(ss), msg->msg_name);
+
+    struct trace_info info = {};
+    __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+    info.pid = pid;
+
+    if (ss.ss_family == AF_INET) {
+        struct sockaddr_in *sa = (struct sockaddr_in *)&ss;
+
+        u32 port = bpf_ntohs(sa->sin_port);
+        u32 ip = bpf_ntohl(sa->sin_addr.s_addr);
+
+        info.dst_ip = ip;
+        info.dport = port;
+        info.family = AF_INET;
+        info.sysexit = 11;
+
+    } else if (ss.ss_family == AF_INET6) {
+        struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)&ss;
+
+        u32 port = bpf_ntohs(sa6->sin6_port);
+        if (port == 0) {
+            return 0;
+        }
+
+        bpf_printk("sys_exit_sendmsg IP6 PORT=%d", port);
+
+        info.family = AF_INET6;
+        info.dport = port;
+        info.sysexit = 1;
+
+        // Копируем всю структуру in6_addr
+        __builtin_memcpy(&info.dst_ip6, &sa6->sin6_addr, sizeof(struct in6_addr));
+    }
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+    bpf_map_delete_elem(&addrSend_map, &pid);
+    bpf_map_delete_elem(&conn_info_map, &pid);
+
+    return 0;
+}
+
+
+
+
