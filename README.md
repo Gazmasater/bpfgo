@@ -376,18 +376,19 @@ sudo make install
 bpftool gen trace > trace_helpers.h
 
 
-func ResolveIP(ip net.IP) string {
-	names, err := net.LookupAddr(ip.String())
-	if err != nil || len(names) == 0 {
-		return "Unknown"
-	}
-	return names[0]
-}
+import (
+	"fmt"
+	"github.com/miekg/dns"
+	"net"
+)
 
-func ResolveIP_n(ip string) (string, error) {
+func ResolveIP_n(ip net.IP) (string, error) {
+	// Преобразуем net.IP в строку для использования в DNS запросе
+	ipStr := ip.String()
+
 	// Создаём новый запрос для типа записи PTR (обратный DNS)
 	m := new(dns.Msg)
-	m.SetQuestion(dns.Fqdn(ip)+".in-addr.arpa.", dns.TypePTR)
+	m.SetQuestion(dns.Fqdn(ipStr)+".in-addr.arpa.", dns.TypePTR)
 
 	// Устанавливаем DNS-сервер (например, Google DNS)
 	c := new(dns.Client)
@@ -404,8 +405,9 @@ func ResolveIP_n(ip string) (string, error) {
 			return v.Ptr, nil
 		}
 	}
-	return "", fmt.Errorf("доменное имя для IP %s не найдено", ip)
+	return "", fmt.Errorf("доменное имя для IP %s не найдено", ipStr)
 }
+
 
 
 
