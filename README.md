@@ -465,6 +465,15 @@ STATE=12 IP4 PID=720 srcIP=//[192.168.1.1]:53 NAME=systemd-resolve
 STATE=12 IP4 PID=720 srcIP=//[192.168.1.1]:53 NAME=systemd-resolve
 
 
+func FastBytes2String(b []byte) string {
+  if len(b) == 0 {
+    return ""
+  }
+  return unsafe.String(unsafe.SliceData(b), len(b))
+}
+
+
+
 
 
 
