@@ -400,6 +400,31 @@ func ResolveIP(ip string) (string, error) {
 }
 
 
+	"github.com/miekg/dns"
+
+func main() {
+	srcIP := "8.8.8.8" // Пример исходного IP
+	dstIP := "8.8.4.4" // Пример целевого IP
+
+	// Резолвим исходный IP
+	srcHost, err := ResolveIP(srcIP)
+	if err != nil {
+		log.Println("Ошибка при разрешении исходного IP:", err)
+	} else {
+		fmt.Println("Исходное доменное имя для IP", srcIP, ":", srcHost)
+	}
+
+	// Резолвим целевой IP
+	dstHost, err := ResolveIP(dstIP)
+	if err != nil {
+		log.Println("Ошибка при разрешении целевого IP:", err)
+	} else {
+		fmt.Println("Целевое доменное имя для IP", dstIP, ":", dstHost)
+	}
+}
+
+
+
 
 
 
