@@ -376,6 +376,14 @@ sudo make install
 bpftool gen trace > trace_helpers.h
 
 
+func ResolveIP(ip net.IP) string {
+	names, err := net.LookupAddr(ip.String())
+	if err != nil || len(names) == 0 {
+		return "Unknown"
+	}
+	return names[0]
+}
+
 func ResolveIP_n(ip string) (string, error) {
 	// Создаём новый запрос для типа записи PTR (обратный DNS)
 	m := new(dns.Msg)
@@ -398,23 +406,6 @@ func ResolveIP_n(ip string) (string, error) {
 	}
 	return "", fmt.Errorf("доменное имя для IP %s не найдено", ip)
 }
-
-srchost, err: = pkg.ResolveIP_n(srcIP)
-
-					if err != nil {
-						log.Println("Ошибка при разрешении исходного IP:", err)
-					} else {
-						fmt.Println("Исходное доменное имя для IP", srcIP, ":", srchost)
-					}
-
-					dsthost = pkg.ResolveIP(dstIP)
-
-					srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
-					dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
-
-
-
-
 
 
 
