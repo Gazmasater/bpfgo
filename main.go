@@ -150,6 +150,8 @@ func main() {
 				return
 			}
 
+			fmt.Printf("&&&&&&&&&LENGTH=%d\n", len(record.RawSample))
+
 			if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
 				log.Println("!!!!!!!!!!!!!!!!!!!!!!!invalid event size!!!!!!!!!!!!!!!!!!")
 				continue
