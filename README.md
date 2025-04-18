@@ -376,17 +376,27 @@ sudo make install
 bpftool gen trace > trace_helpers.h
 
 
-	rd, err := perf.NewReaderWithOptions(objs.TraceEvents, 4096, perf.ReaderOptions{})
-	if err != nil {
-		log.Fatalf("failed to create perf reader: %s", err)
-	}
-	defer rd.Close()
+        struct sockaddr_in addr_in = {};
+        bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
+
+        u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
+
+        u16 port = bpf_ntohs(addr_in.sin_port);
+               
+        info.pid = pid;
+        __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+
+            info.src_ip=ip;
+            info.sport = port;
+            info.family=AF_INET;           
+            info.sysexit=2;
+            info.pid=pid;
+
+         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
 
-
-rd, err := perf.NewReader(objs.TraceEvents, os.Getpagesize()*64)
-if err != nil {
-	log.Fatalf("failed to create perf reader: %v", err)
-}
-defer rd.Close()
+struct in6_addr src_ip6;
+    struct in6_addr dst_ip6;
+inf->src_ip6 = BPF_CORE_READ(ip6h, saddr);
+    info->dst_ip6 = BPF_CORE_READ(ip6h, daddr);
 
