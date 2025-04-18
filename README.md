@@ -386,3 +386,19 @@ func NewReaderWithOptions(array *ebpf.Map, perCPUBuffer int, opts ReaderOptions)
   if perCPUBuffer < 1 {
     return nil, errors.New("perCPUBuffer must be larger than 0")
   }
+
+
+  rd, err := perf.NewReaderWithOptions(objs.TraceEvents, 4096, perf.ReaderOptions{
+	Watermark:  true,
+	LostCB: func(count uint64) {
+		log.Printf("Lost %d samples", count)
+	},
+})
+if err != nil {
+	log.Fatalf("failed to create perf reader: %s", err)
+}
+defer rd.Close()
+
+
+go get github.com/cilium/ebpf@latest
+
