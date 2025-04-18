@@ -375,24 +375,6 @@ make
 sudo make install
 bpftool gen trace > trace_helpers.h
 
-// NewReaderWithOptions creates a new reader with the given options.
-func NewReaderWithOptions(array *ebpf.Map, perCPUBuffer int, opts ReaderOptions) (pr *Reader, err error) {
-  closeOnError := func(c io.Closer) {
-    if err != nil {
-      c.Close()
-    }
-  }
-
-  if perCPUBuffer < 1 {
-    return nil, errors.New("perCPUBuffer must be larger than 0")
-  }
-
-
-
-
-
-  
-
 
 	rd, err := perf.NewReaderWithOptions(objs.TraceEvents, 4096, perf.ReaderOptions{})
 	if err != nil {
@@ -402,5 +384,9 @@ func NewReaderWithOptions(array *ebpf.Map, perCPUBuffer int, opts ReaderOptions)
 
 
 
-go get github.com/cilium/ebpf@latest
+rd, err := perf.NewReader(objs.TraceEvents, os.Getpagesize()*64)
+if err != nil {
+	log.Fatalf("failed to create perf reader: %v", err)
+}
+defer rd.Close()
 
