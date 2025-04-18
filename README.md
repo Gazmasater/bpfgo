@@ -375,35 +375,14 @@ make
 sudo make install
 bpftool gen trace > trace_helpers.h
 
+// NewReaderWithOptions creates a new reader with the given options.
+func NewReaderWithOptions(array *ebpf.Map, perCPUBuffer int, opts ReaderOptions) (pr *Reader, err error) {
+  closeOnError := func(c io.Closer) {
+    if err != nil {
+      c.Close()
+    }
+  }
 
-fmt.Printf("expected size: %d\n", unsafe.Sizeof(bpfTraceInfo{}))
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "default",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/go/analysis/passes/printf",
-			"scheme": "https",
-			"authority": "pkg.go.dev"
-		}
-	},
-	"severity": 4,
-	"message": "fmt.Printf format %5e has arg unsafe.Sizeof(bpfTraceInfo{}) of wrong type uintptr",
-	"source": "printf",
-	"startLineNumber": 155,
-	"startColumn": 4,
-	"endLineNumber": 155,
-	"endColumn": 84
-}]
-
-
-
-
-
-
-
-
-
-
+  if perCPUBuffer < 1 {
+    return nil, errors.New("perCPUBuffer must be larger than 0")
+  }
