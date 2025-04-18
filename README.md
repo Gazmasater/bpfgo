@@ -409,6 +409,16 @@ func ResolveIP_n(ip net.IP) (string, error) {
 }
 
 
+dsthost, err := pkg.ResolveIP_n(dstIP)
+
+					if err != nil {
+						log.Println("Ошибка при разрешении исходного IP:", err)
+					} else {
+						fmt.Println("Исходное доменное имя для IP", dstIP, ":", dsthost)
+					}
+
+2025/04/19 01:50:03 Ошибка при разрешении исходного IP: dns: bad rdata
+
 
 
 
