@@ -3,6 +3,7 @@ package pkg
 import (
 	"bytes"
 	"net"
+	"unsafe"
 )
 
 func ResolveIP(ip net.IP) string {
@@ -14,10 +15,13 @@ func ResolveIP(ip net.IP) string {
 }
 
 func Int8ToString(arr [64]int8) string {
-	byteArr := make([]byte, len(arr))
-	for i, v := range arr {
-		byteArr[i] = byte(v)
-	}
+	b := unsafe.Slice((*byte)(unsafe.Pointer(&arr[0])), len(arr))
+	return FastBytes2String(bytes.Trim(b, "\x00"))
+}
 
-	return string(bytes.Trim(byteArr, "\x00"))
+func FastBytes2String(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
+	return unsafe.String(unsafe.SliceData(b), len(b))
 }

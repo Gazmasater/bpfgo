@@ -138,8 +138,9 @@ func main() {
 			executableName = executableName[2:]
 		}
 
+		record := new(perf.Record)
+
 		for {
-			record := new(perf.Record)
 			err := rd.ReadInto(record)
 			if err != nil {
 				if errors.Is(err, os.ErrDeadlineExceeded) {
@@ -150,7 +151,7 @@ func main() {
 			}
 
 			if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
-				log.Println("invalid event size")
+				log.Println("!!!!!!!!!!!!!!!!!!!!!!!invalid event size")
 				continue
 			}
 

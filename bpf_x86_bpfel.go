@@ -32,21 +32,19 @@ type bpfSockaddr struct {
 }
 
 type bpfTraceInfo struct {
-	SrcIp    uint32
-	DstIp    uint32
-	Sport    uint32
-	Pid      uint32
-	Proto    uint32
-	Sysexit  uint32
-	Fd       uint32
-	State    uint32
-	Family   uint16
-	Padding1 uint16
-	SrcIP6   [4]uint32
-	DstIP6   [4]uint32
-	Dport    uint16
-	Padding2 uint16
-	Comm     [64]int8
+	SrcIp   uint32
+	DstIp   uint32
+	Sport   uint32
+	Pid     uint32
+	Proto   uint32
+	Sysexit uint32
+	Fd      uint32
+	State   uint32
+	SrcIP6  [4]uint32
+	DstIP6  [4]uint32
+	Family  uint16
+	Dport   uint16
+	Comm    [64]int8
 }
 
 // loadBpf returns the embedded CollectionSpec for bpf.

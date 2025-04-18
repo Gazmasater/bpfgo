@@ -183,12 +183,12 @@ struct trace_info {
     u32 sysexit;
     u32 fd;
     u32 state;
-    u16 family;
-    u16 __padding1;       // <--- добавить!
     __u32 srcIP6[4];
     __u32 dstIP6[4];
+    u16 family;
     u16 dport;
-    u16 __padding2;       // <--- добавить!
+
+   
     char comm[64];
 };
 // Размещение переменной с атрибутом unused
