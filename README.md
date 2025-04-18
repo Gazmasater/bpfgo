@@ -424,6 +424,19 @@ func main() {
 }
 
 
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"severity": 8,
+	"message": "expected 1 expression",
+	"source": "syntax",
+	"startLineNumber": 331,
+	"startColumn": 6,
+	"endLineNumber": 331,
+	"endColumn": 6
+}]
+
+
 
 
 
