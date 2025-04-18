@@ -400,3 +400,17 @@ struct in6_addr src_ip6;
 inf->src_ip6 = BPF_CORE_READ(ip6h, saddr);
     info->dst_ip6 = BPF_CORE_READ(ip6h, daddr);
 
+
+
+    #include <linux/ipv6.h> // для struct ipv6hdr
+
+const struct ipv6hdr *ip6h = ...; // указывается, как ты получаешь ip6h
+
+info.src_ip6 = BPF_CORE_READ(ip6h, saddr);
+info.dst_ip6 = BPF_CORE_READ(ip6h, daddr);
+
+
+struct in6_addr src_ip6;
+struct in6_addr dst_ip6;
+
+
