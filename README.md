@@ -376,78 +376,33 @@ sudo make install
 bpftool gen trace > trace_helpers.h
 
 
-        struct sockaddr_in addr_in = {};
-        bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
+func ResolveIP(ip string) (string, error) {
+	// Создаём новый запрос для типа записи PTR (обратный DNS)
+	m := new(dns.Msg)
+	m.SetQuestion(dns.Fqdn(ip)+".in-addr.arpa.", dns.TypePTR)
 
-        u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
+	// Устанавливаем DNS-сервер (например, Google DNS)
+	c := new(dns.Client)
+	r, _, err := c.Exchange(m, "8.8.8.8:53") // 8.8.8.8 - Google DNS
 
-        u16 port = bpf_ntohs(addr_in.sin_port);
-               
-        info.pid = pid;
-        __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+	if err != nil {
+		return "", err
+	}
 
-            info.src_ip=ip;
-            info.sport = port;
-            info.family=AF_INET;           
-            info.sysexit=2;
-            info.pid=pid;
-
-         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-
-struct in6_addr src_ip6;
-    struct in6_addr dst_ip6;
-inf->src_ip6 = BPF_CORE_READ(ip6h, saddr);
-    info->dst_ip6 = BPF_CORE_READ(ip6h, daddr);
-
-
-
-    #include <linux/ipv6.h> // для struct ipv6hdr
-
-const struct ipv6hdr *ip6h = ...; // указывается, как ты получаешь ip6h
-
-info.src_ip6 = BPF_CORE_READ(ip6h, saddr);
-info.dst_ip6 = BPF_CORE_READ(ip6h, daddr);
-
-
-struct in6_addr src_ip6;
-struct in6_addr dst_ip6;
+	// Если получен ответ, выводим результат
+	for _, ans := range r.Answer {
+		switch v := ans.(type) {
+		case *dns.PTR:
+			return v.Ptr, nil
+		}
+	}
+	return "", fmt.Errorf("доменное имя для IP %s не найдено", ip)
+}
 
 
 
-STATE=3 srcIP=//[192.168.1.71]:44080 dstIP=//Unknown[151.236.67.225]:443 PROTO=6 FAMILY=2
-STATE=3 srcIP=//[192.168.1.71]:44080 dstIP=//Unknown[151.236.67.225]:443 PROTO=6 FAMILY=2
-STATE=3 srcIP=//[192.168.1.71]:44080 dstIP=//Unknown[151.236.67.225]:443 PROTO=6 FAMILY=2
-STATE=3 srcIP=//[127.0.0.53]:53 dstIP=//localhost[127.0.0.1]:41732 PROTO=17 FAMILY=2
-STATE=12 IP4 PID=795 srcIP=//[127.0.0.1]:41732 NAME=systemd-resolve
-STATE=12 IP4 PID=795 srcIP=//[192.168.1.1]:53 NAME=systemd-resolve
-STATE=11 IP4 PID=795  dstIP=//[127.0.0.1]:41732 FAMILY=2 NAME=systemd-resolve 
-STATE=3 srcIP=//[127.0.0.53]:53 dstIP=//localhost[127.0.0.1]:59572 PROTO=17 FAMILY=2
-STATE=12 IP4 PID=795 srcIP=//[127.0.0.1]:59572 NAME=systemd-resolve
-STATE=12 IP4 PID=795 srcIP=//[192.168.1.1]:53 NAME=systemd-resolve
-STATE=11 IP4 PID=795  dstIP=//[127.0.0.1]:59572 FAMILY=2 NAME=systemd-resolve 
-STATE=3 srcIP=//[127.0.0.53]:53 dstIP=//localhost[127.0.0.1]:39599 PROTO=17 FAMILY=2
-STATE=12 IP4 PID=795 srcIP=//[127.0.0.1]:39599 NAME=systemd-resolve
-STATE=12 IP4 PID=795 srcIP=//[192.168.1.1]:53 NAME=systemd-resolve
-STATE=11 IP4 PID=795  dstIP=//[127.0.0.1]:39599 FAMILY=2 NAME=systemd-resolve 
-STATE=3 srcIP=//[192.168.1.71]:40904 dstIP=//Unknown[151.236.77.65]:443 PROTO=6 FAMILY=2
-STATE=12 IP4 PID=795 srcIP=//[127.0.0.1]:57612 NAME=systemd-resolve
-STATE=3 srcIP=//[192.168.1.71]:40904 dstIP=//Unknown[151.236.77.65]:443 PROTO=6 FAMILY=2
-STATE=12 IP4 PID=795 srcIP=//[192.168.1.1]:53 NAME=systemd-resolve
-STATE=11 IP4 PID=795  dstIP=//[127.0.0.1]:57612 FAMILY=2 NAME=systemd-resolve 
-STATE=3 srcIP=//[127.0.0.53]:53 dstIP=//localhost[127.0.0.1]:57612 PROTO=17 FAMILY=2
-STATE=12 IP4 PID=795 srcIP=//[127.0.0.1]:51082 NAME=systemd-resolve
-STATE=12 IP4 PID=795 srcIP=//[192.168.1.1]:53 NAME=systemd-resolve
-STATE=11 IP4 PID=795  dstIP=//[127.0.0.1]:51082 FAMILY=2 NAME=systemd-resolve 
-STATE=3 srcIP=//[127.0.0.53]:53 dstIP=//localhost[127.0.0.1]:51082 PROTO=17 FAMILY=2
-STATE=3 srcIP=//[192.168.1.71]:56088 dstIP=//cloud.cdn.yandex.net.[37.9.64.225]:443 PROTO=6 FAMILY=2
-STATE=3 srcIP=//[127.0.0.53]:53 dstIP=//localhost[127.0.0.1]:35924 PROTO=17 FAMILY=2
-STATE=12 IP4 PID=795 srcIP=//[127.0.0.1]:35924 NAME=systemd-resolve
-STATE=11 IP4 PID=795  dstIP=//[127.0.0.1]:35924 FAMILY=2 NAME=systemd-resolve 
-STATE=3 srcIP=//[192.168.1.71]:56088 dstIP=//cloud.cdn.yandex.net.[37.9.64.225]:443 PROTO=6 FAMILY=2
-STATE=3 srcIP=//[127.0.0.53]:53 dstIP=//localhost[127.0.0.1]:38590 PROTO=17 FAMILY=2
-STATE=12 IP4 PID=795 srcIP=//[127.0.0.1]:38590 NAME=systemd-resolve
-STATE=11 IP4 PID=795  dstIP=//[127.0.0.1]:38590 FAMILY=2 NAME=systemd-resolve 
-STATE=3 srcIP=//[192.168.1.71]:34852 dstIP=//portal.mail.ru.[217.69.139.58]:443 PROTO=6 FAMILY=2
-STATE=12 IP4 PID=795 srcIP=//[127.0.0.1]:53510 NAME=systemd-resolve
-STATE=11 IP4 PID=795  dstIP=//[127.0.0.1]:53510 FAMILY=2 NAME=systemd-resolve 
+
+
+
+
+
