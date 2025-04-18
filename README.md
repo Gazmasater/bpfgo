@@ -376,7 +376,7 @@ sudo make install
 bpftool gen trace > trace_helpers.h
 
 
-func ResolveIP(ip string) (string, error) {
+func ResolveIP_n(ip string) (string, error) {
 	// Создаём новый запрос для типа записи PTR (обратный DNS)
 	m := new(dns.Msg)
 	m.SetQuestion(dns.Fqdn(ip)+".in-addr.arpa.", dns.TypePTR)
@@ -399,42 +399,19 @@ func ResolveIP(ip string) (string, error) {
 	return "", fmt.Errorf("доменное имя для IP %s не найдено", ip)
 }
 
+srchost, err: = pkg.ResolveIP_n(srcIP)
 
-	"github.com/miekg/dns"
+					if err != nil {
+						log.Println("Ошибка при разрешении исходного IP:", err)
+					} else {
+						fmt.Println("Исходное доменное имя для IP", srcIP, ":", srchost)
+					}
 
-func main() {
-	srcIP := "8.8.8.8" // Пример исходного IP
-	dstIP := "8.8.4.4" // Пример целевого IP
+					dsthost = pkg.ResolveIP(dstIP)
 
-	// Резолвим исходный IP
-	srcHost, err := ResolveIP(srcIP)
-	if err != nil {
-		log.Println("Ошибка при разрешении исходного IP:", err)
-	} else {
-		fmt.Println("Исходное доменное имя для IP", srcIP, ":", srcHost)
-	}
+					srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
+					dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
 
-	// Резолвим целевой IP
-	dstHost, err := ResolveIP(dstIP)
-	if err != nil {
-		log.Println("Ошибка при разрешении целевого IP:", err)
-	} else {
-		fmt.Println("Целевое доменное имя для IP", dstIP, ":", dstHost)
-	}
-}
-
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#1",
-	"severity": 8,
-	"message": "expected 1 expression",
-	"source": "syntax",
-	"startLineNumber": 331,
-	"startColumn": 6,
-	"endLineNumber": 331,
-	"endColumn": 6
-}]
 
 
 
