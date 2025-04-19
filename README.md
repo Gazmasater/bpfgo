@@ -376,63 +376,178 @@ sudo make install
 bpftool gen trace > trace_helpers.h
 
 
-package main
+		for {
 
-import (
-	"bufio"
-	"fmt"
-	"os"
-	"regexp"
-)
-
-func main() {
-	reIP := regexp.MustCompile(`([sd]rcIP)=//\[?([0-9\.]+)\]?:([0-9]+)`)
-	reAction := regexp.MustCompile(`\b(sendmsg|sendto|recvmsg|recvfrom)\b`)
-
-	type Flow struct {
-		Src string
-		Dst string
-	}
-	seen := map[Flow]bool{}
-
-	scanner := bufio.NewScanner(os.Stdin)
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		actionMatch := reAction.FindStringSubmatch(line)
-		if actionMatch == nil {
-			continue
-		}
-		action := actionMatch[1]
-
-		ipMatches := reIP.FindAllStringSubmatch(line, -1)
-		if len(ipMatches) == 0 {
-			continue
-		}
-
-		var src, dst string
-		for _, m := range ipMatches {
-			ipPort := m[2] + ":" + m[3]
-			if m[1] == "srcIP" {
-				src = ipPort
-			} else if m[1] == "dstIP" {
-				dst = ipPort
+			err := rd.ReadInto(record)
+			if err != nil {
+				if errors.Is(err, os.ErrDeadlineExceeded) {
+					continue
+				}
+				log.Printf("error reading from perf reader: %v", err)
+				return
 			}
-		}
 
-		// Определим направление
-		if src != "" && dst != "" {
-			flow := Flow{Src: src, Dst: dst}
-			if !seen[flow] {
-				fmt.Printf("%s → %s\n", src, dst)
-				fmt.Printf("%s ← %s\n", dst, src)
-				seen[flow] = true
+			if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
+				log.Println("!!!!!!!!!!!!!!!!!!!!!!!invalid event size!!!!!!!!!!!!!!!!!!")
+				continue
 			}
-		}
-	}
 
-	if err := scanner.Err(); err != nil {
-		fmt.Fprintln(os.Stderr, "ошибка чтения:", err)
-	}
-}
+			// Приводим прочитанные данные к структуре bpfTraceInfo
+			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
+
+			srcIP := net.IPv4(
+				byte(event.SrcIp>>24),
+				byte(event.SrcIp>>16),
+				byte(event.SrcIp>>8),
+				byte(event.SrcIp),
+			)
+
+			dstIP := net.IPv4(
+				byte(event.DstIp>>24),
+				byte(event.DstIp>>16),
+				byte(event.DstIp>>8),
+				byte(event.DstIp),
+			)
+
+			if pkg.Int8ToString(event.Comm) == executableName {
+				continue
+			}
+
+			if event.Sysexit == 1 {
+
+				family := event.Family
+
+				if family == 2 {
+
+					dstAddr := fmt.Sprintf("//[%s]:%d", dstIP.String(), event.Dport)
+					pid := event.Pid
+					fmt.Printf("STATE=1 IP4 PID=%d  dstIP=%s FAMILY=%d NAME=%s \n", pid, dstAddr, family, pkg.Int8ToString(event.Comm))
+				} else if family == 10 {
+					port := event.Dport
+
+					pid := event.Pid
+					fmt.Printf("STATE=1 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d NAME=%s\n",
+						pid,
+						event.DstIP6[0], event.DstIP6[1],
+						event.DstIP6[2], event.DstIP6[3],
+
+						port,
+						pkg.Int8ToString(event.Comm),
+					)
+
+				}
+
+			}
+
+			if event.Sysexit == 11 {
+
+				if event.Family == 2 {
+
+					dstAddr := fmt.Sprintf("//[%s]:%d", dstIP.String(), event.Dport)
+					pid := event.Pid
+					fmt.Printf("STATE=11 IP4 PID=%d  dstIP=%s FAMILY=%d NAME=%s \n",
+						pid,
+						dstAddr,
+						event.Family,
+						pkg.Int8ToString(event.Comm))
+				} else if event.Family == 10 {
+					port := event.Dport
+
+					pid := event.Pid
+					fmt.Printf("STATE=11 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d  NAME=%s\n",
+						pid,
+						event.DstIP6[0], event.DstIP6[1],
+						event.DstIP6[2], event.DstIP6[3],
+
+						port,
+						pkg.Int8ToString(event.Comm),
+					)
+
+				}
+
+			}
+
+			if event.Sysexit == 2 {
+
+				if event.Family == 2 {
+					dstAddr := fmt.Sprintf("//[%s]:%d", srcIP.String(), event.Sport)
+					pid := event.Pid
+					fmt.Printf("STATE=2 IP4 PID=%d srcIP=%s NAME=%s\n", pid, dstAddr, pkg.Int8ToString(event.Comm))
+				} else if event.Family == 10 {
+					port := event.Sport
+					pid := event.Pid
+					fmt.Printf("STATE2 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d\n",
+						pid,
+						event.SrcIP6[0], event.SrcIP6[1],
+						event.SrcIP6[2], event.SrcIP6[3],
+						port,
+					)
+
+				}
+
+			}
+
+			if event.Sysexit == 12 {
+
+				if event.Family == 2 {
+					srcAddr := fmt.Sprintf("//[%s]:%d", srcIP.String(), event.Sport)
+					pid := event.Pid
+					fmt.Printf("STATE=12 IP4 PID=%d srcIP=%s NAME=%s\n",
+						pid,
+						srcAddr,
+						pkg.Int8ToString(event.Comm))
+				} else if event.Family == 10 {
+					port := event.Sport
+					pid := event.Pid
+					fmt.Printf("STATE=12 IPv6 PID=%d srcIPv6=%x:%x:%x:%x:%d\n",
+						pid,
+						event.SrcIP6[0], event.SrcIP6[1],
+						event.SrcIP6[2], event.SrcIP6[3],
+						port,
+					)
+
+					eventDstIP6 := [4]uint32{
+						event.SrcIP6[0],
+						event.SrcIP6[1],
+						event.SrcIP6[2],
+						event.SrcIP6[3],
+					}
+
+					ipBytes := []byte{
+						byte(eventDstIP6[0] >> 24), byte(eventDstIP6[0] >> 16), byte(eventDstIP6[0] >> 8), byte(eventDstIP6[0]),
+						byte(eventDstIP6[1] >> 24), byte(eventDstIP6[1] >> 16), byte(eventDstIP6[1] >> 8), byte(eventDstIP6[1]),
+						byte(eventDstIP6[2] >> 24), byte(eventDstIP6[2] >> 16), byte(eventDstIP6[2] >> 8), byte(eventDstIP6[2]),
+						byte(eventDstIP6[3] >> 24), byte(eventDstIP6[3] >> 16), byte(eventDstIP6[3] >> 8), byte(eventDstIP6[3]),
+					}
+
+					ip := net.IP(ipBytes)
+					fmt.Printf("STATE=12 SHRT IPv6:=%s%d\n", ip.String(), event.Sport)
+
+				}
+
+			}
+
+			if event.Sysexit == 3 {
+
+				family := event.Family
+				if family == 2 {
+					dstAddr := fmt.Sprintf("//%s[%s]:%d", pkg.ResolveIP(dstIP), dstIP.String(), event.Dport)
+					srcAddr := fmt.Sprintf("//[%s]:%d", srcIP.String(), event.Sport)
+					fmt.Printf("STATE=3 srcIP=%s dstIP=%s PROTO=%d FAMILY=%d\n", srcAddr, dstAddr, event.Proto, int(family))
+				} else if family == 10 {
+
+					fmt.Printf("STATE=3 DST IPv6=%x:%x:%x:%x\n",
+						event.DstIP6[0], event.DstIP6[1],
+						event.DstIP6[2], event.DstIP6[3])
+
+					fmt.Printf("STATE=3 SRC IPv6=%x:%x:%x:%x\n",
+						event.SrcIP6[0], event.SrcIP6[1],
+						event.SrcIP6[2], event.SrcIP6[3])
+
+					fmt.Printf("STATE=3 SPORT=%d  DPORT=%d PROTO=%d\n", event.Sport, event.Dport, event.Proto)
+
+				}
+
+			}
+
 
