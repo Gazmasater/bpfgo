@@ -376,40 +376,8 @@ sudo make install
 bpftool gen trace > trace_helpers.h
 
 
-package main
-
-import (
-	"fmt"
-	"net"
-)
-
-func main() {
-	ips := []string{
-		"127.0.0.1",
-		"::1",
-		"192.168.1.10",
-		"8.8.8.8",
-	}
-
-	for _, ipStr := range ips {
-		ip := net.ParseIP(ipStr)
-		if ip == nil {
-			fmt.Println(ipStr, "невалидный IP")
-			continue
-		}
-
-		if ip.IsLoopback() {
-			fmt.Println(ip, "→ это localhost")
-		} else {
-			fmt.Println(ip, "→ это не localhost")
-		}
-	}
-}
-
-
-
-
-
-
-
-
+STATE=3 srcIP=//[127.0.0.53]:53 dstIP=//localhost[127.0.0.1]:52057 PROTO=17 FAMILY=2  sk_lookup
+STATE=2 IP4 PID=3881 srcIP=//[127.0.0.53]:53 NAME=DNS Res~ver #31   sendto
+STATE=12 IP4 PID=742 srcIP=//[127.0.0.1]:52057 NAME=systemd-resolve  recvmsg
+STATE=11 IP4 PID=742  dstIP=//[127.0.0.1]:52057 FAMILY=2 NAME=systemd-resolve  sendmsg
+STATE=12 IP4 PID=742 srcIP=//[127.0.0.1]:52057 NAME=systemd-resolve recvmsg
