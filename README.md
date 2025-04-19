@@ -376,28 +376,18 @@ sudo make install
 bpftool gen trace > trace_helpers.h
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ dig -x 13.69.116.109 
+func Int8ToString(arr [64]int8) string {
+	b := unsafe.Slice((*byte)(unsafe.Pointer(&arr[0])), len(arr))
+	return FastBytes2String(bytes.Trim(b, "\x00"))
+}
 
-; <<>> DiG 9.18.30-0ubuntu0.24.04.2-Ubuntu <<>> -x 13.69.116.109
-;; global options: +cmd
-;; Got answer:
-;; ->>HEADER<<- opcode: QUERY, status: NXDOMAIN, id: 44511
-;; flags: qr rd ra; QUERY: 1, ANSWER: 0, AUTHORITY: 1, ADDITIONAL: 1
+func FastBytes2String(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
+	return unsafe.String(unsafe.SliceData(b), len(b))
+}
 
-;; OPT PSEUDOSECTION:
-; EDNS: version: 0, flags:; udp: 65494
-;; QUESTION SECTION:
-;109.116.69.13.in-addr.arpa.    IN      PTR
-
-;; AUTHORITY SECTION:
-116.69.13.in-addr.arpa. 708     IN      SOA     ns1-201.azure-dns.com. msnhst.microsoft.com. 1 900 300 604800 3600
-
-;; Query time: 13 msec
-;; SERVER: 127.0.0.53#53(127.0.0.53) (UDP)
-;; WHEN: Sat Apr 19 03:37:11 MSK 2025
-;; MSG SIZE  rcvd: 129
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
 
