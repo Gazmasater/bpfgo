@@ -376,13 +376,34 @@ sudo make install
 bpftool gen trace > trace_helpers.h
 
 
-func Int8ToString(arr [64]int8) string {
-	b := unsafe.Slice((*byte)(unsafe.Pointer(&arr[0])), len(arr))
-	b = bytes.Trim(b, "\x00")
-	if len(b) == 0 {
-		return ""
+package main
+
+import (
+	"fmt"
+	"net"
+)
+
+func main() {
+	ips := []string{
+		"127.0.0.1",
+		"::1",
+		"192.168.1.10",
+		"8.8.8.8",
 	}
-	return unsafe.String(unsafe.SliceData(b), len(b))
+
+	for _, ipStr := range ips {
+		ip := net.ParseIP(ipStr)
+		if ip == nil {
+			fmt.Println(ipStr, "невалидный IP")
+			continue
+		}
+
+		if ip.IsLoopback() {
+			fmt.Println(ip, "→ это localhost")
+		} else {
+			fmt.Println(ip, "→ это не localhost")
+		}
+	}
 }
 
 
