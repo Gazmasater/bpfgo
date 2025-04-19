@@ -376,48 +376,34 @@ sudo make install
 bpftool gen trace > trace_helpers.h
 
 
-import (
-	"fmt"
-	"github.com/miekg/dns"
-	"net"
-)
-
 func ResolveIP_n(ip net.IP) (string, error) {
-	// Преобразуем net.IP в строку для использования в DNS запросе
-	ipStr := ip.String()
-
-	// Создаём новый запрос для типа записи PTR (обратный DNS)
-	m := new(dns.Msg)
-	m.SetQuestion(dns.Fqdn(ipStr)+".in-addr.arpa.", dns.TypePTR)
-
-	// Устанавливаем DNS-сервер (например, Google DNS)
-	c := new(dns.Client)
-	r, _, err := c.Exchange(m, "8.8.8.8:53") // 8.8.8.8 - Google DNS
-
+	// Получаем обратную запись для PTR-запроса
+	ptrName, err := dns.ReverseAddr(ip.String())
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("не удалось сформировать PTR-запрос: %v", err)
 	}
 
-	// Если получен ответ, выводим результат
+	// Создаём DNS-запрос
+	m := new(dns.Msg)
+	m.SetQuestion(ptrName, dns.TypePTR)
+
+	// Используем Google DNS
+	c := new(dns.Client)
+	r, _, err := c.Exchange(m, "8.8.8.8:53")
+	if err != nil {
+		return "", fmt.Errorf("ошибка DNS-запроса: %v", err)
+	}
+
+	// Обрабатываем ответ
 	for _, ans := range r.Answer {
-		switch v := ans.(type) {
-		case *dns.PTR:
-			return v.Ptr, nil
+		if ptr, ok := ans.(*dns.PTR); ok {
+			return ptr.Ptr, nil
 		}
 	}
-	return "", fmt.Errorf("доменное имя для IP %s не найдено", ipStr)
+	return "", fmt.Errorf("доменное имя для IP %s не найдено", ip.String())
 }
 
 
-dsthost, err := pkg.ResolveIP_n(dstIP)
-
-					if err != nil {
-						log.Println("Ошибка при разрешении исходного IP:", err)
-					} else {
-						fmt.Println("Исходное доменное имя для IP", dstIP, ":", dsthost)
-					}
-
-2025/04/19 01:50:03 Ошибка при разрешении исходного IP: dns: bad rdata
 
 
 
