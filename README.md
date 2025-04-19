@@ -378,10 +378,7 @@ bpftool gen trace > trace_helpers.h
 
 func Int8ToString(arr [64]int8) string {
 	b := unsafe.Slice((*byte)(unsafe.Pointer(&arr[0])), len(arr))
-	return FastBytes2String(bytes.Trim(b, "\x00"))
-}
-
-func FastBytes2String(b []byte) string {
+	b = bytes.Trim(b, "\x00")
 	if len(b) == 0 {
 		return ""
 	}
