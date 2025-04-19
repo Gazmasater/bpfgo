@@ -376,8 +376,63 @@ sudo make install
 bpftool gen trace > trace_helpers.h
 
 
-STATE=3 srcIP=//[127.0.0.53]:53 dstIP=//localhost[127.0.0.1]:52057 PROTO=17 FAMILY=2  sk_lookup
-STATE=2 IP4 PID=3881 srcIP=//[127.0.0.53]:53 NAME=DNS Res~ver #31   sendto
-STATE=12 IP4 PID=742 srcIP=//[127.0.0.1]:52057 NAME=systemd-resolve  recvmsg
-STATE=11 IP4 PID=742  dstIP=//[127.0.0.1]:52057 FAMILY=2 NAME=systemd-resolve  sendmsg
-STATE=12 IP4 PID=742 srcIP=//[127.0.0.1]:52057 NAME=systemd-resolve recvmsg
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"regexp"
+)
+
+func main() {
+	reIP := regexp.MustCompile(`([sd]rcIP)=//\[?([0-9\.]+)\]?:([0-9]+)`)
+	reAction := regexp.MustCompile(`\b(sendmsg|sendto|recvmsg|recvfrom)\b`)
+
+	type Flow struct {
+		Src string
+		Dst string
+	}
+	seen := map[Flow]bool{}
+
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		actionMatch := reAction.FindStringSubmatch(line)
+		if actionMatch == nil {
+			continue
+		}
+		action := actionMatch[1]
+
+		ipMatches := reIP.FindAllStringSubmatch(line, -1)
+		if len(ipMatches) == 0 {
+			continue
+		}
+
+		var src, dst string
+		for _, m := range ipMatches {
+			ipPort := m[2] + ":" + m[3]
+			if m[1] == "srcIP" {
+				src = ipPort
+			} else if m[1] == "dstIP" {
+				dst = ipPort
+			}
+		}
+
+		// Определим направление
+		if src != "" && dst != "" {
+			flow := Flow{Src: src, Dst: dst}
+			if !seen[flow] {
+				fmt.Printf("%s → %s\n", src, dst)
+				fmt.Printf("%s ← %s\n", dst, src)
+				seen[flow] = true
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintln(os.Stderr, "ошибка чтения:", err)
+	}
+}
+
