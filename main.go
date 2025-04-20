@@ -30,6 +30,29 @@ var xxx, xxx_pid int
 
 var proto, srchost, dsthost string
 
+type Lookup struct {
+	DstIP   net.IP
+	DstPort int
+	SrcIP   net.IP
+	SrcPort int
+}
+
+type Sendmsg struct {
+	DstIP   net.IP
+	DstPort int
+}
+
+type Recvmsg struct {
+	SrcIP   net.IP
+	SrcPort int
+}
+
+type EventData struct {
+	Lookup  *Lookup
+	Sendmsg *Sendmsg
+	Recvmsg *Recvmsg
+}
+
 func init() {
 	// Снимаем ограничение на память
 	if err := rlimit.RemoveMemlock(); err != nil {
@@ -120,12 +143,6 @@ func main() {
 	defer skLookupLink.Close()
 
 	// Создаем perf.Reader для чтения событий eBPF
-	const buffLen = 4096
-	rd, err := perf.NewReader(objs.TraceEvents, buffLen)
-	if err != nil {
-		log.Fatalf("failed to create perf reader: %s", err)
-	}
-	defer rd.Close()
 
 	// Канал для завершения работы
 	stop := make(chan os.Signal, 1)
@@ -133,14 +150,22 @@ func main() {
 
 	go func() {
 
+		record := new(perf.Record)
+
+		const buffLen = 8196
+		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
+		if err != nil {
+			log.Fatalf("failed to create perf reader: %s", err)
+		}
+		defer rd.Close()
+
 		executableName := os.Args[0]
 		if len(executableName) > 2 {
 			executableName = executableName[2:]
 		}
 
-		record := new(perf.Record)
-
 		for {
+
 			err := rd.ReadInto(record)
 			if err != nil {
 				if errors.Is(err, os.ErrDeadlineExceeded) {
@@ -149,8 +174,6 @@ func main() {
 				log.Printf("error reading from perf reader: %v", err)
 				return
 			}
-
-			fmt.Printf("&&&&&&&&&LENGTH=%d\n", len(record.RawSample))
 
 			if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
 				log.Println("!!!!!!!!!!!!!!!!!!!!!!!invalid event size!!!!!!!!!!!!!!!!!!")
@@ -328,8 +351,24 @@ func main() {
 					}
 					mu.Unlock()
 
-					srchost = pkg.ResolveIP(srcIP)
-					dsthost = pkg.ResolveIP(dstIP)
+					if dstIP.IsLoopback() {
+						dsthost = pkg.ResolveIP(dstIP)
+					} else {
+
+						dsthost, err = pkg.ResolveIP_n(dstIP)
+						if err != nil {
+							dsthost = "unknown"
+
+							//log.Println("Оdsthost шибка при разрешении исходного IP:", err)
+						} else {
+							//	fmt.Println("Исходное доменное имя для IP", dstIP, ":", dsthost)
+						}
+
+					}
+
+					srchost := pkg.ResolveIP(srcIP)
+
+					//	dsthost, err := pkg.ResolveIP_n(dstIP)
 
 					srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
 					dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
@@ -367,8 +406,22 @@ func main() {
 
 				case xxx = <-eventChan_sport:
 
-					srchost = pkg.ResolveIP(srcIP)
-					dsthost = pkg.ResolveIP(dstIP)
+					if dstIP.IsLoopback() {
+						dsthost = pkg.ResolveIP(dstIP)
+					} else {
+
+						dsthost, err = pkg.ResolveIP_n(dstIP)
+						if err != nil {
+							dsthost = "unknown"
+
+							//log.Println("Оdsthost шибка при разрешении исходного IP:", err)
+						} else {
+							//	fmt.Println("Исходное доменное имя для IP", dstIP, ":", dsthost)
+						}
+
+					}
+
+					srchost := pkg.ResolveIP(srcIP)
 
 					srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), xxx)
 					dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)

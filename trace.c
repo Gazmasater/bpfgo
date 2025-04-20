@@ -56,9 +56,9 @@ struct sys_enter_sendmsg_args {
     unsigned char common_flags;      
     unsigned char common_preempt_count;     
     int common_pid;   
-    int __syscall_nr; 
+    int __syscall_nr;
+    int  pad;  
     int fd;
-    int  pad;   
     struct user_msghdr * msg; 
     unsigned int flags;      
 
@@ -275,6 +275,8 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
                 bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
            
     } else if (addr.sa_family==AF_INET6) {
+
+      
         struct sockaddr_in6 addr_in6 = {};
         bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr);
 
@@ -362,6 +364,7 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
             info.family=AF_INET;           
             info.sysexit=2;
             info.pid=pid;
+            
 
          bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
@@ -454,15 +457,16 @@ int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
         return 0;
     }
 
+    
+
     struct sockaddr_in sa = {};
     struct sockaddr_in6 sa6 = {};
     struct trace_info info = {};
+   
     __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
-
 
     bpf_probe_read_user(&sa, sizeof(sa), &msg->msg_name);
     bpf_probe_read_user(&sa6, sizeof(sa6), &msg->msg_name);
-
 
     if (sa.sin_family==AF_INET) {
 
@@ -536,6 +540,8 @@ int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
+    
+
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
     if (!conn_info) {
         bpf_printk("No conn_info for pid=%d", pid);
@@ -561,6 +567,8 @@ int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
         bpf_printk("msg is NULL for pid=%d", pid);
         return 0;
     }
+
+    
 
     struct sockaddr_in sa = {};
     struct sockaddr_in6 sa6 = {};
