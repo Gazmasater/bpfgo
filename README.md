@@ -378,72 +378,106 @@ bpftool gen trace > trace_helpers.h
 
 import "net"
 
-type Lookup struct {
-	DstIP   net.IP
-	DstPort int
-	SrcIP   net.IP
-	SrcPort int
-}
+			if event.Sysexit == 12 {
 
-type Sendmsg struct {
-	DstIP   net.IP
-	DstPort int
-}
+				if event.Family == 2 {
 
-type Recvmsg struct {
-	SrcIP   net.IP
-	SrcPort int
-}
+					recvmsg := &Recvmsg{
+						SrcIP:   srcIP,
+						SrcPort: int(event.Sport),
+					}
 
-type EventData struct {
-	Lookup  *Lookup
-	Sendmsg *Sendmsg
-	Recvmsg *Recvmsg
-}
+					eventMap[int(event.Sport)] = &EventData{
+						Recvmsg: recvmsg,
+					}
 
-	eventMap := make(map[int]*EventData)
+					for port, data := range eventMap {
+						//if data.Lookup != nil && data.Sendmsg != nil && data.Recvmsg != nil {
+						if data.Sendmsg != nil && data.Recvmsg != nil {
 
-if event.Sysexit == 3 && event.Family == 2 {
-    lookup := &Lookup{
-        DstIP:   dstIP,
-        DstPort: event.Dport,
-        SrcIP:   srcIP,
-        SrcPort: event.Sport,
-    }
+							fmt.Printf("=== FULL FLOW ON PORT RECVMSG %d ===\n", port)
 
-    // записываем по DstPort
-    eventMap[event.Dport] = &EventData{
-        Lookup: lookup,
-    }
+							// Lookup info
+							// fmt.Printf("Lookup:  SrcIP: %s, SrcPort: %d → DstIP: %s, DstPort: %d\n",
+							// 	data.Lookup.SrcIP.String(), data.Lookup.SrcPort,
+							// 	data.Lookup.DstIP.String(), data.Lookup.DstPort)
 
-    dstAddr := fmt.Sprintf("//%s[%s]:%d", pkg.ResolveIP(dstIP), dstIP.String(), event.Dport)
-    srcAddr := fmt.Sprintf("//[%s]:%d", srcIP.String(), event.Sport)
-    fmt.Printf("STATE=3 srcIP=%s dstIP=%s PROTO=%d FAMILY=%d\n", srcAddr, dstAddr, event.Proto, int(event.Family))
-}
+							// Sendmsg info
+							// fmt.Printf("Sendmsg: DstIP: %s, DstPort: %d\n",
+							// 	data.Sendmsg.DstIP.String(), data.Sendmsg.DstPort)
+
+							// Recvmsg info
+							fmt.Printf("Recvmsg: SrcIP: %s, SrcPort: %d\n",
+								data.Recvmsg.SrcIP.String(), data.Recvmsg.SrcPort)
+
+							fmt.Println("============================")
+						}
+					}
 
 
 
+			if event.Sysexit == 11 {
 
-for port, data := range eventMap {
-    if data.Lookup != nil && data.Sendmsg != nil && data.Recvmsg != nil {
-        fmt.Printf("=== FULL FLOW ON PORT %d ===\n", port)
+				if event.Family == 2 {
 
-        // Lookup info
-        fmt.Printf("Lookup:  SrcIP: %s, SrcPort: %d → DstIP: %s, DstPort: %d\n",
-            data.Lookup.SrcIP.String(), data.Lookup.SrcPort,
-            data.Lookup.DstIP.String(), data.Lookup.DstPort)
+					sendmsg := &Sendmsg{
+						DstIP:   dstIP,
+						DstPort: int(event.Dport),
+					}
 
-        // Sendmsg info
-        fmt.Printf("Sendmsg: DstIP: %s, DstPort: %d\n",
-            data.Sendmsg.DstIP.String(), data.Sendmsg.DstPort)
+					// записываем по DstPort
+					eventMap[int(event.Dport)] = &EventData{
+						Sendmsg: sendmsg,
+					}
 
-        // Recvmsg info
-        fmt.Printf("Recvmsg: SrcIP: %s, SrcPort: %d\n",
-            data.Recvmsg.SrcIP.String(), data.Recvmsg.SrcPort)
+					for port, data := range eventMap {
+						//if data.Lookup != nil && data.Sendmsg != nil && data.Recvmsg != nil {
+						if data.Sendmsg != nil && data.Recvmsg != nil {
 
-        fmt.Println("============================")
-    }
-}
+							fmt.Printf("=== FULL FLOW ON PORT SENDMSG %d ===\n", port)
+
+							// Lookup info
+							// fmt.Printf("Lookup:  SrcIP: %s, SrcPort: %d → DstIP: %s, DstPort: %d\n",
+							// 	data.Lookup.SrcIP.String(), data.Lookup.SrcPort,
+							// 	data.Lookup.DstIP.String(), data.Lookup.DstPort)
+
+							// Sendmsg info
+							fmt.Printf("Sendmsg: DstIP: %s, DstPort: %d\n",
+								data.Sendmsg.DstIP.String(), data.Sendmsg.DstPort)
+
+							// Recvmsg info
+							// fmt.Printf("Recvmsg: SrcIP: %s, SrcPort: %d\n",
+							// 	data.Recvmsg.SrcIP.String(), data.Recvmsg.SrcPort)
+
+							fmt.Println("============================")
+						}
+					}
+
+					dstAddr := fmt.Sprintf("//[%s]:%d", dstIP.String(), event.Dport)
+					pid := event.Pid
+					fmt.Printf("STATE=11 IP4 PID=%d  dstIP=%s FAMILY=%d NAME=%s PROTO=%d\n",
+						pid,
+						dstAddr,
+						event.Family,
+						pkg.Int8ToString(event.Comm),
+						event.Proto)
+				} else if event.Family == 10 {
+					port := event.Dport
+
+					pid := event.Pid
+					fmt.Printf("STATE=11 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d  NAME=%s\n",
+						pid,
+						event.DstIP6[0], event.DstIP6[1],
+						event.DstIP6[2], event.DstIP6[3],
+
+						port,
+						pkg.Int8ToString(event.Comm),
+					)
+
+				}
+
+			}
+
 
 
 
