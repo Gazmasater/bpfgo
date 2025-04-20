@@ -328,33 +328,18 @@ nc -u -l 9999
 
 
 
-			if event.Sysexit == 3 {
-
-				family := event.Family
-				if family == 2 {
-
-					dstAddr := fmt.Sprintf("//%s[%s]:%d", pkg.ResolveIP(dstIP), dstIP.String(), event.Dport)
-					srcAddr := fmt.Sprintf("//[%s]:%d", srcIP.String(), event.Sport)
-					fmt.Printf("STATE=3 srcIP=%s dstIP=%s PROTO=%d FAMILY=%d\n", srcAddr, dstAddr, event.Proto, int(family))
-
-
-
-
-
-	lookup := &Lookup{
-		SrcIP:   srcIP,
-		SrcPort: int(event.Sport),
-		DstIP:   dstIP,
-		DstPort: int(event.Dport),
-	}
-
-	eventMap[int(event.Sport)] = &EventData{
-		Lookup: lookup,
-	}
-
-	fmt.Printf("STATE=3 Lookup: SrcIP=%s:%d → DstIP=%s:%d\n",
-		lookup.SrcIP.String(), lookup.SrcPort,
-		lookup.DstIP.String(), lookup.DstPort)
+port := int(event.Dport)
+					data, exists := eventMap[port]
+					if !exists {
+						data = &EventData{}
+						eventMap[port] = data
+					}
+					data.Sendmsg = &Sendmsg{
+						DstIP:   dstIP,
+						DstPort: port,
+						Pid:     event.Pid,
+						Comm:    pkg.Int8ToString(event.Comm),
+					}
 
 
 
