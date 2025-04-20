@@ -403,8 +403,16 @@ type EventData struct {
 
 	eventMap := make(map[int]*EventData)
 
- STATE=1 IP4 PID=5373  dstIP=//[127.0.0.1]:33333 FAMILY=2 NAME=udp_client 
-STATE=2 IP4 PID=3829 srcIP=//[127.0.0.1]:57735 NAME=udp_server
+			if event.Sysexit == 3 {
+
+				
+
+				family := event.Family
+				if family == 2 {
+					dstAddr := fmt.Sprintf("//%s[%s]:%d", pkg.ResolveIP(dstIP), dstIP.String(), event.Dport)
+					srcAddr := fmt.Sprintf("//[%s]:%d", srcIP.String(), event.Sport)
+					fmt.Printf("STATE=3 srcIP=%s dstIP=%s PROTO=%d FAMILY=%d\n", srcAddr, dstAddr, event.Proto, int(family))
+
 
 
 
