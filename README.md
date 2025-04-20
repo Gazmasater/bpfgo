@@ -394,17 +394,28 @@ if event.Sysexit == 11 {
 }
 
 
-TATE=12 IP4 PID=794 srcIP=//[192.168.1.1]:53 NAME=systemd-resolve
-=== FULL FLOW ON PORT SENDMSG 44442 ===
-panic: runtime error: invalid memory address or nil pointer dereference
-[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x68e41a]
 
-goroutine 11 [running]:
-main.main.func1()
-        /home/gaz358/myprog/bpfgo/main.go:252 +0x263a
-created by main.main in goroutine 1
-        /home/gaz358/myprog/bpfgo/main.go:154 +0xb1b
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+// Sysexit == 11
+port := int(event.Sport) // ← клиентский порт, тот же будет и в Recvmsg
+data, exists := eventMap[port]
+if !exists {
+    data = &EventData{}
+    eventMap[port] = data
+}
+data.Sendmsg = &Sendmsg{ DstIP: dstIP, DstPort: int(event.Dport) }
+
+
+
+
+// Sysexit == 12
+port := int(event.Sport) // тот же порт клиента
+data, exists := eventMap[port]
+if !exists {
+    data = &EventData{}
+    eventMap[port] = data
+}
+data.Recvmsg = &Recvmsg{ SrcIP: srcIP, SrcPort: port }
+
 
 
 
