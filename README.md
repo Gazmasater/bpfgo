@@ -403,15 +403,23 @@ type EventData struct {
 
 	eventMap := make(map[int]*EventData)
 
-			if event.Sysexit == 3 {
+if event.Sysexit == 3 && event.Family == 2 {
+    lookup := &Lookup{
+        DstIP:   dstIP,
+        DstPort: event.Dport,
+        SrcIP:   srcIP,
+        SrcPort: event.Sport,
+    }
 
-				
+    // записываем по DstPort
+    eventMap[event.Dport] = &EventData{
+        Lookup: lookup,
+    }
 
-				family := event.Family
-				if family == 2 {
-					dstAddr := fmt.Sprintf("//%s[%s]:%d", pkg.ResolveIP(dstIP), dstIP.String(), event.Dport)
-					srcAddr := fmt.Sprintf("//[%s]:%d", srcIP.String(), event.Sport)
-					fmt.Printf("STATE=3 srcIP=%s dstIP=%s PROTO=%d FAMILY=%d\n", srcAddr, dstAddr, event.Proto, int(family))
+    dstAddr := fmt.Sprintf("//%s[%s]:%d", pkg.ResolveIP(dstIP), dstIP.String(), event.Dport)
+    srcAddr := fmt.Sprintf("//[%s]:%d", srcIP.String(), event.Sport)
+    fmt.Printf("STATE=3 srcIP=%s dstIP=%s PROTO=%d FAMILY=%d\n", srcAddr, dstAddr, event.Proto, int(event.Family))
+}
 
 
 
