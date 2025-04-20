@@ -328,96 +328,15 @@ nc -u -l 9999
 
 
 
-if event.Sysexit == 12 && event.Family == 2 {
+			if event.Sysexit == 3 {
 
-fmt.Printf("→ STATE=12: Sport=%d, SrcIP=%s\n", event.Sport, srcIP.String())
+				family := event.Family
+				if family == 2 {
 
-	port := int(event.Sport)
-	data, exists := eventMap[port]
-	if !exists {
-		data = &EventData{}
-		eventMap[port] = data
-	}
-	data.Recvmsg = &Recvmsg{
-		SrcIP:   srcIP,
-		SrcPort: port,
-	}
+					dstAddr := fmt.Sprintf("//%s[%s]:%d", pkg.ResolveIP(dstIP), dstIP.String(), event.Dport)
+					srcAddr := fmt.Sprintf("//[%s]:%d", srcIP.String(), event.Sport)
+					fmt.Printf("STATE=3 srcIP=%s dstIP=%s PROTO=%d FAMILY=%d\n", srcAddr, dstAddr, event.Proto, int(family))
 
-	for port, data := range eventMap {
-		if data.Sendmsg != nil && data.Recvmsg != nil {
-			fmt.Printf("=== FULL FLOW ON PORT RECVMSG %d ===\n", port)
-			fmt.Printf("Recvmsg: SrcIP: %s, SrcPort: %d\n",
-				data.Recvmsg.SrcIP.String(), data.Recvmsg.SrcPort)
-			fmt.Println("============================")
-		}
-	}
-}
-
-if event.Sysexit == 11 {
-	if event.Family == 2 {
-		port := int(event.Dport)
-		data, exists := eventMap[port]
-		if !exists {
-			data = &EventData{}
-			eventMap[port] = data
-		}
-		data.Sendmsg = &Sendmsg{
-			DstIP:   dstIP,
-			DstPort: port,
-		}
-
-		for port, data := range eventMap {
-			if data.Sendmsg != nil && data.Recvmsg != nil {
-				fmt.Printf("=== FULL FLOW ON PORT SENDMSG %d ===\n", port)
-				fmt.Printf("Sendmsg: DstIP: %s, DstPort: %d\n",
-					data.Sendmsg.DstIP.String(), data.Sendmsg.DstPort)
-				fmt.Println("============================")
-			}
-		}
-
-		dstAddr := fmt.Sprintf("//[%s]:%d", dstIP.String(), event.Dport)
-		pid := event.Pid
-		fmt.Printf("STATE=11 IP4 PID=%d  dstIP=%s FAMILY=%d NAME=%s PROTO=%d\n",
-			pid,
-			dstAddr,
-			event.Family,
-			pkg.Int8ToString(event.Comm),
-			event.Proto)
-	} else if event.Family == 10 {
-		port := event.Dport
-		pid := event.Pid
-		fmt.Printf("STATE=11 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d  NAME=%s\n",
-			pid,
-			event.DstIP6[0], event.DstIP6[1],
-			event.DstIP6[2], event.DstIP6[3],
-			port,
-			pkg.Int8ToString(event.Comm),
-		)
-	}
-}
-
-
-
-// Sysexit == 11
-port := int(event.Sport) // ← клиентский порт, тот же будет и в Recvmsg
-data, exists := eventMap[port]
-if !exists {
-    data = &EventData{}
-    eventMap[port] = data
-}
-data.Sendmsg = &Sendmsg{ DstIP: dstIP, DstPort: int(event.Dport) }
-
-
-
-
-// Sysexit == 12
-port := int(event.Sport) // тот же порт клиента
-data, exists := eventMap[port]
-if !exists {
-    data = &EventData{}
-    eventMap[port] = data
-}
-data.Recvmsg = &Recvmsg{ SrcIP: srcIP, SrcPort: port }
 
 
 
