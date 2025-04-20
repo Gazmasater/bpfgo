@@ -341,5 +341,21 @@ nc -u -l 9999
 
 
 
+	lookup := &Lookup{
+		SrcIP:   srcIP,
+		SrcPort: int(event.Sport),
+		DstIP:   dstIP,
+		DstPort: int(event.Dport),
+	}
+
+	eventMap[int(event.Sport)] = &EventData{
+		Lookup: lookup,
+	}
+
+	fmt.Printf("STATE=3 Lookup: SrcIP=%s:%d → DstIP=%s:%d\n",
+		lookup.SrcIP.String(), lookup.SrcPort,
+		lookup.DstIP.String(), lookup.DstPort)
+
+
 
 
