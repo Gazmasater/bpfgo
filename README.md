@@ -329,6 +329,9 @@ nc -u -l 9999
 
 
 if event.Sysexit == 12 && event.Family == 2 {
+
+fmt.Printf("→ STATE=12: Sport=%d, SrcIP=%s\n", event.Sport, srcIP.String())
+
 	port := int(event.Sport)
 	data, exists := eventMap[port]
 	if !exists {
