@@ -326,158 +326,72 @@ ls /sys/kernel/debug/tracing/events/net/netif_receive_skb_entry/
 nc -u -l 9999
 
 
-echo "hello UDP" | nc -u 192.168.1.71 9999
-
-ip a
-echo "test" | nc -u 192.168.1.71 9999
 
 
-SEC("tracepoint/net/netif_receive_skb_entry")
-int trace_netif_receive_skb(struct netif_receive_skb_entry_args *ctx)
-{
-    bpf_printk("skb received:\n");
-    struct trace_info info = {};
+if event.Sysexit == 12 && event.Family == 2 {
+	port := int(event.Sport)
+	data, exists := eventMap[port]
+	if !exists {
+		data = &EventData{}
+		eventMap[port] = data
+	}
+	data.Recvmsg = &Recvmsg{
+		SrcIP:   srcIP,
+		SrcPort: port,
+	}
 
-    info.sysexit=13;
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-    return 0;
+	for port, data := range eventMap {
+		if data.Sendmsg != nil && data.Recvmsg != nil {
+			fmt.Printf("=== FULL FLOW ON PORT RECVMSG %d ===\n", port)
+			fmt.Printf("Recvmsg: SrcIP: %s, SrcPort: %d\n",
+				data.Recvmsg.SrcIP.String(), data.Recvmsg.SrcPort)
+			fmt.Println("============================")
+		}
+	}
 }
 
+if event.Sysexit == 11 {
+	if event.Family == 2 {
+		port := int(event.Dport)
+		data, exists := eventMap[port]
+		if !exists {
+			data = &EventData{}
+			eventMap[port] = data
+		}
+		data.Sendmsg = &Sendmsg{
+			DstIP:   dstIP,
+			DstPort: port,
+		}
 
-
-
-1. Установи libtraceevent:
-Если ты на Ubuntu / Debian:
-
-
-sudo apt update
-sudo apt install libtraceevent1 libtraceevent-dev
-А чтобы perf пересобрался с поддержкой tracepoint, можно установить:
-
-
-sudo apt install linux-tools-$(uname -r)
-2. Проверь после установки:
-
-perf list | grep netif_receive_skb_entry
-Если всё ок, ты увидишь:
-
-
-  net:netif_receive_skb_entry [Tracepoint]
-
-
-bpftool gen trace > trace_helpers.h
-
-sudo apt install -y clang llvm libelf-dev gcc make libbpf-dev libz-dev flex bison
-git clone --depth=1 https://github.com/torvalds/linux.git
-cd linux/tools/bpf/bpftool
-make
-sudo make install
-bpftool gen trace > trace_helpers.h
-
-
-import "net"
-
-			if event.Sysexit == 12 {
-
-				if event.Family == 2 {
-
-					recvmsg := &Recvmsg{
-						SrcIP:   srcIP,
-						SrcPort: int(event.Sport),
-					}
-
-					eventMap[int(event.Sport)] = &EventData{
-						Recvmsg: recvmsg,
-					}
-
-					for port, data := range eventMap {
-						//if data.Lookup != nil && data.Sendmsg != nil && data.Recvmsg != nil {
-						if data.Sendmsg != nil && data.Recvmsg != nil {
-
-							fmt.Printf("=== FULL FLOW ON PORT RECVMSG %d ===\n", port)
-
-							// Lookup info
-							// fmt.Printf("Lookup:  SrcIP: %s, SrcPort: %d → DstIP: %s, DstPort: %d\n",
-							// 	data.Lookup.SrcIP.String(), data.Lookup.SrcPort,
-							// 	data.Lookup.DstIP.String(), data.Lookup.DstPort)
-
-							// Sendmsg info
-							// fmt.Printf("Sendmsg: DstIP: %s, DstPort: %d\n",
-							// 	data.Sendmsg.DstIP.String(), data.Sendmsg.DstPort)
-
-							// Recvmsg info
-							fmt.Printf("Recvmsg: SrcIP: %s, SrcPort: %d\n",
-								data.Recvmsg.SrcIP.String(), data.Recvmsg.SrcPort)
-
-							fmt.Println("============================")
-						}
-					}
-
-
-
-			if event.Sysexit == 11 {
-
-				if event.Family == 2 {
-
-					sendmsg := &Sendmsg{
-						DstIP:   dstIP,
-						DstPort: int(event.Dport),
-					}
-
-					// записываем по DstPort
-					eventMap[int(event.Dport)] = &EventData{
-						Sendmsg: sendmsg,
-					}
-
-					for port, data := range eventMap {
-						//if data.Lookup != nil && data.Sendmsg != nil && data.Recvmsg != nil {
-						if data.Sendmsg != nil && data.Recvmsg != nil {
-
-							fmt.Printf("=== FULL FLOW ON PORT SENDMSG %d ===\n", port)
-
-							// Lookup info
-							// fmt.Printf("Lookup:  SrcIP: %s, SrcPort: %d → DstIP: %s, DstPort: %d\n",
-							// 	data.Lookup.SrcIP.String(), data.Lookup.SrcPort,
-							// 	data.Lookup.DstIP.String(), data.Lookup.DstPort)
-
-							// Sendmsg info
-							fmt.Printf("Sendmsg: DstIP: %s, DstPort: %d\n",
-								data.Sendmsg.DstIP.String(), data.Sendmsg.DstPort)
-
-							// Recvmsg info
-							// fmt.Printf("Recvmsg: SrcIP: %s, SrcPort: %d\n",
-							// 	data.Recvmsg.SrcIP.String(), data.Recvmsg.SrcPort)
-
-							fmt.Println("============================")
-						}
-					}
-
-					dstAddr := fmt.Sprintf("//[%s]:%d", dstIP.String(), event.Dport)
-					pid := event.Pid
-					fmt.Printf("STATE=11 IP4 PID=%d  dstIP=%s FAMILY=%d NAME=%s PROTO=%d\n",
-						pid,
-						dstAddr,
-						event.Family,
-						pkg.Int8ToString(event.Comm),
-						event.Proto)
-				} else if event.Family == 10 {
-					port := event.Dport
-
-					pid := event.Pid
-					fmt.Printf("STATE=11 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d  NAME=%s\n",
-						pid,
-						event.DstIP6[0], event.DstIP6[1],
-						event.DstIP6[2], event.DstIP6[3],
-
-						port,
-						pkg.Int8ToString(event.Comm),
-					)
-
-				}
-
+		for port, data := range eventMap {
+			if data.Sendmsg != nil && data.Recvmsg != nil {
+				fmt.Printf("=== FULL FLOW ON PORT SENDMSG %d ===\n", port)
+				fmt.Printf("Sendmsg: DstIP: %s, DstPort: %d\n",
+					data.Sendmsg.DstIP.String(), data.Sendmsg.DstPort)
+				fmt.Println("============================")
 			}
+		}
 
+		dstAddr := fmt.Sprintf("//[%s]:%d", dstIP.String(), event.Dport)
+		pid := event.Pid
+		fmt.Printf("STATE=11 IP4 PID=%d  dstIP=%s FAMILY=%d NAME=%s PROTO=%d\n",
+			pid,
+			dstAddr,
+			event.Family,
+			pkg.Int8ToString(event.Comm),
+			event.Proto)
+	} else if event.Family == 10 {
+		port := event.Dport
+		pid := event.Pid
+		fmt.Printf("STATE=11 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d  NAME=%s\n",
+			pid,
+			event.DstIP6[0], event.DstIP6[1],
+			event.DstIP6[2], event.DstIP6[3],
+			port,
+			pkg.Int8ToString(event.Comm),
+		)
+	}
+}
 
 
 
