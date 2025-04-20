@@ -403,6 +403,9 @@ type EventData struct {
 
 	eventMap := make(map[int]*EventData)
 
+ STATE=1 IP4 PID=5373  dstIP=//[127.0.0.1]:33333 FAMILY=2 NAME=udp_client 
+STATE=2 IP4 PID=3829 srcIP=//[127.0.0.1]:57735 NAME=udp_server
+
 
 
 
