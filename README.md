@@ -424,5 +424,28 @@ if event.Sysexit == 3 && event.Family == 2 {
 
 
 
+for port, data := range eventMap {
+    if data.Lookup != nil && data.Sendmsg != nil && data.Recvmsg != nil {
+        fmt.Printf("=== FULL FLOW ON PORT %d ===\n", port)
+
+        // Lookup info
+        fmt.Printf("Lookup:  SrcIP: %s, SrcPort: %d → DstIP: %s, DstPort: %d\n",
+            data.Lookup.SrcIP.String(), data.Lookup.SrcPort,
+            data.Lookup.DstIP.String(), data.Lookup.DstPort)
+
+        // Sendmsg info
+        fmt.Printf("Sendmsg: DstIP: %s, DstPort: %d\n",
+            data.Sendmsg.DstIP.String(), data.Sendmsg.DstPort)
+
+        // Recvmsg info
+        fmt.Printf("Recvmsg: SrcIP: %s, SrcPort: %d\n",
+            data.Recvmsg.SrcIP.String(), data.Recvmsg.SrcPort)
+
+        fmt.Println("============================")
+    }
+}
+
+
+
 
 
