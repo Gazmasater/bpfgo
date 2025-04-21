@@ -327,5 +327,27 @@ nc -u -l 9999
 
 
 
-bpf_probe_read_kernel(event.comm, sizeof(event.comm), conn_info.com);
+event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
+
+switch event.Family {
+case 2: // AF_INET (IPv4)
+	srcIP := net.IPv4(
+		byte(event.SrcIp>>24),
+		byte(event.SrcIp>>16),
+		byte(event.SrcIp>>8),
+		byte(event.SrcIp),
+	)
+	dstIP := net.IPv4(
+		byte(event.DstIp>>24),
+		byte(event.DstIp>>16),
+		byte(event.DstIp>>8),
+		byte(event.DstIp),
+	)
+	HandleIPv4Event(event, srcIP, dstIP, &mu, eventChan_sport, eventChan_pid)
+
+case 10: // AF_INET6 (IPv6)
+	srcIP := net.IP(event.Saddr6[:])
+	dstIP := net.IP(event.Daddr6[:])
+	HandleIPv6Event(event, srcIP, dstIP, &mu, eventChan_sport, eventChan_pid)
+}
 
