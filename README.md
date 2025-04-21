@@ -327,73 +327,27 @@ nc -u -l 9999
 
 
 
+			if event.Sysexit == 6 {
+				//	var srcIP, dstIP net.IP
 
-SEC("tracepoint/sock/inet_sock_set_state")
-int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
+				fmt.Printf("!!!!!!!FAMIY=%d\n", event.Family)
 
-    struct trace_info info = {};
-
-
-    __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
-
-    __u32 srcip;
-    bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
-    srcip = bpf_ntohl(srcip);
-
-    __u32 dstip;
-    bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
-    dstip = bpf_ntohl(dstip);
-       
-    __u16 sport=0;
-    
-    sport=ctx->sport;
-       
-    __u16 dport;
-    dport=ctx->dport;
-
-   __u8 state=ctx->newstate;
-
-    if (ctx->family==AF_INET) {
-    if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
-
-        info.src_ip=srcip;
-        info.sport=sport;
-        info.dst_ip=dstip;
-        info.dport=dport;
-        info.sysexit=6;
-        info.proto=ctx->protocol;
-        info.pid=pid_tcp;
-        info.state=ctx->newstate;
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    }
-
-    } else if (ctx->family==AF_INET6) {
-
-
-        info.sysexit=6;
-        info.pid=pid_tcp;
-        info.proto=ctx->protocol;
-        info.state=ctx->newstate;
-        info.sport = bpf_ntohs(ctx->sport);
-       __builtin_memcpy(info.saddr6, ctx->saddr_v6, 16);
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-    }
-
-    return 0;
-}
-
- // Копируем IPv6 адрес из структуры
-        if (bpf_probe_read_kernel(&info.saddr6, sizeof(info.saddr6), ctx->saddr_v6) < 0) {
-            return 0;
-        }
-
-
-
-        			if event.Sysexit == 6 {
+				switch event.Family {
+				case 2: // AF_INET (IPv4)
+					// srcIP = make(net.IP, net.IPv4len)
+					// dstIP = make(net.IP, net.IPv4len)
+					// copy(srcIP, event.Saddr6[:4])
+					// copy(dstIP, event.Daddr6[:4])
+				case 10: // AF_INET6 (IPv6)
+					// srcIP = make(net.IP, net.IPv6len)
+					// dstIP = make(net.IP, net.IPv6len)
+					// copy(srcIP, event.Saddr6[:])
+					// copy(dstIP, event.Daddr6[:])
+				default:
+					continue // неизвестное семейство — пропускаем
+				}
 
 				if event.State == 1 {
-
 					mu.Lock()
 					select {
 					case eventChan_sport <- int(event.Sport):
@@ -406,71 +360,44 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 					if dstIP.IsLoopback() {
 						dsthost = pkg.ResolveIP(dstIP)
 					} else {
-
 						dsthost, err = pkg.ResolveIP_n(dstIP)
 						if err != nil {
 							dsthost = "unknown"
-
-							//log.Println("Оdsthost шибка при разрешении исходного IP:", err)
-						} else {
-							//	fmt.Println("Исходное доменное имя для IP", dstIP, ":", dsthost)
 						}
-
 					}
 
 					srchost := pkg.ResolveIP(srcIP)
-
-					//	dsthost, err := pkg.ResolveIP_n(dstIP)
 
 					srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
 					dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
 
 					if event.Proto == 6 {
-
 						proto = "TCP"
 					}
 
 					fmt.Println("")
 					fmt.Printf("PID=%d %s:%s <- %s:%s \n", event.Pid, proto, srcAddr, proto, dstAddr)
-
 				}
-				if event.State == 2 {
+
+				if event.State == 2 || event.State == 10 {
 					mu.Lock()
 					select {
 					case eventChan_pid <- int(event.Pid):
 					default:
-						//fmt.Println("State 2: eventChan_pid заполнен, пропускаю запись PID")
-					}
-					mu.Unlock()
-				}
-
-				if event.State == 10 {
-					mu.Lock()
-					select {
-					case eventChan_pid <- int(event.Pid):
-					default:
-						//fmt.Println("State 10: eventChan_pid заполнен, пропускаю запись PID")
+						// пропускаем, если канал заполнен
 					}
 					mu.Unlock()
 				}
 
 				select {
-
 				case xxx = <-eventChan_sport:
-
 					if dstIP.IsLoopback() {
 						dsthost = pkg.ResolveIP(dstIP)
 					} else {
-
 						dsthost, err = pkg.ResolveIP_n(dstIP)
 						if err != nil {
 							dsthost = "unknown"
-
-							//log.Println("Оdsthost шибка при разрешении исходного IP:", err)
-						} else {
-							//	fmt.Println("Исходное доменное имя для IP", dstIP, ":", dsthost)
 						}
-
 					}
 
 					srchost := pkg.ResolveIP(srcIP)
@@ -480,13 +407,12 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 
 					select {
 					case xxx_pid = <-eventChan_pid:
-						//fmt.Printf("State 2: получил PID %d\n", xxx_pid)
+						// получили PID
 					default:
-						//fmt.Println("State 2: eventChan_pid пуст, PID неизвестен")
+						// PID неизвестен
 					}
 
 					if event.Proto == 6 {
-
 						proto = "TCP"
 					}
 
@@ -496,113 +422,6 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 				default:
 					fmt.Println("")
 				}
-
-			}
-
-		}
-
-
-
-
-
-
-
-
-
-if event.Sysexit == 6 {
-	var srcIP, dstIP net.IP
-
-	switch event.Family {
-	case 2: // AF_INET (IPv4)
-		srcIP = make(net.IP, net.IPv4len)
-		dstIP = make(net.IP, net.IPv4len)
-		copy(srcIP, event.Saddr[:4])
-		copy(dstIP, event.Daddr[:4])
-	case 10: // AF_INET6 (IPv6)
-		srcIP = make(net.IP, net.IPv6len)
-		dstIP = make(net.IP, net.IPv6len)
-		copy(srcIP, event.Saddr[:])
-		copy(dstIP, event.Daddr[:])
-	default:
-		continue // неизвестное семейство — пропускаем
-	}
-
-	if event.State == 1 {
-		mu.Lock()
-		select {
-		case eventChan_sport <- int(event.Sport):
-		default:
-			eventChan_sport <- int(event.Sport)
-			fmt.Printf("State 1: заменен порт %d\n", event.Sport)
-		}
-		mu.Unlock()
-
-		if dstIP.IsLoopback() {
-			dsthost = pkg.ResolveIP(dstIP)
-		} else {
-			dsthost, err = pkg.ResolveIP_n(dstIP)
-			if err != nil {
-				dsthost = "unknown"
 			}
 		}
-
-		srchost := pkg.ResolveIP(srcIP)
-
-		srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
-		dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
-
-		if event.Proto == 6 {
-			proto = "TCP"
-		}
-
-		fmt.Println("")
-		fmt.Printf("PID=%d %s:%s <- %s:%s \n", event.Pid, proto, srcAddr, proto, dstAddr)
-	}
-
-	if event.State == 2 || event.State == 10 {
-		mu.Lock()
-		select {
-		case eventChan_pid <- int(event.Pid):
-		default:
-			// пропускаем, если канал заполнен
-		}
-		mu.Unlock()
-	}
-
-	select {
-	case xxx = <-eventChan_sport:
-		if dstIP.IsLoopback() {
-			dsthost = pkg.ResolveIP(dstIP)
-		} else {
-			dsthost, err = pkg.ResolveIP_n(dstIP)
-			if err != nil {
-				dsthost = "unknown"
-			}
-		}
-
-		srchost := pkg.ResolveIP(srcIP)
-
-		srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), xxx)
-		dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
-
-		select {
-		case xxx_pid = <-eventChan_pid:
-			// получили PID
-		default:
-			// PID неизвестен
-		}
-
-		if event.Proto == 6 {
-			proto = "TCP"
-		}
-
-		fmt.Printf("PID=%d %s:%s -> %s:%s \n", xxx_pid, proto, srcAddr, proto, dstAddr)
-		fmt.Println("")
-
-	default:
-		fmt.Println("")
-	}
-}
-
-
 
