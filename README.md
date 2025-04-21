@@ -327,16 +327,5 @@ nc -u -l 9999
 
 
 
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
-	"owner": "C/C++: IntelliSense",
-	"code": "137",
-	"severity": 8,
-	"message": "expression must be a modifiable lvalue",
-	"source": "C/C++",
-	"startLineNumber": 777,
-	"startColumn": 9,
-	"endLineNumber": 777,
-	"endColumn": 13
-}]
+bpf_probe_read_kernel(event.comm, sizeof(event.comm), conn_info.com);
 
