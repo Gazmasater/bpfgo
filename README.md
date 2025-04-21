@@ -328,14 +328,39 @@ nc -u -l 9999
 
 
 
-struct sockaddr_in6 addr_in6 = {};
-// Пример из ядра, если addr_in6 бы был частью ядра
-BPF_CORE_READ(&addr_in6, sin6_addr.s6_addr);
-info.dstIP6[0] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[0]);
-info.dstIP6[1] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[4]);
-info.dstIP6[2] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[8]);
-info.dstIP6[3] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[12]);
-u16 port = bpf_ntohs(addr_in6.sin6_port);
+
+tracepoints := []struct {
+    event  string
+    trace  interface{}
+    enter  bool
+}{
+    {"syscalls/sys_enter_sendmsg", objs.TraceSendmsgEnter, true},
+    {"syscalls/sys_exit_sendmsg", objs.TraceSendmsgExit, false},
+    {"net/netif_receive_skb", objs.TraceNetifReceiveSkb, true},
+    {"syscalls/sys_enter_sendto", objs.TraceSendtoEnter, true},
+    {"syscalls/sys_exit_sendto", objs.TraceSendtoExit, false},
+    {"syscalls/sys_enter_recvmsg", objs.TraceRecvmsgEnter, true},
+    {"syscalls/sys_exit_recvmsg", objs.TraceRecvmsgExit, false},
+    {"syscalls/sys_enter_recvfrom", objs.TraceRecvfromEnter, true},
+    {"syscalls/sys_exit_recvfrom", objs.TraceRecvfromExit, false},
+}
+
+for _, tp := range tracepoints {
+    var err error
+    var linkInstance *link.Link
+
+    if tp.enter {
+        linkInstance, err = link.Tracepoint("syscalls", tp.event, tp.trace, nil)
+    } else {
+        linkInstance, err = link.Tracepoint("syscalls", tp.event, tp.trace, nil)
+    }
+
+    if err != nil {
+        log.Fatalf("opening tracepoint %s: %s", tp.event, err)
+    }
+
+    defer linkInstance.Close()
+}
 
 
 
