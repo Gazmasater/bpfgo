@@ -326,22 +326,35 @@ ls /sys/kernel/debug/tracing/events/net/netif_receive_skb_entry/
 nc -u -l 9999
 
 
-name: inet_sock_set_state
-ID: 1607
-format:
-        field:unsigned short common_type;       offset:0;       size:2; signed:0;
-        field:unsigned char common_flags;       offset:2;       size:1; signed:0;
-        field:unsigned char common_preempt_count;       offset:3;       size:1; signed:0;
-        field:int common_pid;   offset:4;       size:4; signed:1;
 
-        field:const void * skaddr;      offset:8;       size:8; signed:0;
-        field:int oldstate;     offset:16;      size:4; signed:1;
-        field:int newstate;     offset:20;      size:4; signed:1;
-        field:__u16 sport;      offset:24;      size:2; signed:0;
-        field:__u16 dport;      offset:26;      size:2; signed:0;
-        field:__u16 family;     offset:28;      size:2; signed:0;
-        field:__u16 protocol;   offset:30;      size:2; signed:0;
-        field:__u8 saddr[4];    offset:32;      size:4; signed:0;
-        field:__u8 daddr[4];    offset:36;      size:4; signed:0;
-        field:__u8 saddr_v6[16];        offset:40;      size:16;        signed:0;
-        field:__u8 daddr_v6[16];        offset:56;      size:16;        signed:0;
+
+#include <linux/in6.h>
+#include <linux/types.h>
+#include <linux/bpf.h>
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_tracing.h>
+
+struct ipv6_event_t {
+    __u16 sport;
+    __u8 saddr6[16];
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+} ipv6_events SEC(".maps");
+
+SEC("tracepoint/sock/inet_sock_set_state")
+int trace_tcp_ipv6_state(struct trace_event_raw_inet_sock_set_state *ctx) {
+    if (ctx->family == AF_INET6) {
+        struct ipv6_event_t event = {};
+        event.sport = bpf_ntohs(ctx->sport);
+        __builtin_memcpy(event.saddr6, ctx->saddr_v6, 16);
+
+        bpf_perf_event_output(ctx, &ipv6_events, BPF_F_CURRENT_CPU, &event, sizeof(event));
+    }
+
+    return 0;
+}
+
+char _license[] SEC("license") = "GPL";
+
