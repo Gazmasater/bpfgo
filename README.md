@@ -328,18 +328,8 @@ nc -u -l 9999
 
 
 
-port := int(event.Dport)
-					data, exists := eventMap[port]
-					if !exists {
-						data = &EventData{}
-						eventMap[port] = data
-					}
-					data.Sendmsg = &Sendmsg{
-						DstIP:   dstIP,
-						DstPort: port,
-						Pid:     event.Pid,
-						Comm:    pkg.Int8ToString(event.Comm),
-					}
+UDP/140.82.121.4:443->192.168.1.71:58730
+UDP/140.82.121.4:443<-192.168.1.71:58730
 
 
 
