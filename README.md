@@ -531,6 +531,8 @@ func handleIPv4Event(
 }
 
 
-			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
+func handleIPv4Event(event bpfTraceInfo, srcIP, dstIP net.IP, mu *sync.Mutex, eventChan_sport, eventChan_pid chan int) {
+    // Используешь event как обычно
+}
 
 
