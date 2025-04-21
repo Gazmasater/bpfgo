@@ -328,8 +328,15 @@ nc -u -l 9999
 
 
 
-UDP/140.82.121.4:443->192.168.1.71:58730
-UDP/140.82.121.4:443<-192.168.1.71:58730
+struct sockaddr_in6 addr_in6 = {};
+// Пример из ядра, если addr_in6 бы был частью ядра
+BPF_CORE_READ(&addr_in6, sin6_addr.s6_addr);
+info.dstIP6[0] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[0]);
+info.dstIP6[1] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[4]);
+info.dstIP6[2] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[8]);
+info.dstIP6[3] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[12]);
+u16 port = bpf_ntohs(addr_in6.sin6_port);
+
 
 
 
