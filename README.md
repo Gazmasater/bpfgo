@@ -383,5 +383,10 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
     return 0;
 }
 
+ // Копируем IPv6 адрес из структуры
+        if (bpf_probe_read_kernel(&info.saddr6, sizeof(info.saddr6), ctx->saddr_v6) < 0) {
+            return 0;
+        }
+
 
 
