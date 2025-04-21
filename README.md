@@ -327,27 +327,16 @@ nc -u -l 9999
 
 
 
-event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
-
-switch event.Family {
-case 2: // AF_INET (IPv4)
-	srcIP := net.IPv4(
-		byte(event.SrcIp>>24),
-		byte(event.SrcIp>>16),
-		byte(event.SrcIp>>8),
-		byte(event.SrcIp),
-	)
-	dstIP := net.IPv4(
-		byte(event.DstIp>>24),
-		byte(event.DstIp>>16),
-		byte(event.DstIp>>8),
-		byte(event.DstIp),
-	)
-	HandleIPv4Event(event, srcIP, dstIP, &mu, eventChan_sport, eventChan_pid)
-
-case 10: // AF_INET6 (IPv6)
-	srcIP := net.IP(event.Saddr6[:])
-	dstIP := net.IP(event.Daddr6[:])
-	HandleIPv6Event(event, srcIP, dstIP, &mu, eventChan_sport, eventChan_pid)
-}
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "137",
+	"severity": 8,
+	"message": "expression must be a modifiable lvalue",
+	"source": "C/C++",
+	"startLineNumber": 777,
+	"startColumn": 9,
+	"endLineNumber": 777,
+	"endColumn": 13
+}]
 
