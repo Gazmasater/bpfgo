@@ -530,3 +530,7 @@ func handleIPv4Event(
 	}
 }
 
+
+			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
+
+
