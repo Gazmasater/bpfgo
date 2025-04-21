@@ -329,47 +329,27 @@ nc -u -l 9999
 
 
 
-	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
-	}
-	defer SEnter.Close()
+tracepoints := []struct {
+    category string
+    event    string
+    trace    interface{}
+}{
+    {"syscalls", "sys_enter_sendto", objs.TraceSendtoEnter},
+    {"syscalls", "sys_exit_sendto", objs.TraceSendtoExit},
+    {"syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter},
+    {"syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit},
+    {"syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter},
+    {"syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit},
+    {"sock", "inet_sock_set_state", objs.TraceTcpEst},
+}
 
-	SExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_sendto: %s", err)
-	}
-	defer SExit.Close()
-
-	RmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_recvmsg: %s", err)
-	}
-	defer RmsgEnter.Close()
-
-	RmsgExit, err := link.Tracepoint("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_recvmsg: %s", err)
-	}
-	defer RmsgExit.Close()
-
-	REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
-	}
-	defer REnter.Close()
-
-	RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
-	}
-	defer RExit.Close()
-
-	InetSock, err := link.Tracepoint("sock", "inet_sock_set_state", objs.TraceTcpEst, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint inet_sock_set_state: %s", err)
-	}
-	defer InetSock.Close()
+for _, tp := range tracepoints {
+    linkInstance, err := link.Tracepoint(tp.category, tp.event, tp.trace, nil)
+    if err != nil {
+        log.Fatalf("opening tracepoint %s/%s: %s", tp.category, tp.event, err)
+    }
+    defer linkInstance.Close()
+}
 
 
 
