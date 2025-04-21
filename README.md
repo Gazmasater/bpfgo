@@ -326,33 +326,22 @@ ls /sys/kernel/debug/tracing/events/net/netif_receive_skb_entry/
 nc -u -l 9999
 
 
+name: inet_sock_set_state
+ID: 1607
+format:
+        field:unsigned short common_type;       offset:0;       size:2; signed:0;
+        field:unsigned char common_flags;       offset:2;       size:1; signed:0;
+        field:unsigned char common_preempt_count;       offset:3;       size:1; signed:0;
+        field:int common_pid;   offset:4;       size:4; signed:1;
 
-
-
-tracepoints := []struct {
-    category string
-    event    string
-    trace    interface{}
-}{
-    {"syscalls", "sys_enter_sendto", objs.TraceSendtoEnter},
-    {"syscalls", "sys_exit_sendto", objs.TraceSendtoExit},
-    {"syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter},
-    {"syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit},
-    {"syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter},
-    {"syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit},
-    {"sock", "inet_sock_set_state", objs.TraceTcpEst},
-}
-
-for _, tp := range tracepoints {
-    linkInstance, err := link.Tracepoint(tp.category, tp.event, tp.trace, nil)
-    if err != nil {
-        log.Fatalf("opening tracepoint %s/%s: %s", tp.category, tp.event, err)
-    }
-    defer linkInstance.Close()
-}
-
-
-
-
-
-
+        field:const void * skaddr;      offset:8;       size:8; signed:0;
+        field:int oldstate;     offset:16;      size:4; signed:1;
+        field:int newstate;     offset:20;      size:4; signed:1;
+        field:__u16 sport;      offset:24;      size:2; signed:0;
+        field:__u16 dport;      offset:26;      size:2; signed:0;
+        field:__u16 family;     offset:28;      size:2; signed:0;
+        field:__u16 protocol;   offset:30;      size:2; signed:0;
+        field:__u8 saddr[4];    offset:32;      size:4; signed:0;
+        field:__u8 daddr[4];    offset:36;      size:4; signed:0;
+        field:__u8 saddr_v6[16];        offset:40;      size:16;        signed:0;
+        field:__u8 daddr_v6[16];        offset:56;      size:16;        signed:0;
