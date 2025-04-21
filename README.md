@@ -328,33 +328,60 @@ nc -u -l 9999
 
 
 
-#include <linux/in6.h>
-#include <linux/types.h>
-#include <linux/bpf.h>
-#include <bpf/bpf_helpers.h>
-#include <bpf/bpf_tracing.h>
-
-struct ipv6_event_t {
-    __u16 sport;
-    __u8 saddr6[16];
-};
-
-struct {
-    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-} ipv6_events SEC(".maps");
-
 SEC("tracepoint/sock/inet_sock_set_state")
-int trace_tcp_ipv6_state(struct trace_event_raw_inet_sock_set_state *ctx) {
-    if (ctx->family == AF_INET6) {
-        struct ipv6_event_t event = {};
-        event.sport = bpf_ntohs(ctx->sport);
-        __builtin_memcpy(event.saddr6, ctx->saddr_v6, 16);
+int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 
-        bpf_perf_event_output(ctx, &ipv6_events, BPF_F_CURRENT_CPU, &event, sizeof(event));
+    struct trace_info info = {};
+
+
+    __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
+
+    __u32 srcip;
+    bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
+    srcip = bpf_ntohl(srcip);
+
+    __u32 dstip;
+    bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
+    dstip = bpf_ntohl(dstip);
+       
+    __u16 sport=0;
+    
+    sport=ctx->sport;
+       
+    __u16 dport;
+    dport=ctx->dport;
+
+   __u8 state=ctx->newstate;
+
+    if (ctx->family==AF_INET) {
+    if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
+
+        info.src_ip=srcip;
+        info.sport=sport;
+        info.dst_ip=dstip;
+        info.dport=dport;
+        info.sysexit=6;
+        info.proto=ctx->protocol;
+        info.pid=pid_tcp;
+        info.state=ctx->newstate;
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    }
+
+    } else if (ctx->family==AF_INET6) {
+
+
+        info.sysexit=6;
+        info.pid=pid_tcp;
+        info.proto=ctx->protocol;
+        info.state=ctx->newstate;
+        info.sport = bpf_ntohs(ctx->sport);
+       __builtin_memcpy(info.saddr6, ctx->saddr_v6, 16);
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
     }
 
     return 0;
 }
 
-char _license[] SEC("license") = "GPL";
+
 
