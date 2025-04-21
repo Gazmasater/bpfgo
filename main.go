@@ -532,113 +532,22 @@ func main() {
 
 			if event.Sysexit == 6 {
 
-				if event.State == 1 {
+				fmt.Printf("!!!!!!!FAMIY=%d\n", event.Family)
 
-					mu.Lock()
-					select {
-					case eventChan_sport <- int(event.Sport):
-					default:
-						eventChan_sport <- int(event.Sport)
-						fmt.Printf("State 1: заменен порт %d\n", event.Sport)
-					}
-					mu.Unlock()
+				switch event.Family {
+				case 2: // AF_INET (IPv4)
+					HandleIPv4Event(event, srcIP, dstIP, &mu, eventChan_sport, eventChan_pid)
 
-					if dstIP.IsLoopback() {
-						dsthost = pkg.ResolveIP(dstIP)
-					} else {
-
-						dsthost, err = pkg.ResolveIP_n(dstIP)
-						if err != nil {
-							dsthost = "unknown"
-
-							//log.Println("Оdsthost шибка при разрешении исходного IP:", err)
-						} else {
-							//	fmt.Println("Исходное доменное имя для IP", dstIP, ":", dsthost)
-						}
-
-					}
-
-					srchost := pkg.ResolveIP(srcIP)
-
-					//	dsthost, err := pkg.ResolveIP_n(dstIP)
-
-					srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
-					dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
-
-					if event.Proto == 6 {
-
-						proto = "TCP"
-					}
-
-					fmt.Println("")
-					fmt.Printf("PID=%d %s:%s <- %s:%s \n", event.Pid, proto, srcAddr, proto, dstAddr)
-
-				}
-				if event.State == 2 {
-					mu.Lock()
-					select {
-					case eventChan_pid <- int(event.Pid):
-					default:
-						//fmt.Println("State 2: eventChan_pid заполнен, пропускаю запись PID")
-					}
-					mu.Unlock()
-				}
-
-				if event.State == 10 {
-					mu.Lock()
-					select {
-					case eventChan_pid <- int(event.Pid):
-					default:
-						//fmt.Println("State 10: eventChan_pid заполнен, пропускаю запись PID")
-					}
-					mu.Unlock()
-				}
-
-				select {
-
-				case xxx = <-eventChan_sport:
-
-					if dstIP.IsLoopback() {
-						dsthost = pkg.ResolveIP(dstIP)
-					} else {
-
-						dsthost, err = pkg.ResolveIP_n(dstIP)
-						if err != nil {
-							dsthost = "unknown"
-
-							//log.Println("Оdsthost шибка при разрешении исходного IP:", err)
-						} else {
-							//	fmt.Println("Исходное доменное имя для IP", dstIP, ":", dsthost)
-						}
-
-					}
-
-					srchost := pkg.ResolveIP(srcIP)
-
-					srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), xxx)
-					dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
-
-					select {
-					case xxx_pid = <-eventChan_pid:
-						//fmt.Printf("State 2: получил PID %d\n", xxx_pid)
-					default:
-						//fmt.Println("State 2: eventChan_pid пуст, PID неизвестен")
-					}
-
-					if event.Proto == 6 {
-
-						proto = "TCP"
-					}
-
-					fmt.Printf("PID=%d %s:%s -> %s:%s \n", xxx_pid, proto, srcAddr, proto, dstAddr)
-					fmt.Println("")
-
+				case 10: // AF_INET6 (IPv6)
+					// srcIP = make(net.IP, net.IPv6len)
+					// dstIP = make(net.IP, net.IPv6len)
+					// copy(srcIP, event.Saddr6[:])
+					// copy(dstIP, event.Daddr6[:])
 				default:
-					fmt.Println("")
+					continue // неизвестное семейство — пропускаем
 				}
 
 			}
-
 		}
 
 	}()

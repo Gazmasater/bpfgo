@@ -748,6 +748,8 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
         info.proto=ctx->protocol;
         info.pid=pid_tcp;
         info.state=ctx->newstate;
+        info.family=ctx->family;
+
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
     }
 
@@ -756,6 +758,7 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 
         info.sysexit=6;
         info.pid=pid_tcp;
+        info.family=ctx->family;
         info.proto=ctx->protocol;
         info.state=ctx->newstate;
         info.sport = bpf_ntohs(ctx->sport);
