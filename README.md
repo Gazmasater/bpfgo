@@ -349,54 +349,7 @@ strace -f -o trace.log ./твоя_программа
 grep -i AF_INET6 trace.log
 
 
-!!!!!!!!!LOOKUP ETH=2 PID=0 SRC6=Unknown[::19:27ff:2eeb:b3f7:c0e8:b7b2]:546 DST6=bc9a:ffff:44e8:4ac6:bc9a:ffff:::53385
-
-sudo tcpdump -i wlp0s20f3 ip6
 
 
-package main
-
-import (
-	"fmt"
-	"net"
-	"os"
-)
-
-func main() {
-	// IPv6 адрес в raw виде (пример fe80::e73:29ff:feb7:d6e8)
-	ip := net.IP{
-		0xfe, 0x80, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00,
-		0x0e, 0x73, 0x29, 0xff,
-		0xfe, 0xb7, 0xd6, 0xe8,
-	}
-
-	// Если ты знаешь ifindex (например, из eBPF) — 2
-	ifIndex := 2
-
-	// Узнаем имя интерфейса по индексу
-	iface, err := net.InterfaceByIndex(ifIndex)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "ошибка: %v\n", err)
-		return
-	}
-
-	// Создаем net.IPAddr с указанием Zone (scope_id как имя интерфейса)
-	ipAddr := &net.IPAddr{
-		IP:   ip,
-		Zone: iface.Name,
-	}
-
-	// Теперь выводим адрес как fe80::...%wlp0s20f3
-	fmt.Printf("IPv6 адрес с интерфейсом: %s\n", ipAddr.String())
-}
-
-
-
-
-
-
-
-
-
-
+!!!!!!!!!LOOKUP ETH=2 PID=0 SRC6=Unknown[::9c:1e04:1782:7dd6:c0e8:77a5]:546 DST6=418e:ffff:c4db:4b82:418e:ffff:::53385
+IPv6 адрес с интерфейсом: ::9c:1e04:1782:7dd6:c0e8:77a5%wlp0s20f3
