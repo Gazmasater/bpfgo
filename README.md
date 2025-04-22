@@ -354,11 +354,42 @@ grep -i AF_INET6 trace.log
 sudo tcpdump -i wlp0s20f3 ip6
 
 
-23:48:24.089631 IP6 fe80::e73:29ff:feb7:d6e8.53385 > gaz358-BOD-WXX9.dhcpv6-client: dhcp6 reply
-23:48:25.840732 IP6 gaz358-BOD-WXX9.mdns > ff02::fb.mdns: 0 [2q] PTR (QM)? _ipp._tcp.local. PTR (QM)? _ipps._tcp.local. (45)
-23:48:29.100393 IP6 fe80::e73:29ff:feb7:d6e8 > gaz358-BOD-WXX9: ICMP6, neighbor solicitation, who has gaz358-BOD-WXX9, length 32
-23:48:29.100419 IP6 gaz358-BOD-WXX9 > fe80::e73:29ff:feb7:d6e8: ICMP6, neighbor advertisement, tgt is gaz358-BOD-WXX9, length 24
-23:48:34.492325 IP6 gaz358-BOD-WXX9 > fe80::e73:29ff:feb7:d6e8: ICMP6, neighbor solicitation, who has fe80::e73:29ff:feb7:d6e8, length 32
+package main
+
+import (
+	"fmt"
+	"net"
+	"os"
+)
+
+func main() {
+	// IPv6 адрес в raw виде (пример fe80::e73:29ff:feb7:d6e8)
+	ip := net.IP{
+		0xfe, 0x80, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00,
+		0x0e, 0x73, 0x29, 0xff,
+		0xfe, 0xb7, 0xd6, 0xe8,
+	}
+
+	// Если ты знаешь ifindex (например, из eBPF) — 2
+	ifIndex := 2
+
+	// Узнаем имя интерфейса по индексу
+	iface, err := net.InterfaceByIndex(ifIndex)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ошибка: %v\n", err)
+		return
+	}
+
+	// Создаем net.IPAddr с указанием Zone (scope_id как имя интерфейса)
+	ipAddr := &net.IPAddr{
+		IP:   ip,
+		Zone: iface.Name,
+	}
+
+	// Теперь выводим адрес как fe80::...%wlp0s20f3
+	fmt.Printf("IPv6 адрес с интерфейсом: %s\n", ipAddr.String())
+}
 
 
 
