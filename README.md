@@ -355,5 +355,16 @@ grep -i AF_INET6 trace.log
 IPv6 адрес с интерфейсом: ::9c:1e04:1782:7dd6:c0e8:77a5%wlp0s20f3
 
 
-ping -I wlp0s20f3 fe80::9c:1e04:1782:7dd6:c0e8:77a5
+ping -I wlp0s20f3  fe80::c5:4019:bd20:89f2:c0e8:7790
+
+
+
+Saddr6 bytes: [0 0 0 0 0 197 64 25 189 32 137 242 192 232 119 144]
+!!!!!!!!!LOOKUP ETH=2 PID=0 SRC6=Unknown[::c5:4019:bd20:89f2:c0e8:7790]:546 DST6=dc9a:ffff:44ad:2409:dc9a:ffff:::53385
+IPv6 адрес с интерфейсом: fe80::c5:4019:bd20:89f2:c0e8:7790%wlp0s20f3
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ping -I wlp0s20f3  fe80::c5:4019:bd20:89f2:c0e8:7790
+ping: Warning: source address might be selected on device other than: wlp0s20f3
+PING fe80::c5:4019:bd20:89f2:c0e8:7790 (fe80:0:c5:4019:bd20:89f2:c0e8:7790) from :: wlp0s20f3: 56 data bytes
+
 
