@@ -351,6 +351,7 @@ grep -i AF_INET6 trace.log
 
 !!!!!!!!!LOOKUP ETH=2 PID=0 SRC6=Unknown[::19:27ff:2eeb:b3f7:c0e8:b7b2]:546 DST6=bc9a:ffff:44e8:4ac6:bc9a:ffff:::53385
 
+sudo tcpdump -i wlp0s20f3 ip6
 
 
 
