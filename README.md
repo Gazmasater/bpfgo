@@ -331,7 +331,8 @@ nc -u -l 9999
 
 
 
-srcIP6 := net.IP(event.Saddr6[:])
-			dstIP6 := net.IP(event.Daddr6[:])
+
+        info.saddr6=ctx->local_ip6;
+
 
 
