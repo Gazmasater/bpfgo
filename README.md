@@ -1,5 +1,9 @@
 ip link show wlp0s20f3
 
+az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ip link show wlp0s20f3
+2: wlp0s20f3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DORMANT group default qlen 1000
+    link/ether e4:fd:45:a8:ec:0b brd ff:ff:ff:ff:ff:ff
+
 
 
 sudo strace -p <PID>
