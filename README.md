@@ -333,6 +333,8 @@ nc -u -l 9999
 
 
 			srcIP6 := net.IP(event.Saddr6[:])
+   fmt.Printf("Saddr6 bytes: %v\n", event.Saddr6[:])
+
 
 
 
