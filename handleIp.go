@@ -61,7 +61,13 @@ func HandleIPEvent(
 		}
 
 		fmt.Println("")
-		fmt.Printf("PID=%d %s:%s <- %s:%s \n", event.Pid, proto, srcAddr, proto, dstAddr)
+		fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s \n",
+			event.Pid,
+			pkg.Int8ToString(event.Comm),
+			proto,
+			srcAddr,
+			proto,
+			dstAddr)
 	}
 
 	if event.State == 2 || event.State == 10 {
@@ -104,7 +110,13 @@ func HandleIPEvent(
 			proto = "TCP"
 		}
 
-		fmt.Printf("PID=%d %s:%s -> %s:%s \n", xxx_pid, proto, srcAddr, proto, dstAddr)
+		fmt.Printf("PID=%d NAME=%s %s:%s -> %s:%s \n",
+			xxx_pid,
+			pkg.Int8ToString(event.Comm),
+			proto,
+			srcAddr,
+			proto,
+			dstAddr)
 		fmt.Println("")
 
 	default:

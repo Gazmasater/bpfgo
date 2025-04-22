@@ -40,6 +40,7 @@ type bpfTraceInfo struct {
 	Proto   uint32
 	Sysexit uint32
 	State   uint32
+	Ifindex uint32
 	Saddr6  [16]uint8
 	Daddr6  [16]uint8
 	Family  uint16

@@ -164,7 +164,7 @@ func main() {
 
 		record := new(perf.Record)
 
-		const buffLen = 8196
+		const buffLen = 128
 		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
 		if err != nil {
 			log.Fatalf("failed to create perf reader: %s", err)
@@ -257,19 +257,10 @@ func main() {
 
 				} else if family == 10 {
 
-					fmt.Printf("!!!!!!!!!SENDTO SRC6=%s:%d DST6=%s:%d\n", srcIP6, event.Sport, dstIP6, event.Dport)
-
-					//port := event.Dport
-
-					//pid := event.Pid
-					// fmt.Printf("STATE=1 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d NAME=%s\n",
-					// 	pid,
-					// 	event.DstIP6[0], event.DstIP6[1],
-					// 	event.DstIP6[2], event.DstIP6[3],
-
-					// 	port,
-					// 	pkg.Int8ToString(event.Comm),
-					// )
+					fmt.Printf("!!!!!!!!!SENDTO  DST6=%s[%s]:%d\n",
+						pkg.ResolveIP(dstIP6),
+						dstIP6,
+						event.Dport)
 
 				}
 
@@ -301,18 +292,27 @@ func main() {
 
 						fmt.Println("")
 
-						fmt.Printf("%s/%s:%d->%s:%d\n",
+						fmt.Printf("PID=%d NAME=%s %s/%s[%s]:%d->%s[%s]:%d\n",
+							data.Sendmsg.Pid,
+							data.Sendmsg.Comm,
 							proto,
+							pkg.ResolveIP(dstIP),
 							data.Lookup.DstIP,
 							data.Lookup.DstPort,
+							pkg.ResolveIP(srcIP),
 							data.Lookup.SrcIP,
 							data.Lookup.SrcPort,
 						)
 
-						fmt.Printf("%s/%s:%d<-%s:%d\n",
+						fmt.Printf("PID=%d NAME=%s %s/%s[%s]:%d<-%s[%s]:%d\n",
+							data.Recvmsg.Pid,
+							data.Recvmsg.Comm,
 							proto,
+							pkg.ResolveIP(dstIP),
+
 							data.Lookup.DstIP,
 							data.Lookup.DstPort,
+							pkg.ResolveIP(srcIP),
 							data.Lookup.SrcIP,
 							data.Lookup.SrcPort,
 						)
@@ -400,7 +400,9 @@ func main() {
 
 						fmt.Println("")
 
-						fmt.Printf("%s/%s:%d->%s:%d\n",
+						fmt.Printf("PID=%d NAME=%s %s/%s:%d<-%s:%d\n",
+							data.Sendmsg.Pid,
+							data.Sendmsg.Comm,
 							proto,
 							data.Lookup.DstIP,
 							data.Lookup.DstPort,
@@ -408,7 +410,9 @@ func main() {
 							data.Lookup.SrcPort,
 						)
 
-						fmt.Printf("%s/%s:%d<-%s:%d\n",
+						fmt.Printf("PID=%d NAME=%s %s/%s:%d<-%s:%d\n",
+							data.Recvmsg.Pid,
+							data.Recvmsg.Comm,
 							proto,
 							data.Lookup.DstIP,
 							data.Lookup.DstPort,
@@ -503,7 +507,9 @@ func main() {
 
 						fmt.Println("")
 
-						fmt.Printf("%s/%s:%d->%s:%d\n",
+						fmt.Printf("PID=%d NAME=%s %s/%s:%d<-%s:%d\n",
+							data.Recvmsg.Pid,
+							data.Recvmsg.Comm,
 							proto,
 							data.Lookup.DstIP,
 							data.Lookup.DstPort,
@@ -511,7 +517,9 @@ func main() {
 							data.Lookup.SrcPort,
 						)
 
-						fmt.Printf("%s/%s:%d<-%s:%d\n",
+						fmt.Printf("PID=%d NAME=%s %s/%s:%d->%s:%d\n",
+							data.Sendmsg.Pid,
+							data.Sendmsg.Comm,
 							proto,
 							data.Lookup.DstIP,
 							data.Lookup.DstPort,
@@ -527,12 +535,26 @@ func main() {
 
 					fmt.Printf("Saddr6 bytes: %v\n", event.Saddr6[:])
 
-					fmt.Printf("!!!!!!!!!LOOKUP PID=%d SRC6=%s[%s]:%d DST6=%s:%d\n",
+					fmt.Printf("!!!!!!!!!LOOKUP ETH=%d PID=%d SRC6=%s[%s]:%d DST6=%s:%d\n",
+						event.Ifindex,
 						event.Pid,
 						pkg.ResolveIP(srcIP6),
 						srcIP6, event.Sport,
 						dstIP6,
 						event.Dport)
+
+					iface, err := net.InterfaceByIndex(int(event.Ifindex))
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "ошибка: %v\n", err)
+						return
+					}
+
+					ipAddr := &net.IPAddr{
+						IP:   srcIP6,
+						Zone: iface.Name,
+					}
+
+					fmt.Printf("IPv6 адрес с интерфейсом: %s\n", ipAddr.String())
 
 					// fmt.Printf("STATE=3 DST IPv6=%x:%x:%x:%x\n",
 					// 	event.DstIP6[0], event.DstIP6[1],

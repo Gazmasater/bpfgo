@@ -203,6 +203,7 @@ struct trace_info {
     u32 proto;
     u32 sysexit;
     u32 state;
+    __u32 ifindex;
     __u8 saddr6[16];
     __u8 daddr6[16];
     u16 family;
@@ -243,7 +244,6 @@ SEC("tracepoint/syscalls/sys_enter_sendto")
 int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     struct conn_info_t conn_info = {};
-
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
@@ -280,7 +280,7 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     struct trace_info info = {};
 
     struct sockaddr addr = {};
-
+    bpf_probe_read_kernel(info.comm, sizeof(info.comm), conn_info->comm);
 
     bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);
  
@@ -378,6 +378,8 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
     }
 
     struct trace_info info = {};
+    bpf_probe_read_kernel(info.comm, sizeof(info.comm), conn_info->comm);
+
 
     struct sockaddr addr = {};
 
@@ -499,8 +501,7 @@ int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
     struct sockaddr_in sa = {};
     struct sockaddr_in6 sa6 = {};
     struct trace_info info = {};
-   
-    __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+    bpf_probe_read_kernel(info.comm, sizeof(info.comm), conn_info->comm);
 
     bpf_probe_read_user(&sa, sizeof(sa), &msg->msg_name);
     bpf_probe_read_user(&sa6, sizeof(sa6), &msg->msg_name);
@@ -608,9 +609,7 @@ int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
     struct sockaddr_in sa = {};
     struct sockaddr_in6 sa6 = {};
     struct trace_info info = {};
-    __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
-
-
+    bpf_probe_read_kernel(info.comm, sizeof(info.comm), conn_info->comm);
     bpf_probe_read_user(&sa, sizeof(sa), &msg->msg_name);
     bpf_probe_read_user(&sa6, sizeof(sa6), &msg->msg_name);
      if (sa.sin_family == AF_INET) {
@@ -656,6 +655,9 @@ int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
 SEC("sk_lookup")
 int look_up(struct bpf_sk_lookup *ctx) {
     struct trace_info info = {};
+    info.ifindex=ctx->ingress_ifindex;
+
+    
 
 
     __u32 proto = ctx->protocol;
