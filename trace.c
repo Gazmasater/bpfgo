@@ -318,16 +318,15 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
 
         bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr);
 
-        // info.dstIP6[0] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[0]);
-        // info.dstIP6[1] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[4]);
-        // info.dstIP6[2] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[8]);
-        // info.dstIP6[3] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[12]);
         u16 port = bpf_ntohs(addr_in6.sin6_port);
         
         info.pid=pid;
         info.sysexit=1;
         info.family=AF_INET6;
         info.dport=port;
+
+        bpf_probe_read_kernel(&info.daddr6, sizeof(info.daddr6), &addr_in6.sin6_addr);
+
         
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
@@ -537,10 +536,7 @@ int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
         info.dport=port;
         info.pid=pid;
 
-        // info.dstIP6[0] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[0]);
-        // info.dstIP6[1] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[1]);
-        // info.dstIP6[2] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[2]);
-        // info.dstIP6[3] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[3]);
+
          bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
     }
@@ -617,44 +613,38 @@ int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
 
     bpf_probe_read_user(&sa, sizeof(sa), &msg->msg_name);
     bpf_probe_read_user(&sa6, sizeof(sa6), &msg->msg_name);
+     if (sa.sin_family == AF_INET) {
+        u32 port = bpf_ntohs(sa.sin_port);
+        u32 ip = bpf_ntohl(sa.sin_addr.s_addr);
 
+        info.pid = conn_info->pid;
+        info.src_ip = ip;
+        info.sport = port;
+        info.family = AF_INET;
+        info.sysexit = 12;
 
-    if (sa.sin_family==AF_INET) {
+         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
-     u32   port=bpf_ntohs(sa.sin_port);
-     u32   ip=bpf_ntohl(sa.sin_addr.s_addr);
-     info.pid=conn_info->pid;
-     info.src_ip=ip;
-     info.sport = port;
-     info.family=AF_INET;  
-     info.sysexit=12;
-           
-     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-
-    } else if (sa.sin_family==AF_INET6) {
-
-        u32 port=bpf_ntohs(sa6.sin6_port);
-        
-
-        if (port==0) {
+      } else if (sa6.sin6_family == AF_INET6) {
+        u32 port = bpf_ntohs(sa6.sin6_port);
+        if (port == 0) {
             return 0;
         }
 
-        bpf_printk("sys_exit_recvmsg IP6 PORT=%d",port);
+        bpf_printk("sys_exit_recvmsg IP6 PORT=%d", port);
 
-        info.sysexit=12;
-        info.family=AF_INET6;
-        info.sport=port;
-        info.pid=pid;
+        info.sysexit = 12;
+        info.family = AF_INET6;
+        info.sport = port;
+        info.pid = pid;
 
-        // info.srcIP6[0] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[0]);
-        // info.srcIP6[1] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[1]);
-        // info.srcIP6[2] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[2]);
-        // info.srcIP6[3] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[3]);
+        if (bpf_probe_read_user(&info.saddr6, sizeof(info.saddr6), &sa6.sin6_addr) < 0) {
+            bpf_printk("failed to read saddr6");
+            return 0;
+        }
+
          bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-    }
+     }
 
     bpf_map_delete_elem(&addrRecv_map, &pid);
     bpf_map_delete_elem(&conn_info_map, &pid);
@@ -663,10 +653,10 @@ int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
 }
 
 
-
 SEC("sk_lookup")
 int look_up(struct bpf_sk_lookup *ctx) {
     struct trace_info info = {};
+
 
     __u32 proto = ctx->protocol;
 
@@ -687,23 +677,17 @@ int look_up(struct bpf_sk_lookup *ctx) {
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
     } else if (ctx->family == AF_INET6) {
-
-        // info.srcIP6[0]=bpf_ntohl(ctx->local_ip6[0]);
-        // info.srcIP6[1]=bpf_ntohl(ctx->local_ip6[1]);
-        // info.srcIP6[2]=bpf_ntohl(ctx->local_ip6[2]);
-        // info.srcIP6[3]=bpf_ntohl(ctx->local_ip6[3]);
-
-        // info.dstIP6[0]=bpf_ntohl(ctx->remote_ip6[0]);
-        // info.dstIP6[1]=bpf_ntohl(ctx->remote_ip6[1]);
-        // info.dstIP6[2]=bpf_ntohl(ctx->remote_ip6[2]);
-        // info.dstIP6[3]=bpf_ntohl(ctx->remote_ip6[3]);
-
         info.sport = ctx->local_port;
         info.dport = bpf_ntohs(ctx->remote_port);
         info.family=AF_INET6;
         info.sysexit = 3;
         info.proto=ctx->protocol;
+        bpf_probe_read_kernel(&info.saddr6, sizeof(info.saddr6), ctx->local_ip6);
+        bpf_probe_read_kernel(&info.daddr6, sizeof(info.daddr6), ctx->remote_ip6);
 
+        int32 *ip6 = (int32 *)info.saddr6;
+
+        bpf_printk("IPv6 src: %x:%x:%x:%x", bpf_ntohl(ip6[0]), bpf_ntohl(ip6[1]), bpf_ntohl(ip6[2]), bpf_ntohl(ip6[3]));
 
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
@@ -716,9 +700,15 @@ SEC("tracepoint/sock/inet_sock_set_state")
 int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 
     struct trace_info info = {};
+    struct conn_info_t conn_info={};
 
 
     __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info));
+
+    bpf_probe_read_kernel(info.comm, sizeof(info.comm), conn_info.comm);
+
+
 
     __u32 srcip;
     bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
@@ -761,11 +751,19 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
         info.family=ctx->family;
         info.proto=ctx->protocol;
         info.state=ctx->newstate;
-        info.sport = bpf_ntohs(ctx->sport);
+        info.sport =(ctx->sport);
+        info.dport=(ctx->dport);
         if (bpf_probe_read_kernel(&info.saddr6, sizeof(info.saddr6), ctx->saddr_v6) < 0) {
             return 0;
         }
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+        if (bpf_probe_read_kernel(&info.daddr6, sizeof(info.saddr6), ctx->daddr_v6) < 0) {
+            return 0;
+        }
+
+
+        
+       bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
 
     }
 
@@ -775,47 +773,6 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 
 
 
-// SEC("tracepoint/net/netif_receive_skb")
-// int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
-//     u32 pid = bpf_get_current_pid_tgid() >> 32;
-
-//     struct sk_buff skb = {};
-//     struct iphdr iph = {};
-//     struct tcphdr tcph = {};
-//     struct udphdr udph = {};
-
-//     bpf_probe_read(&skb, sizeof(skb), ctx->skbaddr);
-
-//     bpf_probe_read(&iph, sizeof(iph), skb.data);
-    
-
-//     if (iph.protocol == 33) {
-//         void *tcp_start = (void *)skb.data + iph.ihl * 4;
-
-//         bpf_probe_read(&tcph, sizeof(tcph), tcp_start);
-
-//         __u16 sport = bpf_ntohs(tcph.source);
-//         __u16 dport = bpf_ntohs(tcph.dest);
-
-//         bpf_printk("Incoming TCP packet:PID=%d %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",pid,
-//             iph.saddr & 0xff, (iph.saddr >> 8) & 0xff, (iph.saddr >> 16) & 0xff, (iph.saddr >> 24) & 0xff, sport,
-//             iph.daddr & 0xff, (iph.daddr >> 8) & 0xff, (iph.daddr >> 16) & 0xff, (iph.daddr >> 24) & 0xff, dport);
-//     }
-//     else if (iph.protocol == IPPROTO_UDP) {
-//         void *udp_start = (void *)skb.data + iph.ihl * 4;
-
-//         bpf_probe_read(&udph, sizeof(udph), udp_start);
-
-//         __u16 sport = bpf_ntohs(udph.source);
-//         __u16 dport = bpf_ntohs(udph.dest);
-
-//         bpf_printk("Incoming UDP packet:PID=%d %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",pid,
-//             iph.saddr & 0xff, (iph.saddr >> 8) & 0xff, (iph.saddr >> 16) & 0xff, (iph.saddr >> 24) & 0xff, sport,
-//             iph.daddr & 0xff, (iph.daddr >> 8) & 0xff, (iph.daddr >> 16) & 0xff, (iph.daddr >> 24) & 0xff, dport);
-//     }
-
-//     return 0;
-// }
 
 
 

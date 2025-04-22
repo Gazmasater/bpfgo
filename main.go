@@ -209,6 +209,9 @@ func main() {
 				byte(event.DstIp),
 			)
 
+			srcIP6 := net.IP(event.Saddr6[:])
+			dstIP6 := net.IP(event.Daddr6[:])
+
 			if pkg.Int8ToString(event.Comm) == executableName {
 				continue
 			}
@@ -253,6 +256,9 @@ func main() {
 					}
 
 				} else if family == 10 {
+
+					fmt.Printf("!!!!!!!!!SENDTO SRC6=%s:%d DST6=%s:%d\n", srcIP6, event.Sport, dstIP6, event.Dport)
+
 					//port := event.Dport
 
 					//pid := event.Pid
@@ -316,8 +322,7 @@ func main() {
 					}
 
 				} else if event.Family == 10 {
-					// port := event.Dport
-
+					fmt.Printf("!!!!!!!!!SENDMSG SRC6=%s:%d DST6=%s:%d\n", srcIP6, event.Sport, dstIP6, event.Dport)
 					// pid := event.Pid
 					// fmt.Printf("STATE=11 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d  NAME=%s\n",
 					// 	pid,
@@ -355,6 +360,8 @@ func main() {
 					// 	data.Recvmsg.SrcPort)
 
 				} else if event.Family == 10 {
+					fmt.Printf("!!!!!!!!!RECVFROM SRC6=%s:%d DST6=%s:%d\n", srcIP6, event.Sport, dstIP6, event.Dport)
+
 					// port := event.Sport
 					// pid := event.Pid
 					// fmt.Printf("STATE2 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d\n",
@@ -414,6 +421,8 @@ func main() {
 					}
 
 				} else if event.Family == 10 {
+					fmt.Printf("!!!!!!!!!RECVMSG SRC6=%s:%d DST6=%s:%d\n", srcIP6, event.Sport, dstIP6, event.Dport)
+
 					// port := event.Sport
 					// pid := event.Pid
 					// fmt.Printf("STATE=12 IPv6 PID=%d srcIPv6=%x:%x:%x:%x:%d\n",
@@ -516,6 +525,15 @@ func main() {
 
 				} else if family == 10 {
 
+					fmt.Printf("Saddr6 bytes: %v\n", event.Saddr6[:])
+
+					fmt.Printf("!!!!!!!!!LOOKUP PID=%d SRC6=%s[%s]:%d DST6=%s:%d\n",
+						event.Pid,
+						pkg.ResolveIP(srcIP6),
+						srcIP6, event.Sport,
+						dstIP6,
+						event.Dport)
+
 					// fmt.Printf("STATE=3 DST IPv6=%x:%x:%x:%x\n",
 					// 	event.DstIP6[0], event.DstIP6[1],
 					// 	event.DstIP6[2], event.DstIP6[3])
@@ -532,19 +550,16 @@ func main() {
 
 			if event.Sysexit == 6 {
 
-				fmt.Printf("!!!!!!!FAMIY=%d\n", event.Family)
-
 				switch event.Family {
-				case 2: // AF_INET (IPv4)
-					HandleIPv4Event(event, srcIP, dstIP, &mu, eventChan_sport, eventChan_pid)
+				case 2:
+					HandleIPEvent(event, srcIP, dstIP, &mu, eventChan_sport, eventChan_pid)
 
-				case 10: // AF_INET6 (IPv6)
-					// srcIP = make(net.IP, net.IPv6len)
-					// dstIP = make(net.IP, net.IPv6len)
-					// copy(srcIP, event.Saddr6[:])
-					// copy(dstIP, event.Daddr6[:])
+				case 10:
+
+					HandleIPEvent(event, srcIP6, dstIP6, &mu, eventChan_sport, eventChan_pid)
+
 				default:
-					continue // неизвестное семейство — пропускаем
+					continue
 				}
 
 			}
