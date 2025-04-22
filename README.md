@@ -332,7 +332,8 @@ nc -u -l 9999
 
 
 
-        info.saddr6=ctx->local_ip6;
+bpf_probe_read_kernel(&info.saddr6, sizeof(info.saddr6), ctx->saddr_v6);
+bpf_probe_read_kernel(&info.daddr6, sizeof(info.daddr6), ctx->daddr_v6);
 
 
 
