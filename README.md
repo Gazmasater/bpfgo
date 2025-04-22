@@ -334,9 +334,24 @@ nc -u -l 9999
         bpf_probe_read_user(&info.daddr6, sizeof(info.daddr6), ctx->remote_ip6);
 
 
-        __u32 *ip6 = (__u32 *)info.saddr6;
+    } else if (addr.sa_family==AF_INET6) {
 
-bpf_printk("IPv6 src: %x:%x:%x:%x", bpf_ntohl(ip6[0]), bpf_ntohl(ip6[1]), bpf_ntohl(ip6[2]), bpf_ntohl(ip6[3]));
+      
+        struct sockaddr_in6 addr_in6 = {};
+
+        bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr);
+
+        u16 port = bpf_ntohs(addr_in6.sin6_port);
+        
+        info.pid=pid;
+        info.sysexit=1;
+        info.family=AF_INET6;
+        info.dport=port;
+        
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+    }
+
 
 
 
