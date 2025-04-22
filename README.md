@@ -349,9 +349,7 @@ strace -f -o trace.log ./твоя_программа
 grep -i AF_INET6 trace.log
 
 
-az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ grep -i IP6  trace.log
-5206  pread64(7, "_REF\0ip6_icmp_send_t\0FLOWLABEL_R"..., 4076, 4232859) = 4076
-5206  pread64(7, "GE_IN\0__IP6_DEFRAG_CONNTRACK_BRI"..., 4071, 4400428) = 4071
+!!!!!!!!!LOOKUP ETH=2 PID=0 SRC6=Unknown[::19:27ff:2eeb:b3f7:c0e8:b7b2]:546 DST6=bc9a:ffff:44e8:4ac6:bc9a:ffff:::53385
 
 
 
