@@ -1,3 +1,7 @@
+ip link show wlp0s20f3
+
+
+
 sudo strace -p <PID>
 
 
