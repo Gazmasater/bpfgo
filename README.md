@@ -349,8 +349,51 @@ strace -f -o trace.log ./твоя_программа
 grep -i AF_INET6 trace.log
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ip link show
-1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
-    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
-2: wlp0s20f3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DORMANT group default qlen 1000
-    link/ether e4:fd:45:a8:ec:0b brd ff:ff:ff:ff:ff:ff
+	SmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_sendmsg: %s", err)
+	}
+	defer SmsgEnter.Close()
+
+	SmsgExit, err := link.Tracepoint("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_sendmsg: %s", err)
+	}
+	defer SmsgExit.Close()
+
+	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
+	}
+	defer SEnter.Close()
+
+	SExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_sendto: %s", err)
+	}
+	defer SExit.Close()
+
+	RmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_recvmsg: %s", err)
+	}
+	defer RmsgEnter.Close()
+
+	RmsgExit, err := link.Tracepoint("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_recvmsg: %s", err)
+	}
+	defer RmsgExit.Close()
+
+	REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
+	}
+	defer REnter.Close()
+
+	RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
+	}
+	defer RExit.Close()
+
