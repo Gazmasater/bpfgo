@@ -341,6 +341,11 @@ strace -f -o trace.log ./твоя_программа
 grep -i AF_INET6 trace.log
 
 
+az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ grep -i IP6  trace.log
+5206  pread64(7, "_REF\0ip6_icmp_send_t\0FLOWLABEL_R"..., 4076, 4232859) = 4076
+5206  pread64(7, "GE_IN\0__IP6_DEFRAG_CONNTRACK_BRI"..., 4071, 4400428) = 4071
+
+
 
 
 
