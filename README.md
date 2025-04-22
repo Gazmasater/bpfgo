@@ -353,3 +353,7 @@ grep -i AF_INET6 trace.log
 
 !!!!!!!!!LOOKUP ETH=2 PID=0 SRC6=Unknown[::9c:1e04:1782:7dd6:c0e8:77a5]:546 DST6=418e:ffff:c4db:4b82:418e:ffff:::53385
 IPv6 адрес с интерфейсом: ::9c:1e04:1782:7dd6:c0e8:77a5%wlp0s20f3
+
+
+ping -I wlp0s20f3 fe80::9c:1e04:1782:7dd6:c0e8:77a5
+
