@@ -349,51 +349,31 @@ strace -f -o trace.log ./твоя_программа
 grep -i AF_INET6 trace.log
 
 
-	SmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_sendmsg: %s", err)
-	}
-	defer SmsgEnter.Close()
+type tracepoint struct {
+	category string
+	name     string
+	prog     *ebpf.Program
+}
 
-	SmsgExit, err := link.Tracepoint("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_sendmsg: %s", err)
-	}
-	defer SmsgExit.Close()
+tracepoints := []tracepoint{
+	{"syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter},
+	{"syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit},
+	{"syscalls", "sys_enter_sendto", objs.TraceSendtoEnter},
+	{"syscalls", "sys_exit_sendto", objs.TraceSendtoExit},
+	{"syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter},
+	{"syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit},
+	{"syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter},
+	{"syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit},
+}
 
-	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
-	}
-	defer SEnter.Close()
+var links []link.Link
 
-	SExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
+for _, tp := range tracepoints {
+	l, err := link.Tracepoint(tp.category, tp.name, tp.prog, nil)
 	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_sendto: %s", err)
+		log.Fatalf("opening tracepoint %s: %s", tp.name, err)
 	}
-	defer SExit.Close()
-
-	RmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_recvmsg: %s", err)
-	}
-	defer RmsgEnter.Close()
-
-	RmsgExit, err := link.Tracepoint("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_recvmsg: %s", err)
-	}
-	defer RmsgExit.Close()
-
-	REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
-	}
-	defer REnter.Close()
-
-	RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
-	}
-	defer RExit.Close()
+	links = append(links, l)
+	defer l.Close()
+}
 
