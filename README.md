@@ -332,50 +332,17 @@ ls /sys/kernel/debug/tracing/events/net/netif_receive_skb_entry/
 
 nc -u -l 9999
 
-
-
-        bpf_probe_read_user(&info.daddr6, sizeof(info.daddr6), ctx->remote_ip6);
-
-
-    } else if (addr.sa_family==AF_INET6) {
-
-      
-        struct sockaddr_in6 addr_in6 = {};
-
-        bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr);
-
-        u16 port = bpf_ntohs(addr_in6.sin6_port);
-        
-        info.pid=pid;
-        info.sysexit=1;
-        info.family=AF_INET6;
-        info.dport=port;
-        
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-    }
+.daddr6, sizeof(info.daddr6), ctx->remote_ip6);
 
 
 
 
+strace -f -o trace.log ./твоя_программа
+grep -i AF_INET6 trace.log
 
-} else if (addr.sa_family == AF_INET6) {
 
-    struct sockaddr_in6 addr_in6 = {};
-    bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr);
 
-    u16 port = bpf_ntohs(addr_in6.sin6_port);
 
-    info.pid = pid;
-    info.sysexit = 1;
-    info.family = AF_INET6;
-    info.dport = port;
-
-    // Читаем IPv6 адрес
-    bpf_probe_read_user(&info.daddr6, sizeof(info.daddr6), &addr_in6.sin6_addr);
-
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-}
 
 
 
