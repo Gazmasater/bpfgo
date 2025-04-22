@@ -1,3 +1,6 @@
+sudo strace -p <PID>
+
+
 https://platform-balun.ru/teach/control/stream/view/id/930914027
 user: mat3x@mail.ru
 pass: Vkalashnikov00f!
