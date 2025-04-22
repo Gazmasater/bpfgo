@@ -331,9 +331,7 @@ nc -u -l 9999
 
 
 
-
-			srcIP6 := net.IP(event.Saddr6[:])
-   fmt.Printf("Saddr6 bytes: %v\n", event.Saddr6[:])
+        bpf_probe_read_user(&info.daddr6, sizeof(info.daddr6), ctx->remote_ip6);
 
 
 
