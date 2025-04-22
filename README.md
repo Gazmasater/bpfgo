@@ -334,6 +334,12 @@ nc -u -l 9999
         bpf_probe_read_user(&info.daddr6, sizeof(info.daddr6), ctx->remote_ip6);
 
 
+        __u32 *ip6 = (__u32 *)info.saddr6;
+
+bpf_printk("IPv6 src: %x:%x:%x:%x", bpf_ntohl(ip6[0]), bpf_ntohl(ip6[1]), bpf_ntohl(ip6[2]), bpf_ntohl(ip6[3]));
+
+
+
 
 
 
