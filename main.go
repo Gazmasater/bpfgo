@@ -100,12 +100,6 @@ func main() {
 	}
 	defer SmsgExit.Close()
 
-	// Netif_recieve, err := link.Tracepoint("net", "netif_receive_skb", objs.TraceNetifReceiveSkb, nil)
-	// if err != nil {
-	// 	log.Fatalf("opening tracepoint netif_receive_skb_entry: %s", err)
-	// }
-	// defer Netif_recieve.Close()
-
 	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
 	if err != nil {
 		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
@@ -322,16 +316,11 @@ func main() {
 					}
 
 				} else if event.Family == 10 {
-					fmt.Printf("!!!!!!!!!SENDMSG SRC6=%s:%d DST6=%s:%d\n", srcIP6, event.Sport, dstIP6, event.Dport)
-					// pid := event.Pid
-					// fmt.Printf("STATE=11 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d  NAME=%s\n",
-					// 	pid,
-					// 	event.DstIP6[0], event.DstIP6[1],
-					// 	event.DstIP6[2], event.DstIP6[3],
-
-					// 	port,
-					// 	pkg.Int8ToString(event.Comm),
-					// )
+					fmt.Printf("!!!!!!!!!SENDMSG SRC6=%s:%d DST6=%s:%d\n",
+						srcIP6,
+						event.Sport,
+						dstIP6,
+						event.Dport)
 
 				}
 
@@ -354,22 +343,12 @@ func main() {
 						Comm:    pkg.Int8ToString(event.Comm),
 					}
 
-					// fmt.Printf("DATA_RECVFROM PID=%d srcIP=%s:%d\n",
-					// 	data.Recvmsg.Pid,
-					// 	data.Recvmsg.SrcIP,
-					// 	data.Recvmsg.SrcPort)
-
 				} else if event.Family == 10 {
-					fmt.Printf("!!!!!!!!!RECVFROM SRC6=%s:%d DST6=%s:%d\n", srcIP6, event.Sport, dstIP6, event.Dport)
-
-					// port := event.Sport
-					// pid := event.Pid
-					// fmt.Printf("STATE2 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d\n",
-					// 	pid,
-					// 	event.SrcIP6[0], event.SrcIP6[1],
-					// 	event.SrcIP6[2], event.SrcIP6[3],
-					// 	port,
-					// )
+					fmt.Printf("!!!!!!!!!RECVFROM SRC6=%s:%d DST6=%s:%d\n",
+						srcIP6,
+						event.Sport,
+						dstIP6,
+						event.Dport)
 
 				}
 
@@ -427,32 +406,6 @@ func main() {
 				} else if event.Family == 10 {
 					fmt.Printf("!!!!!!!!!RECVMSG SRC6=%s:%d DST6=%s:%d\n", srcIP6, event.Sport, dstIP6, event.Dport)
 
-					// port := event.Sport
-					// pid := event.Pid
-					// fmt.Printf("STATE=12 IPv6 PID=%d srcIPv6=%x:%x:%x:%x:%d\n",
-					// 	pid,
-					// 	event.SrcIP6[0], event.SrcIP6[1],
-					// 	event.SrcIP6[2], event.SrcIP6[3],
-					// 	port,
-					// )
-
-					// eventDstIP6 := [4]uint32{
-					// 	event.SrcIP6[0],
-					// 	event.SrcIP6[1],
-					// 	event.SrcIP6[2],
-					// 	event.SrcIP6[3],
-					// }
-
-					// ipBytes := []byte{
-					// 	byte(eventDstIP6[0] >> 24), byte(eventDstIP6[0] >> 16), byte(eventDstIP6[0] >> 8), byte(eventDstIP6[0]),
-					// 	byte(eventDstIP6[1] >> 24), byte(eventDstIP6[1] >> 16), byte(eventDstIP6[1] >> 8), byte(eventDstIP6[1]),
-					// 	byte(eventDstIP6[2] >> 24), byte(eventDstIP6[2] >> 16), byte(eventDstIP6[2] >> 8), byte(eventDstIP6[2]),
-					// 	byte(eventDstIP6[3] >> 24), byte(eventDstIP6[3] >> 16), byte(eventDstIP6[3] >> 8), byte(eventDstIP6[3]),
-					// }
-
-					// ip := net.IP(ipBytes)
-					// fmt.Printf("STATE=12 SHRT IPv6:=%s%d\n", ip.String(), event.Sport)
-
 				}
 
 			}
@@ -461,10 +414,6 @@ func main() {
 
 				family := event.Family
 				if family == 2 {
-
-					// 	dstAddr := fmt.Sprintf("//%s[%s]:%d", pkg.ResolveIP(dstIP), dstIP.String(), event.Dport)
-					// 	srcAddr := fmt.Sprintf("//[%s]:%d", srcIP.String(), event.Sport)
-					// fmt.Printf("STATE=3 srcIP=%s dstIP=%s PROTO=%d FAMILY=%d\n", srcAddr, dstAddr, event.Proto, int(family))
 
 					port := int(event.Dport)
 
@@ -555,16 +504,6 @@ func main() {
 					}
 
 					fmt.Printf("IPv6 адрес с интерфейсом: %s\n", ipAddr.String())
-
-					// fmt.Printf("STATE=3 DST IPv6=%x:%x:%x:%x\n",
-					// 	event.DstIP6[0], event.DstIP6[1],
-					// 	event.DstIP6[2], event.DstIP6[3])
-
-					// fmt.Printf("STATE=3 SRC IPv6=%x:%x:%x:%x\n",
-					// 	event.SrcIP6[0], event.SrcIP6[1],
-					// 	event.SrcIP6[2], event.SrcIP6[3])
-
-					// fmt.Printf("STATE=3 SPORT=%d  DPORT=%d PROTO=%d\n", event.Sport, event.Dport, event.Proto)
 
 				}
 
