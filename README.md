@@ -349,43 +349,136 @@ strace -f -o trace.log ./твоя_программа
 grep -i AF_INET6 trace.log
 
 
-type tracepoint struct {
-	category string
-	name     string
-	prog     *ebpf.Program
+var handlers = map[int]chan Event{}
+var eventMap = map[int]*EventData{}
+var eventMap_1 = map[int]*EventData{}
+
+func initHandlers() {
+    for _, code := range []int{1, 11} { // Добавь остальные Sysexit коды при необходимости
+        ch := make(chan Event, 100)
+        handlers[code] = ch
+
+        switch code {
+        case 1:
+            go func(ch chan Event) {
+                for evt := range ch {
+                    handleSysexit1(evt)
+                }
+            }(ch)
+
+        case 11:
+            go func(ch chan Event) {
+                for evt := range ch {
+                    handleSysexit11(evt)
+                }
+            }(ch)
+        }
+    }
 }
 
-tracepoints := []tracepoint{
-	{"syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter},
-	{"syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit},
-	{"syscalls", "sys_enter_sendto", objs.TraceSendtoEnter},
-	{"syscalls", "sys_exit_sendto", objs.TraceSendtoExit},
-	{"syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter},
-	{"syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit},
-	{"syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter},
-	{"syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit},
+func dispatchEvent(evt Event) {
+    if ch, ok := handlers[evt.Sysexit]; ok {
+        ch <- evt
+    } else {
+        log.Printf("Unknown Sysexit: %d", evt.Sysexit)
+    }
 }
 
-var links []link.Link
+func handleSysexit1(event Event) {
+    if event.Family == 2 {
+        port := int(event.Dport)
+        data, exists := eventMap_1[port]
+        if !exists {
+            data = &EventData{}
+            eventMap[port] = data
+        }
+        data.Sendmsg = &Sendmsg{
+            DstIP:   dstIP,
+            DstPort: port,
+            Pid:     event.Pid,
+            Comm:    pkg.Int8ToString(event.Comm),
+        }
 
-for _, tp := range tracepoints {
-	l, err := link.Tracepoint(tp.category, tp.name, tp.prog, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint %s: %s", tp.name, err)
-	}
-	links = append(links, l)
-	defer l.Close()
+        if data.Lookup != nil {
+            fmt.Printf("PID=%d srcIP=%s:%d -> dstIP=%s:%d\n",
+                data.Sendmsg.Pid,
+                data.Lookup.DstIP.String(),
+                data.Lookup.DstPort,
+                data.Lookup.SrcIP.String(),
+                data.Lookup.SrcPort,
+            )
+            fmt.Printf("PID=%d srcIP=%s:%d <- dstIP=%s:%d\n",
+                data.Recvmsg.Pid,
+                data.Recvmsg.SrcIP,
+                data.Recvmsg.SrcPort,
+                data.Sendmsg.DstIP,
+                data.Sendmsg.DstPort,
+            )
+        }
+
+    } else if event.Family == 10 {
+        fmt.Printf("!!!!!!!!!SENDTO  DST6=%s[%s]:%d\n",
+            pkg.ResolveIP(dstIP6),
+            dstIP6,
+            event.Dport)
+    }
 }
 
+func handleSysexit11(event Event) {
+    if event.Family == 2 {
+        port := int(event.Dport)
+        data, exists := eventMap[port]
+        if !exists {
+            data = &EventData{}
+            eventMap[port] = data
+        }
 
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"severity": 8,
-	"message": "expected declaration, found tracepoints",
-	"source": "syntax",
-	"startLineNumber": 70,
-	"startColumn": 1,
-	"endLineNumber": 70,
-	"endColumn": 1
-}]
+        data.Sendmsg = &Sendmsg{
+            DstIP:   dstIP,
+            DstPort: port,
+            Pid:     event.Pid,
+            Comm:    pkg.Int8ToString(event.Comm),
+        }
+
+        if data.Lookup != nil && data.Recvmsg != nil {
+            if data.Lookup.Proto == 17 {
+                proto = "UDP"
+            }
+
+            fmt.Println("")
+
+            fmt.Printf("PID=%d NAME=%s %s/%s[%s]:%d->%s[%s]:%d\n",
+                data.Sendmsg.Pid,
+                data.Sendmsg.Comm,
+                proto,
+                pkg.ResolveIP(dstIP),
+                data.Lookup.DstIP,
+                data.Lookup.DstPort,
+                pkg.ResolveIP(srcIP),
+                data.Lookup.SrcIP,
+                data.Lookup.SrcPort,
+            )
+
+            fmt.Printf("PID=%d NAME=%s %s/%s[%s]:%d<-%s[%s]:%d\n",
+                data.Recvmsg.Pid,
+                data.Recvmsg.Comm,
+                proto,
+                pkg.ResolveIP(dstIP),
+                data.Lookup.DstIP,
+                data.Lookup.DstPort,
+                pkg.ResolveIP(srcIP),
+                data.Lookup.SrcIP,
+                data.Lookup.SrcPort,
+            )
+
+            fmt.Println("")
+        }
+
+    } else if event.Family == 10 {
+        fmt.Printf("!!!!!!!!!SENDMSG SRC6=%s:%d DST6=%s:%d\n",
+            srcIP6,
+            event.Sport,
+            dstIP6,
+            event.Dport)
+    }
+}
