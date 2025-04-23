@@ -377,3 +377,15 @@ for _, tp := range tracepoints {
 	defer l.Close()
 }
 
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"severity": 8,
+	"message": "expected declaration, found tracepoints",
+	"source": "syntax",
+	"startLineNumber": 70,
+	"startColumn": 1,
+	"endLineNumber": 70,
+	"endColumn": 1
+}]
