@@ -440,6 +440,9 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
        bpf_probe_read_kernel(&info.daddr6, sizeof(info.daddr6), ctx->remote_ip6);
 
 
+       Saddr6 bytes: [0 0 0 0 0 116 167 169 120 136 1 34 192 232 151 174]
+
+
 
 
 
