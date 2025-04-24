@@ -440,8 +440,11 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
        bpf_probe_read_kernel(&info.daddr6, sizeof(info.daddr6), ctx->remote_ip6);
 
 
-       Saddr6 bytes: [0 0 0 0 0 116 167 169 120 136 1 34 192 232 151 174]
+Saddr6 bytes: [0 0 0 0 0 152 130 182 22 195 181 64 192 232 247 175]
+!!!!!!!!!LOOKUP ETH=2 PID=0 SRC6=Unknown[::98:82b6:16c3:b540:c0e8:f7af]:546 DST6=dc92:ffff:c460:db08:dc92:ffff:::53385
+IPv6 адрес с интерфейсом: ::98:82b6:16c3:b540:c0e8:f7af%wlp0s20f3
 
+Internet Protocol Version 6, Src: fe80::e73:29ff:feb7:d6e8, Dst: fe80::d6b2:9200:15bb:a0e8
 
 
 
