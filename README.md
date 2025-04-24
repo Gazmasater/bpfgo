@@ -438,6 +438,9 @@ BPF_PERF_OUTPUT(trace_events);
 BPF_PERF_OUTPUT(trace_events_v6); // Второй буфер, например, для IPv6
 
 
+SRC6=Unknown[fe00:d615::]:546 DST6=fe00:efe:::53385
+
+
 
 
 
