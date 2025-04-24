@@ -361,4 +361,79 @@ bpf_printk("IPv6 src: %04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x\n",
     (ip3 >> 16) & 0xffff, ip3 & 0xffff);
 
 
+    SEC("tracepoint/sock/inet_sock_set_state")
+int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
+
+    struct trace_info info = {};
+    struct conn_info_t conn_info={};
+
+
+    __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info));
+
+    bpf_probe_read_kernel(info.comm, sizeof(info.comm), conn_info.comm);
+    info.sysexit=6;
+    info.proto=ctx->protocol;
+
+
+
+
+
+    __u32 srcip;
+    bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
+    srcip = bpf_ntohl(srcip);
+
+    __u32 dstip;
+    bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
+    dstip = bpf_ntohl(dstip);
+       
+    __u16 sport=0;
+    
+    sport=ctx->sport;
+       
+    __u16 dport;
+    dport=ctx->dport;
+
+   __u8 state=ctx->newstate;
+
+    if (ctx->family==AF_INET) {
+    if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
+
+        info.src_ip=srcip;
+        info.sport=sport;
+        info.dst_ip=dstip;
+        info.dport=dport;
+        info.sysexit=6;
+        info.state=ctx->newstate;
+        info.family=ctx->family;
+
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    }
+
+    } else if (ctx->family==AF_INET6) {
+
+
+        info.family=ctx->family;
+        info.state=ctx->newstate;
+        info.sport =(ctx->sport);
+        info.dport=(ctx->dport);
+        if (bpf_probe_read_kernel(&info.saddr6, sizeof(info.saddr6), ctx->saddr_v6) < 0) {
+            return 0;
+        }
+        if (bpf_probe_read_kernel(&info.daddr6, sizeof(info.saddr6), ctx->daddr_v6) < 0) {
+            return 0;
+        }
+
+
+        
+       bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+
+    }
+
+    return 0;
+}
+
+
+
 
