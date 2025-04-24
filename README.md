@@ -436,15 +436,30 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 
 
 
-       bpf_probe_read_kernel(&info.saddr6, sizeof(info.saddr6), ctx->local_ip6);
-       bpf_probe_read_kernel(&info.daddr6, sizeof(info.daddr6), ctx->remote_ip6);
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "InvalidConversion",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "InvalidConversion"
+		}
+	},
+	"severity": 8,
+	"message": "cannot convert event.Saddr6[:] (value of type []uint32) to type net.IP",
+	"source": "compiler",
+	"startLineNumber": 206,
+	"startColumn": 21,
+	"endLineNumber": 206,
+	"endColumn": 36
+}]
 
 
-Saddr6 bytes: [0 0 0 0 0 152 130 182 22 195 181 64 192 232 247 175]
-!!!!!!!!!LOOKUP ETH=2 PID=0 SRC6=Unknown[::98:82b6:16c3:b540:c0e8:f7af]:546 DST6=dc92:ffff:c460:db08:dc92:ffff:::53385
-IPv6 адрес с интерфейсом: ::98:82b6:16c3:b540:c0e8:f7af%wlp0s20f3
 
-Internet Protocol Version 6, Src: fe80::e73:29ff:feb7:d6e8, Dst: fe80::d6b2:9200:15bb:a0e8
 
 
 
