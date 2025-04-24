@@ -434,6 +434,10 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
     return 0;
 }
 
+BPF_PERF_OUTPUT(trace_events);
+BPF_PERF_OUTPUT(trace_events_v6); // Второй буфер, например, для IPv6
+
+
 
 
 
