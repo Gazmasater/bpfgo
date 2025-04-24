@@ -349,114 +349,20 @@ strace -f -o trace.log ./твоя_программа
 grep -i AF_INET6 trace.log
 
 
-__u32 ip0 = bpf_ntohl(ctx->local_ip6[0]);
-__u32 ip1 = bpf_ntohl(ctx->local_ip6[1]);
-__u32 ip2 = bpf_ntohl(ctx->local_ip6[2]);
-__u32 ip3 = bpf_ntohl(ctx->local_ip6[3]);
-
-bpf_printk("IPv6 src: %04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x\n",
-    (ip0 >> 16) & 0xffff, ip0 & 0xffff,
-    (ip1 >> 16) & 0xffff, ip1 & 0xffff,
-    (ip2 >> 16) & 0xffff, ip2 & 0xffff,
-    (ip3 >> 16) & 0xffff, ip3 & 0xffff);
-
-
-    SEC("tracepoint/sock/inet_sock_set_state")
-int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
-
-    struct trace_info info = {};
-    struct conn_info_t conn_info={};
-
-
-    __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info));
-
-    bpf_probe_read_kernel(info.comm, sizeof(info.comm), conn_info.comm);
-    info.sysexit=6;
-    info.proto=ctx->protocol;
-
-
-
-
-
-    __u32 srcip;
-    bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
-    srcip = bpf_ntohl(srcip);
-
-    __u32 dstip;
-    bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
-    dstip = bpf_ntohl(dstip);
-       
-    __u16 sport=0;
-    
-    sport=ctx->sport;
-       
-    __u16 dport;
-    dport=ctx->dport;
-
-   __u8 state=ctx->newstate;
-
-    if (ctx->family==AF_INET) {
-    if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
-
-        info.src_ip=srcip;
-        info.sport=sport;
-        info.dst_ip=dstip;
-        info.dport=dport;
-        info.sysexit=6;
-        info.state=ctx->newstate;
-        info.family=ctx->family;
-
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+func uint32ToIP(saddr []uint32) net.IP {
+    ip := make([]byte, 16) // для IPv6 длина 16 байт
+    for i, val := range saddr {
+        ip[i*4] = byte(val >> 24)
+        ip[i*4+1] = byte(val >> 16)
+        ip[i*4+2] = byte(val >> 8)
+        ip[i*4+3] = byte(val)
     }
-
-    } else if (ctx->family==AF_INET6) {
-
-
-        info.family=ctx->family;
-        info.state=ctx->newstate;
-        info.sport =(ctx->sport);
-        info.dport=(ctx->dport);
-        if (bpf_probe_read_kernel(&info.saddr6, sizeof(info.saddr6), ctx->saddr_v6) < 0) {
-            return 0;
-        }
-        if (bpf_probe_read_kernel(&info.daddr6, sizeof(info.saddr6), ctx->daddr_v6) < 0) {
-            return 0;
-        }
-
-
-        
-       bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-
-    }
-
-    return 0;
+    return net.IP(ip)
 }
 
+ip := uint32ToIP(event.Saddr6[:])
 
 
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "InvalidConversion",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "InvalidConversion"
-		}
-	},
-	"severity": 8,
-	"message": "cannot convert event.Saddr6[:] (value of type []uint32) to type net.IP",
-	"source": "compiler",
-	"startLineNumber": 206,
-	"startColumn": 21,
-	"endLineNumber": 206,
-	"endColumn": 36
-}]
 
 
 
