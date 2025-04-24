@@ -349,8 +349,9 @@ strace -f -o trace.log ./твоя_программа
 grep -i AF_INET6 trace.log
 
 
-if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
-	log.Println("invalid event size:", len(record.RawSample), "<", unsafe.Sizeof(bpfTraceInfo{}))
-	continue
-}
+        info.srcIP6[0]=bpf_ntohl(ctx->local_ip6[0]);
+        info.srcIP6[1]=bpf_ntohl(ctx->local_ip6[1]);
+        info.srcIP6[2]=bpf_ntohl(ctx->local_ip6[2]);
+        info.srcIP6[3]=bpf_ntohl(ctx->local_ip6[3]);
+
 
