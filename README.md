@@ -349,18 +349,9 @@ strace -f -o trace.log ./твоя_программа
 grep -i AF_INET6 trace.log
 
 
-func uint32ToIP(saddr []uint32) net.IP {
-    ip := make([]byte, 16) // для IPv6 длина 16 байт
-    for i, val := range saddr {
-        ip[i*4] = byte(val >> 24)
-        ip[i*4+1] = byte(val >> 16)
-        ip[i*4+2] = byte(val >> 8)
-        ip[i*4+3] = byte(val)
-    }
-    return net.IP(ip)
-}
+        bpf_probe_read_kernel(&info.saddr6, sizeof(info.saddr6), ctx->local_ip6);
+        bpf_probe_read_kernel(&info.daddr6, sizeof(info.daddr6), ctx->remote_ip6);
 
-ip := uint32ToIP(event.Saddr6[:])
 
 
 
