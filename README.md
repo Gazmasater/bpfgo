@@ -434,11 +434,10 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
     return 0;
 }
 
-BPF_PERF_OUTPUT(trace_events);
-BPF_PERF_OUTPUT(trace_events_v6); // Второй буфер, например, для IPv6
 
 
-SRC6=Unknown[fe00:d615::]:546 DST6=fe00:efe:::53385
+       bpf_probe_read_kernel(&info.saddr6, sizeof(info.saddr6), ctx->local_ip6);
+       bpf_probe_read_kernel(&info.daddr6, sizeof(info.daddr6), ctx->remote_ip6);
 
 
 
