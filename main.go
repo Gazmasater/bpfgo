@@ -100,17 +100,17 @@ func main() {
 	}
 	defer SmsgExit.Close()
 
-	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
-	}
-	defer SEnter.Close()
+	// SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
+	// }
+	// defer SEnter.Close()
 
-	SExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_sendto: %s", err)
-	}
-	defer SExit.Close()
+	// SExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_exit_sendto: %s", err)
+	// }
+	// defer SExit.Close()
 
 	RmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter, nil)
 	if err != nil {
@@ -124,17 +124,17 @@ func main() {
 	}
 	defer RmsgExit.Close()
 
-	REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
-	}
-	defer REnter.Close()
+	// REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
+	// }
+	// defer REnter.Close()
 
-	RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
-	}
-	defer RExit.Close()
+	// RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
+	// }
+	// defer RExit.Close()
 
 	InetSock, err := link.Tracepoint("sock", "inet_sock_set_state", objs.TraceTcpEst, nil)
 	if err != nil {
@@ -158,7 +158,7 @@ func main() {
 
 		record := new(perf.Record)
 
-		const buffLen = 128
+		const buffLen = 4096
 		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
 		if err != nil {
 			log.Fatalf("failed to create perf reader: %s", err)
@@ -488,8 +488,9 @@ func main() {
 						event.Ifindex,
 						event.Pid,
 						pkg.ResolveIP(srcIP6),
-						srcIP6, event.Sport,
-						dstIP6,
+						srcIP6.String(),
+						event.Sport,
+						dstIP6.String(),
 						event.Dport)
 
 					iface, err := net.InterfaceByIndex(int(event.Ifindex))
