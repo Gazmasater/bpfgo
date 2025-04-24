@@ -349,9 +349,16 @@ strace -f -o trace.log ./твоя_программа
 grep -i AF_INET6 trace.log
 
 
-        info.srcIP6[0]=bpf_ntohl(ctx->local_ip6[0]);
-        info.srcIP6[1]=bpf_ntohl(ctx->local_ip6[1]);
-        info.srcIP6[2]=bpf_ntohl(ctx->local_ip6[2]);
-        info.srcIP6[3]=bpf_ntohl(ctx->local_ip6[3]);
+__u32 ip0 = bpf_ntohl(ctx->local_ip6[0]);
+__u32 ip1 = bpf_ntohl(ctx->local_ip6[1]);
+__u32 ip2 = bpf_ntohl(ctx->local_ip6[2]);
+__u32 ip3 = bpf_ntohl(ctx->local_ip6[3]);
+
+bpf_printk("IPv6 src: %04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x\n",
+    (ip0 >> 16) & 0xffff, ip0 & 0xffff,
+    (ip1 >> 16) & 0xffff, ip1 & 0xffff,
+    (ip2 >> 16) & 0xffff, ip2 & 0xffff,
+    (ip3 >> 16) & 0xffff, ip3 & 0xffff);
+
 
 
