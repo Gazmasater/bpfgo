@@ -366,6 +366,15 @@ fmt.Printf("Raw IPv6 u32: %08x %08x %08x %08x\n", info.Daddr6[0], info.Daddr6[1]
 
 Raw IPv6 u32: 000002ff 00000000 00000000 02000100
 
+func Uint32ToIP(saddr []uint32) net.IP {
+	ip := make([]byte, 16)
+	for i, val := range saddr {
+		binary.BigEndian.PutUint32(ip[i*4:], val)
+	}
+	return net.IP(ip)
+}
+
+
 
 
 
