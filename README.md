@@ -382,6 +382,9 @@ done
     bpf_map_delete_elem(&conn_info_map, &pid);
 
 
+    bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+
+
 
 
 
