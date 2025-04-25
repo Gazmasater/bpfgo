@@ -364,8 +364,12 @@ info.saddr6[0]=bpf_ntohl(ctx->local_ip6[0]);
     info.daddr6[3]=bpf_ntohl(ctx->remote_ip6[3]);
 
 
-__builtin_memcpy(info.saddr6, ctx->local_ip6, sizeof(info.saddr6));
-__builtin_memcpy(info.daddr6, ctx->remote_ip6, sizeof(info.daddr6));
+#pragma unroll
+for (int i = 0; i < 4; i++) {
+    info.saddr6[i] = ctx->local_ip6[i];
+    info.daddr6[i] = ctx->remote_ip6[i];
+}
+
 
 
 
