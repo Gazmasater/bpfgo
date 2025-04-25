@@ -354,21 +354,46 @@ while true; do
 done
 
 
-info.saddr6[0]=bpf_ntohl(ctx->local_ip6[0]);
-    info.saddr6[1]=bpf_ntohl(ctx->local_ip6[1]);
-    info.saddr6[2]=bpf_ntohl(ctx->local_ip6[2]);
-    info.saddr6[3]=bpf_ntohl(ctx->local_ip6[3]);
-    info.daddr6[0]=bpf_ntohl(ctx->remote_ip6[0]);
-    info.daddr6[1]=bpf_ntohl(ctx->remote_ip6[1]);
-    info.daddr6[2]=bpf_ntohl(ctx->remote_ip6[2]);
-    info.daddr6[3]=bpf_ntohl(ctx->remote_ip6[3]);
+struct trace_info {
+    u32 src_ip;
+    u32 dst_ip;
+    __u16 sport;
+    u32 pid;
+    u32 proto;
+    u32 sysexit;
+    u32 state;
+    __u32 ifindex;
+    __u32 saddr6[4];
+    __u32 daddr6[4];
+    __u8 saddr6n[16];
+    __u8 daddr6n[16];
 
+    u16 family;
+    u16 dport;
 
-#pragma unroll
-for (int i = 0; i < 4; i++) {
-    info.saddr6[i] = ctx->local_ip6[i];
-    info.daddr6[i] = ctx->remote_ip6[i];
+   
+    char comm[64];
+};
+
+type bpfTraceInfo struct {
+	SrcIp   uint32
+	DstIp   uint32
+	Sport   uint16
+	_       [2]byte
+	Pid     uint32
+	Proto   uint32
+	Sysexit uint32
+	State   uint32
+	Ifindex uint32
+	Saddr6  [4]uint32
+	Daddr6  [4]uint32
+	Saddr6n [16]uint8
+	Daddr6n [16]uint8
+	Family  uint16
+	Dport   uint16
+	Comm    [64]int8
 }
+
 
 
 
