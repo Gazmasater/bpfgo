@@ -364,6 +364,7 @@ Internet Protocol Version 6, Dst: ff02::1:2
 
 fmt.Printf("Raw IPv6 u32: %08x %08x %08x %08x\n", info.Daddr6[0], info.Daddr6[1], info.Daddr6[2], info.Daddr6[3])
 
+Raw IPv6 u32: 000002ff 00000000 00000000 02000100
 
 
 
