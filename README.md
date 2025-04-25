@@ -354,26 +354,32 @@ while true; do
 done
 
 
+ else if (addr.sa_family==AF_INET6) {
+
+      
+        struct sockaddr_in6 addr_in6 = {};
+
+        bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr);
+
+        u16 port = bpf_ntohs(addr_in6.sin6_port);
+        
+        info.family=AF_INET6;
+        info.dport=port;
+
         info.daddr6[0]=bpf_ntohl(addr_in6.sin6_addr.in6_u.u6_addr32[0]);
         info.daddr6[1]=bpf_ntohl(addr_in6.sin6_addr.in6_u.u6_addr32[1]);
         info.daddr6[2]=bpf_ntohl(addr_in6.sin6_addr.in6_u.u6_addr32[2]);
         info.daddr6[3]=bpf_ntohl(addr_in6.sin6_addr.in6_u.u6_addr32[3]);
-SENDTO  DST6=Unknown[0:2ff::200:100]:547
-Internet Protocol Version 6, Dst: ff02::1:2
 
+     //   bpf_probe_read_kernel(&info.daddr6, sizeof(info.daddr6), &addr_in6.sin6_addr);
 
-fmt.Printf("Raw IPv6 u32: %08x %08x %08x %08x\n", info.Daddr6[0], info.Daddr6[1], info.Daddr6[2], info.Daddr6[3])
+        
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
-Raw IPv6 u32: 000002ff 00000000 00000000 02000100
+    }
 
-func Uint32ToIP(saddr []uint32) net.IP {
-	ip := make([]byte, 16)
-	for i, val := range saddr {
-		binary.BigEndian.PutUint32(ip[i*4:], val)
-	}
-	return net.IP(ip)
-}
-
+    bpf_map_delete_elem(&addrSend_map, &pid);  
+    bpf_map_delete_elem(&conn_info_map, &pid);
 
 
 
