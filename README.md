@@ -361,13 +361,11 @@ done
 SENDTO  DST6=Unknown[0:2ff::200:100]:547
 Internet Protocol Version 6, Dst: ff02::1:2
 
+
 func Uint32ToIP(saddr []uint32) net.IP {
-	ip := make([]byte, 16) // для IPv6 длина 16 байт
+	ip := make([]byte, 16)
 	for i, val := range saddr {
-		ip[i*4] = byte(val >> 24)
-		ip[i*4+1] = byte(val >> 16)
-		ip[i*4+2] = byte(val >> 8)
-		ip[i*4+3] = byte(val)
+		binary.BigEndian.PutUint32(ip[i*4:], val)
 	}
 	return net.IP(ip)
 }
