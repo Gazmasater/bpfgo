@@ -431,4 +431,15 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
     return 0;
 }
 
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/handleIp.go",
+	"owner": "go-staticcheck",
+	"severity": 4,
+	"message": "cannot use [16]int8(event.Comm) (value of type [16]int8) as [64]int8 value in argument to pkg.Int8ToString",
+	"source": "go-staticcheck",
+	"startLineNumber": 32,
+	"startColumn": 20,
+	"endLineNumber": 32,
+	"endColumn": 42
+}]
 
