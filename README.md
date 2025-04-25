@@ -354,95 +354,14 @@ while true; do
 done
 
 
- else if (addr.sa_family==AF_INET6) {
-
-      
-        struct sockaddr_in6 addr_in6 = {};
-
-        bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr);
-
-        u16 port = bpf_ntohs(addr_in6.sin6_port);
-        
-        info.family=AF_INET6;
-        info.dport=port;
-
-        info.daddr6[0]=bpf_ntohl(addr_in6.sin6_addr.in6_u.u6_addr32[0]);
-        info.daddr6[1]=bpf_ntohl(addr_in6.sin6_addr.in6_u.u6_addr32[1]);
-        info.daddr6[2]=bpf_ntohl(addr_in6.sin6_addr.in6_u.u6_addr32[2]);
-        info.daddr6[3]=bpf_ntohl(addr_in6.sin6_addr.in6_u.u6_addr32[3]);
-
-     //   bpf_probe_read_kernel(&info.daddr6, sizeof(info.daddr6), &addr_in6.sin6_addr);
-
-        
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-    }
-
-    bpf_map_delete_elem(&addrSend_map, &pid);  
-    bpf_map_delete_elem(&conn_info_map, &pid);
-
-
-    bpf2go -output-dir . -tags linux -type trace_info -type trace_infon -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
-
-    struct
-{
-    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-    __uint(key_size, sizeof(u32));
-    __uint(value_size, sizeof(u32));
-    __uint(max_entries, 128);
-} trace_events SEC(".maps");
-
-struct
-{
-    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-    __uint(key_size, sizeof(u32));
-    __uint(value_size, sizeof(u32));
-    __uint(max_entries, 128);
-} trace_eventsn SEC(".maps");
-
-
-    struct trace_info {
-    u32 src_ip;
-    u32 dst_ip;
-    __u16 sport;
-    u32 pid;
-    u32 proto;
-    u32 sysexit;
-    u32 state;
-    __u32 ifindex;
-    __u32 saddr6[4];
-    __u32 daddr6[4];
-    u16 family;
-    u16 dport;
-
-   
-    char comm[64];
-};
-
-struct traceinfon {
-    u32 src_ip;
-    u32 dst_ip;
-    __u16 sport;
-    u32 pid;
-    u32 proto;
-    u32 sysexit;
-    u32 state;
-    __u32 ifindex;
-    __u8 saddr6[16];
-    __u8 daddr6[16];
-    u16 family;
-    u16 dport;
-
-   
-    char comm[64];
-};
-
-
-    gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -type traceinfon -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
-Compiled /home/gaz358/myprog/bpfgo/bpf_x86_bpfel.o
-Stripped /home/gaz358/myprog/bpfgo/bpf_x86_bpfel.o
-Error: collect C types: type name traceinfon: not found
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+info.saddr6[0]=bpf_ntohl(ctx->local_ip6[0]);
+    info.saddr6[1]=bpf_ntohl(ctx->local_ip6[1]);
+    info.saddr6[2]=bpf_ntohl(ctx->local_ip6[2]);
+    info.saddr6[3]=bpf_ntohl(ctx->local_ip6[3]);
+    info.daddr6[0]=bpf_ntohl(ctx->remote_ip6[0]);
+    info.daddr6[1]=bpf_ntohl(ctx->remote_ip6[1]);
+    info.daddr6[2]=bpf_ntohl(ctx->remote_ip6[2]);
+    info.daddr6[3]=bpf_ntohl(ctx->remote_ip6[3]);
 
 
 
