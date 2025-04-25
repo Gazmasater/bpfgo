@@ -362,13 +362,8 @@ SENDTO  DST6=Unknown[0:2ff::200:100]:547
 Internet Protocol Version 6, Dst: ff02::1:2
 
 
-func Uint32ToIP(saddr []uint32) net.IP {
-	ip := make([]byte, 16)
-	for i, val := range saddr {
-		binary.BigEndian.PutUint32(ip[i*4:], val)
-	}
-	return net.IP(ip)
-}
+fmt.Printf("Raw IPv6 u32: %08x %08x %08x %08x\n", info.Daddr6[0], info.Daddr6[1], info.Daddr6[2], info.Daddr6[3])
+
 
 
 
