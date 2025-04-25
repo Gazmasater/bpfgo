@@ -382,7 +382,67 @@ done
     bpf_map_delete_elem(&conn_info_map, &pid);
 
 
-    bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+    bpf2go -output-dir . -tags linux -type trace_info -type trace_infon -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+
+    struct
+{
+    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+    __uint(key_size, sizeof(u32));
+    __uint(value_size, sizeof(u32));
+    __uint(max_entries, 128);
+} trace_events SEC(".maps");
+
+struct
+{
+    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+    __uint(key_size, sizeof(u32));
+    __uint(value_size, sizeof(u32));
+    __uint(max_entries, 128);
+} trace_eventsn SEC(".maps");
+
+
+    struct trace_info {
+    u32 src_ip;
+    u32 dst_ip;
+    __u16 sport;
+    u32 pid;
+    u32 proto;
+    u32 sysexit;
+    u32 state;
+    __u32 ifindex;
+    __u32 saddr6[4];
+    __u32 daddr6[4];
+    u16 family;
+    u16 dport;
+
+   
+    char comm[64];
+};
+
+struct traceinfon {
+    u32 src_ip;
+    u32 dst_ip;
+    __u16 sport;
+    u32 pid;
+    u32 proto;
+    u32 sysexit;
+    u32 state;
+    __u32 ifindex;
+    __u8 saddr6[16];
+    __u8 daddr6[16];
+    u16 family;
+    u16 dport;
+
+   
+    char comm[64];
+};
+
+
+    gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -type traceinfon -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+Compiled /home/gaz358/myprog/bpfgo/bpf_x86_bpfel.o
+Stripped /home/gaz358/myprog/bpfgo/bpf_x86_bpfel.o
+Error: collect C types: type name traceinfon: not found
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
 
