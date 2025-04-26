@@ -354,7 +354,6 @@ while true; do
 done
 
 
-
 package main
 
 import (
@@ -461,6 +460,21 @@ func HandleIPEvent(
 	default:
 	}
 }
+
+
+
+
+
+
+PID=5802 NAME=nc TCP://ip6-localhost[::1]:48486 <- TCP://ip6-localhost[::1]:12345 
+PID=5679 NAME=nc TCP://ip6-localhost[::1]:48486 -> TCP://ip6-localhost[::1]:12345 
+
+FAMIY FUNC =10 STATE=3
+PID=5802 SPORT=12345 DPORT=0 STATE=3 NAME=nc
+FAMIY FUNC =10 STATE=1
+PID=5802 SPORT=12345 DPORT=48486 STATE=1 NAME=nc
+
+PID=5802 NAME=nc TCP://ip6-localhost[::1]:12345 <- TCP://ip6-localhost[::1]:48486 
 
 
 
