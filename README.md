@@ -356,117 +356,131 @@ done
 
 
 
-SEC("tracepoint/sock/inet_sock_set_state")
-int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
-    struct trace_info info = {};
-    struct sock_info_t sock_info = {};
+			if event.Sysexit == 3 {
 
-    __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
-    bpf_get_current_comm(&sock_info.comm, sizeof(sock_info.comm));
+				family := event.SockInfo.Family
 
-    sock_info.pid = pid_tcp;
-    sock_info.proto = ctx->protocol;
-    sock_info.state = ctx->newstate;
-    sock_info.family = ctx->family;
-    sock_info.sport = ctx->sport; 
-    sock_info.dport = ctx->dport;
+				if family == 2 {
 
-    info.sysexit=6;
+					port := int(event.SockInfo.Dport)
 
-    if (ctx->family == AF_INET) {
-        struct sockaddr_in addr4 = {};
-        addr4.sin_family = AF_INET;
-        bpf_probe_read_kernel(&addr4.sin_addr.s_addr, sizeof(addr4.sin_addr.s_addr), ctx->saddr);
-        sock_info.saddr4 = addr4;
+					data, exists := eventMap[port]
+					if !exists {
+						data = &EventData{}
+						eventMap[port] = data
+					}
 
-        struct sockaddr_in addr4_dst = {};
-        addr4_dst.sin_family = AF_INET;
-        bpf_probe_read_kernel(&addr4_dst.sin_addr.s_addr, sizeof(addr4_dst.sin_addr.s_addr), ctx->daddr);
-        sock_info.daddr4 = addr4_dst;  
+					data.Lookup = &Lookup{
+						SrcIP:   srcIP,
+						SrcPort: int(event.SockInfo.Sport),
+						DstIP:   dstIP,
+						DstPort: int(event.SockInfo.Dport),
+						Proto:   int(event.SockInfo.Proto)}
+				}
 
-    } else if (ctx->family == AF_INET6) {
-        struct sockaddr_in6 addr6 = {};
-        addr6.sin6_family = AF_INET6;
-        if (bpf_probe_read_kernel(&addr6.sin6_addr, sizeof(addr6.sin6_addr), ctx->saddr_v6) < 0)
-            return 0;
-       sock_info.saddr6 = addr6;
+				port_1 := int(event.SockInfo.Sport)
 
-        // Считывание адреса назначения (daddr)
-        struct sockaddr_in6 addr6_dst = {};
-        addr6_dst.sin6_family = AF_INET6;
-        if (bpf_probe_read_kernel(&addr6_dst.sin6_addr, sizeof(addr6_dst.sin6_addr), ctx->daddr_v6) < 0)
-            return 0;
-        sock_info.daddr6 = addr6_dst;  // Добавление адреса назначения для IPv6
-    }
+				data_1, exists := eventMap_1[port_1]
+				if !exists {
+					data_1 = &EventData{}
+					eventMap_1[port_1] = data_1
+				}
 
-   info.sock_info = sock_info; // заполняем вложение
+				data_1.Lookup = &Lookup{
+					SrcIP:   srcIP,
+					SrcPort: int(event.SockInfo.Sport),
+					DstIP:   dstIP,
+					DstPort: int(event.SockInfo.Dport),
+					Proto:   int(event.SockInfo.Proto),
+				}
 
-    bpf_probe_read_kernel(info.comm, sizeof(info.comm), sock_info.comm);
+				fmt.Printf("LOOKUP srcIP=%s:%d\n", data_1.Lookup.SrcIP, data_1.Lookup.SrcPort)
 
-    if (ctx->newstate == TCP_ESTABLISHED ||
-        ctx->newstate == TCP_SYN_SENT ||
-        ctx->newstate == TCP_LISTEN) {
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    }
+				if data.Recvmsg != nil && data.Sendmsg != nil {
 
-    return 0;
-}
+					if data.Lookup.Proto == 17 {
+
+						proto = "UDP"
+					}
+
+					// 			fmt.Println("")
+
+					// 			fmt.Printf("PID=%d NAME=%s %s/%s:%d<-%s:%d\n",
+					// 				data.Recvmsg.Pid,
+					// 				data.Recvmsg.Comm,
+					// 				proto,
+					// 				data.Lookup.DstIP,
+					// 				data.Lookup.DstPort,
+					// 				data.Lookup.SrcIP,
+					// 				data.Lookup.SrcPort,
+					// 			)
+
+					// 			fmt.Printf("PID=%d NAME=%s %s/%s:%d->%s:%d\n",
+					// 				data.Sendmsg.Pid,
+					// 				data.Sendmsg.Comm,
+					// 				proto,
+					// 				data.Lookup.DstIP,
+					// 				data.Lookup.DstPort,
+					// 				data.Lookup.SrcIP,
+					// 				data.Lookup.SrcPort,
+					// 			)
+
+					// 			fmt.Println("")
+
+				}
+
+				// 	} else if family == 10 {
+
+				// 		fmt.Printf("Saddr6 bytes: %v\n", event.Saddr6[:])
+
+				// 		fmt.Printf("!!!!!!!!!LOOKUP ETH=%d PID=%d SRC6=%s[%s]:%d DST6=%s:%d\n",
+				// 			event.Ifindex,
+				// 			event.SockInfo.Pid,
+				// 			pkg.ResolveIP(srcIP6),
+				// 			srcIP6.String(),
+				// 			event.SockInfo.Sport,
+				// 			dstIP6.String(),
+				// 			event.SockInfo.Dport)
+
+				// 		iface, err := net.InterfaceByIndex(int(event.Ifindex))
+				// 		if err != nil {
+				// 			fmt.Fprintf(os.Stderr, "ошибка: %v\n", err)
+				// 			return
+				// 		}
+
+				// 		ipAddr := &net.IPAddr{
+				// 			IP:   srcIP6,
+				// 			Zone: iface.Name,
+				// 		}
+
+				// 		fmt.Printf("IPv6 адрес с интерфейсом: %s\n", ipAddr.String())
+
+				// 	}
+
+			}
 
 
-SEC("sk_lookup")
-int look_up(struct bpf_sk_lookup *ctx) {
-    struct trace_info info = {};
-    struct sock_info_t sock_info = {};
-
-    sock_info.family = ctx->family;
-    sock_info.proto = ctx->protocol;
-    sock_info.sport = ctx->local_port;
-    sock_info.dport = bpf_ntohs(ctx->remote_port);
-
-    info.sysexit = 3;
-    info.ifindex = ctx->ingress_ifindex;
-
-    if (ctx->family == AF_INET) {
-        struct sockaddr_in addr4_src = {};
-        addr4_src.sin_family = AF_INET;
-        addr4_src.sin_port = ctx->local_port;
-        addr4_src.sin_addr.s_addr = ctx->local_ip4;
-
-        sock_info.saddr4 = addr4_src;
-
-        struct sockaddr_in addr4_dst = {};
-        addr4_dst.sin_family = AF_INET;
-        addr4_dst.sin_port = ctx->remote_port;
-        addr4_dst.sin_addr.s_addr = ctx->remote_ip4;
-
-        sock_info.daddr4 = addr4_dst;
-
-    } else if (ctx->family == AF_INET6) {
-        struct sockaddr_in6 addr6_src = {};
-        addr6_src.sin6_family = AF_INET6;
-        addr6_src.sin6_port = ctx->local_port;
-
-        if (bpf_probe_read_kernel(&addr6_src.sin6_addr, sizeof(addr6_src.sin6_addr), ctx->local_ip6) < 0)
-            return SK_PASS;
-
-        sock_info.saddr6 = addr6_src;
-
-        struct sockaddr_in6 addr6_dst = {};
-        addr6_dst.sin6_family = AF_INET6;
-        addr6_dst.sin6_port = ctx->remote_port;
-
-        if (bpf_probe_read_kernel(&addr6_dst.sin6_addr, sizeof(addr6_dst.sin6_addr), ctx->remote_ip6) < 0)
-            return SK_PASS;
-
-        sock_info.daddr6 = addr6_dst;
-    }
-
-    info.sock_info = sock_info;  // кладём заполненный sock_info в info
-
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-    return SK_PASS;
-}
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#3",
+	"code": {
+		"value": "UndeclaredName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: data",
+	"source": "compiler",
+	"startLineNumber": 464,
+	"startColumn": 8,
+	"endLineNumber": 464,
+	"endColumn": 12
+}]
 
 
 
