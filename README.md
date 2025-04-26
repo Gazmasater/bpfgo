@@ -355,13 +355,47 @@ done
 
 
 
-if event.SockInfo.Family == unix.AF_INET {
-    // IPv4
-    srcIP := make(net.IP, 4)
-    binary.BigEndian.PutUint32(srcIP, event.SockInfo.Addr4.SinAddr.S_addr)
-
-} else if event.SockInfo.Family == unix.AF_INET6 {
-    // IPv6
-    srcIP := net.IP(event.Saddr6[:]) // <- saddr6 должен быть сверху отдельно
+type bpfTraceInfo struct {
+	SockInfo struct {
+		Family uint8
+		_      [3]byte
+		Addr4  struct {
+			SinFamily uint16
+			SinPort   uint16
+			SinAddr   struct{ S_addr uint32 }
+			Pad       [8]uint8
+		}
+		_     [12]byte
+		Sport uint16
+		Dport uint16
+		Comm  [16]int8
+		Pid   uint32
+		State uint8
+		Proto uint8
+		_     [2]byte
+	}
+	Sysexit uint32
+	Ifindex uint32
+	Comm    [64]int8
 }
+
+
+			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
+
+			srcIP := net.IPv4(
+				byte(event.SockInfo.Addr4.SinAddr.S_addr>>24),
+				byte(event.SockInfo.Addr4.SinAddr.S_addr>>16),
+				byte(event.SockInfo.Addr4.SinAddr.S_addr>>8),
+				byte(event.SockInfo.Addr4.SinAddr.S_addr),
+			)
+
+			dstIP := net.IPv4(
+				byte(event.SockInfo.Addr4.SinAddr.S_addr>>24),
+				byte(event.SockInfo.Addr4.SinAddr.S_addr>>16),
+				byte(event.SockInfo.Addr4.SinAddr.S_addr>>8),
+				byte(event.SockInfo.Addr4.SinAddr.S_addr),
+			)
+
+			srcIP6 = net.IP(event.SockInfo)
+			dstIP6 = net.IP(event.SockInfo.Addr6.Sin6Addr[:])
 
