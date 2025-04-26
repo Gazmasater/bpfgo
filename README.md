@@ -369,10 +369,10 @@ done
 		}
 	},
 	"severity": 8,
-	"message": "event.SockInf undefined (type bpfTraceInfo has no field or method SockInf)",
+	"message": "event.SockInfo.Addr6 undefined (type struct{Family uint8; _ [3]byte; Addr4 struct{SinFamily uint16; SinPort uint16; SinAddr struct{S_addr uint32}; Pad [8]uint8}; _ [12]byte; Sport uint16; Dport uint16; Comm [16]int8; Pid uint32; State uint8; Proto uint8; _ [2]byte} has no field or method Addr6)",
 	"source": "compiler",
 	"startLineNumber": 206,
-	"startColumn": 25,
+	"startColumn": 34,
 	"endLineNumber": 206,
-	"endColumn": 32
+	"endColumn": 39
 }]
