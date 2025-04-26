@@ -354,138 +354,87 @@ while true; do
 done
 
 
-package main
+SEC("tracepoint/sock/inet_sock_set_state")
+int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 
-import (
-	"bpfgo/pkg"
-	"fmt"
-	"net"
-	"sync"
-)
 
-// Глобальная мапа соединений и мьютекс
-var (
-	connections = make(map[string]bool)
-	muConn      sync.Mutex
-)
 
-func HandleIPEvent(
-	event bpfTraceInfo,
-	srcIP, dstIP net.IP,
-	mu *sync.Mutex,
-	eventChan_sport chan int,
-	eventChan_pid chan int,
-) {
-	var (
-		proto   string
-		dsthost string
-		err     error
-	)
+    struct trace_info info = {};
+    struct conn_info_t conn_info={};
 
-	// fmt.Printf("FAMIY FUNC =%d STATE=%d\n", event.Family, event.State)
-	// fmt.Printf("PID=%d SPORT=%d DPORT=%d STATE=%d NAME=%s\n",
-	// 	event.Pid,
-	// 	event.Sport,
-	// 	event.Dport,
-	// 	event.State,
-	// 	pkg.Int8ToString(event.Comm))
 
-	// Определяем протокол
-	if event.Proto == 6 {
-		proto = "TCP"
-	}
+    __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info));
 
-	// Определяем имена хостов
-	if dstIP.IsLoopback() {
-		dsthost = pkg.ResolveIP(dstIP)
-	} else {
-		dsthost, err = pkg.ResolveIP_n(dstIP)
-		if err != nil {
-			dsthost = "unknown"
-		}
-	}
-	srchost := pkg.ResolveIP(srcIP)
+    bpf_probe_read_kernel(info.comm, sizeof(info.comm), conn_info.comm);
+    info.sysexit=6;
+    info.proto=ctx->protocol;
+    info.pid=pid_tcp;
 
-	// Формируем адреса
-	srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
-	dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
 
-	// Формируем ключ соединения
-	key := makeConnectionKey(srcIP, event.Sport, dstIP, event.Dport)
 
-	// Обработка состояния 1 (новое соединение)
-	if event.State == 1 {
-		muConn.Lock()
-		if _, exists := connections[key]; !exists {
-			connections[key] = true
-			muConn.Unlock()
 
-			mu.Lock()
-			select {
-			case eventChan_sport <- int(event.Sport):
-			default:
-				eventChan_sport <- int(event.Sport)
-				fmt.Printf("State 1: заменен порт %d\n", event.Sport)
-			}
-			mu.Unlock()
 
-			fmt.Println("")
-			fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s \n",
-				event.Pid,
-				pkg.Int8ToString(event.Comm),
-				proto,
-				srcAddr,
-				proto,
-				dstAddr)
-		} else {
-			muConn.Unlock()
-		}
-	}
+    __u32 srcip;
+    bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
+    srcip = bpf_ntohl(srcip);
 
-	// Обработка состояний 2 и 10
-	if event.State == 2 || event.State == 10 {
-		//fmt.Printf("POSLE IF STATE=%d PID=%d\n", event.State, event.Pid)
-		mu.Lock()
-		select {
-		case eventChan_pid <- int(event.Pid):
-		default:
-		}
-		mu.Unlock()
-	}
+    __u32 dstip;
+    bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
+    dstip = bpf_ntohl(dstip);
+       
+    __u16 sport=0;
+    
+    sport=ctx->sport;
+       
+    __u16 dport;
+    dport=ctx->dport;
 
-	// Чтение данных из каналов (если есть)
-	select {
-	case sport := <-eventChan_sport:
-		select {
-		case pid := <-eventChan_pid:
-			if pid > 0 {
-				srcAddr = fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), sport)
-				dstAddr = fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
+   __u8 state=ctx->newstate;
 
-				fmt.Printf("PID=%d NAME=%s %s:%s -> %s:%s \n",
-					pid,
-					pkg.Int8ToString(event.Comm),
-					proto,
-					srcAddr,
-					proto,
-					dstAddr)
-				fmt.Println("")
-			}
-		default:
-			return
-		}
-	default:
-	}
+    if (ctx->family==AF_INET) {
+    if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
+
+        info.src_ip=srcip;
+        info.sport=sport;
+        info.dst_ip=dstip;
+        info.dport=dport;
+        info.sysexit=6;
+        info.state=ctx->newstate;
+        info.family=ctx->family;
+
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    }
+
+    } else if (ctx->family==AF_INET6) {
+
+
+        info.family=ctx->family;
+        info.state=ctx->newstate;
+        info.sport =(ctx->sport);
+        info.dport=(ctx->dport);
+        if (bpf_probe_read_kernel(&info.saddr6, sizeof(info.saddr6), ctx->saddr_v6) < 0) {
+            return 0;
+        }
+        if (bpf_probe_read_kernel(&info.daddr6, sizeof(info.saddr6), ctx->daddr_v6) < 0) {
+            return 0;
+        }
+
+
+        
+       bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+
+    }
+
+    return 0;
 }
 
-func makeConnectionKey(srcIP net.IP, srcPort uint16, dstIP net.IP, dstPort uint16) string {
-	src := fmt.Sprintf("%s:%d", srcIP.String(), srcPort)
-	dst := fmt.Sprintf("%s:%d", dstIP.String(), dstPort)
-	if src < dst {
-		return fmt.Sprintf("%s-%s", src, dst)
-	}
-	return fmt.Sprintf("%s-%s", dst, src)
-}
+
+
+
+
+
 
 
 
