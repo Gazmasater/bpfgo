@@ -354,23 +354,5 @@ while true; do
 done
 
 
-    } else if (ctx->family == AF_INET6) {
-        struct sockaddr_in6 addr6_src = {};
-        addr6_src.sin6_family = AF_INET6;
-        addr6_src.sin6_port = ctx->local_port;
 
-        if (bpf_probe_read_kernel(&addr6_src.sin6_addr, sizeof(addr6_src.sin6_addr), ctx->local_ip6) < 0)
-            return SK_PASS;
-
-        sock_info.saddr6 = addr6_src;
-
-        struct sockaddr_in6 addr6_dst = {};
-        addr6_dst.sin6_family = AF_INET6;
-        addr6_dst.sin6_port = ctx->remote_port;
-
-        if (bpf_probe_read_kernel(&addr6_dst.sin6_addr, sizeof(addr6_dst.sin6_addr), ctx->remote_ip6) < 0)
-            return SK_PASS;
-
-        sock_info.daddr6 = addr6_dst;
-    }
 
