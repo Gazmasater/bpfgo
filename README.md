@@ -501,3 +501,8 @@ func HandleIPEvent(
 }
 
 
+eventChan_info := make(chan PortPid, 10)
+HandleIPEvent(event, srcIP, dstIP, &mu, eventChan_info)
+
+
+
