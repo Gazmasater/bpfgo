@@ -356,51 +356,47 @@ done
 
 
 
-type bpfTraceInfo struct {
-	SockInfo struct {
-		Family uint8
-		_      [3]byte
-		Addr4  struct {
-			SinFamily uint16
-			SinPort   uint16
-			SinAddr   struct{ S_addr uint32 }
-			Pad       [8]uint8
-		}
-		Addr6 struct {
-			Sin6Family uint16
-			Sin6Addr   [16]byte
-			Sin6Port   uint16
-		}
-		Sport uint16
-		Dport uint16
-		Comm  [16]int8
-		Pid   uint32
-		State uint8
-		Proto uint8
-		_     [2]byte
-	}
-	Sysexit uint32
-	Ifindex uint32
-	Comm    [64]int8
-}
+SEC("tracepoint/sock/inet_sock_set_state")
+int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
+    struct trace_info info = {};
+    struct sock_info_t sock_info = {};
 
+    __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
+    bpf_get_current_comm(&sock_info.comm, sizeof(sock_info.comm));
 
-if record.SockInfo.Family == 10 { // AF_INET6
-	// Если семейство адресов - IPv6, извлекаем IPv6-адрес
-	dstIP6 := net.IP(record.SockInfo.Addr6.Sin6Addr[:])
-	fmt.Printf("Destination IPv6: %s\n", dstIP6)
-}
+    sock_info.pid = pid_tcp;
+    sock_info.proto = ctx->protocol;
+    sock_info.state = ctx->newstate;
+    sock_info.family = ctx->family;
+    sock_info.sport = bpf_ntohs(ctx->sport); 
+    sock_info.dport = bpf_ntohs(ctx->dport);
 
+    if (ctx->family == AF_INET) {
+        struct sockaddr_in addr4 = {};
+        addr4.sin_family = AF_INET;
+        bpf_probe_read_kernel(&addr4.sin_addr.s_addr, sizeof(addr4.sin_addr.s_addr), ctx->saddr);
+        sock_info.addr4 = addr4;
 
-if record.SockInfo.Family == 2 { // AF_INET
-	// Если семейство адресов - IPv4, извлекаем IPv4-адрес
-	srcIP := net.IPv4(
-		byte(record.SockInfo.Addr4.SinAddr.S_addr>>24),
-		byte(record.SockInfo.Addr4.SinAddr.S_addr>>16),
-		byte(record.SockInfo.Addr4.SinAddr.S_addr>>8),
-		byte(record.SockInfo.Addr4.SinAddr.S_addr),
-	)
-	fmt.Printf("Source IPv4: %s\n", srcIP)
+    } else if (ctx->family == AF_INET6) {
+        struct sockaddr_in6 addr6 = {};
+        addr6.sin6_family = AF_INET6;
+        if (bpf_probe_read_kernel(&addr6.sin6_addr, sizeof(addr6.sin6_addr), ctx->saddr_v6) < 0)
+            return 0;
+        sock_info.addr6 = addr6;
+    }
+
+    info.sock_info = sock_info; // заполняем вложение
+    info.sysexit = 6;
+
+    bpf_probe_read_kernel(info.comm, sizeof(info.comm), sock_info.comm);
+
+    if (ctx->newstate == TCP_ESTABLISHED ||
+        ctx->newstate == TCP_SYN_SENT ||
+        ctx->newstate == TCP_LISTEN) {
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    }
+
+    return 0;
 }
 
 
