@@ -385,6 +385,10 @@ struct trace_info {
 };
 
 
+ printf("Size of sock_info_t: %zu\n", sizeof(struct sock_info_t));
+    printf("Size of trace_info: %zu\n", sizeof(struct trace_info));
+
+
 
 
 
