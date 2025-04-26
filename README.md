@@ -367,16 +367,20 @@ import (
 	"sync"
 )
 
-type PortPid struct {
-	Sport int
-	Pid   int
+// структура для хранения серверных PID по порту
+var listenPID = struct {
+	sync.Mutex
+	data map[int]int
+}{
+	data: make(map[int]int),
 }
 
 func HandleIPEvent(
 	event bpfTraceInfo,
 	srcIP, dstIP net.IP,
 	mu *sync.Mutex,
-	eventChan_info chan PortPid, // <- один канал
+	eventChan_sport chan int,
+	eventChan_pid chan int,
 ) {
 	var (
 		proto   string
@@ -384,149 +388,132 @@ func HandleIPEvent(
 		err     error
 	)
 
-	fmt.Printf("FAMIY FUNC =%d STATE=%d\n", event.Family, event.State)
+	fmt.Printf("FAMILY FUNC =%d STATE=%d\n", event.Family, event.State)
 
+	// Выводим информацию о событии
 	if event.Family == 2 {
 		fmt.Printf("PID=%d SPORT=%d DPORT=%d STATE=%d NAME=%s\n",
-			event.Pid,
-			event.Ipv4.Sport,
-			event.Ipv4.Dport,
-			event.State,
-			pkg.Int8ToString([16]int8(event.Comm)),
-		)
+			event.Pid, event.Ipv4.Sport, event.Ipv4.Dport, event.State,
+			pkg.Int8ToString([16]int8(event.Comm)))
 	} else if event.Family == 10 {
 		fmt.Printf("PID=%d SPORT=%d DPORT=%d STATE=%d NAME=%s\n",
-			event.Pid,
-			event.Ipv6.Sport,
-			event.Ipv6.Dport,
-			event.State,
-			pkg.Int8ToString([16]int8(event.Comm)),
-		)
+			event.Pid, event.Ipv6.Sport, event.Ipv6.Dport, event.State,
+			pkg.Int8ToString([16]int8(event.Comm)))
 	}
 
-	if event.State == 1 {
-		// отправляем и Sport, и Pid в канал
+	// Если сокет в LISTEN — запоминаем PID по порту
+	if event.State == 10 { // TCP_LISTEN
+		var sport uint16
+		if event.Family == 2 {
+			sport = event.Ipv4.Sport
+		} else if event.Family == 10 {
+			sport = event.Ipv6.Sport
+		}
+
+		listenPID.Lock()
+		listenPID.data[int(sport)] = int(event.Pid)
+		listenPID.Unlock()
+
+		fmt.Printf("SAVE LISTEN PID: port=%d pid=%d\n", sport, event.Pid)
+		return
+	}
+
+	// Теперь обработка установленных соединений
+	if event.State == 1 || event.State == 2 { // TCP_ESTABLISHED или TCP_SYN_RECV
 		mu.Lock()
 		select {
-		case eventChan_info <- PortPid{Sport: int(event.Ipv4.Sport), Pid: int(event.Pid)}:
+		case eventChan_sport <- int(event.Ipv4.Sport):
 		default:
-			eventChan_info <- PortPid{Sport: int(event.Ipv4.Sport), Pid: int(event.Pid)}
-			fmt.Printf("State 1: заменен порт %d\n", event.Ipv4.Sport)
+			// перепишем канал, если он полный
+		}
+
+		select {
+		case eventChan_pid <- int(event.Pid):
+		default:
+			// перепишем канал, если он полный
 		}
 		mu.Unlock()
-
-		if dstIP.IsLoopback() {
-			dsthost = pkg.ResolveIP(dstIP)
-		} else {
-			dsthost, err = pkg.ResolveIP_n(dstIP)
-			if err != nil {
-				dsthost = "unknown"
-			}
-		}
-
-		srchost := pkg.ResolveIP(srcIP)
-
-		var Sport, Dport uint16
-		if event.Family == 2 {
-			Sport = event.Ipv4.Sport
-			Dport = event.Ipv4.Dport
-		} else if event.Family == 10 {
-			Sport = event.Ipv6.Sport
-			Dport = event.Ipv6.Dport
-		}
-
-		srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), Sport)
-		dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), Dport)
-
-		if event.Proto == 6 {
-			proto = "TCP"
-		}
-
-		fmt.Println("")
-		fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s \n",
-			event.Pid,
-			pkg.Int8ToString(event.Comm),
-			proto,
-			srcAddr,
-			proto,
-			dstAddr,
-		)
 	}
 
-	if event.State == 2 || event.State == 10 {
-		fmt.Printf("POSLE IF STATE=%d PID=%d\n", event.State, event.Pid)
-		// мы не отправляем сюда данные больше, чтобы не путать PID отдельно
+	// Определяем имена хостов
+	if dstIP.IsLoopback() {
+		dsthost = pkg.ResolveIP(dstIP)
+	} else {
+		dsthost, err = pkg.ResolveIP_n(dstIP)
+		if err != nil {
+			dsthost = "unknown"
+		}
+	}
+	srchost := pkg.ResolveIP(srcIP)
+
+	var Sport, Dport uint16
+
+	if event.Family == 2 {
+		Sport = event.Ipv4.Sport
+		Dport = event.Ipv4.Dport
+	} else if event.Family == 10 {
+		Sport = event.Ipv6.Sport
+		Dport = event.Ipv6.Dport
 	}
 
+	srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), Sport)
+	dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), Dport)
+
+	if event.Proto == 6 {
+		proto = "TCP"
+	}
+
+	// Вывод основного подключения
+	fmt.Println("")
+	fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s\n",
+		event.Pid,
+		pkg.Int8ToString(event.Comm),
+		proto,
+		srcAddr,
+		proto,
+		dstAddr)
+
+	// Если получили спорт, проверим, был ли такой слушающий PID
 	select {
-	case info := <-eventChan_info:
-		if dstIP.IsLoopback() {
-			dsthost = pkg.ResolveIP(dstIP)
-		} else {
-			dsthost, err = pkg.ResolveIP_n(dstIP)
-			if err != nil {
-				dsthost = "unknown"
+	case clientSport := <-eventChan_sport:
+		select {
+		case clientPid := <-eventChan_pid:
+			// Клиент подключился
+
+			listenPID.Lock()
+			serverPid, found := listenPID.data[int(Dport)]
+			listenPID.Unlock()
+
+			if found {
+				// Отобразим соединение: сервер PID -> клиент PID
+				fmt.Printf("CONNECTED: SERVER_PID=%d -> CLIENT_PID=%d PORT=%d\n", serverPid, clientPid, Dport)
+				fmt.Printf("PID=%d NAME=%s %s:%s -> %s:%s\n",
+					serverPid,
+					pkg.Int8ToString(event.Comm),
+					proto,
+					srcAddr,
+					proto,
+					dstAddr)
+				fmt.Println("")
+			} else {
+				// Если сервер PID не нашли, просто выведем клиент PID
+				fmt.Printf("PID=%d NAME=%s %s:%s -> %s:%s\n",
+					clientPid,
+					pkg.Int8ToString(event.Comm),
+					proto,
+					srcAddr,
+					proto,
+					dstAddr)
+				fmt.Println("")
 			}
+		default:
+			// нет PID
 		}
-
-		srchost := pkg.ResolveIP(srcIP)
-
-		var Dport uint16
-		if event.Family == 2 {
-			Dport = event.Ipv4.Dport
-		} else if event.Family == 10 {
-			Dport = event.Ipv6.Dport
-		}
-
-		srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), info.Sport)
-		dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), Dport)
-
-		if event.Proto == 6 {
-			proto = "TCP"
-		}
-
-		fmt.Printf("PID=%d NAME=%s %s:%s -> %s:%s \n",
-			info.Pid,
-			pkg.Int8ToString(event.Comm),
-			proto,
-			srcAddr,
-			proto,
-			dstAddr,
-		)
-		fmt.Println("")
-
 	default:
 		fmt.Println("")
 	}
 }
 
-
-az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
-Дескриптор нового namespace: 12
-Press Ctrl+C to exit
-!!!!!!!!!!!!!!!!!!!!PID=6049
-FAMIY FUNC =10 STATE=10
-PID=6049 SPORT=12345 DPORT=0 STATE=10 NAME=nc
-POSLE IF STATE=10 PID=6049
-
-!!!!!!!!!!!!!!!!!!!!PID=6087
-FAMIY FUNC =10 STATE=2
-PID=6087 SPORT=0 DPORT=12345 STATE=2 NAME=nc
-POSLE IF STATE=2 PID=6087
-
-!!!!!!!!!!!!!!!!!!!!PID=6087
-FAMIY FUNC =10 STATE=1
-PID=6087 SPORT=48856 DPORT=12345 STATE=1 NAME=nc
-
-PID=6087 NAME=nc TCP://ip6-localhost[::1]:48856 <- TCP://ip6-localhost[::1]:12345 
-PID=6087 NAME=nc TCP://ip6-localhost[::1]:0 -> TCP://ip6-localhost[::1]:12345 
-
-!!!!!!!!!!!!!!!!!!!!PID=6087
-FAMIY FUNC =10 STATE=1
-PID=6087 SPORT=12345 DPORT=48856 STATE=1 NAME=nc
-
-PID=6087 NAME=nc TCP://ip6-localhost[::1]:12345 <- TCP://ip6-localhost[::1]:48856 
-PID=6087 NAME=nc TCP://ip6-localhost[::1]:0 -> TCP://ip6-localhost[::1]:48856 
 
 
 
