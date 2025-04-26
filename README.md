@@ -372,6 +372,45 @@ struct sock_info_t {
     __u8 state;
     __u8 proto;
 };
+struct trace_info {
+    struct sock_info_t sock_info;  // <-- Всё внутри sock_info
+    u32 sysexit;
+    u32 ifindex;
+    char comm[64];
+};
+
+
+type bpfTraceInfo struct {
+	SockInfo struct {
+		Family uint8
+		_      [3]byte
+		Saddr4 struct {
+			SinFamily uint16
+			SinPort   uint16
+			SinAddr   struct{ S_addr uint32 }
+			Pad       [8]uint8
+		}
+		_      [12]byte
+		Daddr4 struct {
+			SinFamily uint16
+			SinPort   uint16
+			SinAddr   struct{ S_addr uint32 }
+			Pad       [8]uint8
+		}
+		_     [12]byte
+		Sport uint16
+		Dport uint16
+		Comm  [16]int8
+		Pid   uint32
+		State uint8
+		Proto uint8
+		_     [2]byte
+	}
+	Sysexit uint32
+	Ifindex uint32
+	Comm    [64]int8
+}
+
 
 
 
