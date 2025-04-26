@@ -355,29 +355,21 @@ done
 
 
 
-FAMIY FUNC =10 STATE=10
-PID=5917 SPORT=12345 DPORT=0 STATE=10 NAME=nc
-POSLE IF STATE=10 PID=5917
+var seenConnections = make(map[string]bool)
 
-FAMIY FUNC =10 STATE=2
-PID=5943 SPORT=0 DPORT=12345 STATE=2 NAME=nc
-POSLE IF STATE=2 PID=5943
+if event.State == 1 {
+    key := fmt.Sprintf("%d:%d", event.Sport, event.Dport)
 
-FAMIY FUNC =10 STATE=1
-PID=5943 SPORT=56770 DPORT=12345 STATE=1 NAME=nc
+    mu.Lock()
+    if seenConnections[key] {
+        mu.Unlock()
+        return // Уже обработали — не печатаем
+    }
+    seenConnections[key] = true
+    mu.Unlock()
 
-PID=5943 NAME=nc TCP://ip6-localhost[::1]:56770 <- TCP://ip6-localhost[::1]:12345 
-PID=5917 NAME=nc TCP://ip6-localhost[::1]:56770 -> TCP://ip6-localhost[::1]:12345 
+    // Всё остальное оставляем — печать, отправка в каналы и т.д.
+}
 
-PID=5917 NAME=nc TCP://ip6-localhost[::1]:56770 -> TCP://ip6-localhost[::1]:12345 
-
-FAMIY FUNC =10 STATE=3
-PID=5943 SPORT=12345 DPORT=0 STATE=3 NAME=nc
-
-FAMIY FUNC =10 STATE=1
-PID=5943 SPORT=12345 DPORT=56770 STATE=1 NAME=nc
-
-PID=5943 NAME=nc TCP://ip6-localhost[::1]:12345 <- TCP://ip6-localhost[::1]:56770 
-PID=0 NAME=nc TCP://ip6-localhost[::1]:12345 -> TCP://ip6-localhost[::1]:56770 
 
 
