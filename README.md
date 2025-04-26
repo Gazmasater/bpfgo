@@ -384,12 +384,10 @@ func HandleIPEvent(
 		event.State,
 		pkg.Int8ToString(event.Comm))
 
-	// Определяем протокол
 	if event.Proto == 6 {
 		proto = "TCP"
 	}
 
-	// Определяем имена хостов
 	if dstIP.IsLoopback() {
 		dsthost = pkg.ResolveIP(dstIP)
 	} else {
@@ -400,32 +398,30 @@ func HandleIPEvent(
 	}
 	srchost := pkg.ResolveIP(srcIP)
 
-	// Формируем адреса
 	srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
 	dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
 
-	// Обработка состояния 1 (новое соединение)
 	if event.State == 1 {
 		mu.Lock()
 		select {
 		case eventChan_sport <- int(event.Sport):
+			// Успешно отправили порт — не печатаем здесь
 		default:
+			// Канал занят — заменяем и печатаем
 			eventChan_sport <- int(event.Sport)
 			fmt.Printf("State 1: заменен порт %d\n", event.Sport)
+			fmt.Println("")
+			fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s \n",
+				event.Pid,
+				pkg.Int8ToString(event.Comm),
+				proto,
+				srcAddr,
+				proto,
+				dstAddr)
 		}
 		mu.Unlock()
-
-		fmt.Println("")
-		fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s \n",
-			event.Pid,
-			pkg.Int8ToString(event.Comm),
-			proto,
-			srcAddr,
-			proto,
-			dstAddr)
 	}
 
-	// Обработка состояний 2 и 10
 	if event.State == 2 || event.State == 10 {
 		fmt.Printf("POSLE IF STATE=%d PID=%d\n", event.State, event.Pid)
 		mu.Lock()
@@ -436,7 +432,6 @@ func HandleIPEvent(
 		mu.Unlock()
 	}
 
-	// Чтение данных из каналов (если есть)
 	select {
 	case sport := <-eventChan_sport:
 		select {
@@ -461,20 +456,6 @@ func HandleIPEvent(
 	}
 }
 
-
-
-
-
-
-PID=5802 NAME=nc TCP://ip6-localhost[::1]:48486 <- TCP://ip6-localhost[::1]:12345 
-PID=5679 NAME=nc TCP://ip6-localhost[::1]:48486 -> TCP://ip6-localhost[::1]:12345 
-
-FAMIY FUNC =10 STATE=3
-PID=5802 SPORT=12345 DPORT=0 STATE=3 NAME=nc
-FAMIY FUNC =10 STATE=1
-PID=5802 SPORT=12345 DPORT=48486 STATE=1 NAME=nc
-
-PID=5802 NAME=nc TCP://ip6-localhost[::1]:12345 <- TCP://ip6-localhost[::1]:48486 
 
 
 
