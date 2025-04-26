@@ -354,6 +354,26 @@ while true; do
 done
 
 
+struct sock_info_t {
+    __u8 family;
+    union {
+        struct sockaddr_in  addr4;
+        struct sockaddr_in6 addr6;
+    };
+    __u16 sport;
+    __u16 dport;
+    char comm[16];
+    __u32 pid;
+    __u8 state;
+    __u8 proto;
+};
+
+struct trace_info {
+    struct sock_info_t sock_info;  // <-- Всё внутри sock_info
+    u32 sysexit;
+    u32 ifindex;
+    char comm[64];
+};
 
 type bpfTraceInfo struct {
 	SockInfo struct {
@@ -379,23 +399,4 @@ type bpfTraceInfo struct {
 	Comm    [64]int8
 }
 
-
-			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
-
-			srcIP := net.IPv4(
-				byte(event.SockInfo.Addr4.SinAddr.S_addr>>24),
-				byte(event.SockInfo.Addr4.SinAddr.S_addr>>16),
-				byte(event.SockInfo.Addr4.SinAddr.S_addr>>8),
-				byte(event.SockInfo.Addr4.SinAddr.S_addr),
-			)
-
-			dstIP := net.IPv4(
-				byte(event.SockInfo.Addr4.SinAddr.S_addr>>24),
-				byte(event.SockInfo.Addr4.SinAddr.S_addr>>16),
-				byte(event.SockInfo.Addr4.SinAddr.S_addr>>8),
-				byte(event.SockInfo.Addr4.SinAddr.S_addr),
-			)
-
-			srcIP6 = net.IP(event.SockInfo)
-			dstIP6 = net.IP(event.SockInfo.Addr6.Sin6Addr[:])
 
