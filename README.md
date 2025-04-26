@@ -354,108 +354,25 @@ while true; do
 done
 
 
-#include <linux/in.h>
-#include <linux/in6.h>
-#include <linux/ipv6.h>
 
-struct sock_info_t {
-    __u8 family;
-    union {
-        struct sockaddr_in  addr4;
-        struct sockaddr_in6 addr6;
-    };
-    __u16 sport;
-    __u16 dport;
-    char comm[16];
-    __u32 pid;
-    __u8 state;
-    __u8 proto;
-};
-
-struct trace_info {
-    struct sock_info_t sock_info;  // <-- Всё внутри sock_info
-    u32 sysexit;
-    u32 ifindex;
-    char comm[64];
-};
-
-
-SEC("tracepoint/sock/inet_sock_set_state")
-int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
-    struct trace_info info = {};
-    struct sock_info_t sock_info = {};
-
-    __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
-    bpf_get_current_comm(&sock_info.comm, sizeof(sock_info.comm));
-
-    sock_info.pid = pid_tcp;
-    sock_info.proto = ctx->protocol;
-    sock_info.state = ctx->newstate;
-    sock_info.family = ctx->family;
-    sock_info.sport = bpf_ntohs(ctx->sport); // Обрати внимание: htons/ntohs
-    sock_info.dport = bpf_ntohs(ctx->dport);
-
-    if (ctx->family == AF_INET) {
-        struct sockaddr_in addr4 = {};
-        addr4.sin_family = AF_INET;
-        bpf_probe_read_kernel(&addr4.sin_addr.s_addr, sizeof(addr4.sin_addr.s_addr), ctx->saddr);
-        sock_info.addr4 = addr4;
-
-    } else if (ctx->family == AF_INET6) {
-        struct sockaddr_in6 addr6 = {};
-        addr6.sin6_family = AF_INET6;
-        if (bpf_probe_read_kernel(&addr6.sin6_addr, sizeof(addr6.sin6_addr), ctx->saddr_v6) < 0)
-            return 0;
-        sock_info.addr6 = addr6;
-    }
-
-    info.sock_info = sock_info; // заполняем вложение
-    info.sysexit = 6;
-    info.ifindex = ctx->ifindex;
-
-    bpf_probe_read_kernel(info.comm, sizeof(info.comm), sock_info.comm);
-
-    if (ctx->newstate == TCP_ESTABLISHED ||
-        ctx->newstate == TCP_SYN_SENT ||
-        ctx->newstate == TCP_LISTEN) {
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    }
-
-    return 0;
-}
-
-
-
-var srcIP, dstIP net.IP
-
-switch event.SockInfo.Family {
-case unix.AF_INET:
-	srcIP = net.IPv4(
-		byte(event.SockInfo.Addr4.SinAddr.S_addr>>24),
-		byte(event.SockInfo.Addr4.SinAddr.S_addr>>16),
-		byte(event.SockInfo.Addr4.SinAddr.S_addr>>8),
-		byte(event.SockInfo.Addr4.SinAddr.S_addr),
-	)
-
-	dstIP = net.IPv4(
-		byte(event.SockInfo.Addr4.SinAddr.S_addr>>24),
-		byte(event.SockInfo.Addr4.SinAddr.S_addr>>16),
-		byte(event.SockInfo.Addr4.SinAddr.S_addr>>8),
-		byte(event.SockInfo.Addr4.SinAddr.S_addr),
-	)
-
-case unix.AF_INET6:
-	srcIP = net.IP(event.SockInfo.Addr6.Sin6Addr[:])
-	dstIP = net.IP(event.SockInfo.Addr6.Sin6Addr[:])
-}
-
-
-
-
-
-
-
-
-
-
-
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "event.SockInf undefined (type bpfTraceInfo has no field or method SockInf)",
+	"source": "compiler",
+	"startLineNumber": 206,
+	"startColumn": 25,
+	"endLineNumber": 206,
+	"endColumn": 32
+}]
