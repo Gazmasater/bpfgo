@@ -425,6 +425,25 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 }
 
 
+			srcIP := net.IPv4(
+				byte(event.SrcIp>>24),
+				byte(event.SrcIp>>16),
+				byte(event.SrcIp>>8),
+				byte(event.SrcIp),
+			)
+
+			dstIP := net.IPv4(
+				byte(event.DstIp>>24),
+				byte(event.DstIp>>16),
+				byte(event.DstIp>>8),
+				byte(event.DstIp),
+			)
+
+			srcIP6 := net.IP(event.Saddr6[:])
+			dstIP6 := net.IP(event.Daddr6[:])
+
+
+
 
 
 
