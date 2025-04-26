@@ -355,23 +355,29 @@ done
 
 
 
-select {
-case xxx_pid = <-eventChan_pid:
-    if xxx_pid > 0 {
-        if event.Proto == 6 {
-            proto = "TCP"
-        }
+FAMIY FUNC =10 STATE=10
+PID=5917 SPORT=12345 DPORT=0 STATE=10 NAME=nc
+POSLE IF STATE=10 PID=5917
 
-        fmt.Printf("PID=%d NAME=%s %s:%s -> %s:%s \n",
-            xxx_pid,
-            pkg.Int8ToString(event.Comm),
-            proto,
-            srcAddr,
-            proto,
-            dstAddr)
-        fmt.Println("")
-    }
-default:
-    // PID неизвестен — ничего не делаем
-}
+FAMIY FUNC =10 STATE=2
+PID=5943 SPORT=0 DPORT=12345 STATE=2 NAME=nc
+POSLE IF STATE=2 PID=5943
+
+FAMIY FUNC =10 STATE=1
+PID=5943 SPORT=56770 DPORT=12345 STATE=1 NAME=nc
+
+PID=5943 NAME=nc TCP://ip6-localhost[::1]:56770 <- TCP://ip6-localhost[::1]:12345 
+PID=5917 NAME=nc TCP://ip6-localhost[::1]:56770 -> TCP://ip6-localhost[::1]:12345 
+
+PID=5917 NAME=nc TCP://ip6-localhost[::1]:56770 -> TCP://ip6-localhost[::1]:12345 
+
+FAMIY FUNC =10 STATE=3
+PID=5943 SPORT=12345 DPORT=0 STATE=3 NAME=nc
+
+FAMIY FUNC =10 STATE=1
+PID=5943 SPORT=12345 DPORT=56770 STATE=1 NAME=nc
+
+PID=5943 NAME=nc TCP://ip6-localhost[::1]:12345 <- TCP://ip6-localhost[::1]:56770 
+PID=0 NAME=nc TCP://ip6-localhost[::1]:12345 -> TCP://ip6-localhost[::1]:56770 
+
 
