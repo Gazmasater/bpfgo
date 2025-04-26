@@ -355,15 +355,6 @@ done
 
 
 
-package main
-
-import (
-	"bpfgo/pkg"
-	"fmt"
-	"net"
-	"sync"
-)
-
 func HandleIPEvent(
 	event bpfTraceInfo,
 	srcIP, dstIP net.IP,
@@ -373,8 +364,6 @@ func HandleIPEvent(
 ) {
 	var (
 		proto   string
-		xxx     int
-		xxx_pid int
 		dsthost string
 		err     error
 	)
@@ -388,17 +377,25 @@ func HandleIPEvent(
 		event.State,
 		pkg.Int8ToString(event.Comm))
 
-	if event.State == 1 {
+	if event.Proto == 6 {
+		proto = "TCP"
+	}
 
+	switch event.State {
+	case 1:
+		// Сохраняем спорт
 		mu.Lock()
 		select {
 		case eventChan_sport <- int(event.Sport):
 		default:
+			// если канал полон, перезаписываем
 			eventChan_sport <- int(event.Sport)
 			fmt.Printf("State 1: заменен порт %d\n", event.Sport)
 		}
 		mu.Unlock()
 
+		var srchost, dsthost string
+		srchost = pkg.ResolveIP(srcIP)
 		if dstIP.IsLoopback() {
 			dsthost = pkg.ResolveIP(dstIP)
 		} else {
@@ -408,115 +405,68 @@ func HandleIPEvent(
 			}
 		}
 
-		srchost := pkg.ResolveIP(srcIP)
-
 		srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
 		dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
 
-		if event.Proto == 6 {
-			proto = "TCP"
-		}
-
 		fmt.Println("")
-		fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s \n",
+		fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s\n",
 			event.Pid,
 			pkg.Int8ToString(event.Comm),
 			proto,
 			srcAddr,
 			proto,
 			dstAddr)
-	}
 
-	if event.State == 2 || event.State == 10 {
-
+	case 2, 10:
+		// Сохраняем pid
 		fmt.Printf("POSLE IF STATE=%d PID=%d\n", event.State, event.Pid)
 		mu.Lock()
 		select {
 		case eventChan_pid <- int(event.Pid):
 		default:
-
+			// пропускаем, если канал заполнен
 		}
 		mu.Unlock()
-	}
 
-	select {
-	case xxx = <-eventChan_sport:
+		// Пытаемся забрать sport и pid и вывести ->
+		var xxx, xxx_pid int
+
+		select {
+		case xxx = <-eventChan_sport:
+		default:
+			return
+		}
+
+		select {
+		case xxx_pid = <-eventChan_pid:
+		default:
+			return
+		}
+
+		var srchost, dsthost string
+		srchost = pkg.ResolveIP(srcIP)
 		if dstIP.IsLoopback() {
 			dsthost = pkg.ResolveIP(dstIP)
 		} else {
 			dsthost, err = pkg.ResolveIP_n(dstIP)
-
 			if err != nil {
 				dsthost = "unknown"
 			}
 		}
 
-		srchost := pkg.ResolveIP(srcIP)
-
 		srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), xxx)
 		dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
 
-		select {
-		case xxx_pid = <-eventChan_pid:
-			if xxx_pid > 0 {
-				if event.Proto == 6 {
-					proto = "TCP"
-				}
-
-				fmt.Printf("PID=%d NAME=%s %s:%s -> %s:%s \n",
-					xxx_pid,
-					pkg.Int8ToString(event.Comm),
-					proto,
-					srcAddr,
-					proto,
-					dstAddr)
-				fmt.Println("")
-			}
-		default:
-			return
-		}
-		if event.Proto == 6 {
-			proto = "TCP"
-		}
-
-		fmt.Printf("PID=%d NAME=%s %s:%s -> %s:%s \n",
+		fmt.Println("")
+		fmt.Printf("PID=%d NAME=%s %s:%s -> %s:%s\n",
 			xxx_pid,
 			pkg.Int8ToString(event.Comm),
 			proto,
 			srcAddr,
 			proto,
 			dstAddr)
-		fmt.Println("")
-
-	default:
-		fmt.Println("")
 	}
 }
-
-
-FAMIY FUNC =10 STATE=10
-PID=9525 SPORT=12345 DPORT=0 STATE=10 NAME=nc
-POSLE IF STATE=10 PID=9525
-
-FAMIY FUNC =10 STATE=2
-PID=9579 SPORT=0 DPORT=12345 STATE=2 NAME=nc
-POSLE IF STATE=2 PID=9579
-
-FAMIY FUNC =10 STATE=1
-PID=9579 SPORT=52318 DPORT=12345 STATE=1 NAME=nc
-
-PID=9579 NAME=nc TCP://ip6-localhost[::1]:52318 <- TCP://ip6-localhost[::1]:12345 
-PID=9525 NAME=nc TCP://ip6-localhost[::1]:52318 -> TCP://ip6-localhost[::1]:12345 
-
-PID=9525 NAME=nc TCP://ip6-localhost[::1]:52318 -> TCP://ip6-localhost[::1]:12345 
-
-FAMIY FUNC =10 STATE=3
-PID=9579 SPORT=12345 DPORT=0 STATE=3 NAME=nc
-
-FAMIY FUNC =10 STATE=1
-PID=9579 SPORT=12345 DPORT=52318 STATE=1 NAME=nc
-
-PID=9579 NAME=nc TCP://ip6-localhost[::1]:12345 <- TCP://ip6-localhost[::1]:52318 
 
 
 
