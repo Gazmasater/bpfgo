@@ -425,22 +425,29 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 }
 
 
-			srcIP := net.IPv4(
-				byte(event.SrcIp>>24),
-				byte(event.SrcIp>>16),
-				byte(event.SrcIp>>8),
-				byte(event.SrcIp),
-			)
 
-			dstIP := net.IPv4(
-				byte(event.DstIp>>24),
-				byte(event.DstIp>>16),
-				byte(event.DstIp>>8),
-				byte(event.DstIp),
-			)
+var srcIP, dstIP net.IP
 
-			srcIP6 := net.IP(event.Saddr6[:])
-			dstIP6 := net.IP(event.Daddr6[:])
+switch event.SockInfo.Family {
+case unix.AF_INET:
+	srcIP = net.IPv4(
+		byte(event.SockInfo.Addr4.SinAddr.S_addr>>24),
+		byte(event.SockInfo.Addr4.SinAddr.S_addr>>16),
+		byte(event.SockInfo.Addr4.SinAddr.S_addr>>8),
+		byte(event.SockInfo.Addr4.SinAddr.S_addr),
+	)
+
+	dstIP = net.IPv4(
+		byte(event.SockInfo.Addr4.SinAddr.S_addr>>24),
+		byte(event.SockInfo.Addr4.SinAddr.S_addr>>16),
+		byte(event.SockInfo.Addr4.SinAddr.S_addr>>8),
+		byte(event.SockInfo.Addr4.SinAddr.S_addr),
+	)
+
+case unix.AF_INET6:
+	srcIP = net.IP(event.SockInfo.Addr6.Sin6Addr[:])
+	dstIP = net.IP(event.SockInfo.Addr6.Sin6Addr[:])
+}
 
 
 
