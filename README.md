@@ -355,7 +355,158 @@ done
 
 
 
-az358@gaz358-BOD-WXX9:~/myprog$ git clone https://github.com/Gazmasater/bpfgo/tree/ipv6_1
-Cloning into 'ipv6_1'...
-fatal: repository 'https://github.com/Gazmasater/bpfgo/tree/ipv6_1/' not found
-gaz358@gaz358-BOD-WXX9:~/myprog$ 
+package main
+
+import (
+	"bpfgo/pkg"
+	"fmt"
+	"net"
+	"sync"
+)
+
+func HandleIPEvent(
+	event bpfTraceInfo,
+	srcIP, dstIP net.IP,
+	mu *sync.Mutex,
+	eventChan_sport chan int,
+	eventChan_pid chan int,
+) {
+	var (
+		proto   string
+		xxx     int
+		xxx_pid int
+		dsthost string
+		err     error
+	)
+
+	fmt.Printf("FAMIY FUNC =%d STATE=%d\n", event.Family, event.State)
+
+	fmt.Printf("PID=%d SPORT=%d DPORT=%d STATE=%d NAME=%s\n",
+		event.Pid,
+		event.Sport,
+		event.Dport,
+		event.State,
+		pkg.Int8ToString(event.Comm))
+
+	if event.State == 1 {
+
+		mu.Lock()
+		select {
+		case eventChan_sport <- int(event.Sport):
+		default:
+			eventChan_sport <- int(event.Sport)
+			fmt.Printf("State 1: заменен порт %d\n", event.Sport)
+		}
+		mu.Unlock()
+
+		if dstIP.IsLoopback() {
+			dsthost = pkg.ResolveIP(dstIP)
+		} else {
+			dsthost, err = pkg.ResolveIP_n(dstIP)
+			if err != nil {
+				dsthost = "unknown"
+			}
+		}
+
+		srchost := pkg.ResolveIP(srcIP)
+
+		srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
+		dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
+
+		if event.Proto == 6 {
+			proto = "TCP"
+		}
+
+		fmt.Println("")
+		fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s \n",
+			event.Pid,
+			pkg.Int8ToString(event.Comm),
+			proto,
+			srcAddr,
+			proto,
+			dstAddr)
+	}
+
+	if event.State == 2 || event.State == 10 {
+
+		fmt.Printf("POSLE IF STATE=%d PID=%d\n", event.State, event.Pid)
+		mu.Lock()
+		select {
+		case eventChan_pid <- int(event.Pid):
+		default:
+			// пропускаем, если канал заполнен
+		}
+		mu.Unlock()
+	}
+
+	select {
+	case xxx = <-eventChan_sport:
+		if dstIP.IsLoopback() {
+			dsthost = pkg.ResolveIP(dstIP)
+		} else {
+			dsthost, err = pkg.ResolveIP_n(dstIP)
+
+			if err != nil {
+				dsthost = "unknown"
+			}
+		}
+
+		srchost := pkg.ResolveIP(srcIP)
+
+		srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), xxx)
+		dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
+
+		select {
+		case xxx_pid = <-eventChan_pid:
+			// получили PID
+		default:
+			// PID неизвестен
+		}
+
+		if event.Proto == 6 {
+			proto = "TCP"
+		}
+
+		fmt.Printf("PID=%d NAME=%s %s:%s -> %s:%s \n",
+			xxx_pid,
+			pkg.Int8ToString(event.Comm),
+			proto,
+			srcAddr,
+			proto,
+			dstAddr)
+		fmt.Println("")
+
+	default:
+		fmt.Println("")
+	}
+}
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
+Дескриптор нового namespace: 4
+Press Ctrl+C to exit
+FAMIY FUNC =10 STATE=10
+PID=6513 SPORT=12345 DPORT=0 STATE=10 NAME=nc
+POSLE IF STATE=10 PID=6513
+
+FAMIY FUNC =10 STATE=2
+PID=6557 SPORT=0 DPORT=12345 STATE=2 NAME=nc
+POSLE IF STATE=2 PID=6557
+
+Saddr6 bytes: [0 0 0 0 0 74 199 54 165 52 93 91 192 232 23 156]
+!!!!!!!!!LOOKUP ETH=1 PID=0 SRC6=Unknown[::4a:c736:a534:5d5b:c0e8:179c]:12345 DST6=fe88:ffff:88d7:3242:fe88:ffff:::53418
+IPv6 адрес с интерфейсом: ::4a:c736:a534:5d5b:c0e8:179c%lo
+FAMIY FUNC =10 STATE=1
+PID=6557 SPORT=53418 DPORT=12345 STATE=1 NAME=nc
+
+PID=6557 NAME=nc TCP://ip6-localhost[::1]:53418 <- TCP://ip6-localhost[::1]:12345 
+PID=6513 NAME=nc TCP://ip6-localhost[::1]:53418 -> TCP://ip6-localhost[::1]:12345 
+
+FAMIY FUNC =10 STATE=3
+PID=6557 SPORT=12345 DPORT=0 STATE=3 NAME=nc
+
+FAMIY FUNC =10 STATE=1
+PID=6557 SPORT=12345 DPORT=53418 STATE=1 NAME=nc
+
+PID=6557 NAME=nc TCP://ip6-localhost[::1]:12345 <- TCP://ip6-localhost[::1]:53418 
+PID=0 NAME=nc TCP://ip6-localhost[::1]:12345 -> TCP://ip6-localhost[::1]:53418 
