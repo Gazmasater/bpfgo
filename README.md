@@ -357,71 +357,35 @@ done
 
 struct sock_info_t {
     __u8 family;
-    union {
-        struct sockaddr_in  saddr4;
-        struct sockaddr_in6 saddr6;
-    };
-    union {
-        struct sockaddr_in  daddr4;
-        struct sockaddr_in6 daddr6;
-    };
+    __u8 pad1[3]; // выравнивание до 4
+
+    struct sockaddr_in  saddr4;
+    __u8 pad2[12]; // компенсируем разницу с IPv6 (16 байт + 12 байт = 28)
+
+    struct sockaddr_in  daddr4;
+    __u8 pad3[12]; // компенсируем разницу с IPv6
+
+    struct sockaddr_in6 saddr6;
+    struct sockaddr_in6 daddr6;
+
     __u16 sport;
     __u16 dport;
+
     char comm[16];
     __u32 pid;
+
     __u8 state;
     __u8 proto;
+    __u8 pad4[2]; // выравнивание до 4
 };
+
 struct trace_info {
-    struct sock_info_t sock_info;  // <-- Всё внутри sock_info
-    u32 sysexit;
-    u32 ifindex;
+    struct sock_info_t sock_info;  // Теперь размер ~154 байта
+    __u32 sysexit;
+    __u32 ifindex;
     char comm[64];
 };
 
-
-type bpfTraceInfo struct {
-	SockInfo struct {
-		Family uint8
-		_      [3]byte
-		Saddr4 struct {
-			SinFamily uint16
-			SinPort   uint16
-			SinAddr   struct{ S_addr uint32 }
-			Pad       [8]uint8
-		}
-		_      [12]byte
-		Daddr4 struct {
-			SinFamily uint16
-			SinPort   uint16
-			SinAddr   struct{ S_addr uint32 }
-			Pad       [8]uint8
-		}
-		_      [12]byte
-		Saddr6 struct {
-			Sin6Family uint16
-			Sin6Port   uint16
-			Sin6Addr   [16]byte // IPv6 адрес — 16 байт
-			Pad        [8]uint8
-		}
-		Daddr6 struct {
-			Sin6Family uint16
-			Sin6Port   uint16
-			Sin6Addr   [16]byte // IPv6 адрес — 16 байт
-			Pad        [8]uint8
-		}
-		Sport uint16
-		Dport uint16
-		Comm  [16]int8
-		Pid   uint32
-		State uint8
-		Proto uint8
-		_     [2]byte
-	}
-	Sysexit uint32
-	Ifindex uint32
-	Comm    [64]int8
-}
 
 
 
