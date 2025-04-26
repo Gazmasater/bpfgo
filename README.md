@@ -353,6 +353,38 @@ while true; do
   nc -zv 127.0.0.1 80 2>/dev/null
 done
 
+struct sock_info_t {
+    __u8 family;
+    __u8 pad1[3]; // выравнивание до 4
+
+    struct sockaddr_in  saddr4;
+    __u8 pad2[12]; // компенсируем разницу с IPv6 (16 байт + 12 байт = 28)
+
+    struct sockaddr_in  daddr4;
+    __u8 pad3[12]; // компенсируем разницу с IPv6
+
+    struct sockaddr_in6 saddr6;
+    struct sockaddr_in6 daddr6;
+
+    __u16 sport;
+    __u16 dport;
+
+    char comm[16];
+    __u32 pid;
+
+    __u8 state;
+    __u8 proto;
+    __u8 pad4[2]; // выравнивание до 4
+};
+
+struct trace_info {
+    struct sock_info_t sock_info;  // Теперь размер ~154 байта
+    __u32 sysexit;
+    __u32 ifindex;
+    char comm[64];
+};
+
+
 
 
 
