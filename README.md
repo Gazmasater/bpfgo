@@ -355,62 +355,23 @@ done
 
 
 
-
-SEC("tracepoint/sock/inet_sock_set_state")
-int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
-    struct trace_info info = {};
-    struct sock_info_t sock_info = {};
-
-    __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
-    bpf_get_current_comm(&sock_info.comm, sizeof(sock_info.comm));
-
-    sock_info.pid = pid_tcp;
-    sock_info.proto = ctx->protocol;
-    sock_info.state = ctx->newstate;
-    sock_info.family = ctx->family;
-    sock_info.sport = bpf_ntohs(ctx->sport); 
-    sock_info.dport = bpf_ntohs(ctx->dport);
-
-    // Считывание адреса источника (saddr)
-    if (ctx->family == AF_INET) {
-        struct sockaddr_in addr4 = {};
-        addr4.sin_family = AF_INET;
-        bpf_probe_read_kernel(&addr4.sin_addr.s_addr, sizeof(addr4.sin_addr.s_addr), ctx->saddr);
-        sock_info.addr4 = addr4;
-
-        // Считывание адреса назначения (daddr)
-        struct sockaddr_in addr4_dst = {};
-        addr4_dst.sin_family = AF_INET;
-        bpf_probe_read_kernel(&addr4_dst.sin_addr.s_addr, sizeof(addr4_dst.sin_addr.s_addr), ctx->daddr);
-        sock_info.addr4_dst = addr4_dst;  // Добавление адреса назначения для IPv4
-    } else if (ctx->family == AF_INET6) {
-        struct sockaddr_in6 addr6 = {};
-        addr6.sin6_family = AF_INET6;
-        if (bpf_probe_read_kernel(&addr6.sin6_addr, sizeof(addr6.sin6_addr), ctx->saddr_v6) < 0)
-            return 0;
-        sock_info.addr6 = addr6;
-
-        // Считывание адреса назначения (daddr)
-        struct sockaddr_in6 addr6_dst = {};
-        addr6_dst.sin6_family = AF_INET6;
-        if (bpf_probe_read_kernel(&addr6_dst.sin6_addr, sizeof(addr6_dst.sin6_addr), ctx->daddr_v6) < 0)
-            return 0;
-        sock_info.addr6_dst = addr6_dst;  // Добавление адреса назначения для IPv6
-    }
-
-    info.sock_info = sock_info; // заполняем вложение
-    info.sysexit = 6;
-
-    bpf_probe_read_kernel(info.comm, sizeof(info.comm), sock_info.comm);
-
-    if (ctx->newstate == TCP_ESTABLISHED ||
-        ctx->newstate == TCP_SYN_SENT ||
-        ctx->newstate == TCP_LISTEN) {
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    }
-
-    return 0;
-}
+struct sock_info_t {
+    __u8 family;
+    union {
+        struct sockaddr_in  saddr4;
+        struct sockaddr_in6 saddr6;
+    };
+    union {
+        struct sockaddr_in  daddr4;
+        struct sockaddr_in6 daddr6;
+    };
+    __u16 sport;
+    __u16 dport;
+    char comm[16];
+    __u32 pid;
+    __u8 state;
+    __u8 proto;
+};
 
 
 
