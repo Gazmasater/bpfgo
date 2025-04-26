@@ -433,8 +433,9 @@ type bpfTraceInfo struct {
 }
 
 
-dstIP6 := net.IP(event.SockInfo.Daddr6[:])
-				srcIP6 := net.IP(event.SockInfo.Saddr6[:])
+dstIP6 := net.IP(event.SockInfo.Daddr6.Sin6Addr.In6U.U6Addr8[:])
+srcIP6 := net.IP(event.SockInfo.Saddr6.Sin6Addr.In6U.U6Addr8[:])
+
 
 
 
