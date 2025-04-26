@@ -504,5 +504,21 @@ func HandleIPEvent(
 eventChan_info := make(chan PortPid, 10)
 HandleIPEvent(event, srcIP, dstIP, &mu, eventChan_info)
 
+FAMIY FUNC =10 STATE=2
+PID=5967 SPORT=0 DPORT=1234 STATE=2 NAME=nc
+POSLE IF STATE=2 PID=5967
+
+FAMIY FUNC =10 STATE=1
+PID=5967 SPORT=59832 DPORT=1234 STATE=1 NAME=nc
+
+PID=5967 NAME=nc TCP://ip6-localhost[::1]:59832 <- TCP://ip6-localhost[::1]:1234 
+PID=5967 NAME=nc TCP://ip6-localhost[::1]:0 -> TCP://ip6-localhost[::1]:1234 
+
+FAMIY FUNC =10 STATE=1
+PID=5967 SPORT=1234 DPORT=59832 STATE=1 NAME=nc
+
+PID=5967 NAME=nc TCP://ip6-localhost[::1]:1234 <- TCP://ip6-localhost[::1]:59832 
+PID=5967 NAME=nc TCP://ip6-localhost[::1]:0 -> TCP://ip6-localhost[::1]:59832 
+
 
 
