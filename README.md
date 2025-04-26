@@ -371,18 +371,31 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
     sock_info.sport = bpf_ntohs(ctx->sport); 
     sock_info.dport = bpf_ntohs(ctx->dport);
 
+    // Считывание адреса источника (saddr)
     if (ctx->family == AF_INET) {
         struct sockaddr_in addr4 = {};
         addr4.sin_family = AF_INET;
         bpf_probe_read_kernel(&addr4.sin_addr.s_addr, sizeof(addr4.sin_addr.s_addr), ctx->saddr);
         sock_info.addr4 = addr4;
 
+        // Считывание адреса назначения (daddr)
+        struct sockaddr_in addr4_dst = {};
+        addr4_dst.sin_family = AF_INET;
+        bpf_probe_read_kernel(&addr4_dst.sin_addr.s_addr, sizeof(addr4_dst.sin_addr.s_addr), ctx->daddr);
+        sock_info.addr4_dst = addr4_dst;  // Добавление адреса назначения для IPv4
     } else if (ctx->family == AF_INET6) {
         struct sockaddr_in6 addr6 = {};
         addr6.sin6_family = AF_INET6;
         if (bpf_probe_read_kernel(&addr6.sin6_addr, sizeof(addr6.sin6_addr), ctx->saddr_v6) < 0)
             return 0;
         sock_info.addr6 = addr6;
+
+        // Считывание адреса назначения (daddr)
+        struct sockaddr_in6 addr6_dst = {};
+        addr6_dst.sin6_family = AF_INET6;
+        if (bpf_probe_read_kernel(&addr6_dst.sin6_addr, sizeof(addr6_dst.sin6_addr), ctx->daddr_v6) < 0)
+            return 0;
+        sock_info.addr6_dst = addr6_dst;  // Добавление адреса назначения для IPv6
     }
 
     info.sock_info = sock_info; // заполняем вложение
@@ -398,6 +411,7 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 
     return 0;
 }
+
 
 
 
