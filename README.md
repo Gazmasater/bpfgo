@@ -416,50 +416,60 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 SEC("sk_lookup")
 int look_up(struct bpf_sk_lookup *ctx) {
     struct trace_info info = {};
-    info.ifindex=ctx->ingress_ifindex;
+    struct sock_info_t sock_info = {};
 
-    
+    sock_info.family = ctx->family;
+    sock_info.proto = ctx->protocol;
+    sock_info.sport = ctx->local_port;
+    sock_info.dport = bpf_ntohs(ctx->remote_port);
 
-
-    __u32 proto = ctx->protocol;
+    info.sysexit = 3;
+    info.ifindex = ctx->ingress_ifindex;
 
     if (ctx->family == AF_INET) {
-        __u32 srcIP = bpf_ntohl(ctx->local_ip4);
-        __u32 dstIP = bpf_ntohl(ctx->remote_ip4);
-        __u32 srcPort = ctx->local_port;
-        __u16 dstPort = bpf_ntohs(ctx->remote_port);
+        struct sockaddr_in addr4_src = {};
+        addr4_src.sin_family = AF_INET;
+        addr4_src.sin_port = ctx->local_port;
+        addr4_src.sin_addr.s_addr = ctx->local_ip4;
 
-        info.src_ip = srcIP;
-        info.sport = srcPort;
-        info.dst_ip = dstIP;
-        info.dport = dstPort;
-        info.sysexit = 3;
-        info.proto = proto;
-        info.family=AF_INET;
+        sock_info.saddr4 = addr4_src;
 
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+        struct sockaddr_in addr4_dst = {};
+        addr4_dst.sin_family = AF_INET;
+        addr4_dst.sin_port = ctx->remote_port;
+        addr4_dst.sin_addr.s_addr = ctx->remote_ip4;
+
+        sock_info.daddr4 = addr4_dst;
 
     } else if (ctx->family == AF_INET6) {
-        info.sport = ctx->local_port;
-        info.dport = bpf_ntohs(ctx->remote_port);
-        info.family=AF_INET6;
-        info.sysexit = 3;
-        info.proto=ctx->protocol;
+        struct sockaddr_in6 addr6_src = {};
+        addr6_src.sin6_family = AF_INET6;
+        addr6_src.sin6_port = ctx->local_port;
 
+        if (bpf_probe_read_kernel(&addr6_src.sin6_addr, sizeof(addr6_src.sin6_addr), ctx->local_ip6) < 0)
+            return SK_PASS;
 
+        sock_info.saddr6 = addr6_src;
 
+        struct sockaddr_in6 addr6_dst = {};
+        addr6_dst.sin6_family = AF_INET6;
+        addr6_dst.sin6_port = ctx->remote_port;
 
-       bpf_probe_read_kernel(&info.saddr6, sizeof(info.saddr6), ctx->local_ip6);
-       bpf_probe_read_kernel(&info.daddr6, sizeof(info.daddr6), ctx->remote_ip6);
+        if (bpf_probe_read_kernel(&addr6_dst.sin6_addr, sizeof(addr6_dst.sin6_addr), ctx->remote_ip6) < 0)
+            return SK_PASS;
 
-        int32 *ip6 = (int32 *)info.saddr6;
-
-        bpf_printk("IPv6 src: %x:%x:%x:%x", bpf_ntohl(ip6[0]), bpf_ntohl(ip6[1]), bpf_ntohl(ip6[2]), bpf_ntohl(ip6[3]));
-
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
+        sock_info.daddr6 = addr6_dst;
     }
+
+    info.sock_info = sock_info;  // кладём заполненный sock_info в info
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
     return SK_PASS;
 }
+
+
+
+
+
 
