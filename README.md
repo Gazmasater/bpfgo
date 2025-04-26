@@ -356,90 +356,29 @@ done
 
 
 
-struct ipv4_event_t {
-    __u32 saddr;
-    __u32 daddr;
-    __u16 sport;
-    __u16 dport;
-};
+if event.Family==2 {
+uint8	Sport=event.Ipv4.Sport
+uint8	Dport=event.Ipv4.Sport
 
-struct ipv6_event_t {
-    __u8 saddr[16];
-    __u8 daddr[16];
-    __u16 sport;
-    __u16 dport;
-};
 
-struct trace_info {
-    __u32 pid;
-    __u8 family;
-    __u8 state;
-    __u8 proto;
-    __u8 sysexit;
-    char comm[16];
-    struct ipv4_event_t ipv4;
-    struct ipv6_event_t ipv6;
-};
+}else if event.Family==10 {
+	uint8	Sport=event.Ipv6.Sport
+	uint8	Dport=event.Ipv6.Sport
+	
 
-SEC("tracepoint/sock/inet_sock_set_state")
-int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
-    struct trace_info info = {};
-    struct conn_info_t conn_info = {};
-
-    __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info));
-    bpf_probe_read_kernel(info.comm, sizeof(info.comm), conn_info.comm);
-
-    info.pid = pid_tcp;
-    info.sysexit = 6;
-    info.proto = ctx->protocol;
-    info.family = ctx->family;
-    info.state = ctx->newstate;
-
-    if (ctx->family == AF_INET) {
-        if (ctx->newstate == TCP_ESTABLISHED || ctx->newstate == TCP_SYN_SENT || ctx->newstate == TCP_LISTEN) {
-            __u32 srcip = 0, dstip = 0;
-            bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
-            bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
-            srcip = bpf_ntohl(srcip);
-            dstip = bpf_ntohl(dstip);
-
-            info.ipv4.saddr = srcip;
-            info.ipv4.daddr = dstip;
-            info.ipv4.sport = ctx->sport;
-            info.ipv4.dport = ctx->dport;
-
-            bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-        }
-
-    } else if (ctx->family == AF_INET6) {
-        if (ctx->newstate == TCP_ESTABLISHED || ctx->newstate == TCP_SYN_SENT || ctx->newstate == TCP_LISTEN) {
-            info.ipv6.sport = ctx->sport;
-            info.ipv6.dport = ctx->dport;
-
-            if (bpf_probe_read_kernel(&info.ipv6.saddr, sizeof(info.ipv6.saddr), ctx->saddr_v6) < 0) {
-                return 0;
-            }
-            if (bpf_probe_read_kernel(&info.ipv6.daddr, sizeof(info.ipv6.daddr), ctx->daddr_v6) < 0) {
-                return 0;
-            }
-
-            bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-        }
-    }
-
-    return 0;
 }
+		srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), Sport)
+		dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), Dport)
 
 [{
 	"resource": "/home/gaz358/myprog/bpfgo/handleIp.go",
-	"owner": "go-staticcheck",
-	"severity": 4,
-	"message": "cannot use [16]int8(event.Comm) (value of type [16]int8) as [64]int8 value in argument to pkg.Int8ToString",
-	"source": "go-staticcheck",
-	"startLineNumber": 32,
-	"startColumn": 20,
-	"endLineNumber": 32,
-	"endColumn": 42
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"severity": 8,
+	"message": "expected ';', found Sport",
+	"source": "syntax",
+	"startLineNumber": 70,
+	"startColumn": 7,
+	"endLineNumber": 70,
+	"endColumn": 7
 }]
 
