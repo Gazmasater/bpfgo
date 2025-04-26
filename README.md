@@ -356,7 +356,108 @@ done
 
 
 
-    var data *EventData // <--- добавляем объявление тут
+			if event.Sysexit == 3 {
+
+				family := event.SockInfo.Family
+
+				if family == 2 {
+
+					port := int(event.SockInfo.Dport)
+
+					data, exists := eventMap[port]
+					if !exists {
+						data = &EventData{}
+						eventMap[port] = data
+					}
+
+					data.Lookup = &Lookup{
+						SrcIP:   srcIP,
+						SrcPort: int(event.SockInfo.Sport),
+						DstIP:   dstIP,
+						DstPort: int(event.SockInfo.Dport),
+						Proto:   int(event.SockInfo.Proto)}
+				}
+
+				port_1 := int(event.SockInfo.Sport)
+
+				data_1, exists := eventMap_1[port_1]
+				if !exists {
+					data_1 = &EventData{}
+					eventMap_1[port_1] = data_1
+				}
+
+				data_1.Lookup = &Lookup{
+					SrcIP:   srcIP,
+					SrcPort: int(event.SockInfo.Sport),
+					DstIP:   dstIP,
+					DstPort: int(event.SockInfo.Dport),
+					Proto:   int(event.SockInfo.Proto),
+				}
+
+				fmt.Printf("LOOKUP srcIP=%s:%d\n", data_1.Lookup.SrcIP, data_1.Lookup.SrcPort)
+
+				if data.Recvmsg != nil && data.Sendmsg != nil {
+
+					if data.Lookup.Proto == 17 {
+
+						proto = "UDP"
+					}
+
+					fmt.Println("")
+
+					fmt.Printf("PID=%d NAME=%s %s/%s:%d<-%s:%d\n",
+						data.Recvmsg.Pid,
+						data.Recvmsg.Comm,
+						proto,
+						data.Lookup.DstIP,
+						data.Lookup.DstPort,
+						data.Lookup.SrcIP,
+						data.Lookup.SrcPort,
+					)
+
+					fmt.Printf("PID=%d NAME=%s %s/%s:%d->%s:%d\n",
+						data.Sendmsg.Pid,
+						data.Sendmsg.Comm,
+						proto,
+						data.Lookup.DstIP,
+						data.Lookup.DstPort,
+						data.Lookup.SrcIP,
+						data.Lookup.SrcPort,
+					)
+
+					fmt.Println("")
+
+				}
+
+				// 	} else if family == 10 {
+
+				// 		fmt.Printf("Saddr6 bytes: %v\n", event.Saddr6[:])
+
+				// 		fmt.Printf("!!!!!!!!!LOOKUP ETH=%d PID=%d SRC6=%s[%s]:%d DST6=%s:%d\n",
+				// 			event.Ifindex,
+				// 			event.SockInfo.Pid,
+				// 			pkg.ResolveIP(srcIP6),
+				// 			srcIP6.String(),
+				// 			event.SockInfo.Sport,
+				// 			dstIP6.String(),
+				// 			event.SockInfo.Dport)
+
+				// 		iface, err := net.InterfaceByIndex(int(event.Ifindex))
+				// 		if err != nil {
+				// 			fmt.Fprintf(os.Stderr, "ошибка: %v\n", err)
+				// 			return
+				// 		}
+
+				// 		ipAddr := &net.IPAddr{
+				// 			IP:   srcIP6,
+				// 			Zone: iface.Name,
+				// 		}
+
+				// 		fmt.Printf("IPv6 адрес с интерфейсом: %s\n", ipAddr.String())
+
+				//	}
+
+			}
 
 
 
