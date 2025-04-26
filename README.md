@@ -364,6 +364,8 @@ import (
 	"sync"
 )
 
+var seenConnections = make(map[string]bool)
+
 func HandleIPEvent(
 	event bpfTraceInfo,
 	srcIP, dstIP net.IP,
@@ -378,8 +380,6 @@ func HandleIPEvent(
 		dsthost string
 		err     error
 	)
-
-	var seenConnections = make(map[string]bool)
 
 	fmt.Printf("FAMIY FUNC =%d STATE=%d\n", event.Family, event.State)
 
@@ -505,22 +505,30 @@ func HandleIPEvent(
 	}
 }
 
+FAMIY FUNC =10 STATE=10
+PID=4315 SPORT=12345 DPORT=0 STATE=10 NAME=nc
+POSLE IF STATE=10 PID=4315
+
+FAMIY FUNC =10 STATE=2
+PID=4401 SPORT=0 DPORT=12345 STATE=2 NAME=nc
+POSLE IF STATE=2 PID=4401
+
 FAMIY FUNC =10 STATE=1
-PID=5427 SPORT=58400 DPORT=12345 STATE=1 NAME=nc
+PID=4401 SPORT=38586 DPORT=12345 STATE=1 NAME=nc
 
-PID=5427 NAME=nc TCP://ip6-localhost[::1]:58400 <- TCP://ip6-localhost[::1]:12345 
-PID=5295 NAME=nc TCP://ip6-localhost[::1]:58400 -> TCP://ip6-localhost[::1]:12345 
+PID=4401 NAME=nc TCP://ip6-localhost[::1]:38586 <- TCP://ip6-localhost[::1]:12345 
+PID=4315 NAME=nc TCP://ip6-localhost[::1]:38586 -> TCP://ip6-localhost[::1]:12345 
 
-PID=5295 NAME=nc TCP://ip6-localhost[::1]:58400 -> TCP://ip6-localhost[::1]:12345 
+PID=4315 NAME=nc TCP://ip6-localhost[::1]:38586 -> TCP://ip6-localhost[::1]:12345 
 
 FAMIY FUNC =10 STATE=3
-PID=5427 SPORT=12345 DPORT=0 STATE=3 NAME=nc
+PID=4401 SPORT=12345 DPORT=0 STATE=3 NAME=nc
 
 FAMIY FUNC =10 STATE=1
-PID=5427 SPORT=12345 DPORT=58400 STATE=1 NAME=nc
+PID=4401 SPORT=12345 DPORT=38586 STATE=1 NAME=nc
 
-PID=5427 NAME=nc TCP://ip6-localhost[::1]:12345 <- TCP://ip6-localhost[::1]:58400 
-PID=0 NAME=nc TCP://ip6-localhost[::1]:12345 -> TCP://ip6-localhost[::1]:58400 
+PID=4401 NAME=nc TCP://ip6-localhost[::1]:12345 <- TCP://ip6-localhost[::1]:38586 
+PID=0 NAME=nc TCP://ip6-localhost[::1]:12345 -> TCP://ip6-localhost[::1]:38586 
 
 
 
