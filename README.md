@@ -354,26 +354,7 @@ while true; do
 done
 
 
-struct sock_info_t {
-    __u8 family;
-    union {
-        struct sockaddr_in  addr4;
-        struct sockaddr_in6 addr6;
-    };
-    __u16 sport;
-    __u16 dport;
-    char comm[16];
-    __u32 pid;
-    __u8 state;
-    __u8 proto;
-};
 
-struct trace_info {
-    struct sock_info_t sock_info;  // <-- Всё внутри sock_info
-    u32 sysexit;
-    u32 ifindex;
-    char comm[64];
-};
 
 type bpfTraceInfo struct {
 	SockInfo struct {
@@ -385,7 +366,11 @@ type bpfTraceInfo struct {
 			SinAddr   struct{ S_addr uint32 }
 			Pad       [8]uint8
 		}
-		_     [12]byte
+		Addr6 struct {
+			Sin6Family uint16
+			Sin6Addr   [16]byte
+			Sin6Port   uint16
+		}
 		Sport uint16
 		Dport uint16
 		Comm  [16]int8
@@ -398,5 +383,25 @@ type bpfTraceInfo struct {
 	Ifindex uint32
 	Comm    [64]int8
 }
+
+
+if record.SockInfo.Family == 10 { // AF_INET6
+	// Если семейство адресов - IPv6, извлекаем IPv6-адрес
+	dstIP6 := net.IP(record.SockInfo.Addr6.Sin6Addr[:])
+	fmt.Printf("Destination IPv6: %s\n", dstIP6)
+}
+
+
+if record.SockInfo.Family == 2 { // AF_INET
+	// Если семейство адресов - IPv4, извлекаем IPv4-адрес
+	srcIP := net.IPv4(
+		byte(record.SockInfo.Addr4.SinAddr.S_addr>>24),
+		byte(record.SockInfo.Addr4.SinAddr.S_addr>>16),
+		byte(record.SockInfo.Addr4.SinAddr.S_addr>>8),
+		byte(record.SockInfo.Addr4.SinAddr.S_addr),
+	)
+	fmt.Printf("Source IPv4: %s\n", srcIP)
+}
+
 
 
