@@ -397,7 +397,19 @@ type bpfTraceInfo struct {
 			SinAddr   struct{ S_addr uint32 }
 			Pad       [8]uint8
 		}
-		_     [12]byte
+		_      [12]byte
+		Saddr6 struct {
+			Sin6Family uint16
+			Sin6Port   uint16
+			Sin6Addr   [16]byte // IPv6 адрес — 16 байт
+			Pad        [8]uint8
+		}
+		Daddr6 struct {
+			Sin6Family uint16
+			Sin6Port   uint16
+			Sin6Addr   [16]byte // IPv6 адрес — 16 байт
+			Pad        [8]uint8
+		}
 		Sport uint16
 		Dport uint16
 		Comm  [16]int8
@@ -410,6 +422,7 @@ type bpfTraceInfo struct {
 	Ifindex uint32
 	Comm    [64]int8
 }
+
 
 
 
