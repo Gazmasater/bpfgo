@@ -355,6 +355,15 @@ done
 
 
 
+package main
+
+import (
+	"bpfgo/pkg"
+	"fmt"
+	"net"
+	"sync"
+)
+
 func HandleIPEvent(
 	event bpfTraceInfo,
 	srcIP, dstIP net.IP,
@@ -369,7 +378,6 @@ func HandleIPEvent(
 	)
 
 	fmt.Printf("FAMIY FUNC =%d STATE=%d\n", event.Family, event.State)
-
 	fmt.Printf("PID=%d SPORT=%d DPORT=%d STATE=%d NAME=%s\n",
 		event.Pid,
 		event.Sport,
@@ -377,94 +385,80 @@ func HandleIPEvent(
 		event.State,
 		pkg.Int8ToString(event.Comm))
 
+	// Определяем протокол
 	if event.Proto == 6 {
 		proto = "TCP"
 	}
 
-	switch event.State {
-	case 1:
-		// Сохраняем спорт
+	// Определяем имена хостов
+	if dstIP.IsLoopback() {
+		dsthost = pkg.ResolveIP(dstIP)
+	} else {
+		dsthost, err = pkg.ResolveIP_n(dstIP)
+		if err != nil {
+			dsthost = "unknown"
+		}
+	}
+	srchost := pkg.ResolveIP(srcIP)
+
+	// Формируем адреса
+	srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
+	dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
+
+	// Обработка состояния 1 (новое соединение)
+	if event.State == 1 {
 		mu.Lock()
 		select {
 		case eventChan_sport <- int(event.Sport):
 		default:
-			// если канал полон, перезаписываем
 			eventChan_sport <- int(event.Sport)
 			fmt.Printf("State 1: заменен порт %d\n", event.Sport)
 		}
 		mu.Unlock()
 
-		var srchost, dsthost string
-		srchost = pkg.ResolveIP(srcIP)
-		if dstIP.IsLoopback() {
-			dsthost = pkg.ResolveIP(dstIP)
-		} else {
-			dsthost, err = pkg.ResolveIP_n(dstIP)
-			if err != nil {
-				dsthost = "unknown"
-			}
-		}
-
-		srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
-		dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
-
 		fmt.Println("")
-		fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s\n",
+		fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s \n",
 			event.Pid,
 			pkg.Int8ToString(event.Comm),
 			proto,
 			srcAddr,
 			proto,
 			dstAddr)
+	}
 
-	case 2, 10:
-		// Сохраняем pid
+	// Обработка состояний 2 и 10
+	if event.State == 2 || event.State == 10 {
 		fmt.Printf("POSLE IF STATE=%d PID=%d\n", event.State, event.Pid)
 		mu.Lock()
 		select {
 		case eventChan_pid <- int(event.Pid):
 		default:
-			// пропускаем, если канал заполнен
 		}
 		mu.Unlock()
+	}
 
-		// Пытаемся забрать sport и pid и вывести ->
-		var xxx, xxx_pid int
-
+	// Чтение данных из каналов (если есть)
+	select {
+	case sport := <-eventChan_sport:
 		select {
-		case xxx = <-eventChan_sport:
-		default:
-			return
-		}
+		case pid := <-eventChan_pid:
+			if pid > 0 {
+				srcAddr = fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), sport)
+				dstAddr = fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
 
-		select {
-		case xxx_pid = <-eventChan_pid:
-		default:
-			return
-		}
-
-		var srchost, dsthost string
-		srchost = pkg.ResolveIP(srcIP)
-		if dstIP.IsLoopback() {
-			dsthost = pkg.ResolveIP(dstIP)
-		} else {
-			dsthost, err = pkg.ResolveIP_n(dstIP)
-			if err != nil {
-				dsthost = "unknown"
+				fmt.Printf("PID=%d NAME=%s %s:%s -> %s:%s \n",
+					pid,
+					pkg.Int8ToString(event.Comm),
+					proto,
+					srcAddr,
+					proto,
+					dstAddr)
+				fmt.Println("")
 			}
+		default:
+			return
 		}
-
-		srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), xxx)
-		dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
-
-		fmt.Println("")
-		fmt.Printf("PID=%d NAME=%s %s:%s -> %s:%s\n",
-			xxx_pid,
-			pkg.Int8ToString(event.Comm),
-			proto,
-			srcAddr,
-			proto,
-			dstAddr)
+	default:
 	}
 }
 
