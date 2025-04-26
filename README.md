@@ -355,9 +355,6 @@ done
 
 
 
-
-
-
 package main
 
 import (
@@ -366,14 +363,6 @@ import (
 	"net"
 	"sync"
 )
-
-// структура для хранения серверных PID по порту
-var listenPID = struct {
-	sync.Mutex
-	data map[int]int
-}{
-	data: make(map[int]int),
-}
 
 func HandleIPEvent(
 	event bpfTraceInfo,
@@ -384,136 +373,92 @@ func HandleIPEvent(
 ) {
 	var (
 		proto   string
-		dsthost string
+		srcHost string
+		dstHost string
 		err     error
 	)
 
-	fmt.Printf("FAMILY FUNC =%d STATE=%d\n", event.Family, event.State)
+	fmt.Printf("FAMILY=%d STATE=%d\n", event.Family, event.State)
+	fmt.Printf("PID=%d SPORT=%d DPORT=%d NAME=%s\n",
+		event.Pid, event.Sport, event.Dport, pkg.Int8ToString(event.Comm))
 
-	// Выводим информацию о событии
-	if event.Family == 2 {
-		fmt.Printf("PID=%d SPORT=%d DPORT=%d STATE=%d NAME=%s\n",
-			event.Pid, event.Ipv4.Sport, event.Ipv4.Dport, event.State,
-			pkg.Int8ToString([16]int8(event.Comm)))
-	} else if event.Family == 10 {
-		fmt.Printf("PID=%d SPORT=%d DPORT=%d STATE=%d NAME=%s\n",
-			event.Pid, event.Ipv6.Sport, event.Ipv6.Dport, event.State,
-			pkg.Int8ToString([16]int8(event.Comm)))
+	// Определение протокола
+	if event.Proto == 6 {
+		proto = "TCP"
+	} else {
+		proto = "UNKNOWN"
 	}
 
-	// Если сокет в LISTEN — запоминаем PID по порту
-	if event.State == 10 { // TCP_LISTEN
-		var sport uint16
-		if event.Family == 2 {
-			sport = event.Ipv4.Sport
-		} else if event.Family == 10 {
-			sport = event.Ipv6.Sport
+	// Определение IP-имен
+	srcHost = pkg.ResolveIP(srcIP)
+	if dstIP.IsLoopback() {
+		dstHost = pkg.ResolveIP(dstIP)
+	} else {
+		dstHost, err = pkg.ResolveIP_n(dstIP)
+		if err != nil {
+			dstHost = "unknown"
 		}
-
-		listenPID.Lock()
-		listenPID.data[int(sport)] = int(event.Pid)
-		listenPID.Unlock()
-
-		fmt.Printf("SAVE LISTEN PID: port=%d pid=%d\n", sport, event.Pid)
-		return
 	}
 
-	// Теперь обработка установленных соединений
-	if event.State == 1 || event.State == 2 { // TCP_ESTABLISHED или TCP_SYN_RECV
+	srcAddr := fmt.Sprintf("//%s[%s]:%d", srcHost, srcIP.String(), event.Sport)
+	dstAddr := fmt.Sprintf("//%s[%s]:%d", dstHost, dstIP.String(), event.Dport)
+
+	// Обработка состояний
+	switch event.State {
+	case 1: // ESTABLISHED
 		mu.Lock()
 		select {
-		case eventChan_sport <- int(event.Ipv4.Sport):
+		case eventChan_sport <- int(event.Sport):
 		default:
-			// перепишем канал, если он полный
+			// Канал занят, заменяем
+			<-eventChan_sport
+			eventChan_sport <- int(event.Sport)
+			fmt.Printf("State 1: заменен порт %d\n", event.Sport)
 		}
+		mu.Unlock()
 
+		fmt.Println()
+		fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s\n",
+			event.Pid,
+			pkg.Int8ToString(event.Comm),
+			proto,
+			srcAddr,
+			proto,
+			dstAddr)
+
+	case 2, 10: // SYN_RECEIVED или LISTEN
+		fmt.Printf("AFTER STATE=%d PID=%d\n", event.State, event.Pid)
+
+		mu.Lock()
 		select {
 		case eventChan_pid <- int(event.Pid):
 		default:
-			// перепишем канал, если он полный
+			// Канал заполнен, пропускаем
 		}
 		mu.Unlock()
 	}
 
-	// Определяем имена хостов
-	if dstIP.IsLoopback() {
-		dsthost = pkg.ResolveIP(dstIP)
-	} else {
-		dsthost, err = pkg.ResolveIP_n(dstIP)
-		if err != nil {
-			dsthost = "unknown"
-		}
-	}
-	srchost := pkg.ResolveIP(srcIP)
-
-	var Sport, Dport uint16
-
-	if event.Family == 2 {
-		Sport = event.Ipv4.Sport
-		Dport = event.Ipv4.Dport
-	} else if event.Family == 10 {
-		Sport = event.Ipv6.Sport
-		Dport = event.Ipv6.Dport
-	}
-
-	srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), Sport)
-	dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), Dport)
-
-	if event.Proto == 6 {
-		proto = "TCP"
-	}
-
-	// Вывод основного подключения
-	fmt.Println("")
-	fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s\n",
-		event.Pid,
-		pkg.Int8ToString(event.Comm),
-		proto,
-		srcAddr,
-		proto,
-		dstAddr)
-
-	// Если получили спорт, проверим, был ли такой слушающий PID
+	// Пытаемся получить sport и pid для вывода соединения
 	select {
-	case clientSport := <-eventChan_sport:
+	case sport := <-eventChan_sport:
 		select {
-		case clientPid := <-eventChan_pid:
-			// Клиент подключился
+		case pid := <-eventChan_pid:
+			srcAddr = fmt.Sprintf("//%s[%s]:%d", srcHost, srcIP.String(), sport)
+			dstAddr = fmt.Sprintf("//%s[%s]:%d", dstHost, dstIP.String(), event.Dport)
 
-			listenPID.Lock()
-			serverPid, found := listenPID.data[int(Dport)]
-			listenPID.Unlock()
-
-			if found {
-				// Отобразим соединение: сервер PID -> клиент PID
-				fmt.Printf("CONNECTED: SERVER_PID=%d -> CLIENT_PID=%d PORT=%d\n", serverPid, clientPid, Dport)
-				fmt.Printf("PID=%d NAME=%s %s:%s -> %s:%s\n",
-					serverPid,
-					pkg.Int8ToString(event.Comm),
-					proto,
-					srcAddr,
-					proto,
-					dstAddr)
-				fmt.Println("")
-			} else {
-				// Если сервер PID не нашли, просто выведем клиент PID
-				fmt.Printf("PID=%d NAME=%s %s:%s -> %s:%s\n",
-					clientPid,
-					pkg.Int8ToString(event.Comm),
-					proto,
-					srcAddr,
-					proto,
-					dstAddr)
-				fmt.Println("")
-			}
+			fmt.Printf("PID=%d NAME=%s %s:%s -> %s:%s\n",
+				pid,
+				pkg.Int8ToString(event.Comm),
+				proto,
+				srcAddr,
+				proto,
+				dstAddr)
+			fmt.Println()
 		default:
-			// нет PID
+			// PID неизвестен
 		}
 	default:
-		fmt.Println("")
+		// Нет новых событий в канале
+		fmt.Println()
 	}
 }
-
-
-
-
