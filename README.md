@@ -356,29 +356,186 @@ done
 
 
 
-if event.Family==2 {
-uint8	Sport=event.Ipv4.Sport
-uint8	Dport=event.Ipv4.Sport
+FAMIY FUNC =10 STATE=10
+PID=15336 SPORT=12345 DPORT=0 STATE=10 NAME=nc
+POSLE IF STATE=10 PID=15336
+
+FAMIY FUNC =10 STATE=2
+PID=15401 SPORT=0 DPORT=12345 STATE=2 NAME=nc
+POSLE IF STATE=2 PID=15401
+
+FAMIY FUNC =10 STATE=1
+PID=15401 SPORT=57868 DPORT=12345 STATE=1 NAME=nc
+
+PID=15401 NAME=nc TCP://ip6-localhost[::1]:57868 <- TCP://ip6-localhost[::1]:12345 
+PID=15336 NAME=nc TCP://ip6-localhost[::1]:0 -> TCP://ip6-localhost[::1]:12345 
+
+FAMIY FUNC =10 STATE=1
+PID=15401 SPORT=12345 DPORT=57868 STATE=1 NAME=nc
+
+PID=15401 NAME=nc TCP://ip6-localhost[::1]:12345 <- TCP://ip6-localhost[::1]:57868 
+PID=0 NAME=nc TCP://ip6-localhost[::1]:0 -> TCP://ip6-localhost[::1]:57868 
 
 
-}else if event.Family==10 {
-	uint8	Sport=event.Ipv6.Sport
-	uint8	Dport=event.Ipv6.Sport
-	
 
-}
+
+package main
+
+import (
+	"bpfgo/pkg"
+	"fmt"
+	"net"
+	"sync"
+)
+
+func HandleIPEvent(
+	event bpfTraceInfo,
+	srcIP, dstIP net.IP,
+	mu *sync.Mutex,
+	eventChan_sport chan int,
+	eventChan_pid chan int,
+) {
+	var (
+		proto   string
+		xxx     int
+		xxx_pid int
+		dsthost string
+		err     error
+	)
+
+	fmt.Printf("FAMIY FUNC =%d STATE=%d\n", event.Family, event.State)
+
+	if event.Family == 2 {
+
+		fmt.Printf("PID=%d SPORT=%d DPORT=%d STATE=%d NAME=%s\n",
+			event.Pid,
+			event.Ipv4.Sport,
+			event.Ipv4.Dport,
+			event.State,
+			pkg.Int8ToString([16]int8(event.Comm)))
+	} else if event.Family == 10 {
+
+		fmt.Printf("PID=%d SPORT=%d DPORT=%d STATE=%d NAME=%s\n",
+			event.Pid,
+			event.Ipv6.Sport,
+			event.Ipv6.Dport,
+			event.State,
+			pkg.Int8ToString([16]int8(event.Comm)))
+
+	}
+
+	if event.State == 1 {
+
+		mu.Lock()
+		select {
+		case eventChan_sport <- int(event.Ipv4.Sport):
+		default:
+			eventChan_sport <- int(event.Ipv4.Sport)
+			fmt.Printf("State 1: заменен порт %d\n", event.Ipv4.Sport)
+		}
+		mu.Unlock()
+
+		if dstIP.IsLoopback() {
+			dsthost = pkg.ResolveIP(dstIP)
+		} else {
+			dsthost, err = pkg.ResolveIP_n(dstIP)
+			if err != nil {
+				dsthost = "unknown"
+			}
+		}
+
+		srchost := pkg.ResolveIP(srcIP)
+
+		var Sport, Dport uint16
+
+		if event.Family == 2 {
+			Sport = event.Ipv4.Sport
+			Dport = event.Ipv4.Dport
+
+		} else if event.Family == 10 {
+			Sport = event.Ipv6.Sport
+			Dport = event.Ipv6.Dport
+
+		}
 		srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), Sport)
 		dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), Dport)
 
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/handleIp.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"severity": 8,
-	"message": "expected ';', found Sport",
-	"source": "syntax",
-	"startLineNumber": 70,
-	"startColumn": 7,
-	"endLineNumber": 70,
-	"endColumn": 7
-}]
+		if event.Proto == 6 {
+			proto = "TCP"
+		}
+
+		fmt.Println("")
+		fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s \n",
+			event.Pid,
+			pkg.Int8ToString(event.Comm),
+			proto,
+			srcAddr,
+			proto,
+			dstAddr)
+	}
+
+	if event.State == 2 || event.State == 10 {
+
+		fmt.Printf("POSLE IF STATE=%d PID=%d\n", event.State, event.Pid)
+		mu.Lock()
+		select {
+		case eventChan_pid <- int(event.Pid):
+		default:
+			// пропускаем, если канал заполнен
+		}
+		mu.Unlock()
+	}
+
+	select {
+	case xxx = <-eventChan_sport:
+		if dstIP.IsLoopback() {
+			dsthost = pkg.ResolveIP(dstIP)
+		} else {
+			dsthost, err = pkg.ResolveIP_n(dstIP)
+
+			if err != nil {
+				dsthost = "unknown"
+			}
+		}
+
+		srchost := pkg.ResolveIP(srcIP)
+
+		var Dport uint16
+
+		if event.Family == 2 {
+			Dport = event.Ipv4.Dport
+
+		} else if event.Family == 10 {
+			Dport = event.Ipv6.Dport
+
+		}
+
+		srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), xxx)
+		dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), Dport)
+
+		select {
+		case xxx_pid = <-eventChan_pid:
+			// получили PID
+		default:
+			// PID неизвестен
+		}
+
+		if event.Proto == 6 {
+			proto = "TCP"
+		}
+
+		fmt.Printf("PID=%d NAME=%s %s:%s -> %s:%s \n",
+			xxx_pid,
+			pkg.Int8ToString(event.Comm),
+			proto,
+			srcAddr,
+			proto,
+			dstAddr)
+		fmt.Println("")
+
+	default:
+		fmt.Println("")
+	}
+}
+
 
