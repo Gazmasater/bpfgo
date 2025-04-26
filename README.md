@@ -364,8 +364,6 @@ import (
 	"sync"
 )
 
-var seenConnections = make(map[string]bool)
-
 func HandleIPEvent(
 	event bpfTraceInfo,
 	srcIP, dstIP net.IP,
@@ -391,16 +389,6 @@ func HandleIPEvent(
 		pkg.Int8ToString(event.Comm))
 
 	if event.State == 1 {
-
-		key := fmt.Sprintf("%d:%d", event.Sport, event.Dport)
-
-		mu.Lock()
-		if seenConnections[key] {
-			mu.Unlock()
-			return // Уже обработали — не печатаем
-		}
-		seenConnections[key] = true
-		mu.Unlock()
 
 		mu.Lock()
 		select {
@@ -446,7 +434,7 @@ func HandleIPEvent(
 		select {
 		case eventChan_pid <- int(event.Pid):
 		default:
-			// пропускаем, если канал заполнен
+
 		}
 		mu.Unlock()
 	}
@@ -485,7 +473,7 @@ func HandleIPEvent(
 				fmt.Println("")
 			}
 		default:
-			// PID неизвестен — ничего не делаем
+			return
 		}
 		if event.Proto == 6 {
 			proto = "TCP"
@@ -505,30 +493,30 @@ func HandleIPEvent(
 	}
 }
 
+
 FAMIY FUNC =10 STATE=10
-PID=4315 SPORT=12345 DPORT=0 STATE=10 NAME=nc
-POSLE IF STATE=10 PID=4315
+PID=9525 SPORT=12345 DPORT=0 STATE=10 NAME=nc
+POSLE IF STATE=10 PID=9525
 
 FAMIY FUNC =10 STATE=2
-PID=4401 SPORT=0 DPORT=12345 STATE=2 NAME=nc
-POSLE IF STATE=2 PID=4401
+PID=9579 SPORT=0 DPORT=12345 STATE=2 NAME=nc
+POSLE IF STATE=2 PID=9579
 
 FAMIY FUNC =10 STATE=1
-PID=4401 SPORT=38586 DPORT=12345 STATE=1 NAME=nc
+PID=9579 SPORT=52318 DPORT=12345 STATE=1 NAME=nc
 
-PID=4401 NAME=nc TCP://ip6-localhost[::1]:38586 <- TCP://ip6-localhost[::1]:12345 
-PID=4315 NAME=nc TCP://ip6-localhost[::1]:38586 -> TCP://ip6-localhost[::1]:12345 
+PID=9579 NAME=nc TCP://ip6-localhost[::1]:52318 <- TCP://ip6-localhost[::1]:12345 
+PID=9525 NAME=nc TCP://ip6-localhost[::1]:52318 -> TCP://ip6-localhost[::1]:12345 
 
-PID=4315 NAME=nc TCP://ip6-localhost[::1]:38586 -> TCP://ip6-localhost[::1]:12345 
+PID=9525 NAME=nc TCP://ip6-localhost[::1]:52318 -> TCP://ip6-localhost[::1]:12345 
 
 FAMIY FUNC =10 STATE=3
-PID=4401 SPORT=12345 DPORT=0 STATE=3 NAME=nc
+PID=9579 SPORT=12345 DPORT=0 STATE=3 NAME=nc
 
 FAMIY FUNC =10 STATE=1
-PID=4401 SPORT=12345 DPORT=38586 STATE=1 NAME=nc
+PID=9579 SPORT=12345 DPORT=52318 STATE=1 NAME=nc
 
-PID=4401 NAME=nc TCP://ip6-localhost[::1]:12345 <- TCP://ip6-localhost[::1]:38586 
-PID=0 NAME=nc TCP://ip6-localhost[::1]:12345 -> TCP://ip6-localhost[::1]:38586 
+PID=9579 NAME=nc TCP://ip6-localhost[::1]:12345 <- TCP://ip6-localhost[::1]:52318 
 
 
 
