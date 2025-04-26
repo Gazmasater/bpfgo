@@ -363,6 +363,22 @@ import (
 	"sync"
 )
 
+type bpfTraceInfo struct {
+	Family uint16
+	Proto  uint8
+	Pid    uint32
+	Sport  uint16
+	Dport  uint16
+	State  uint8
+	Comm   [16]int8
+}
+
+// Глобальная мапа соединений и мьютекс
+var (
+	connections = make(map[string]bool)
+	muConn      sync.Mutex
+)
+
 func HandleIPEvent(
 	event bpfTraceInfo,
 	srcIP, dstIP net.IP,
@@ -384,10 +400,12 @@ func HandleIPEvent(
 		event.State,
 		pkg.Int8ToString(event.Comm))
 
+	// Определяем протокол
 	if event.Proto == 6 {
 		proto = "TCP"
 	}
 
+	// Определяем имена хостов
 	if dstIP.IsLoopback() {
 		dsthost = pkg.ResolveIP(dstIP)
 	} else {
@@ -398,18 +416,29 @@ func HandleIPEvent(
 	}
 	srchost := pkg.ResolveIP(srcIP)
 
+	// Формируем адреса
 	srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
 	dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
 
+	// Формируем ключ соединения
+	key := fmt.Sprintf("%s:%d-%s:%d", srcIP.String(), event.Sport, dstIP.String(), event.Dport)
+
+	// Обработка состояния 1 (новое соединение)
 	if event.State == 1 {
-		mu.Lock()
-		select {
-		case eventChan_sport <- int(event.Sport):
-			// Успешно отправили порт — не печатаем здесь
-		default:
-			// Канал занят — заменяем и печатаем
-			eventChan_sport <- int(event.Sport)
-			fmt.Printf("State 1: заменен порт %d\n", event.Sport)
+		muConn.Lock()
+		if _, exists := connections[key]; !exists {
+			connections[key] = true
+			muConn.Unlock()
+
+			mu.Lock()
+			select {
+			case eventChan_sport <- int(event.Sport):
+			default:
+				eventChan_sport <- int(event.Sport)
+				fmt.Printf("State 1: заменен порт %d\n", event.Sport)
+			}
+			mu.Unlock()
+
 			fmt.Println("")
 			fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s \n",
 				event.Pid,
@@ -418,10 +447,12 @@ func HandleIPEvent(
 				srcAddr,
 				proto,
 				dstAddr)
+		} else {
+			muConn.Unlock()
 		}
-		mu.Unlock()
 	}
 
+	// Обработка состояний 2 и 10
 	if event.State == 2 || event.State == 10 {
 		fmt.Printf("POSLE IF STATE=%d PID=%d\n", event.State, event.Pid)
 		mu.Lock()
@@ -432,6 +463,7 @@ func HandleIPEvent(
 		mu.Unlock()
 	}
 
+	// Чтение данных из каналов (если есть)
 	select {
 	case sport := <-eventChan_sport:
 		select {
