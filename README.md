@@ -387,6 +387,58 @@ struct trace_info {
 };
 
 
+type bpfTraceInfo struct {
+	SockInfo struct {
+		Family uint8
+		Pad1   [3]uint8
+		Saddr4 struct {
+			SinFamily uint16
+			SinPort   uint16
+			SinAddr   struct{ S_addr uint32 }
+			Pad       [8]uint8
+		}
+		Pad2   [12]uint8
+		Daddr4 struct {
+			SinFamily uint16
+			SinPort   uint16
+			SinAddr   struct{ S_addr uint32 }
+			Pad       [8]uint8
+		}
+		Pad3   [12]uint8
+		Saddr6 struct {
+			Sin6Family   uint16
+			Sin6Port     uint16
+			Sin6Flowinfo uint32
+			Sin6Addr     struct{ In6U struct{ U6Addr8 [16]uint8 } }
+			Sin6ScopeId  uint32
+		}
+		Daddr6 struct {
+			Sin6Family   uint16
+			Sin6Port     uint16
+			Sin6Flowinfo uint32
+			Sin6Addr     struct{ In6U struct{ U6Addr8 [16]uint8 } }
+			Sin6ScopeId  uint32
+		}
+		Sport uint16
+		Dport uint16
+		Comm  [16]int8
+		Pid   uint32
+		State uint8
+		Proto uint8
+		Pad4  [2]uint8
+	}
+	Sysexit uint32
+	Ifindex uint32
+	Comm    [64]int8
+}
+
+
+dstIP6 := net.IP(event.SockInfo.Daddr6[:])
+				srcIP6 := net.IP(event.SockInfo.Saddr6[:])
+
+
+
+
 
 
 
