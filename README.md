@@ -354,77 +354,73 @@ while true; do
 done
 
 
+#include <linux/in.h>
+#include <linux/in6.h>
+#include <linux/ipv6.h>
+
+struct sock_info_t {
+    __u8 family;
+    union {
+        struct sockaddr_in  addr4;
+        struct sockaddr_in6 addr6;
+    };
+    __u16 sport;
+    __u16 dport;
+    char comm[16];
+    __u32 pid;
+    __u8 state;
+    __u8 proto;
+};
+
 SEC("tracepoint/sock/inet_sock_set_state")
 int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
-
-
-
-    struct trace_info info = {};
-    struct conn_info_t conn_info={};
-
+    struct sock_info_t info = {};
 
     __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info));
+    bpf_get_current_comm(&info.comm, sizeof(info.comm));
 
-    bpf_probe_read_kernel(info.comm, sizeof(info.comm), conn_info.comm);
-    info.sysexit=6;
-    info.proto=ctx->protocol;
-    info.pid=pid_tcp;
+    info.pid = pid_tcp;
+    info.proto = ctx->protocol;
+    info.state = ctx->newstate;
+    info.family = ctx->family;
+    info.sport = bpf_ntohs(ctx->sport); // sport в host byte order
+    info.dport = bpf_ntohs(ctx->dport);
 
+    if (ctx->family == AF_INET) {
+        struct sockaddr_in addr4 = {};
+        addr4.sin_family = AF_INET;
 
+        __u32 srcip = 0;
+        bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
+        addr4.sin_addr.s_addr = srcip; // уже в network byte order (sin_addr.s_addr требует его)
 
+        __u32 dstip = 0;
+        bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
 
+        info.addr4 = addr4;
 
-    __u32 srcip;
-    bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
-    srcip = bpf_ntohl(srcip);
-
-    __u32 dstip;
-    bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
-    dstip = bpf_ntohl(dstip);
-       
-    __u16 sport=0;
-    
-    sport=ctx->sport;
-       
-    __u16 dport;
-    dport=ctx->dport;
-
-   __u8 state=ctx->newstate;
-
-    if (ctx->family==AF_INET) {
-    if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
-
-        info.src_ip=srcip;
-        info.sport=sport;
-        info.dst_ip=dstip;
-        info.dport=dport;
-        info.sysexit=6;
-        info.state=ctx->newstate;
-        info.family=ctx->family;
-
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    }
-
-    } else if (ctx->family==AF_INET6) {
-
-
-        info.family=ctx->family;
-        info.state=ctx->newstate;
-        info.sport =(ctx->sport);
-        info.dport=(ctx->dport);
-        if (bpf_probe_read_kernel(&info.saddr6, sizeof(info.saddr6), ctx->saddr_v6) < 0) {
-            return 0;
-        }
-        if (bpf_probe_read_kernel(&info.daddr6, sizeof(info.saddr6), ctx->daddr_v6) < 0) {
-            return 0;
+        if (ctx->newstate == TCP_ESTABLISHED ||
+            ctx->newstate == TCP_SYN_SENT ||
+            ctx->newstate == TCP_LISTEN) {
+            bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
         }
 
+    } else if (ctx->family == AF_INET6) {
+        struct sockaddr_in6 addr6 = {};
+        addr6.sin6_family = AF_INET6;
 
-        
-       bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+        if (bpf_probe_read_kernel(&addr6.sin6_addr, sizeof(addr6.sin6_addr), ctx->saddr_v6) < 0)
+            return 0;
+        if (bpf_probe_read_kernel(&addr6.sin6_addr, sizeof(addr6.sin6_addr), ctx->daddr_v6) < 0)
+            return 0;
 
+        info.addr6 = addr6;
 
+        if (ctx->newstate == TCP_ESTABLISHED ||
+            ctx->newstate == TCP_SYN_SENT ||
+            ctx->newstate == TCP_LISTEN) {
+            bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+        }
     }
 
     return 0;
