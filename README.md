@@ -367,11 +367,15 @@ done
 
 
 
-    sock_info.saddr6.sin6_addr.in6_u.u6_addr32[0] = (ctx->local_ip6[0]);
-    sock_info.saddr6.sin6_addr.in6_u.u6_addr32[1] = (ctx->local_ip6[1]);
-    sock_info.saddr6.sin6_addr.in6_u.u6_addr32[2] = (ctx->local_ip6[2]);
+struct sockaddr_in6 addr6_src = {};
+        addr6_src.sin6_family = AF_INET6;
+        addr6_src.sin6_port = ctx->local_port;
 
-    sock_info.saddr6.sin6_addr.in6_u.u6_addr32[3] =(ctx->local_ip6[3]);
+        addr6_src.sin6_addr.in6_u.u6_addr32[0] =(ctx->local_ip6[0]);
+        addr6_src.sin6_addr.in6_u.u6_addr32[1] = (ctx->local_ip6[1]);
+        addr6_src.sin6_addr.in6_u.u6_addr32[2] = (ctx->local_ip6[2]);
+        addr6_src.sin6_addr.in6_u.u6_addr32[3] =(ctx->local_ip6[3]);
+
 
 
     __builtin_memcpy(&sock_info.saddr6.sin6_addr.in6_u.u6_addr32, ctx->local_ip6, 4 * sizeof(__u32));
