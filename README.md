@@ -396,6 +396,12 @@ struct trace_info {
             code-3235    [005] ..s21   298.275819: bpf_trace_printk: Size of trace_info: 216
 
 
+                printf("offsetof(struct sockaddr_in6, sin6_family) = %zu\n", offsetof(struct sockaddr_in6, sin6_family));
+    printf("offsetof(struct sockaddr_in6, sin6_port) = %zu\n", offsetof(struct sockaddr_in6, sin6_port));
+    printf("offsetof(struct sockaddr_in6, sin6_addr) = %zu\n", offsetof(struct sockaddr_in6, sin6_addr));
+
+
+
 
 
 
