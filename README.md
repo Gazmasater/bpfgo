@@ -383,7 +383,12 @@ struct sockaddr_in6 addr6_src = {};
 bpf_probe_read_kernel(&sock_info.daddr6.sin6_addr.in6_u.u6_addr32, sizeof(sock_info.daddr6.sin6_addr.in6_u.u6_addr32), ctx->remote_ip6);
 
 
- __u8 padding[3]; 
+#pragma unroll
+    for (int i = 0; i < 4; i++)
+    {
+
+        addr6_src.in6_u.u6_addr32[i] =(ctx->local_ip6[i]);
+    }
 
 
 
