@@ -401,7 +401,9 @@ struct trace_info {
     printf("offsetof(struct sockaddr_in6, sin6_addr) = %zu\n", offsetof(struct sockaddr_in6, sin6_addr));
 
 
-
+DNS Resolver #4-4213    [002] ..s21   166.613369: bpf_trace_printk: offsetof(struct sockaddr_in6, sin6_family) = 0
+ DNS Resolver #4-4213    [002] ..s21   166.613370: bpf_trace_printk: offsetof(struct sockaddr_in6, sin6_port) = 2
+ DNS Resolver #4-4213    [002] ..s21   166.613371: bpf_trace_printk: offsetof(struct sockaddr_in6, sin6_addr) = 8
 
 
 
