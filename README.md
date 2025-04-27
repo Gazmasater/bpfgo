@@ -391,6 +391,23 @@ bpf_probe_read_kernel(&sock_info.daddr6.sin6_addr.in6_u.u6_addr32, sizeof(sock_i
     }
 
 
+    [{
+	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "513",
+	"severity": 8,
+	"message": "a value of type \"__be32\" (aka \"unsigned int\") cannot be assigned to an entity of type \"struct in_addr\"",
+	"source": "C/C++",
+	"startLineNumber": 783,
+	"startColumn": 25,
+	"endLineNumber": 783,
+	"endColumn": 26
+}]
+
+        sock_info.saddr4=addr4_src.s_addr;
+
+
+
 
 
 
