@@ -392,6 +392,11 @@ done
     __u8 pad5[8];                  // Паддинг до 16 байт, чтобы выровнять структуру
 };
 
+SRCIP6=::6c:be23:9e0f:656f:c0e8:97a2
+ fe80::e73:29ff:feb7:d6e8
+
+ 			Sin6Addr     struct{ In6U struct{ U6Addr8 [16]uint8 } }
+
 
 
 
