@@ -357,11 +357,13 @@ struct sock_info_t {
     __u8 family;
     __u8 pad1[3];
 
-    struct sockaddr_in  saddr4;
+    struct sockaddr_in saddr4;
     __u8 pad2[12];
 
-    struct sockaddr_in  daddr4;
+    struct sockaddr_in daddr4;
     __u8 pad3[12];
+
+    __u8 pad_align1[4]; // <<< ДОБАВИТЬ ЭТО! выровнять на 8 байт перед saddr6
 
     struct sockaddr_in6 saddr6;
     struct sockaddr_in6 daddr6;
@@ -374,10 +376,9 @@ struct sock_info_t {
 
     __u8 state;
     __u8 proto;
-    __u8 pad4[2]; // выравнивание до 4
-
-    __u8 pad5[8]; // <<< ДОБАВЛЯЕМ НОВЫЙ ПАДДИНГ до 16 байт
+    __u8 pad4[2];
 };
+
 
 
 struct trace_info {
