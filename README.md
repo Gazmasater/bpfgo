@@ -408,4 +408,20 @@ struct trace_info {
     printf("Offset of pad5: %zu\n", offsetof(struct sock_info_t, pad5));
 
 
+               bpfgo-5300    [006] ..s21   666.192595: bpf_trace_printk: Offset of family: 0
+           bpfgo-5300    [006] ..s21   666.192596: bpf_trace_printk: Offset of saddr4: 4
+           bpfgo-5300    [006] ..s21   666.192598: bpf_trace_printk: Offset of pad2: 20
+           bpfgo-5300    [006] ..s21   666.192599: bpf_trace_printk: Offset of daddr4: 32
+           bpfgo-5300    [006] ..s21   666.192600: bpf_trace_printk: Offset of pad3: 48
+           bpfgo-5300    [006] ..s21   666.192601: bpf_trace_printk: Offset of saddr6: 64
+           bpfgo-5300    [006] ..s21   666.192602: bpf_trace_printk: Offset of daddr6: 92
+           bpfgo-5300    [006] ..s21   666.192603: bpf_trace_printk: Offset of sport: 120
+           bpfgo-5300    [006] ..s21   666.192604: bpf_trace_printk: Offset of dport: 122
+           bpfgo-5300    [006] ..s21   666.192606: bpf_trace_printk: Offset of comm: 124
+           bpfgo-5300    [006] ..s21   666.192607: bpf_trace_printk: Offset of pid: 140
+           bpfgo-5300    [006] ..s21   666.192609: bpf_trace_printk: Offset of state: 144
+           bpfgo-5300    [006] ..s21   666.192611: bpf_trace_printk: Offset of proto: 145
+           bpfgo-5300    [006] ..s21   666.192613: bpf_trace_printk: Offset of pad4: 146
+
+
 
