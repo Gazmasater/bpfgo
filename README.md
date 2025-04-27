@@ -390,21 +390,22 @@ struct trace_info {
 
 
 
- printf("Size of sock_info_t: %zu\n", sizeof(struct sock_info_t));
-    printf("Size of trace_info: %zu\n", sizeof(struct trace_info));
-
-    Size of sock_info_t: 144
-            code-3235    [005] ..s21   298.275819: bpf_trace_printk: Size of trace_info: 216
-
-
-                printf("offsetof(struct sockaddr_in6, sin6_family) = %zu\n", offsetof(struct sockaddr_in6, sin6_family));
-    printf("offsetof(struct sockaddr_in6, sin6_port) = %zu\n", offsetof(struct sockaddr_in6, sin6_port));
-    printf("offsetof(struct sockaddr_in6, sin6_addr) = %zu\n", offsetof(struct sockaddr_in6, sin6_addr));
-
-
-DNS Resolver #4-4213    [002] ..s21   166.613369: bpf_trace_printk: offsetof(struct sockaddr_in6, sin6_family) = 0
- DNS Resolver #4-4213    [002] ..s21   166.613370: bpf_trace_printk: offsetof(struct sockaddr_in6, sin6_port) = 2
- DNS Resolver #4-4213    [002] ..s21   166.613371: bpf_trace_printk: offsetof(struct sockaddr_in6, sin6_addr) = 8
+    printf("Offset of family: %zu\n", offsetof(struct sock_info_t, family));
+    printf("Offset of saddr4: %zu\n", offsetof(struct sock_info_t, saddr4));
+    printf("Offset of pad2: %zu\n", offsetof(struct sock_info_t, pad2));
+    printf("Offset of daddr4: %zu\n", offsetof(struct sock_info_t, daddr4));
+    printf("Offset of pad3: %zu\n", offsetof(struct sock_info_t, pad3));
+    printf("Offset of pad_align: %zu\n", offsetof(struct sock_info_t, pad_align));
+    printf("Offset of saddr6: %zu\n", offsetof(struct sock_info_t, saddr6));
+    printf("Offset of daddr6: %zu\n", offsetof(struct sock_info_t, daddr6));
+    printf("Offset of sport: %zu\n", offsetof(struct sock_info_t, sport));
+    printf("Offset of dport: %zu\n", offsetof(struct sock_info_t, dport));
+    printf("Offset of comm: %zu\n", offsetof(struct sock_info_t, comm));
+    printf("Offset of pid: %zu\n", offsetof(struct sock_info_t, pid));
+    printf("Offset of state: %zu\n", offsetof(struct sock_info_t, state));
+    printf("Offset of proto: %zu\n", offsetof(struct sock_info_t, proto));
+    printf("Offset of pad4: %zu\n", offsetof(struct sock_info_t, pad4));
+    printf("Offset of pad5: %zu\n", offsetof(struct sock_info_t, pad5));
 
 
 
