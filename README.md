@@ -393,6 +393,9 @@ bpf_probe_read_kernel(&sock_info.daddr6.sin6_addr.in6_u.u6_addr32, sizeof(sock_i
 
 addr4_src.s_addr = ctx->local_ip4;
 
+BPF_CORE_READ_INTO(&sock_info.daddr6.sin6_addr.in6_u.u6_addr32, ctx, remote_ip6);
+
+
 
 
 
