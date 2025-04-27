@@ -88,17 +88,17 @@ func main() {
 
 	fmt.Printf("Дескриптор нового namespace: %d\n", netns.Fd())
 
-	SmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_sendmsg: %s", err)
-	}
-	defer SmsgEnter.Close()
+	// SmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_enter_sendmsg: %s", err)
+	// }
+	// defer SmsgEnter.Close()
 
-	SmsgExit, err := link.Tracepoint("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_sendmsg: %s", err)
-	}
-	defer SmsgExit.Close()
+	// SmsgExit, err := link.Tracepoint("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_exit_sendmsg: %s", err)
+	// }
+	// defer SmsgExit.Close()
 
 	// SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
 	// if err != nil {
@@ -112,17 +112,17 @@ func main() {
 	// }
 	// defer SExit.Close()
 
-	RmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_recvmsg: %s", err)
-	}
-	defer RmsgEnter.Close()
+	// RmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_enter_recvmsg: %s", err)
+	// }
+	// defer RmsgEnter.Close()
 
-	RmsgExit, err := link.Tracepoint("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_recvmsg: %s", err)
-	}
-	defer RmsgExit.Close()
+	// RmsgExit, err := link.Tracepoint("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit, nil)
+	// if err != nil {
+	// 	log.Fatalf("opening tracepoint sys_exit_recvmsg: %s", err)
+	// }
+	// defer RmsgExit.Close()
 
 	// REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
 	// if err != nil {
@@ -185,26 +185,33 @@ func main() {
 				log.Println("!!!!!!!!!!!!!!!!!!!!!!!invalid event size!!!!!!!!!!!!!!!!!!")
 				continue
 			}
-
-			// Приводим прочитанные данные к структуре bpfTraceInfo
 			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
 
-			srcIP := net.IPv4(
-				byte(event.SrcIp>>24),
-				byte(event.SrcIp>>16),
-				byte(event.SrcIp>>8),
-				byte(event.SrcIp),
-			)
+			var srcIP, dstIP net.IP
 
-			dstIP := net.IPv4(
-				byte(event.DstIp>>24),
-				byte(event.DstIp>>16),
-				byte(event.DstIp>>8),
-				byte(event.DstIp),
-			)
+			if event.SockInfo.Family == 2 {
+				srcIP = net.IPv4(
+					byte(event.SockInfo.Saddr4.SinAddr.S_addr),
+					byte(event.SockInfo.Saddr4.SinAddr.S_addr>>8),
+					byte(event.SockInfo.Saddr4.SinAddr.S_addr>>16),
+					byte(event.SockInfo.Saddr4.SinAddr.S_addr>>24),
+				)
 
-			srcIP6 := net.IP(event.Saddr6[:])
-			dstIP6 := net.IP(event.Daddr6[:])
+				dstIP = net.IPv4(
+					byte(event.SockInfo.Daddr4.SinAddr.S_addr),
+					byte(event.SockInfo.Daddr4.SinAddr.S_addr>>8),
+					byte(event.SockInfo.Daddr4.SinAddr.S_addr>>16),
+					byte(event.SockInfo.Daddr4.SinAddr.S_addr>>24),
+				)
+			}
+
+			var dstIP6, srcIP6 net.IP
+			if event.SockInfo.Family == 10 {
+				dstIP6 = net.IP(event.SockInfo.Daddr6.Sin6Addr.In6U.U6Addr8[:])
+				srcIP6 = net.IP(event.SockInfo.Saddr6.Sin6Addr.In6U.U6Addr8[:])
+
+				//	fmt.Printf("Destination IPv6: %s\n", dstIP6)
+			}
 
 			if pkg.Int8ToString(event.Comm) == executableName {
 				continue
@@ -212,11 +219,11 @@ func main() {
 
 			if event.Sysexit == 1 {
 
-				family := event.Family
+				family := event.SockInfo.Family
 
 				if family == 2 {
 
-					port := int(event.Dport)
+					port := int(event.SockInfo.Dport)
 					data, exists := eventMap_1[port]
 					if !exists {
 						data = &EventData{}
@@ -225,7 +232,7 @@ func main() {
 					data.Sendmsg = &Sendmsg{
 						DstIP:   dstIP,
 						DstPort: port,
-						Pid:     event.Pid,
+						Pid:     event.SockInfo.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
 					}
 
@@ -254,7 +261,7 @@ func main() {
 					fmt.Printf("!!!!!!!!!SENDTO  DST6=%s[%s]:%d\n",
 						pkg.ResolveIP(dstIP6),
 						dstIP6,
-						event.Dport)
+						event.SockInfo.Dport)
 
 				}
 
@@ -262,9 +269,9 @@ func main() {
 
 			if event.Sysexit == 11 {
 
-				if event.Family == 2 {
+				if event.SockInfo.Family == 2 {
 
-					port := int(event.Dport)
+					port := int(event.SockInfo.Dport)
 					data, exists := eventMap[port]
 					if !exists {
 						data = &EventData{}
@@ -273,7 +280,7 @@ func main() {
 					data.Sendmsg = &Sendmsg{
 						DstIP:   dstIP,
 						DstPort: port,
-						Pid:     event.Pid,
+						Pid:     event.SockInfo.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
 					}
 
@@ -315,12 +322,12 @@ func main() {
 
 					}
 
-				} else if event.Family == 10 {
+				} else if event.SockInfo.Family == 10 {
 					fmt.Printf("!!!!!!!!!SENDMSG SRC6=%s:%d DST6=%s:%d\n",
 						srcIP6,
-						event.Sport,
+						event.SockInfo.Sport,
 						dstIP6,
-						event.Dport)
+						event.SockInfo.Dport)
 
 				}
 
@@ -328,9 +335,9 @@ func main() {
 
 			if event.Sysexit == 2 {
 
-				if event.Family == 2 {
+				if event.SockInfo.Family == 2 {
 
-					port := int(event.Sport)
+					port := int(event.SockInfo.Sport)
 					data, exists := eventMap[port]
 					if !exists {
 						data = &EventData{}
@@ -339,16 +346,16 @@ func main() {
 					data.Recvmsg = &Recvmsg{
 						SrcIP:   srcIP,
 						SrcPort: port,
-						Pid:     event.Pid,
+						Pid:     event.SockInfo.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
 					}
 
-				} else if event.Family == 10 {
+				} else if event.SockInfo.Family == 10 {
 					fmt.Printf("!!!!!!!!!RECVFROM SRC6=%s:%d DST6=%s:%d\n",
 						srcIP6,
-						event.Sport,
+						event.SockInfo.Sport,
 						dstIP6,
-						event.Dport)
+						event.SockInfo.Dport)
 
 				}
 
@@ -356,9 +363,9 @@ func main() {
 
 			if event.Sysexit == 12 {
 
-				if event.Family == 2 {
+				if event.SockInfo.Family == 2 {
 
-					port := int(event.Sport)
+					port := int(event.SockInfo.Sport)
 					data, exists := eventMap[port]
 					if !exists {
 						data = &EventData{}
@@ -367,7 +374,7 @@ func main() {
 					data.Recvmsg = &Recvmsg{
 						SrcIP:   srcIP,
 						SrcPort: port,
-						Pid:     event.Pid,
+						Pid:     event.SockInfo.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
 					}
 					if data.Lookup != nil && data.Sendmsg != nil {
@@ -403,8 +410,12 @@ func main() {
 
 					}
 
-				} else if event.Family == 10 {
-					fmt.Printf("!!!!!!!!!RECVMSG SRC6=%s:%d DST6=%s:%d\n", srcIP6, event.Sport, dstIP6, event.Dport)
+				} else if event.SockInfo.Family == 10 {
+					fmt.Printf("!!!!!!!!!RECVMSG SRC6=%s:%d DST6=%s:%d\n",
+						srcIP6,
+						event.SockInfo.Sport,
+						dstIP6,
+						event.SockInfo.Dport)
 
 				}
 
@@ -412,10 +423,11 @@ func main() {
 
 			if event.Sysexit == 3 {
 
-				family := event.Family
+				family := event.SockInfo.Family
+
 				if family == 2 {
 
-					port := int(event.Dport)
+					port := int(event.SockInfo.Dport)
 
 					data, exists := eventMap[port]
 					if !exists {
@@ -425,36 +437,38 @@ func main() {
 
 					data.Lookup = &Lookup{
 						SrcIP:   srcIP,
-						SrcPort: int(event.Sport),
+						SrcPort: int(event.SockInfo.Sport),
 						DstIP:   dstIP,
-						DstPort: int(event.Dport),
-						Proto:   int(event.Proto),
+						DstPort: int(event.SockInfo.Dport),
+						Proto:   int(event.SockInfo.Proto),
 					}
 
-					port_1 := int(event.Sport)
+					port_1 := int(event.SockInfo.Sport)
 
 					data_1, exists := eventMap_1[port_1]
 					if !exists {
 						data_1 = &EventData{}
-						eventMap_1[port_1] = data
+						eventMap_1[port_1] = data_1
 					}
 
 					data_1.Lookup = &Lookup{
 						SrcIP:   srcIP,
-						SrcPort: int(event.Sport),
+						SrcPort: int(event.SockInfo.Sport),
 						DstIP:   dstIP,
-						DstPort: int(event.Dport),
-						Proto:   int(event.Proto),
+						DstPort: int(event.SockInfo.Dport),
+						Proto:   int(event.SockInfo.Proto),
 					}
+
+					fmt.Printf("LOOKUP srcIP=%s:%d\n", data_1.Lookup.SrcIP, data_1.Lookup.SrcPort)
 
 					if data.Recvmsg != nil && data.Sendmsg != nil {
 
+						proto := "TCP"
 						if data.Lookup.Proto == 17 {
-
 							proto = "UDP"
 						}
 
-						fmt.Println("")
+						fmt.Println()
 
 						fmt.Printf("PID=%d NAME=%s %s/%s:%d<-%s:%d\n",
 							data.Recvmsg.Pid,
@@ -476,43 +490,19 @@ func main() {
 							data.Lookup.SrcPort,
 						)
 
-						fmt.Println("")
-
+						fmt.Println()
 					}
-
-				} else if family == 10 {
-
-					fmt.Printf("Saddr6 bytes: %v\n", event.Saddr6[:])
-
-					fmt.Printf("!!!!!!!!!LOOKUP ETH=%d PID=%d SRC6=%s[%s]:%d DST6=%s:%d\n",
-						event.Ifindex,
-						event.Pid,
-						pkg.ResolveIP(srcIP6),
-						srcIP6.String(),
-						event.Sport,
-						dstIP6.String(),
-						event.Dport)
-
-					iface, err := net.InterfaceByIndex(int(event.Ifindex))
-					if err != nil {
-						fmt.Fprintf(os.Stderr, "ошибка: %v\n", err)
-						return
-					}
-
-					ipAddr := &net.IPAddr{
-						IP:   srcIP6,
-						Zone: iface.Name,
-					}
-
-					fmt.Printf("IPv6 адрес с интерфейсом: %s\n", ipAddr.String())
+				}
+				if family == 10 {
+					fmt.Printf("SRCIP6=%s:%d\n", srcIP6.String(), event.SockInfo.Sport)
+					fmt.Printf("DSTIP6=%s:%d\n", dstIP6.String(), event.SockInfo.Dport)
 
 				}
-
 			}
 
 			if event.Sysexit == 6 {
 
-				switch event.Family {
+				switch event.SockInfo.Family {
 				case 2:
 					HandleIPEvent(event, srcIP, dstIP, &mu, eventChan_sport, eventChan_pid)
 
