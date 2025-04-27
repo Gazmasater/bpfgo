@@ -372,18 +372,20 @@ struct sock_info_t {
 
     struct sockaddr_in saddr4;     // 16 байт
     struct sockaddr_in daddr4;     // 16 байт
+
     char comm[16];                 // 16 байт
 
     __u32 pid;                     // 4 байта
-     __u16 sport;                   // 2 байта
+    __u16 sport;                   // 2 байта
     __u16 dport;                   // 2 байта
-
 
     __u8 state;                    // 1 байт
     __u8 family;                   // 1 байт
     __u8 proto;                    // 1 байт
 
+    __u8 pad[2];                   // 2 байта паддинга для выравнивания до 4
 };
+
 
 
 
