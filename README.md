@@ -366,4 +366,32 @@ done
  irq/145-iwlwifi-516     [002] ..s21   130.768633: bpf_trace_printk: Offset of proto: 117
 
 
+ struct sock_info_t {
+    __u8 family;                   // 1 байт
+    __u8 pad1[3];                  // Паддинг до 4 байт
+
+    struct sockaddr_in saddr4;     // 16 байт
+    __u8 pad2[12];                 // Паддинг до 28 байт (IPv6 требует 16 байт)
+
+    struct sockaddr_in daddr4;     // 16 байт
+    __u8 pad3[12];                 // Паддинг до 28 байт (IPv6 требует 16 байт)
+
+    struct sockaddr_in6 saddr6;    // 28 байт
+    struct sockaddr_in6 daddr6;    // 28 байт
+
+    __u16 sport;                   // 2 байта
+    __u16 dport;                   // 2 байта
+
+    char comm[16];                 // 16 байт
+    __u32 pid;                     // 4 байта
+
+    __u8 state;                    // 1 байт
+    __u8 proto;                    // 1 байт
+    __u8 pad4[2];                  // Паддинг до 4 байт
+
+    __u8 pad5[8];                  // Паддинг до 16 байт, чтобы выровнять структуру
+};
+
+
+
 
