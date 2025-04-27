@@ -353,75 +353,17 @@ while true; do
   nc -zv 127.0.0.1 80 2>/dev/null
 done
 
-struct sock_info_t {
-    __u8 family;
-    __u8 pad1[3];
-
-    struct sockaddr_in saddr4;
-    __u8 pad2[12];
-
-    struct sockaddr_in daddr4;
-    __u8 pad3[12];
-
-    __u8 pad_align1[4]; // <<< ДОБАВИТЬ ЭТО! выровнять на 8 байт перед saddr6
-
-    struct sockaddr_in6 saddr6;
-    struct sockaddr_in6 daddr6;
-
-    __u16 sport;
-    __u16 dport;
-
-    char comm[16];
-    __u32 pid;
-
-    __u8 state;
-    __u8 proto;
-    __u8 pad4[2];
-};
-
-
-
-struct trace_info {
-    struct sock_info_t sock_info;  // Теперь размер ~154 байта
-    __u32 sysexit;
-    __u32 ifindex;
-    char comm[64];
-};
-
-
-
-    printf("Offset of family: %zu\n", offsetof(struct sock_info_t, family));
-    printf("Offset of saddr4: %zu\n", offsetof(struct sock_info_t, saddr4));
-    printf("Offset of pad2: %zu\n", offsetof(struct sock_info_t, pad2));
-    printf("Offset of daddr4: %zu\n", offsetof(struct sock_info_t, daddr4));
-    printf("Offset of pad3: %zu\n", offsetof(struct sock_info_t, pad3));
-    printf("Offset of pad_align: %zu\n", offsetof(struct sock_info_t, pad_align));
-    printf("Offset of saddr6: %zu\n", offsetof(struct sock_info_t, saddr6));
-    printf("Offset of daddr6: %zu\n", offsetof(struct sock_info_t, daddr6));
-    printf("Offset of sport: %zu\n", offsetof(struct sock_info_t, sport));
-    printf("Offset of dport: %zu\n", offsetof(struct sock_info_t, dport));
-    printf("Offset of comm: %zu\n", offsetof(struct sock_info_t, comm));
-    printf("Offset of pid: %zu\n", offsetof(struct sock_info_t, pid));
-    printf("Offset of state: %zu\n", offsetof(struct sock_info_t, state));
-    printf("Offset of proto: %zu\n", offsetof(struct sock_info_t, proto));
-    printf("Offset of pad4: %zu\n", offsetof(struct sock_info_t, pad4));
-    printf("Offset of pad5: %zu\n", offsetof(struct sock_info_t, pad5));
-
-
-               bpfgo-5300    [006] ..s21   666.192595: bpf_trace_printk: Offset of family: 0
-           bpfgo-5300    [006] ..s21   666.192596: bpf_trace_printk: Offset of saddr4: 4
-           bpfgo-5300    [006] ..s21   666.192598: bpf_trace_printk: Offset of pad2: 20
-           bpfgo-5300    [006] ..s21   666.192599: bpf_trace_printk: Offset of daddr4: 32
-           bpfgo-5300    [006] ..s21   666.192600: bpf_trace_printk: Offset of pad3: 48
-           bpfgo-5300    [006] ..s21   666.192601: bpf_trace_printk: Offset of saddr6: 64
-           bpfgo-5300    [006] ..s21   666.192602: bpf_trace_printk: Offset of daddr6: 92
-           bpfgo-5300    [006] ..s21   666.192603: bpf_trace_printk: Offset of sport: 120
-           bpfgo-5300    [006] ..s21   666.192604: bpf_trace_printk: Offset of dport: 122
-           bpfgo-5300    [006] ..s21   666.192606: bpf_trace_printk: Offset of comm: 124
-           bpfgo-5300    [006] ..s21   666.192607: bpf_trace_printk: Offset of pid: 140
-           bpfgo-5300    [006] ..s21   666.192609: bpf_trace_printk: Offset of state: 144
-           bpfgo-5300    [006] ..s21   666.192611: bpf_trace_printk: Offset of proto: 145
-           bpfgo-5300    [006] ..s21   666.192613: bpf_trace_printk: Offset of pad4: 146
+ irq/145-iwlwifi-516     [002] ..s21   130.768626: bpf_trace_printk: Offset of family: 0
+ irq/145-iwlwifi-516     [002] ..s21   130.768626: bpf_trace_printk: Offset of saddr4: 4
+ irq/145-iwlwifi-516     [002] ..s21   130.768627: bpf_trace_printk: Offset of daddr4: 20
+ irq/145-iwlwifi-516     [002] ..s21   130.768628: bpf_trace_printk: Offset of saddr6: 36
+ irq/145-iwlwifi-516     [002] ..s21   130.768629: bpf_trace_printk: Offset of daddr6: 64
+ irq/145-iwlwifi-516     [002] ..s21   130.768629: bpf_trace_printk: Offset of sport: 92
+ irq/145-iwlwifi-516     [002] ..s21   130.768630: bpf_trace_printk: Offset of dport: 94
+ irq/145-iwlwifi-516     [002] ..s21   130.768631: bpf_trace_printk: Offset of comm: 96
+ irq/145-iwlwifi-516     [002] ..s21   130.768631: bpf_trace_printk: Offset of pid: 112
+ irq/145-iwlwifi-516     [002] ..s21   130.768632: bpf_trace_printk: Offset of state: 116
+ irq/145-iwlwifi-516     [002] ..s21   130.768633: bpf_trace_printk: Offset of proto: 117
 
 
 
