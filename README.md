@@ -376,6 +376,9 @@ done
 
     __builtin_memcpy(&sock_info.saddr6.sin6_addr.in6_u.u6_addr32, ctx->local_ip6, 4 * sizeof(__u32));
 
+            __builtin_memcpy(&sock_info.daddr6.sin6_addr.in6_u.u6_addr32, ctx->remote_ip6, 4 * sizeof(__u32));
+
+
 
 
 
