@@ -383,25 +383,7 @@ struct sockaddr_in6 addr6_src = {};
 bpf_probe_read_kernel(&sock_info.daddr6.sin6_addr.in6_u.u6_addr32, sizeof(sock_info.daddr6.sin6_addr.in6_u.u6_addr32), ctx->remote_ip6);
 
 
-struct sock_info_t {
-    struct in6_addr saddr6;    
-    struct in6_addr daddr6;    
-
-
-    struct sockaddr_in saddr4;     // 16 байт
-    struct sockaddr_in daddr4;     // 16 байт
-
-    char comm[16];                 // 16 байт
-
-    __u32 pid;                     // 4 байта
-    __u16 sport;                   // 2 байта
-    __u16 dport;                   // 2 байта
-
-    __u8 state;                    // 1 байт
-    __u8 family;                   // 1 байт
-    __u8 proto;                    // 1 байт
-
-};
+ __u8 padding[3]; 
 
 
 
