@@ -367,10 +367,12 @@ done
 
 
 
-#pragma clang loop unroll(full)
-for (int i = 0; i < 4; i++) {
-    sock_info.saddr6.sin6_addr.in6_u.u6_addr32[i] = bpf_ntohl(ctx->local_ip6[i]);
-}
+    sock_info.saddr6.sin6_addr.in6_u.u6_addr32[0] = (ctx->local_ip6[0]);
+    sock_info.saddr6.sin6_addr.in6_u.u6_addr32[1] = (ctx->local_ip6[1]);
+    sock_info.saddr6.sin6_addr.in6_u.u6_addr32[2] = (ctx->local_ip6[2]);
+
+    sock_info.saddr6.sin6_addr.in6_u.u6_addr32[3] =(ctx->local_ip6[3]);
+
 
 
 
