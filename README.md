@@ -374,6 +374,10 @@ done
     sock_info.saddr6.sin6_addr.in6_u.u6_addr32[3] =(ctx->local_ip6[3]);
 
 
+    __builtin_memcpy(&sock_info.saddr6.sin6_addr.in6_u.u6_addr32, ctx->local_ip6, 4 * sizeof(__u32));
+
+
+
 
 
 
