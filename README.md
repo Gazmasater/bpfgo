@@ -353,19 +353,34 @@ while true; do
   nc -zv 127.0.0.1 80 2>/dev/null
 done
 
-				if event.Family == 2 {
+				if family == 2 {
 
 					port := int(event.Dport)
-					data, exists := eventMap[port]
+					data_S, exists := eventMap[port]
 					if !exists {
-						data = &EventData{}
-						eventMap[port] = data
+						data_S = &EventData{}
+						eventMap[port] = data_S
 					}
-					data.Sendmsg = &Sendmsg{
+					data_S.Sendmsg = &Sendmsg{
 						DstIP:   dstIP,
 						DstPort: port,
 						Pid:     event.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
 					}
+
+					
+
+					if data_L.Lookup != nil {
+
+						fmt.Printf("PID=%d srcIP=%s:%d -> dstIP=%s:%d\n",
+							data_S.Sendmsg.Pid,
+							data_S.Lookup.DstIP.String(),
+							data_S.Lookup.DstPort,
+							data_L.Lookup.SrcIP.String(),
+							data_L.Lookup.SrcPort,
+						)
+
+					}
+
 
 
