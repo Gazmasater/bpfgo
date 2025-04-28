@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/cilium/ebpf/link"
@@ -100,17 +101,17 @@ func main() {
 	// }
 	// defer SmsgExit.Close()
 
-	// SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
-	// if err != nil {
-	// 	log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
-	// }
-	// defer SEnter.Close()
+	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
+	}
+	defer SEnter.Close()
 
-	// SExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
-	// if err != nil {
-	// 	log.Fatalf("opening tracepoint sys_exit_sendto: %s", err)
-	// }
-	// defer SExit.Close()
+	SExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_sendto: %s", err)
+	}
+	defer SExit.Close()
 
 	// RmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter, nil)
 	// if err != nil {
@@ -156,6 +157,8 @@ func main() {
 
 	go func() {
 
+		time.Sleep(1 * time.Nanosecond)
+
 		record := new(perf.Record)
 
 		const buffLen = 4096
@@ -187,28 +190,42 @@ func main() {
 			}
 			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
 
-			var srcIP, dstIP net.IP
+			var srcIP, dstIP, ddstIP net.IP
 
-			if event.SockInfo.Family == 2 {
+			if event.Family == 2 {
 				srcIP = net.IPv4(
-					byte(event.SockInfo.Saddr4.SinAddr.S_addr),
-					byte(event.SockInfo.Saddr4.SinAddr.S_addr>>8),
-					byte(event.SockInfo.Saddr4.SinAddr.S_addr>>16),
-					byte(event.SockInfo.Saddr4.SinAddr.S_addr>>24),
+					byte(event.Saddr4.S_addr),
+					byte(event.Saddr4.S_addr>>8),
+					byte(event.Saddr4.S_addr>>16),
+					byte(event.Saddr4.S_addr>>24),
 				)
 
+				// ssrcIP = net.IPv4(
+				// 	byte(event.Saddr4.S_addr),
+				// 	byte(event.Saddr4.S_addr>>8),
+				// 	byte(event.Saddr4.S_addr>>16),
+				// 	byte(event.Saddr4.S_addr>>24),
+				// )
+
 				dstIP = net.IPv4(
-					byte(event.SockInfo.Daddr4.SinAddr.S_addr),
-					byte(event.SockInfo.Daddr4.SinAddr.S_addr>>8),
-					byte(event.SockInfo.Daddr4.SinAddr.S_addr>>16),
-					byte(event.SockInfo.Daddr4.SinAddr.S_addr>>24),
+					byte(event.Daddr4.S_addr),
+					byte(event.Daddr4.S_addr>>8),
+					byte(event.Daddr4.S_addr>>16),
+					byte(event.Daddr4.S_addr>>24),
+				)
+
+				ddstIP = net.IPv4(
+					byte(event.Ddaddr4.SinAddr.S_addr),
+					byte(event.Ddaddr4.SinAddr.S_addr>>8),
+					byte(event.Ddaddr4.SinAddr.S_addr>>16),
+					byte(event.Ddaddr4.SinAddr.S_addr>>24),
 				)
 			}
 
 			var dstIP6, srcIP6 net.IP
-			if event.SockInfo.Family == 10 {
-				dstIP6 = net.IP(event.SockInfo.Daddr6.Sin6Addr.In6U.U6Addr8[:])
-				srcIP6 = net.IP(event.SockInfo.Saddr6.Sin6Addr.In6U.U6Addr8[:])
+			if event.Family == 10 {
+				dstIP6 = net.IP(event.Daddr6.In6U.U6Addr8[:])
+				srcIP6 = net.IP(event.Saddr6.In6U.U6Addr8[:])
 
 				//	fmt.Printf("Destination IPv6: %s\n", dstIP6)
 			}
@@ -219,12 +236,16 @@ func main() {
 
 			if event.Sysexit == 1 {
 
-				family := event.SockInfo.Family
+				family := event.Family
+				fmt.Printf("!!!!!SENDTO FAMILY=%d DSTIP=%s:%d\n",
+					event.Family,
+					ddstIP.String(),
+					event.Dport)
 
 				if family == 2 {
 
-					port := int(event.SockInfo.Dport)
-					data, exists := eventMap_1[port]
+					port := int(event.Dport)
+					data, exists := eventMap[port]
 					if !exists {
 						data = &EventData{}
 						eventMap[port] = data
@@ -232,7 +253,7 @@ func main() {
 					data.Sendmsg = &Sendmsg{
 						DstIP:   dstIP,
 						DstPort: port,
-						Pid:     event.SockInfo.Pid,
+						Pid:     event.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
 					}
 
@@ -261,7 +282,7 @@ func main() {
 					fmt.Printf("!!!!!!!!!SENDTO  DST6=%s[%s]:%d\n",
 						pkg.ResolveIP(dstIP6),
 						dstIP6,
-						event.SockInfo.Dport)
+						event.Dport)
 
 				}
 
@@ -269,9 +290,9 @@ func main() {
 
 			if event.Sysexit == 11 {
 
-				if event.SockInfo.Family == 2 {
+				if event.Family == 2 {
 
-					port := int(event.SockInfo.Dport)
+					port := int(event.Dport)
 					data, exists := eventMap[port]
 					if !exists {
 						data = &EventData{}
@@ -280,7 +301,7 @@ func main() {
 					data.Sendmsg = &Sendmsg{
 						DstIP:   dstIP,
 						DstPort: port,
-						Pid:     event.SockInfo.Pid,
+						Pid:     event.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
 					}
 
@@ -322,12 +343,12 @@ func main() {
 
 					}
 
-				} else if event.SockInfo.Family == 10 {
+				} else if event.Family == 10 {
 					fmt.Printf("!!!!!!!!!SENDMSG SRC6=%s:%d DST6=%s:%d\n",
 						srcIP6,
-						event.SockInfo.Sport,
+						event.Sport,
 						dstIP6,
-						event.SockInfo.Dport)
+						event.Dport)
 
 				}
 
@@ -335,9 +356,9 @@ func main() {
 
 			if event.Sysexit == 2 {
 
-				if event.SockInfo.Family == 2 {
+				if event.Family == 2 {
 
-					port := int(event.SockInfo.Sport)
+					port := int(event.Sport)
 					data, exists := eventMap[port]
 					if !exists {
 						data = &EventData{}
@@ -346,16 +367,16 @@ func main() {
 					data.Recvmsg = &Recvmsg{
 						SrcIP:   srcIP,
 						SrcPort: port,
-						Pid:     event.SockInfo.Pid,
+						Pid:     event.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
 					}
 
-				} else if event.SockInfo.Family == 10 {
+				} else if event.Family == 10 {
 					fmt.Printf("!!!!!!!!!RECVFROM SRC6=%s:%d DST6=%s:%d\n",
 						srcIP6,
-						event.SockInfo.Sport,
+						event.Sport,
 						dstIP6,
-						event.SockInfo.Dport)
+						event.Dport)
 
 				}
 
@@ -363,9 +384,9 @@ func main() {
 
 			if event.Sysexit == 12 {
 
-				if event.SockInfo.Family == 2 {
+				if event.Family == 2 {
 
-					port := int(event.SockInfo.Sport)
+					port := int(event.Sport)
 					data, exists := eventMap[port]
 					if !exists {
 						data = &EventData{}
@@ -374,7 +395,7 @@ func main() {
 					data.Recvmsg = &Recvmsg{
 						SrcIP:   srcIP,
 						SrcPort: port,
-						Pid:     event.SockInfo.Pid,
+						Pid:     event.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
 					}
 					if data.Lookup != nil && data.Sendmsg != nil {
@@ -410,12 +431,12 @@ func main() {
 
 					}
 
-				} else if event.SockInfo.Family == 10 {
+				} else if event.Family == 10 {
 					fmt.Printf("!!!!!!!!!RECVMSG SRC6=%s:%d DST6=%s:%d\n",
 						srcIP6,
-						event.SockInfo.Sport,
+						event.Sport,
 						dstIP6,
-						event.SockInfo.Dport)
+						event.Dport)
 
 				}
 
@@ -423,11 +444,11 @@ func main() {
 
 			if event.Sysexit == 3 {
 
-				family := event.SockInfo.Family
+				family := event.Family
 
 				if family == 2 {
 
-					port := int(event.SockInfo.Dport)
+					port := int(event.Dport)
 
 					data, exists := eventMap[port]
 					if !exists {
@@ -437,13 +458,13 @@ func main() {
 
 					data.Lookup = &Lookup{
 						SrcIP:   srcIP,
-						SrcPort: int(event.SockInfo.Sport),
+						SrcPort: int(event.Sport),
 						DstIP:   dstIP,
-						DstPort: int(event.SockInfo.Dport),
-						Proto:   int(event.SockInfo.Proto),
+						DstPort: int(event.Dport),
+						Proto:   int(event.Proto),
 					}
 
-					port_1 := int(event.SockInfo.Sport)
+					port_1 := int(event.Sport)
 
 					data_1, exists := eventMap_1[port_1]
 					if !exists {
@@ -453,13 +474,13 @@ func main() {
 
 					data_1.Lookup = &Lookup{
 						SrcIP:   srcIP,
-						SrcPort: int(event.SockInfo.Sport),
+						SrcPort: int(event.Sport),
 						DstIP:   dstIP,
-						DstPort: int(event.SockInfo.Dport),
-						Proto:   int(event.SockInfo.Proto),
+						DstPort: int(event.Dport),
+						Proto:   int(event.Proto),
 					}
 
-					fmt.Printf("LOOKUP srcIP=%s:%d\n", data_1.Lookup.SrcIP, data_1.Lookup.SrcPort)
+					//	fmt.Printf("LOOKUP srcIP=%s:%d\n", data_1.Lookup.SrcIP, data_1.Lookup.SrcPort)
 
 					if data.Recvmsg != nil && data.Sendmsg != nil {
 
@@ -494,15 +515,15 @@ func main() {
 					}
 				}
 				if family == 10 {
-					fmt.Printf("SRCIP6=%s:%d\n", srcIP6.String(), event.SockInfo.Sport)
-					fmt.Printf("DSTIP6=%s:%d\n", dstIP6.String(), event.SockInfo.Dport)
+					fmt.Printf("SRCIP6=%s:%d\n", srcIP6.String(), event.Sport)
+					fmt.Printf("DSTIP6=%s:%d\n", dstIP6.String(), event.Dport)
 
 				}
 			}
 
 			if event.Sysexit == 6 {
 
-				switch event.SockInfo.Family {
+				switch event.Family {
 				case 2:
 					HandleIPEvent(event, srcIP, dstIP, &mu, eventChan_sport, eventChan_pid)
 

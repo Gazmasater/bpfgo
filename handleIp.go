@@ -26,16 +26,16 @@ func HandleIPEvent(
 		err     error
 	)
 
-	//fmt.Printf("FAMIY FUNC =%d STATE=%d\n", event.SockInfo.Family, event.SockInfo.State)
+	//fmt.Printf("FAMIY FUNC =%d STATE=%d\n", event.Family, event.State)
 	// fmt.Printf("PID=%d SPORT=%d DPORT=%d STATE=%d NAME=%s\n",
-	// 	event.SockInfo.Pid,
-	// 	event.SockInfo.Sport,
-	// 	event.SockInfo.Dport,
-	// 	event.SockInfo.State,
+	// 	event.Pid,
+	// 	event.Sport,
+	// 	event.Dport,
+	// 	event.State,
 	// 	pkg.Int8ToString(event.Comm))
 
 	// Определяем протокол
-	if event.SockInfo.Family == 6 {
+	if event.Family == 6 {
 		proto = "TCP"
 	}
 
@@ -51,14 +51,14 @@ func HandleIPEvent(
 	srchost := pkg.ResolveIP(srcIP)
 
 	// Формируем адреса
-	srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.SockInfo.Sport)
-	dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.SockInfo.Dport)
+	srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
+	dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
 
 	// Формируем ключ соединения
-	key := makeConnectionKey(srcIP, event.SockInfo.Sport, dstIP, event.SockInfo.Dport)
+	key := makeConnectionKey(srcIP, event.Sport, dstIP, event.Dport)
 
 	// Обработка состояния 1 (новое соединение)
-	if event.SockInfo.State == 1 {
+	if event.State == 1 {
 		muConn.Lock()
 		if _, exists := connections[key]; !exists {
 			connections[key] = true
@@ -66,16 +66,16 @@ func HandleIPEvent(
 
 			mu.Lock()
 			select {
-			case eventChan_sport <- int(event.SockInfo.Sport):
+			case eventChan_sport <- int(event.Sport):
 			default:
-				eventChan_sport <- int(event.SockInfo.Sport)
-				fmt.Printf("State 1: заменен порт %d\n", event.SockInfo.Sport)
+				eventChan_sport <- int(event.Sport)
+				fmt.Printf("State 1: заменен порт %d\n", event.Sport)
 			}
 			mu.Unlock()
 
 			fmt.Println("")
 			fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s \n",
-				event.SockInfo.Pid,
+				event.Pid,
 				pkg.Int8ToString(event.Comm),
 				proto,
 				srcAddr,
@@ -87,11 +87,11 @@ func HandleIPEvent(
 	}
 
 	// Обработка состояний 2 и 10
-	if event.SockInfo.State == 2 || event.SockInfo.State == 10 {
+	if event.State == 2 || event.State == 10 {
 		//fmt.Printf("POSLE IF STATE=%d PID=%d\n", event.State, event.Pid)
 		mu.Lock()
 		select {
-		case eventChan_pid <- int(event.SockInfo.Pid):
+		case eventChan_pid <- int(event.Pid):
 		default:
 		}
 		mu.Unlock()
@@ -104,7 +104,7 @@ func HandleIPEvent(
 		case pid := <-eventChan_pid:
 			if pid > 0 {
 				srcAddr = fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), sport)
-				dstAddr = fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.SockInfo.Dport)
+				dstAddr = fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
 
 				fmt.Printf("PID=%d NAME=%s %s:%s -> %s:%s \n",
 					pid,
