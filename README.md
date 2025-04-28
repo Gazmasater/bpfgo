@@ -353,58 +353,368 @@ while true; do
   nc -zv 127.0.0.1 80 2>/dev/null
 done
 
- irq/145-iwlwifi-516     [002] ..s21   130.768626: bpf_trace_printk: Offset of family: 0
- irq/145-iwlwifi-516     [002] ..s21   130.768626: bpf_trace_printk: Offset of saddr4: 4
- irq/145-iwlwifi-516     [002] ..s21   130.768627: bpf_trace_printk: Offset of daddr4: 20
- irq/145-iwlwifi-516     [002] ..s21   130.768628: bpf_trace_printk: Offset of saddr6: 36
- irq/145-iwlwifi-516     [002] ..s21   130.768629: bpf_trace_printk: Offset of daddr6: 64
- irq/145-iwlwifi-516     [002] ..s21   130.768629: bpf_trace_printk: Offset of sport: 92
- irq/145-iwlwifi-516     [002] ..s21   130.768630: bpf_trace_printk: Offset of dport: 94
- irq/145-iwlwifi-516     [002] ..s21   130.768631: bpf_trace_printk: Offset of comm: 96
- irq/145-iwlwifi-516     [002] ..s21   130.768631: bpf_trace_printk: Offset of pid: 112
- irq/145-iwlwifi-516     [002] ..s21   130.768632: bpf_trace_printk: Offset of state: 116
- irq/145-iwlwifi-516     [002] ..s21   130.768633: bpf_trace_printk: Offset of proto: 117
+type Lookup struct {
+	DstIP   net.IP
+	DstPort int
+	SrcIP   net.IP
+	SrcPort int
+	Proto   int
+}
+
+type Sendmsg struct {
+	DstIP   net.IP
+	DstPort int
+	Pid     uint32
+	Proto   int
+	Comm    string
+}
+
+type Recvmsg struct {
+	SrcIP   net.IP
+	SrcPort int
+	Pid     uint32
+	Proto   int
+
+	Comm string
+}
+
+type EventData struct {
+	Lookup  *Lookup
+	Sendmsg *Sendmsg
+	Recvmsg *Recvmsg
+}
 
 
+			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
 
-struct sockaddr_in6 addr6_src = {};
-        addr6_src.sin6_family = AF_INET6;
-        addr6_src.sin6_port = ctx->local_port;
+			var srcIP, dstIP net.IP
 
-        addr6_src.sin6_addr.in6_u.u6_addr32[0] =(ctx->local_ip6[0]);
-        addr6_src.sin6_addr.in6_u.u6_addr32[1] = (ctx->local_ip6[1]);
-        addr6_src.sin6_addr.in6_u.u6_addr32[2] = (ctx->local_ip6[2]);
-        addr6_src.sin6_addr.in6_u.u6_addr32[3] =(ctx->local_ip6[3]);
+			if event.Family == 2 {
+				srcIP = net.IPv4(
+					byte(event.Saddr4.S_addr),
+					byte(event.Saddr4.S_addr>>8),
+					byte(event.Saddr4.S_addr>>16),
+					byte(event.Saddr4.S_addr>>24),
+				)
 
+				dstIP = net.IPv4(
+					byte(event.Daddr4.S_addr),
+					byte(event.Daddr4.S_addr>>8),
+					byte(event.Daddr4.S_addr>>16),
+					byte(event.Daddr4.S_addr>>24),
+				)
+			}
 
+			var dstIP6, srcIP6 net.IP
+			if event.Family == 10 {
+				dstIP6 = net.IP(event.Daddr6.In6U.U6Addr8[:])
+				srcIP6 = net.IP(event.Saddr6.In6U.U6Addr8[:])
 
-    __builtin_memcpy(&sock_info.saddr6.sin6_addr.in6_u.u6_addr32, ctx->local_ip6, 4 * sizeof(__u32));
+				//	fmt.Printf("Destination IPv6: %s\n", dstIP6)
+			}
 
-bpf_probe_read_kernel(&sock_info.daddr6.sin6_addr.in6_u.u6_addr32, sizeof(sock_info.daddr6.sin6_addr.in6_u.u6_addr32), ctx->remote_ip6);
+			if pkg.Int8ToString(event.Comm) == executableName {
+				continue
+			}
 
+			if event.Sysexit == 1 {
 
-#pragma unroll
-    for (int i = 0; i < 4; i++)
-    {
+				family := event.Family
 
-        addr6_src.in6_u.u6_addr32[i] =(ctx->local_ip6[i]);
-    }
+				if family == 2 {
 
+					port := int(event.Dport)
+					data, exists := eventMap_1[port]
+					if !exists {
+						data = &EventData{}
+						eventMap[port] = data
+					}
+					data.Sendmsg = &Sendmsg{
+						DstIP:   dstIP,
+						DstPort: port,
+						Pid:     event.Pid,
+						Comm:    pkg.Int8ToString(event.Comm),
+					}
 
-addr4_src.s_addr = ctx->local_ip4;
+					if data.Lookup != nil {
 
-BPF_CORE_READ_INTO(&sock_info.daddr6.sin6_addr.in6_u.u6_addr32, ctx, remote_ip6);
+						fmt.Printf("PID=%d srcIP=%s:%d -> dstIP=%s:%d\n",
+							data.Sendmsg.Pid,
+							data.Lookup.DstIP.String(),
+							data.Lookup.DstPort,
+							data.Lookup.SrcIP.String(),
+							data.Lookup.SrcPort,
+						)
 
-		time.Sleep(1 * time.Nanosecond)
+						fmt.Printf("PID=%d srcIP=%s:%d <- dstIP=%s:%d\n",
+							data.Recvmsg.Pid,
+							data.Recvmsg.SrcIP,
+							data.Recvmsg.SrcPort,
+							data.Sendmsg.DstIP,
+							data.Sendmsg.DstPort,
+						)
 
+					}
 
+				} else if family == 10 {
 
+					fmt.Printf("!!!!!!!!!SENDTO  DST6=%s[%s]:%d\n",
+						pkg.ResolveIP(dstIP6),
+						dstIP6,
+						event.Dport)
 
+				}
 
+			}
 
+			if event.Sysexit == 11 {
 
+				if event.Family == 2 {
 
+					port := int(event.Dport)
+					data, exists := eventMap[port]
+					if !exists {
+						data = &EventData{}
+						eventMap[port] = data
+					}
+					data.Sendmsg = &Sendmsg{
+						DstIP:   dstIP,
+						DstPort: port,
+						Pid:     event.Pid,
+						Comm:    pkg.Int8ToString(event.Comm),
+					}
 
+					if data.Lookup != nil && data.Recvmsg != nil {
 
+						if data.Lookup.Proto == 17 {
+
+							proto = "UDP"
+						}
+
+						fmt.Println("")
+
+						fmt.Printf("PID=%d NAME=%s %s/%s[%s]:%d->%s[%s]:%d\n",
+							data.Sendmsg.Pid,
+							data.Sendmsg.Comm,
+							proto,
+							pkg.ResolveIP(dstIP),
+							data.Lookup.DstIP,
+							data.Lookup.DstPort,
+							pkg.ResolveIP(srcIP),
+							data.Lookup.SrcIP,
+							data.Lookup.SrcPort,
+						)
+
+						fmt.Printf("PID=%d NAME=%s %s/%s[%s]:%d<-%s[%s]:%d\n",
+							data.Recvmsg.Pid,
+							data.Recvmsg.Comm,
+							proto,
+							pkg.ResolveIP(dstIP),
+
+							data.Lookup.DstIP,
+							data.Lookup.DstPort,
+							pkg.ResolveIP(srcIP),
+							data.Lookup.SrcIP,
+							data.Lookup.SrcPort,
+						)
+
+						fmt.Println("")
+
+					}
+
+				} else if event.Family == 10 {
+					fmt.Printf("!!!!!!!!!SENDMSG SRC6=%s:%d DST6=%s:%d\n",
+						srcIP6,
+						event.Sport,
+						dstIP6,
+						event.Dport)
+
+				}
+
+			}
+
+			if event.Sysexit == 2 {
+
+				if event.Family == 2 {
+
+					port := int(event.Sport)
+					data, exists := eventMap[port]
+					if !exists {
+						data = &EventData{}
+						eventMap[port] = data
+					}
+					data.Recvmsg = &Recvmsg{
+						SrcIP:   srcIP,
+						SrcPort: port,
+						Pid:     event.Pid,
+						Comm:    pkg.Int8ToString(event.Comm),
+					}
+
+				} else if event.Family == 10 {
+					fmt.Printf("!!!!!!!!!RECVFROM SRC6=%s:%d DST6=%s:%d\n",
+						srcIP6,
+						event.Sport,
+						dstIP6,
+						event.Dport)
+
+				}
+
+			}
+
+			if event.Sysexit == 12 {
+
+				if event.Family == 2 {
+
+					port := int(event.Sport)
+					data, exists := eventMap[port]
+					if !exists {
+						data = &EventData{}
+						eventMap[port] = data
+					}
+					data.Recvmsg = &Recvmsg{
+						SrcIP:   srcIP,
+						SrcPort: port,
+						Pid:     event.Pid,
+						Comm:    pkg.Int8ToString(event.Comm),
+					}
+					if data.Lookup != nil && data.Sendmsg != nil {
+
+						if data.Lookup.Proto == 17 {
+
+							proto = "UDP"
+						}
+
+						fmt.Println("")
+
+						fmt.Printf("PID=%d NAME=%s %s/%s:%d<-%s:%d\n",
+							data.Sendmsg.Pid,
+							data.Sendmsg.Comm,
+							proto,
+							data.Lookup.DstIP,
+							data.Lookup.DstPort,
+							data.Lookup.SrcIP,
+							data.Lookup.SrcPort,
+						)
+
+						fmt.Printf("PID=%d NAME=%s %s/%s:%d<-%s:%d\n",
+							data.Recvmsg.Pid,
+							data.Recvmsg.Comm,
+							proto,
+							data.Lookup.DstIP,
+							data.Lookup.DstPort,
+							data.Lookup.SrcIP,
+							data.Lookup.SrcPort,
+						)
+
+						fmt.Println("")
+
+					}
+
+				} else if event.Family == 10 {
+					fmt.Printf("!!!!!!!!!RECVMSG SRC6=%s:%d DST6=%s:%d\n",
+						srcIP6,
+						event.Sport,
+						dstIP6,
+						event.Dport)
+
+				}
+
+			}
+
+			if event.Sysexit == 3 {
+
+				family := event.Family
+
+				if family == 2 {
+
+					port := int(event.Dport)
+
+					data, exists := eventMap[port]
+					if !exists {
+						data = &EventData{}
+						eventMap[port] = data
+					}
+
+					data.Lookup = &Lookup{
+						SrcIP:   srcIP,
+						SrcPort: int(event.Sport),
+						DstIP:   dstIP,
+						DstPort: int(event.Dport),
+						Proto:   int(event.Proto),
+					}
+
+					port_1 := int(event.Sport)
+
+					data_1, exists := eventMap_1[port_1]
+					if !exists {
+						data_1 = &EventData{}
+						eventMap_1[port_1] = data_1
+					}
+
+					data_1.Lookup = &Lookup{
+						SrcIP:   srcIP,
+						SrcPort: int(event.Sport),
+						DstIP:   dstIP,
+						DstPort: int(event.Dport),
+						Proto:   int(event.Proto),
+					}
+
+					//	fmt.Printf("LOOKUP srcIP=%s:%d\n", data_1.Lookup.SrcIP, data_1.Lookup.SrcPort)
+
+					if data.Recvmsg != nil && data.Sendmsg != nil {
+
+						proto := "TCP"
+						if data.Lookup.Proto == 17 {
+							proto = "UDP"
+						}
+
+						fmt.Println()
+
+						fmt.Printf("PID=%d NAME=%s %s/%s:%d<-%s:%d\n",
+							data.Recvmsg.Pid,
+							data.Recvmsg.Comm,
+							proto,
+							data.Lookup.DstIP,
+							data.Lookup.DstPort,
+							data.Lookup.SrcIP,
+							data.Lookup.SrcPort,
+						)
+
+						fmt.Printf("PID=%d NAME=%s %s/%s:%d->%s:%d\n",
+							data.Sendmsg.Pid,
+							data.Sendmsg.Comm,
+							proto,
+							data.Lookup.DstIP,
+							data.Lookup.DstPort,
+							data.Lookup.SrcIP,
+							data.Lookup.SrcPort,
+						)
+
+						fmt.Println()
+					}
+				}
+				if family == 10 {
+					fmt.Printf("SRCIP6=%s:%d\n", srcIP6.String(), event.Sport)
+					fmt.Printf("DSTIP6=%s:%d\n", dstIP6.String(), event.Dport)
+
+				}
+			}
+
+			if event.Sysexit == 6 {
+
+				switch event.Family {
+				case 2:
+					HandleIPEvent(event, srcIP, dstIP, &mu, eventChan_sport, eventChan_pid)
+
+				case 10:
+
+					HandleIPEvent(event, srcIP6, dstIP6, &mu, eventChan_sport, eventChan_pid)
+
+				default:
+					continue
+				}
+
+			}
+		}
 
 
