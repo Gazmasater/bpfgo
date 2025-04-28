@@ -267,13 +267,13 @@ func main() {
 							data.Lookup.SrcPort,
 						)
 
-						fmt.Printf("PID=%d srcIP=%s:%d <- dstIP=%s:%d\n",
-							data.Recvmsg.Pid,
-							data.Recvmsg.SrcIP,
-							data.Recvmsg.SrcPort,
-							data.Sendmsg.DstIP,
-							data.Sendmsg.DstPort,
-						)
+						// fmt.Printf("PID=%d srcIP=%s:%d <- dstIP=%s:%d\n",
+						// 	data.Recvmsg.Pid,
+						// 	data.Recvmsg.SrcIP,
+						// 	data.Recvmsg.SrcPort,
+						// 	data.Sendmsg.DstIP,
+						// 	data.Sendmsg.DstPort,
+						// )
 
 					}
 
@@ -445,10 +445,16 @@ func main() {
 			if event.Sysexit == 3 {
 
 				family := event.Family
+				fmt.Printf("LOOKUP SRC=%s:%d DST=%s:%d\n",
+					srcIP.String(),
+					event.Sport,
+					dstIP.String(),
+					event.Dport,
+				)
 
 				if family == 2 {
 
-					port := int(event.Dport)
+					port := int(event.Sport)
 
 					data, exists := eventMap[port]
 					if !exists {
