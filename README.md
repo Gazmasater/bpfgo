@@ -353,34 +353,26 @@ while true; do
   nc -zv 127.0.0.1 80 2>/dev/null
 done
 
-				if family == 2 {
-
-					port := int(event.Dport)
-					data_S, exists := eventMap[port]
-					if !exists {
-						data_S = &EventData{}
-						eventMap[port] = data_S
-					}
-					data_S.Sendmsg = &Sendmsg{
-						DstIP:   dstIP,
-						DstPort: port,
-						Pid:     event.Pid,
-						Comm:    pkg.Int8ToString(event.Comm),
-					}
-
-					
-
-					if data_L.Lookup != nil {
-
-						fmt.Printf("PID=%d srcIP=%s:%d -> dstIP=%s:%d\n",
-							data_S.Sendmsg.Pid,
-							data_S.Lookup.DstIP.String(),
-							data_S.Lookup.DstPort,
-							data_L.Lookup.SrcIP.String(),
-							data_L.Lookup.SrcPort,
-						)
-
-					}
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "default",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/go/analysis/passes/printf",
+			"scheme": "https",
+			"authority": "pkg.go.dev"
+		}
+	},
+	"severity": 4,
+	"message": "fmt.Print call has possible Printf formatting directive %s",
+	"source": "printf",
+	"startLineNumber": 263,
+	"startColumn": 6,
+	"endLineNumber": 263,
+	"endColumn": 61
+}]
 
 
 
