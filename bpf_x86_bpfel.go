@@ -32,8 +32,20 @@ type bpfSockaddr struct {
 }
 
 type bpfTraceInfo struct {
-	SrcIp   uint32
-	DstIp   uint32
+	SsrcIP struct {
+		SinFamily uint16
+		SinPort   uint16
+		SinAddr   struct{ S_addr uint32 }
+		Pad       [8]uint8
+	}
+	DdstIP struct {
+		SinFamily uint16
+		SinPort   uint16
+		SinAddr   struct{ S_addr uint32 }
+		Pad       [8]uint8
+	}
+	SrcIP   struct{ S_addr uint32 }
+	DstIP   struct{ S_addr uint32 }
 	Sport   uint16
 	_       [2]byte
 	Pid     uint32

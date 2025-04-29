@@ -196,8 +196,10 @@ struct {
 // };
 
 struct trace_info {
-    u32 src_ip;
-    u32 dst_ip;
+    struct sockaddr_in ssrcIP;
+    struct sockaddr_in ddstIP;    
+    struct in_addr srcIP;
+    struct in_addr dstIP;
     __u16 sport;
     u32 pid;
     u32 proto;
@@ -206,9 +208,7 @@ struct trace_info {
     __u8 saddr6[16];
     __u8 daddr6[16];
     u16 family;
-    u16 dport;
-
-   
+    u16 dport;   
     char comm[64];
 };
 
@@ -304,7 +304,7 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
                 __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
         
                 info.pid=conn_info->pid;
-                info.dst_ip=ip;
+                info.ddstIP.sin_addr.s_addr=ip;
                 info.dport = port;
                 info.family=AF_INET;  
                 info.sysexit=1;
@@ -397,7 +397,7 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
         info.pid = pid;
         __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
 
-            info.src_ip=ip;
+            info.ssrcIP.sin_addr.s_addr=ip;
             info.sport = port;
             info.family=AF_INET;           
             info.sysexit=2;
@@ -511,7 +511,7 @@ int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
      u32   port=bpf_ntohs(sa.sin_port);
      u32   ip=bpf_ntohl(sa.sin_addr.s_addr);
      info.pid=conn_info->pid;
-     info.dst_ip=ip;
+     info.ddstIP.sin_addr.s_addr=ip;
      info.dport = port;
      info.family=AF_INET;  
      info.sysexit=11;
@@ -541,7 +541,7 @@ int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
         // info.dstIP6[1] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[1]);
         // info.dstIP6[2] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[2]);
         // info.dstIP6[3] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[3]);
-         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+        // bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
     }
 
@@ -624,7 +624,7 @@ int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
      u32   port=bpf_ntohs(sa.sin_port);
      u32   ip=bpf_ntohl(sa.sin_addr.s_addr);
      info.pid=conn_info->pid;
-     info.src_ip=ip;
+     info.ssrcIP.sin_addr.s_addr=ip;
      info.sport = port;
      info.family=AF_INET;  
      info.sysexit=12;
@@ -671,14 +671,19 @@ int look_up(struct bpf_sk_lookup *ctx) {
     __u32 proto = ctx->protocol;
 
     if (ctx->family == AF_INET) {
-        __u32 srcIP = bpf_ntohl(ctx->local_ip4);
-        __u32 dstIP = bpf_ntohl(ctx->remote_ip4);
+        struct in_addr srcIP;
+        struct in_addr dstIP;
+        srcIP.s_addr=ctx->local_ip4;
+        dstIP.s_addr=ctx->remote_ip4;
+
+        
+
         __u32 srcPort = ctx->local_port;
         __u16 dstPort = bpf_ntohs(ctx->remote_port);
 
-        info.src_ip = srcIP;
+        info.srcIP.s_addr = srcIP.s_addr;
         info.sport = srcPort;
-        info.dst_ip = dstIP;
+        info.dstIP.s_addr = dstIP.s_addr;
         info.dport = dstPort;
         info.sysexit = 3;
         info.proto = proto;
@@ -720,30 +725,23 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 
     __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
 
-    __u32 srcip;
-    bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
-    srcip = bpf_ntohl(srcip);
-
-    __u32 dstip;
-    bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
-    dstip = bpf_ntohl(dstip);
-       
-    __u16 sport=0;
-    
-    sport=ctx->sport;
-       
-    __u16 dport;
-    dport=ctx->dport;
-
-   __u8 state=ctx->newstate;
-
     if (ctx->family==AF_INET) {
-    if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
 
-        info.src_ip=srcip;
-        info.sport=sport;
-        info.dst_ip=dstip;
-        info.dport=dport;
+struct in_addr  srcip;
+struct in_addr  dstip;
+
+
+
+
+
+    if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
+        bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
+        bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
+        
+        info.srcIP.s_addr=srcip.s_addr;
+        info.sport=ctx->sport;
+        info.dstIP.s_addr=dstip.s_addr;
+        info.dport=ctx->dport;
         info.sysexit=6;
         info.proto=ctx->protocol;
         info.pid=pid_tcp;
@@ -771,48 +769,6 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 
 
 
-
-// SEC("tracepoint/net/netif_receive_skb")
-// int trace_netif_receive_skb(struct trace_event_raw_net_dev_template *ctx) {
-//     u32 pid = bpf_get_current_pid_tgid() >> 32;
-
-//     struct sk_buff skb = {};
-//     struct iphdr iph = {};
-//     struct tcphdr tcph = {};
-//     struct udphdr udph = {};
-
-//     bpf_probe_read(&skb, sizeof(skb), ctx->skbaddr);
-
-//     bpf_probe_read(&iph, sizeof(iph), skb.data);
-    
-
-//     if (iph.protocol == 33) {
-//         void *tcp_start = (void *)skb.data + iph.ihl * 4;
-
-//         bpf_probe_read(&tcph, sizeof(tcph), tcp_start);
-
-//         __u16 sport = bpf_ntohs(tcph.source);
-//         __u16 dport = bpf_ntohs(tcph.dest);
-
-//         bpf_printk("Incoming TCP packet:PID=%d %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",pid,
-//             iph.saddr & 0xff, (iph.saddr >> 8) & 0xff, (iph.saddr >> 16) & 0xff, (iph.saddr >> 24) & 0xff, sport,
-//             iph.daddr & 0xff, (iph.daddr >> 8) & 0xff, (iph.daddr >> 16) & 0xff, (iph.daddr >> 24) & 0xff, dport);
-//     }
-//     else if (iph.protocol == IPPROTO_UDP) {
-//         void *udp_start = (void *)skb.data + iph.ihl * 4;
-
-//         bpf_probe_read(&udph, sizeof(udph), udp_start);
-
-//         __u16 sport = bpf_ntohs(udph.source);
-//         __u16 dport = bpf_ntohs(udph.dest);
-
-//         bpf_printk("Incoming UDP packet:PID=%d %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d\n",pid,
-//             iph.saddr & 0xff, (iph.saddr >> 8) & 0xff, (iph.saddr >> 16) & 0xff, (iph.saddr >> 24) & 0xff, sport,
-//             iph.daddr & 0xff, (iph.daddr >> 8) & 0xff, (iph.daddr >> 16) & 0xff, (iph.daddr >> 24) & 0xff, dport);
-//     }
-
-//     return 0;
-// }
 
 
 
