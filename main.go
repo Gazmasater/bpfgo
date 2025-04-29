@@ -222,11 +222,6 @@ func main() {
 			}
 
 			if event.Sysexit == 1 {
-				fmt.Println("SENDTO udp")
-				fmt.Printf("SENDTO udp FAMILY=%d DST=%s:%d\n",
-					event.Family,
-					ddstIP.String(),
-					event.Dport)
 
 				family := event.Family
 
@@ -246,22 +241,33 @@ func main() {
 						Comm:    pkg.Int8ToString(event.Comm),
 					}
 
-					if data.Lookup != nil {
+					if data.Lookup != nil && data.Recvmsg != nil {
 
-						fmt.Printf("udp PID=%d srcIP=%s:%d -> dstIP=%s:%d\n",
+						if data.Lookup.Proto == 17 {
+
+							proto = "UDP"
+						}
+
+						fmt.Printf("PID=%d NAME=%s %s/srcIP=%s:%d -> dstIP=%s:%d\n",
 							data.Sendmsg.Pid,
-							data.Lookup.DstIP.String(),
+							data.Sendmsg.Comm,
+
+							proto,
+							data.Lookup.DstIP,
 							data.Lookup.DstPort,
-							data.Lookup.SrcIP.String(),
+							data.Lookup.SrcIP,
 							data.Lookup.SrcPort,
 						)
 
-						fmt.Printf("udp PID=%d srcIP=%s:%d <- dstIP=%s:%d\n",
+						fmt.Printf("PID=%d NAME=%s %s/srcIP=%s:%d <- dstIP=%s:%d\n",
 							data.Recvmsg.Pid,
-							data.Recvmsg.SrcIP,
-							data.Recvmsg.SrcPort,
-							data.Sendmsg.DstIP,
-							data.Sendmsg.DstPort,
+							data.Recvmsg.Comm,
+
+							proto,
+							data.Lookup.DstIP,
+							data.Lookup.DstPort,
+							data.Lookup.SrcIP,
+							data.Lookup.SrcPort,
 						)
 
 					}
