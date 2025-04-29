@@ -353,25 +353,41 @@ while true; do
   nc -zv 127.0.0.1 80 2>/dev/null
 done
 
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "default",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/go/analysis/passes/printf",
-			"scheme": "https",
-			"authority": "pkg.go.dev"
-		}
-	},
-	"severity": 4,
-	"message": "fmt.Print call has possible Printf formatting directive %s",
-	"source": "printf",
-	"startLineNumber": 263,
-	"startColumn": 6,
-	"endLineNumber": 263,
-	"endColumn": 61
+
+struct in_addr  srcip;
+struct in_addr  dstip;
+
+
+
+
+
+    if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
+        bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
+        bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
+        
+        info.srcIP.s_addr=srcip;
+        info.sport=ctx->sport;
+        info.dstIP.s_addr=dstip;
+        info.dport=ctx->dport;
+        info.sysexit=6;
+        info.proto=ctx->protocol;
+        info.pid=pid_tcp;
+        info.state=ctx->newstate;
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    }
+
+
+    [{
+	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "513",
+	"severity": 8,
+	"message": "a value of type \"struct in_addr\" cannot be assigned to an entity of type \"__be32\" (aka \"unsigned int\")",
+	"source": "C/C++",
+	"startLineNumber": 738,
+	"startColumn": 26,
+	"endLineNumber": 738,
+	"endColumn": 27
 }]
 
 
