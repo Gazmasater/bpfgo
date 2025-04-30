@@ -354,32 +354,7 @@ while true; do
 done
 
 
-        info.srcIP6.in6_u.u6_addr32=BPF_CORE_READ(sa6_1,in6_u,u6_addr32);
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
-	"owner": "C/C++: IntelliSense",
-	"code": "137",
-	"severity": 8,
-	"message": "expression must be a modifiable lvalue",
-	"source": "C/C++",
-	"startLineNumber": 538,
-	"startColumn": 9,
-	"endLineNumber": 538,
-	"endColumn": 13
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
-	"owner": "C/C++: IntelliSense",
-	"code": "3364",
-	"severity": 8,
-	"message": "operator -> or ->* applied to \"struct in6_addr\" instead of to a pointer type",
-	"source": "C/C++",
-	"startLineNumber": 538,
-	"startColumn": 37,
-	"endLineNumber": 538,
-	"endColumn": 50
-}]
+bpf_probe_read_user(&info.srcIP6, sizeof(info.srcIP6), &sa6_1->sin6_addr);
 
 
 
