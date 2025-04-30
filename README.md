@@ -354,41 +354,18 @@ while true; do
 done
 
 
-struct in_addr  srcip;
-struct in_addr  dstip;
+srcIP := net.IPv4(
+				byte(event.SrcIP.S_addr),
+				byte(event.SrcIP.S_addr>>8),
+				byte(event.SrcIP.S_addr>>16),
+				byte(event.SrcIP.S_addr>>24),
+			)
 
 
 
 
 
-    if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
-        bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
-        bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
-        
-        info.srcIP.s_addr=srcip;
-        info.sport=ctx->sport;
-        info.dstIP.s_addr=dstip;
-        info.dport=ctx->dport;
-        info.sysexit=6;
-        info.proto=ctx->protocol;
-        info.pid=pid_tcp;
-        info.state=ctx->newstate;
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    }
 
-
-    [{
-	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
-	"owner": "C/C++: IntelliSense",
-	"code": "513",
-	"severity": 8,
-	"message": "a value of type \"struct in_addr\" cannot be assigned to an entity of type \"__be32\" (aka \"unsigned int\")",
-	"source": "C/C++",
-	"startLineNumber": 738,
-	"startColumn": 26,
-	"endLineNumber": 738,
-	"endColumn": 27
-}]
 
 
 
