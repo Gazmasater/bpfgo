@@ -362,6 +362,10 @@ srcIP := net.IPv4(
 			)
 
 
+// event.SrcIP должен быть [16]byte или slice длиной 16
+srcIPv6 := net.IP(event.SrcIP[:])
+
+
 
 
 
