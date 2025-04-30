@@ -371,8 +371,21 @@ srcIPv6 := net.IP(event.SrcIP[:])
         info.srcIP6.in6_u.u6_addr32[2]=ctx->local_ip6[2];
         info.srcIP6.in6_u.u6_addr32[3]=ctx->local_ip6[3];
 
- info.srcIP6 = *(struct in6_addr *)ctx->local_ip6;
+         info.srcIP6.in6_u.u6_addr32=ctx->local_ip6;
 
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "137",
+	"severity": 8,
+	"message": "expression must be a modifiable lvalue",
+	"source": "C/C++",
+	"startLineNumber": 709,
+	"startColumn": 9,
+	"endLineNumber": 709,
+	"endColumn": 13
+}]
 
 
 
