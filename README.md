@@ -354,82 +354,32 @@ while true; do
 done
 
 
-SEC("tracepoint/syscalls/sys_exit_sendmsg")
-int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
+        info.srcIP6.in6_u.u6_addr32=BPF_CORE_READ(sa6_1,in6_u,u6_addr32);
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "137",
+	"severity": 8,
+	"message": "expression must be a modifiable lvalue",
+	"source": "C/C++",
+	"startLineNumber": 538,
+	"startColumn": 9,
+	"endLineNumber": 538,
+	"endColumn": 13
+}]
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
-    if (!conn_info) {
-        bpf_printk("No conn_info for pid=%d", pid);
-        return 0;
-    }
-
-    if (ret < 0) {
-        bpf_printk("recvmsg failed for PID=%d", pid);
-        bpf_map_delete_elem(&conn_info_map, &pid);
-        return 0;
-    }
-
-    // Получаем указатель на msghdr
-    struct msghdr **addr_ptr = bpf_map_lookup_elem(&addrSend_map, &pid);
-    if (!addr_ptr) {
-        bpf_printk("No addr_ptr for pid=%d", pid);
-        return 0;
-    }
-
-    struct msghdr *msg;
-    bpf_probe_read_user(&msg, sizeof(msg), *addr_ptr);
-
-    if (!msg) {
-        bpf_printk("msg is NULL for pid=%d", pid);
-        return 0;
-    }
-
-    struct sockaddr_in sa = {};
-    struct sockaddr_in6 sa6 = {};
-    struct trace_info info = {};
-
-    __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
-
-    // Чтение msg_name через макрос BPF_CORE_READ
-    BPF_CORE_READ(&sa, msg, msg_name);
-    BPF_CORE_READ(&sa6, msg, msg_name);
-
-    if (sa.sin_family == AF_INET) {
-        u32 port = bpf_ntohs(sa.sin_port);
-        u32 ip = bpf_ntohl(sa.sin_addr.s_addr);
-        info.pid = conn_info->pid;
-        info.ddstIP.sin_addr.s_addr = ip;
-        info.dport = port;
-        info.family = AF_INET;
-        info.sysexit = 11;
-        info.proto = conn_info->proto;
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    } else if (sa6.sin6_family == AF_INET6) {
-        u32 port = bpf_ntohs(sa6.sin6_port);
-
-        if (port == 0) {
-            return 0;
-        }
-
-        bpf_printk("sys_exit_recvmsg IP6 PORT=%d", port);
-
-        info.sysexit = 1;
-        info.family = AF_INET6;
-        info.dport = port;
-        info.pid = pid;
-
-        // Используем BPF_CORE_READ для извлечения полей IPv6
-        BPF_CORE_READ(&info.dstIP6, sa6, sin6_addr);
-
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    }
-
-    bpf_map_delete_elem(&addrSend_map, &pid);
-    bpf_map_delete_elem(&conn_info_map, &pid);
-    return 0;
-}
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "3364",
+	"severity": 8,
+	"message": "operator -> or ->* applied to \"struct in6_addr\" instead of to a pointer type",
+	"source": "C/C++",
+	"startLineNumber": 538,
+	"startColumn": 37,
+	"endLineNumber": 538,
+	"endColumn": 50
+}]
 
 
 
