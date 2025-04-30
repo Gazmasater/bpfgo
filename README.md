@@ -371,6 +371,9 @@ srcIPv6 := net.IP(event.SrcIP[:])
         info.srcIP6.in6_u.u6_addr32[2]=ctx->local_ip6[2];
         info.srcIP6.in6_u.u6_addr32[3]=ctx->local_ip6[3];
 
+ info.srcIP6 = *(struct in6_addr *)ctx->local_ip6;
+
+
 
 
 
