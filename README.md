@@ -366,6 +366,14 @@ srcIP := net.IPv4(
 srcIPv6 := net.IP(event.SrcIP[:])
 
 
+        info.srcIP6.in6_u.u6_addr32[0]=ctx->local_ip6[0];
+        info.srcIP6.in6_u.u6_addr32[1]=ctx->local_ip6[1];
+        info.srcIP6.in6_u.u6_addr32[2]=ctx->local_ip6[2];
+        info.srcIP6.in6_u.u6_addr32[3]=ctx->local_ip6[3];
+
+
+
+
 
 
 
