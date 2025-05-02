@@ -354,11 +354,10 @@ while true; do
 done
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
-/home/gaz358/myprog/bpfgo/trace.c:515:19: warning: result of comparison against a string literal is unspecified (use an explicit string comparison function instead) [-Wstring-compare]
-  515 |      if (info.comm=="systemd-resolve") {
-      |                   ^ ~~~~~~~~~~~~~~~~~
-1 warning generated.
+if (__builtin_memcmp(info.comm, "systemd-resolve", sizeof("systemd-resolve") - 1) == 0) {
+    // строки совпадают
+}
+
 
 
 
