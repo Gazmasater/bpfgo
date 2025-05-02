@@ -358,6 +358,20 @@ if (__builtin_memcmp(info.comm, "systemd-resolve", sizeof("systemd-resolve") - 1
     // строки совпадают
 }
 
+     u32   ip=bpf_ntohl(sa.sin_addr.s_addr);
+
+
+     if (__builtin_memcmp(info.comm, "systemd-resolve", sizeof("systemd-resolve") - 1) == 0) {
+        bpf_printk("SENDMSG DST=%d.%d.%d.%d:%d\n",
+            ip>>24,
+            ip>>16,
+            ip>>8,
+            ip,          
+            port);
+
+    }
+
+
 
 
 
