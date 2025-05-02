@@ -371,6 +371,12 @@ if (__builtin_memcmp(info.comm, "systemd-resolve", sizeof("systemd-resolve") - 1
 }
 
 
+           bpfgo-36856   [000] ..s21  8927.397143: bpf_trace_printk: LOOKUP53 SENDMSG src=127.0.0.53:53 dst=127.0.0.1:39749
+ systemd-resolve-793     [007] ...21  8927.397191: bpf_trace_printk: SENDMSG RECVMSG PID=793 SRC=127.0.0.1:39749
+ systemd-resolve-793     [007] ...21  8927.408073: bpf_trace_printk: SENDMSG RECVMSG PID=793 SRC=192.168.1.1:53
+ systemd-resolve-793     [007] ...21  8927.408315: bpf_trace_printk: SENDMSG PID=793 DST=127.0.0.1:39749
+
+
 
 
 
