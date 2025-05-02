@@ -364,6 +364,37 @@ import (
 	"sync"
 )
 
+var (
+	resolveCache     = make(map[string]string)
+	resolveCacheLock sync.Mutex
+)
+
+func cachedResolve(ip net.IP) string {
+	ipStr := ip.String()
+
+	resolveCacheLock.Lock()
+	defer resolveCacheLock.Unlock()
+
+	if host, ok := resolveCache[ipStr]; ok {
+		return host
+	}
+
+	var resolved string
+	var err error
+
+	if ip.IsLoopback() {
+		resolved = "localhost"
+	} else {
+		resolved, err = pkg.ResolveIP_n(ip)
+		if err != nil {
+			resolved = "unknown"
+		}
+	}
+
+	resolveCache[ipStr] = resolved
+	return resolved
+}
+
 func HandleIPEvent(
 	event bpfTraceInfo,
 	srcIP, dstIP net.IP,
@@ -375,8 +406,6 @@ func HandleIPEvent(
 		proto   string
 		xxx     int
 		xxx_pid int
-		dsthost string
-		err     error
 	)
 
 	if event.State == 1 {
@@ -390,16 +419,8 @@ func HandleIPEvent(
 		}
 		mu.Unlock()
 
-		if dstIP.IsLoopback() {
-			dsthost = "localhost"
-		} else {
-			dsthost, err = pkg.ResolveIP_n(dstIP)
-			if err != nil {
-				dsthost = "unknown"
-			}
-		}
-
-		srchost := pkg.ResolveIP(srcIP)
+		dsthost := cachedResolve(dstIP)
+		srchost := cachedResolve(srcIP)
 
 		srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
 		dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
@@ -419,38 +440,26 @@ func HandleIPEvent(
 	}
 
 	if event.State == 2 || event.State == 10 {
-
 		mu.Lock()
 		select {
 		case eventChan_pid <- int(event.Pid):
 		default:
-			// пропускаем, если канал заполнен
+			// канал полон — пропускаем
 		}
 		mu.Unlock()
 	}
 
 	select {
 	case xxx = <-eventChan_sport:
-		if dstIP.IsLoopback() {
-			dsthost = pkg.ResolveIP(dstIP)
-		} else {
-			dsthost, err = pkg.ResolveIP_n(dstIP)
-
-			if err != nil {
-				dsthost = "unknown"
-			}
-		}
-
-		srchost := pkg.ResolveIP(srcIP)
+		dsthost := cachedResolve(dstIP)
+		srchost := cachedResolve(srcIP)
 
 		srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), xxx)
 		dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
 
 		select {
 		case xxx_pid = <-eventChan_pid:
-			// получили PID
 		default:
-			// PID неизвестен
 		}
 
 		if event.Proto == 6 {
@@ -470,6 +479,7 @@ func HandleIPEvent(
 		fmt.Println("")
 	}
 }
+
 
 
    
