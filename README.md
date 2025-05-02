@@ -354,27 +354,7 @@ while true; do
 done
 
 
-if (__builtin_memcmp(info.comm, "systemd-resolve", sizeof("systemd-resolve") - 1) == 0) {
-    // строки совпадают
-}
-
-u32 ip = bpf_ntohl(sa.sin_addr.s_addr);
-u16 port = bpf_ntohs(sa.sin_port);
-
-if (__builtin_memcmp(info.comm, "systemd-resolve", sizeof("systemd-resolve") - 1) == 0) {
-    bpf_printk("SENDMSG DST=%d.%d.%d.%d:%d\n",
-        (ip >> 24) & 0xFF,
-        (ip >> 16) & 0xFF,
-        (ip >> 8)  & 0xFF,
-        ip & 0xFF,
-        port);
-}
-
-
-           bpfgo-36856   [000] ..s21  8927.397143: bpf_trace_printk: LOOKUP53 SENDMSG src=127.0.0.53:53 dst=127.0.0.1:39749
- systemd-resolve-793     [007] ...21  8927.397191: bpf_trace_printk: SENDMSG RECVMSG PID=793 SRC=127.0.0.1:39749
- systemd-resolve-793     [007] ...21  8927.408073: bpf_trace_printk: SENDMSG RECVMSG PID=793 SRC=192.168.1.1:53
- systemd-resolve-793     [007] ...21  8927.408315: bpf_trace_printk: SENDMSG PID=793 DST=127.0.0.1:39749
+DNS.pcapng
 
 
 
