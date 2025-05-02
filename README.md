@@ -354,85 +354,11 @@ while true; do
 done
 
 
-SEC("tracepoint/syscalls/sys_exit_recvmsg")
-int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
-
-    if (ret < 0) {
-        bpf_printk("recvmsg failed for PID=%d", pid);
-        bpf_map_delete_elem(&conn_info_map, &pid);
-        bpf_map_delete_elem(&addrRecv_map, &pid);
-        return 0;
-    }
-
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
-    if (!conn_info) {
-        bpf_printk("No conn_info for pid=%d", pid);
-        return 0;
-    }
-
-    struct msghdr **addr_ptr = bpf_map_lookup_elem(&addrRecv_map, &pid);
-    if (!addr_ptr) {
-        bpf_printk("No addr_ptr for pid=%d", pid);
-        return 0;
-    }
-
-    struct msghdr *msg = NULL;
-    bpf_probe_read_user(&msg, sizeof(msg), *addr_ptr);
-    if (!msg) {
-        bpf_printk("msg is NULL for pid=%d", pid);
-        return 0;
-    }
-
-    void *msg_name_ptr = NULL;
-    bpf_probe_read_user(&msg_name_ptr, sizeof(msg_name_ptr), &msg->msg_name);
-    if (!msg_name_ptr) {
-        bpf_printk("msg_name is NULL for pid=%d", pid);
-        return 0;
-    }
-
-    struct sockaddr sa = {};
-    bpf_probe_read_user(&sa, sizeof(sa), msg_name_ptr);
-
-    struct trace_info info = {};
-    info.pid = pid;
-    __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
-    info.sysexit = 12;
-
-    if (sa.sa_family == AF_INET) {
-        struct sockaddr_in addr_in = {};
-        bpf_probe_read_user(&addr_in, sizeof(addr_in), msg_name_ptr);
-
-        info.family = AF_INET;
-        info.sport = bpf_ntohs(addr_in.sin_port);
-        info.ssrcIP.sin_addr.s_addr = addr_in.sin_addr.s_addr;
-
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    } else if (sa.sa_family == AF_INET6) {
-        struct sockaddr_in6 addr_in6 = {};
-        bpf_probe_read_user(&addr_in6, sizeof(addr_in6), msg_name_ptr);
-
-        u16 port = bpf_ntohs(addr_in6.sin6_port);
-        if (port == 0) {
-            goto cleanup;
-        }
-
-        info.family = AF_INET6;
-        info.sport = port;
-        __builtin_memcpy(&info.srcIP6, &addr_in6.sin6_addr, sizeof(struct in6_addr));
-
-        bpf_printk("sys_exit_recvmsg IP6 PORT=%d", port);
-
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    }
-
-cleanup:
-    bpf_map_delete_elem(&addrRecv_map, &pid);
-    bpf_map_delete_elem(&conn_info_map, &pid);
-    return 0;
-}
-
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+/home/gaz358/myprog/bpfgo/trace.c:515:19: warning: result of comparison against a string literal is unspecified (use an explicit string comparison function instead) [-Wstring-compare]
+  515 |      if (info.comm=="systemd-resolve") {
+      |                   ^ ~~~~~~~~~~~~~~~~~
+1 warning generated.
 
 
 
