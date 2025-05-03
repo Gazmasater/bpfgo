@@ -355,41 +355,18 @@ done
 
 
 
-struct trace_info {
-    __u32 src_ip;
-    __u32 dst_ip;
-    __u32 pid;
-    __u16 state;
-    __u16 ifindex;
-    __u16 family;
-    __u16 sport;
-    __u16 dport;
-    __u8 proto;
-    __u8 sysexit;
-    char comm[64];
-};
-
-
-type bpfTraceInfo struct {
-	SrcIp   uint32
-	DstIp   uint32
-	Pid     uint32
-	State   uint16
-	Ifindex uint16
-	Family  uint16
-	Sport   uint16
-	Dport   uint16
-	Proto   uint8
-	Sysexit uint8
-	Comm    [64]int8
-}
-
-
-if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
-				log.Println("!!!!!!!!!!!!!!!!!!!!!!!invalid event size!!!!!!!!!!!!!!!!!!")
-				continue
-			}
-
+go func() {
+	for {
+		lost, err := reader.ReadLost()
+		if err != nil {
+			log.Println("read lost events error:", err)
+			continue
+		}
+		if lost > 0 {
+			log.Printf("⚠️ Lost %d events\n", lost)
+		}
+	}
+}()
 
 
    
