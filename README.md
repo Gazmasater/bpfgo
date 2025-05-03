@@ -355,105 +355,40 @@ done
 
 
 
-			if event.Sysexit == 11 {
+struct trace_info {
+    __u32 src_ip;
+    __u32 dst_ip;
+    __u32 pid;
+    __u16 state;
+    __u16 ifindex;
+    __u16 family;
+    __u16 sport;
+    __u16 dport;
+    __u8 proto;
+    __u8 sysexit;
+    char comm[64];
+};
 
-				if event.Family == 2 {
 
-					port := int(event.Dport)
-					data, exists := eventMap[port]
-					if !exists {
-						data = &EventData{}
-						eventMap[port] = data
-					}
-					data.Sendmsg = &Sendmsg{
-						DstIP:   dstIP,
-						DstPort: port,
-						Pid:     event.Pid,
-						Comm:    pkg.Int8ToString(event.Comm),
-					}
+type bpfTraceInfo struct {
+	SrcIp   uint32
+	DstIp   uint32
+	Pid     uint32
+	State   uint16
+	Ifindex uint16
+	Family  uint16
+	Sport   uint16
+	Dport   uint16
+	Proto   uint8
+	Sysexit uint8
+	Comm    [64]int8
+}
 
-					if data.Lookup != nil && data.Recvmsg != nil {
 
-						if data.Lookup.Proto == 17 {
-
-							proto = "UDP"
-						}
-
-						fmt.Println("")
-
-						dstip := data.Lookup.DstIP.IsLoopback()
-						srcip := data.Lookup.DstIP.IsLoopback()
-
-						if dstip {
-							dsthost = "localhost"
-						} else {
-							dsthost, err = pkg.ResolveIP_n(dstIP)
-							if err != nil {
-								dsthost = "unknown"
-							}
-						}
-
-						if srcip {
-							srchost = "localhost"
-						} else {
-							srchost, err = pkg.ResolveIP_n(dstIP)
-							if err != nil {
-								srchost = "unknown"
-							}
-						}
-
-						// fmt.Printf("SENDMSG PID=%d %s/%s[%s]:%d->%s[%s]:%d\n",
-						// 	data.Sendmsg.Pid,
-
-						// 	proto,
-						// 	dsthost,
-						// 	data.Lookup.DstIP,
-						// 	data.Lookup.DstPort,
-						// 	srchost,
-						// 	data.Lookup.SrcIP,
-						// 	data.Lookup.SrcPort,
-						// )
-
-						// fmt.Printf("SENDMSG PID=%d %s/%s[%s]:%d<-%s[%s]:%d\n",
-						// 	data.Recvmsg.Pid,
-
-						// 	proto,
-						// 	dsthost,
-						// 	data.Lookup.DstIP,
-						// 	data.Lookup.DstPort,
-						// 	srchost,
-						// 	data.Lookup.SrcIP,
-						// 	data.Lookup.SrcPort,
-						// )
-
-						fmt.Printf("SENDMSG PID=%d NAME=%s %s/%s[%s]:%d->%s[%s]:%d\n",
-							data.Sendmsg.Pid,
-							data.Sendmsg.Comm,
-							proto,
-							pkg.ResolveIP(dstIP),
-							data.Lookup.DstIP,
-							data.Lookup.DstPort,
-							pkg.ResolveIP(srcIP),
-							data.Lookup.SrcIP,
-							data.Lookup.SrcPort,
-						)
-
-						fmt.Printf("SENDMSG PID=%d NAME=%s %s/%s[%s]:%d<-%s[%s]:%d\n",
-							data.Recvmsg.Pid,
-							data.Recvmsg.Comm,
-							proto,
-							pkg.ResolveIP(dstIP),
-
-							data.Lookup.DstIP,
-							data.Lookup.DstPort,
-							pkg.ResolveIP(srcIP),
-							data.Lookup.SrcIP,
-							data.Lookup.SrcPort,
-						)
-
-						fmt.Println("")
-
-					}
+if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
+				log.Println("!!!!!!!!!!!!!!!!!!!!!!!invalid event size!!!!!!!!!!!!!!!!!!")
+				continue
+			}
 
 
 
