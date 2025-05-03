@@ -355,130 +355,105 @@ done
 
 
 
-package main
+			if event.Sysexit == 11 {
 
-import (
-	"bpfgo/pkg"
-	"fmt"
-	"net"
-	"sync"
-)
+				if event.Family == 2 {
 
-var (
-	resolveCache     = make(map[string]string)
-	resolveCacheLock sync.Mutex
-)
+					port := int(event.Dport)
+					data, exists := eventMap[port]
+					if !exists {
+						data = &EventData{}
+						eventMap[port] = data
+					}
+					data.Sendmsg = &Sendmsg{
+						DstIP:   dstIP,
+						DstPort: port,
+						Pid:     event.Pid,
+						Comm:    pkg.Int8ToString(event.Comm),
+					}
 
-func cachedResolve(ip net.IP) string {
-	ipStr := ip.String()
+					if data.Lookup != nil && data.Recvmsg != nil {
 
-	resolveCacheLock.Lock()
-	defer resolveCacheLock.Unlock()
+						if data.Lookup.Proto == 17 {
 
-	if host, ok := resolveCache[ipStr]; ok {
-		return host
-	}
+							proto = "UDP"
+						}
 
-	var resolved string
-	var err error
+						fmt.Println("")
 
-	if ip.IsLoopback() {
-		resolved = "localhost"
-	} else {
-		resolved, err = pkg.ResolveIP_n(ip)
-		if err != nil {
-			resolved = "unknown"
-		}
-	}
+						dstip := data.Lookup.DstIP.IsLoopback()
+						srcip := data.Lookup.DstIP.IsLoopback()
 
-	resolveCache[ipStr] = resolved
-	return resolved
-}
+						if dstip {
+							dsthost = "localhost"
+						} else {
+							dsthost, err = pkg.ResolveIP_n(dstIP)
+							if err != nil {
+								dsthost = "unknown"
+							}
+						}
 
-func HandleIPEvent(
-	event bpfTraceInfo,
-	srcIP, dstIP net.IP,
-	mu *sync.Mutex,
-	eventChan_sport chan int,
-	eventChan_pid chan int,
-) {
-	var (
-		proto   string
-		xxx     int
-		xxx_pid int
-	)
+						if srcip {
+							srchost = "localhost"
+						} else {
+							srchost, err = pkg.ResolveIP_n(dstIP)
+							if err != nil {
+								srchost = "unknown"
+							}
+						}
 
-	if event.State == 1 {
+						// fmt.Printf("SENDMSG PID=%d %s/%s[%s]:%d->%s[%s]:%d\n",
+						// 	data.Sendmsg.Pid,
 
-		mu.Lock()
-		select {
-		case eventChan_sport <- int(event.Sport):
-		default:
-			eventChan_sport <- int(event.Sport)
-			fmt.Printf("State 1: заменен порт %d\n", event.Sport)
-		}
-		mu.Unlock()
+						// 	proto,
+						// 	dsthost,
+						// 	data.Lookup.DstIP,
+						// 	data.Lookup.DstPort,
+						// 	srchost,
+						// 	data.Lookup.SrcIP,
+						// 	data.Lookup.SrcPort,
+						// )
 
-		dsthost := cachedResolve(dstIP)
-		srchost := cachedResolve(srcIP)
+						// fmt.Printf("SENDMSG PID=%d %s/%s[%s]:%d<-%s[%s]:%d\n",
+						// 	data.Recvmsg.Pid,
 
-		srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
-		dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
+						// 	proto,
+						// 	dsthost,
+						// 	data.Lookup.DstIP,
+						// 	data.Lookup.DstPort,
+						// 	srchost,
+						// 	data.Lookup.SrcIP,
+						// 	data.Lookup.SrcPort,
+						// )
 
-		if event.Proto == 6 {
-			proto = "TCP"
-		}
+						fmt.Printf("SENDMSG PID=%d NAME=%s %s/%s[%s]:%d->%s[%s]:%d\n",
+							data.Sendmsg.Pid,
+							data.Sendmsg.Comm,
+							proto,
+							pkg.ResolveIP(dstIP),
+							data.Lookup.DstIP,
+							data.Lookup.DstPort,
+							pkg.ResolveIP(srcIP),
+							data.Lookup.SrcIP,
+							data.Lookup.SrcPort,
+						)
 
-		fmt.Println("")
-		fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s \n",
-			event.Pid,
-			pkg.Int8ToString(event.Comm),
-			proto,
-			srcAddr,
-			proto,
-			dstAddr)
-	}
+						fmt.Printf("SENDMSG PID=%d NAME=%s %s/%s[%s]:%d<-%s[%s]:%d\n",
+							data.Recvmsg.Pid,
+							data.Recvmsg.Comm,
+							proto,
+							pkg.ResolveIP(dstIP),
 
-	if event.State == 2 || event.State == 10 {
-		mu.Lock()
-		select {
-		case eventChan_pid <- int(event.Pid):
-		default:
-			// канал полон — пропускаем
-		}
-		mu.Unlock()
-	}
+							data.Lookup.DstIP,
+							data.Lookup.DstPort,
+							pkg.ResolveIP(srcIP),
+							data.Lookup.SrcIP,
+							data.Lookup.SrcPort,
+						)
 
-	select {
-	case xxx = <-eventChan_sport:
-		dsthost := cachedResolve(dstIP)
-		srchost := cachedResolve(srcIP)
+						fmt.Println("")
 
-		srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), xxx)
-		dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
-
-		select {
-		case xxx_pid = <-eventChan_pid:
-		default:
-		}
-
-		if event.Proto == 6 {
-			proto = "TCP"
-		}
-
-		fmt.Printf("PID=%d NAME=%s %s:%s -> %s:%s \n",
-			xxx_pid,
-			pkg.Int8ToString(event.Comm),
-			proto,
-			srcAddr,
-			proto,
-			dstAddr)
-		fmt.Println("")
-
-	default:
-		fmt.Println("")
-	}
-}
+					}
 
 
 
