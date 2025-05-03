@@ -355,18 +355,51 @@ done
 
 
 
-go func() {
+import (
+	"github.com/cilium/ebpf/perf"
+	"log"
+	"os"
+	"time"
+)
+
+// предполагаемая карта, которую ты создал в eBPF-программе
+var traceEvents *ebpf.Map // или bpfObjects.TraceEvents, если ты использовал `bpf2go`
+
+func main() {
+	// Создаём reader на основе карты traceEvents
+	reader, err := perf.NewReader(traceEvents, os.Getpagesize()*64)
+	if err != nil {
+		log.Fatalf("не удалось создать perf reader: %v", err)
+	}
+	defer reader.Close()
+
+	// Горутина для отслеживания потерянных событий
+	go func() {
+		for {
+			lost, err := reader.ReadLost()
+			if err != nil {
+				log.Printf("ошибка при чтении потерянных событий: %v", err)
+				return
+			}
+			if lost > 0 {
+				log.Printf("⚠️ потеряно %d событий", lost)
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+	}()
+
+	// Чтение нормальных событий
 	for {
-		lost, err := reader.ReadLost()
+		record, err := reader.Read()
 		if err != nil {
-			log.Println("read lost events error:", err)
+			log.Printf("ошибка чтения события: %v", err)
 			continue
 		}
-		if lost > 0 {
-			log.Printf("⚠️ Lost %d events\n", lost)
-		}
+
+		// обрабатываем record.RawSample
 	}
-}()
+}
+
 
 
    
