@@ -356,16 +356,24 @@ done
 
 
 
-ulimit -l         # locked memory
-ulimit -n         # открытые дескрипторы
+count := 0
+start := time.Now()
 
-ulimit -l unlimited
-ulimit -n 65535
+for {
+    record, err := reader.Read()
+    if err != nil {
+        log.Fatal(err)
+    }
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ulimit -l 
-2021324
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ulimit -n  
-1048576
+    count++
+
+    if time.Since(start) >= time.Second {
+        fmt.Printf("Events/sec: %d\n", count)
+        count = 0
+        start = time.Now()
+    }
+}
+
 
 
 
