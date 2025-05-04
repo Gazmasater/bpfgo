@@ -356,39 +356,46 @@ done
 
 
 go func() {
+	const buffLen = 4096
+	rd, err := perf.NewReader(objs.TraceEvents, buffLen)
+	if err != nil {
+		log.Fatalf("failed to create perf reader: %s", err)
+	}
+	defer rd.Close()
 
-		record := new(perf.Record)
+	executableName := os.Args[0]
+	if len(executableName) > 2 {
+		executableName = executableName[2:]
+	}
 
-		const buffLen = 4096
-		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
+	for {
+		record, err := rd.Read()
 		if err != nil {
-			log.Fatalf("failed to create perf reader: %s", err)
-		}
-		defer rd.Close()
-
-		executableName := os.Args[0]
-		if len(executableName) > 2 {
-			executableName = executableName[2:]
-		}
-
-		for {
-
-			err := rd.ReadInto(record)
-			if err != nil {
-				if errors.Is(err, os.ErrDeadlineExceeded) {
-					continue
-				}
-				log.Printf("error reading from perf reader: %v", err)
-				return
-			}
-
-			if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
-				log.Println("!!!!!!!!!!!!!!!!!!!!!!!invalid event size!!!!!!!!!!!!!!!!!!")
+			if errors.Is(err, os.ErrDeadlineExceeded) {
 				continue
 			}
+			log.Printf("error reading from perf reader: %v", err)
+			return
+		}
 
-			// Приводим прочитанные данные к структуре bpfTraceInfo
-			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
+		if record.LostSamples > 0 {
+			log.Printf("lost %d samples", record.LostSamples)
+			continue
+		}
+
+		if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
+			log.Println("!!!!!!!!!!!!!!!!!!!!!!!invalid event size!!!!!!!!!!!!!!!!!!")
+			continue
+		}
+
+		// Приводим прочитанные данные к структуре bpfTraceInfo
+		event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
+
+		// здесь работаем с event
+		_ = event // временно, чтобы не было ошибки компиляции
+	}
+}()
+
 
 
 
