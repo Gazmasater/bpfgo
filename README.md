@@ -371,6 +371,25 @@ go func() {
 			executableName = executableName[2:]
 		}
 
+		for {
+
+			err := rd.ReadInto(record)
+			if err != nil {
+				if errors.Is(err, os.ErrDeadlineExceeded) {
+					continue
+				}
+				log.Printf("error reading from perf reader: %v", err)
+				return
+			}
+
+			if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
+				log.Println("!!!!!!!!!!!!!!!!!!!!!!!invalid event size!!!!!!!!!!!!!!!!!!")
+				continue
+			}
+
+			// Приводим прочитанные данные к структуре bpfTraceInfo
+			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
+
 
 
    
