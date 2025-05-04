@@ -355,19 +355,21 @@ done
 
 
 
-	const buffLen = 4096
-	rd, err := perf.NewReader(objs.TraceEvents, buffLen)
-	if err != nil {
-		log.Fatalf("failed to create perf reader: %s", err)
-	}
-	defer rd.Close()
+go func() {
 
-	record := new(perf.Record)
+		record := new(perf.Record)
 
-	executableName := os.Args[0]
-	if len(executableName) > 2 {
-		executableName = executableName[2:]
-	}
+		const buffLen = 4096
+		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
+		if err != nil {
+			log.Fatalf("failed to create perf reader: %s", err)
+		}
+		defer rd.Close()
+
+		executableName := os.Args[0]
+		if len(executableName) > 2 {
+			executableName = executableName[2:]
+		}
 
 
 
