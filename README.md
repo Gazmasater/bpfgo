@@ -356,10 +356,11 @@ done
 
 
 
-2025/05/04 15:36:18 lost 14 samples
-2025/05/04 15:36:18 lost 4 samples
-2025/05/04 15:36:18 lost 4 samples
-	
+ulimit -l         # locked memory
+ulimit -n         # открытые дескрипторы
+
+ulimit -l unlimited
+ulimit -n 65535
 
 
 
