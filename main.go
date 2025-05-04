@@ -148,17 +148,14 @@ func main() {
 	}
 	defer skLookupLink.Close()
 
-	// Создаем perf.Reader для чтения событий eBPF
+	//	Создаем perf.Reader для чтения событий eBPF
 
 	// Канал для завершения работы
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-
-		record := new(perf.Record)
-
-		const buffLen = 128
+		const buffLen = 8196
 		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
 		if err != nil {
 			log.Fatalf("failed to create perf reader: %s", err)
@@ -170,15 +167,30 @@ func main() {
 			executableName = executableName[2:]
 		}
 
-		for {
+		// count := 0
+		// start := time.Now()
 
-			err := rd.ReadInto(record)
+		for {
+			record, err := rd.Read()
 			if err != nil {
 				if errors.Is(err, os.ErrDeadlineExceeded) {
 					continue
 				}
 				log.Printf("error reading from perf reader: %v", err)
 				return
+			}
+
+			// count++
+
+			// if time.Since(start) >= time.Second {
+			// 	fmt.Printf("%%%%%%%%%%%%%%%%%%%%%%%%%%5Events/sec: %d\n", count)
+			// 	count = 0
+			// 	start = time.Now()
+			// }
+
+			if record.LostSamples > 0 {
+				log.Printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!111lost %d samples", record.LostSamples)
+				continue
 			}
 
 			if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
@@ -190,21 +202,32 @@ func main() {
 			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
 
 			srcIP := net.IPv4(
-				byte(event.SrcIp>>24),
-				byte(event.SrcIp>>16),
-				byte(event.SrcIp>>8),
-				byte(event.SrcIp),
+				byte(event.SrcIP.S_addr),
+				byte(event.SrcIP.S_addr>>8),
+				byte(event.SrcIP.S_addr>>16),
+				byte(event.SrcIP.S_addr>>24),
+			)
+
+			ssrcIP := net.IPv4(
+				byte(event.SsrcIP.SinAddr.S_addr),
+				byte(event.SsrcIP.SinAddr.S_addr>>8),
+				byte(event.SsrcIP.SinAddr.S_addr>>16),
+				byte(event.SsrcIP.SinAddr.S_addr>>24),
 			)
 
 			dstIP := net.IPv4(
-				byte(event.DstIp>>24),
-				byte(event.DstIp>>16),
-				byte(event.DstIp>>8),
-				byte(event.DstIp),
+				byte(event.DstIP.S_addr),
+				byte(event.DstIP.S_addr>>8),
+				byte(event.DstIP.S_addr>>16),
+				byte(event.DstIP.S_addr>>24),
 			)
 
-			srcIP6 := net.IP(event.Saddr6[:])
-			dstIP6 := net.IP(event.Daddr6[:])
+			ddstIP := net.IPv4(
+				byte(event.DdstIP.SinAddr.S_addr>>24),
+				byte(event.DdstIP.SinAddr.S_addr>>16),
+				byte(event.DdstIP.SinAddr.S_addr>>8),
+				byte(event.DdstIP.SinAddr.S_addr),
+			)
 
 			if pkg.Int8ToString(event.Comm) == executableName {
 				continue
@@ -222,39 +245,75 @@ func main() {
 						data = &EventData{}
 						eventMap[port] = data
 					}
+
 					data.Sendmsg = &Sendmsg{
-						DstIP:   dstIP,
+						DstIP:   ddstIP,
 						DstPort: port,
 						Pid:     event.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
 					}
 
-					if data.Lookup != nil {
+					if data.Lookup != nil && data.Recvmsg != nil {
 
-						fmt.Printf("PID=%d srcIP=%s:%d -> dstIP=%s:%d\n",
+						if data.Lookup.Proto == 17 {
+
+							proto = "UDP"
+						}
+
+						if data.Lookup.DstIP.IsLoopback() {
+							dsthost = "localhost"
+						} else {
+							dsthost = pkg.ResolveIP(dstIP)
+
+						}
+
+						if data.Lookup.SrcIP.IsLoopback() {
+							srchost = "localhost"
+						} else {
+							srchost = pkg.ResolveIP(srcIP)
+
+						}
+
+						fmt.Printf("SENDTO PID=%d NAME=%s %s/%s[%s]:%d -> %s[%s]:%d\n",
 							data.Sendmsg.Pid,
-							data.Lookup.DstIP.String(),
+							data.Sendmsg.Comm,
+
+							proto,
+							dsthost,
+							data.Lookup.DstIP,
 							data.Lookup.DstPort,
-							data.Lookup.SrcIP.String(),
+							srchost,
+							data.Lookup.SrcIP,
 							data.Lookup.SrcPort,
 						)
 
-						fmt.Printf("PID=%d srcIP=%s:%d <- dstIP=%s:%d\n",
+						fmt.Printf("SENDTO PID=%d NAME=%s %s/%s[%s]:%d <- %s[%s]:%d\n",
 							data.Recvmsg.Pid,
-							data.Recvmsg.SrcIP,
-							data.Recvmsg.SrcPort,
-							data.Sendmsg.DstIP,
-							data.Sendmsg.DstPort,
+							data.Recvmsg.Comm,
+
+							proto,
+							dsthost,
+							data.Lookup.DstIP,
+							data.Lookup.DstPort,
+							srchost,
+							data.Lookup.SrcIP,
+							data.Lookup.SrcPort,
 						)
 
 					}
 
 				} else if family == 10 {
+					//port := event.Dport
 
-					fmt.Printf("!!!!!!!!!SENDTO  DST6=%s[%s]:%d\n",
-						pkg.ResolveIP(dstIP6),
-						dstIP6,
-						event.Dport)
+					//pid := event.Pid
+					// fmt.Printf("STATE=1 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d NAME=%s\n",
+					// 	pid,
+					// 	event.DstIP6[0], event.DstIP6[1],
+					// 	event.DstIP6[2], event.DstIP6[3],
+
+					// 	port,
+					// 	pkg.Int8ToString(event.Comm),
+					// )
 
 				}
 
@@ -271,7 +330,7 @@ func main() {
 						eventMap[port] = data
 					}
 					data.Sendmsg = &Sendmsg{
-						DstIP:   dstIP,
+						DstIP:   ddstIP,
 						DstPort: port,
 						Pid:     event.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
@@ -286,27 +345,22 @@ func main() {
 
 						fmt.Println("")
 
-						fmt.Printf("PID=%d NAME=%s %s/%s[%s]:%d->%s[%s]:%d\n",
+						fmt.Printf("SENDMSG PID=%d NAME=%s %s/%s:%d->%s:%d\n",
 							data.Sendmsg.Pid,
 							data.Sendmsg.Comm,
 							proto,
-							pkg.ResolveIP(dstIP),
 							data.Lookup.DstIP,
 							data.Lookup.DstPort,
-							pkg.ResolveIP(srcIP),
 							data.Lookup.SrcIP,
 							data.Lookup.SrcPort,
 						)
 
-						fmt.Printf("PID=%d NAME=%s %s/%s[%s]:%d<-%s[%s]:%d\n",
+						fmt.Printf("SENDMSG PID=%d NAME=%s %s/%s:%d<-%s:%d\n",
 							data.Recvmsg.Pid,
 							data.Recvmsg.Comm,
 							proto,
-							pkg.ResolveIP(dstIP),
-
 							data.Lookup.DstIP,
 							data.Lookup.DstPort,
-							pkg.ResolveIP(srcIP),
 							data.Lookup.SrcIP,
 							data.Lookup.SrcPort,
 						)
@@ -316,11 +370,15 @@ func main() {
 					}
 
 				} else if event.Family == 10 {
-					fmt.Printf("!!!!!!!!!SENDMSG SRC6=%s:%d DST6=%s:%d\n",
-						srcIP6,
-						event.Sport,
-						dstIP6,
-						event.Dport)
+					// port := event.Dpor
+					// pid := event.Pid
+					// fmt.Printf("STATE=11 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d  NAME=%s\n",
+					// 	pid,
+					// 	event.DstIP6[0], event.DstIP6[1],
+					// 	event.DstIP6[2], event.DstIP6[3]
+					// 	port,
+					// 	pkg.Int8ToString(event.Comm),
+					// )
 
 				}
 
@@ -337,18 +395,75 @@ func main() {
 						eventMap[port] = data
 					}
 					data.Recvmsg = &Recvmsg{
-						SrcIP:   srcIP,
+						SrcIP:   ssrcIP,
 						SrcPort: port,
 						Pid:     event.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
 					}
 
+					if data.Lookup != nil && data.Sendmsg != nil {
+
+						if data.Lookup.Proto == 17 {
+
+							proto = "UDP"
+						}
+
+						if data.Lookup.DstIP.IsLoopback() {
+							dsthost = "localhost"
+						} else {
+							dsthost = pkg.ResolveIP(dstIP)
+
+						}
+
+						if data.Lookup.SrcIP.IsLoopback() {
+							srchost = "localhost"
+						} else {
+							srchost = pkg.ResolveIP(srcIP)
+
+						}
+
+						fmt.Printf("RECVFROM PID=%d NAME=%s %s/%s[%s]:%d -> %s[%s]:%d\n",
+							data.Sendmsg.Pid,
+							data.Sendmsg.Comm,
+
+							proto,
+							dsthost,
+							data.Lookup.DstIP,
+							data.Lookup.DstPort,
+							srchost,
+							data.Lookup.SrcIP,
+							data.Lookup.SrcPort,
+						)
+
+						fmt.Printf("RECVFROM PID=%d NAME=%s %s/%s[%s]:%d <- %s[%s]:%d\n",
+							data.Recvmsg.Pid,
+							data.Recvmsg.Comm,
+
+							proto,
+							dsthost,
+							data.Lookup.DstIP,
+							data.Lookup.DstPort,
+							srchost,
+							data.Lookup.SrcIP,
+							data.Lookup.SrcPort,
+						)
+
+					}
+
+					// fmt.Printf("DATA_RECVFROM PID=%d srcIP=%s:%d\n",
+					// 	data.Recvmsg.Pid,
+					// 	data.Recvmsg.SrcIP,
+					// 	data.Recvmsg.SrcPort)
+
 				} else if event.Family == 10 {
-					fmt.Printf("!!!!!!!!!RECVFROM SRC6=%s:%d DST6=%s:%d\n",
-						srcIP6,
-						event.Sport,
-						dstIP6,
-						event.Dport)
+					// port := event.Sport
+					// pid := event.Pid
+					// fmt.Printf("STATE2 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d\n",
+					// 	pid,
+					// 	event.SrcIP6[0], event.SrcIP6[1],
+					// 	event.SrcIP6[2], event.SrcIP6[3],
+					// 	port,
+					// )
 
 				}
 
@@ -365,7 +480,7 @@ func main() {
 						eventMap[port] = data
 					}
 					data.Recvmsg = &Recvmsg{
-						SrcIP:   srcIP,
+						SrcIP:   ssrcIP,
 						SrcPort: port,
 						Pid:     event.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
@@ -379,7 +494,7 @@ func main() {
 
 						fmt.Println("")
 
-						fmt.Printf("PID=%d NAME=%s %s/%s:%d<-%s:%d\n",
+						fmt.Printf("RECVMSG PID=%d NAME=%s %s/%s:%d->%s:%d\n",
 							data.Sendmsg.Pid,
 							data.Sendmsg.Comm,
 							proto,
@@ -389,7 +504,7 @@ func main() {
 							data.Lookup.SrcPort,
 						)
 
-						fmt.Printf("PID=%d NAME=%s %s/%s:%d<-%s:%d\n",
+						fmt.Printf("RECVMSG PID=%d NAME=%s %s/%s:%d<-%s:%d\n",
 							data.Recvmsg.Pid,
 							data.Recvmsg.Comm,
 							proto,
@@ -404,7 +519,31 @@ func main() {
 					}
 
 				} else if event.Family == 10 {
-					fmt.Printf("!!!!!!!!!RECVMSG SRC6=%s:%d DST6=%s:%d\n", srcIP6, event.Sport, dstIP6, event.Dport)
+					// port := event.Sport
+					// pid := event.Pid
+					// fmt.Printf("STATE=12 IPv6 PID=%d srcIPv6=%x:%x:%x:%x:%d\n",
+					// 	pid,
+					// 	event.SrcIP6[0], event.SrcIP6[1],
+					// 	event.SrcIP6[2], event.SrcIP6[3],
+					// 	port,
+					// )
+
+					// eventDstIP6 := [4]uint32{
+					// 	event.SrcIP6[0],
+					// 	event.SrcIP6[1],
+					// 	event.SrcIP6[2],
+					// 	event.SrcIP6[3],
+					// }
+
+					// ipBytes := []byte{
+					// 	byte(eventDstIP6[0] >> 24), byte(eventDstIP6[0] >> 16), byte(eventDstIP6[0] >> 8), byte(eventDstIP6[0]),
+					// 	byte(eventDstIP6[1] >> 24), byte(eventDstIP6[1] >> 16), byte(eventDstIP6[1] >> 8), byte(eventDstIP6[1]),
+					// 	byte(eventDstIP6[2] >> 24), byte(eventDstIP6[2] >> 16), byte(eventDstIP6[2] >> 8), byte(eventDstIP6[2]),
+					// 	byte(eventDstIP6[3] >> 24), byte(eventDstIP6[3] >> 16), byte(eventDstIP6[3] >> 8), byte(eventDstIP6[3]),
+					// }
+
+					// ip := net.IP(ipBytes)
+					// fmt.Printf("STATE=12 SHRT IPv6:=%s%d\n", ip.String(), event.Sport)
 
 				}
 
@@ -414,6 +553,9 @@ func main() {
 
 				family := event.Family
 				if family == 2 {
+
+					// dstAddr := fmt.Sprintf("//%s[%s]:%d", pkg.ResolveIP(dstIP), dstIP.String(), event.Dport)
+					// srcAddr := fmt.Sprintf("//[%s]:%d", srcIP.String(), event.Sport)
 
 					port := int(event.Dport)
 
@@ -456,22 +598,40 @@ func main() {
 
 						fmt.Println("")
 
-						fmt.Printf("PID=%d NAME=%s %s/%s:%d<-%s:%d\n",
-							data.Recvmsg.Pid,
-							data.Recvmsg.Comm,
+						if data.Lookup.DstIP.IsLoopback() {
+							dsthost = "localhost"
+						} else {
+							dsthost = pkg.ResolveIP(dstIP)
+
+						}
+
+						if data.Lookup.SrcIP.IsLoopback() {
+							srchost = "localhost"
+						} else {
+							srchost = pkg.ResolveIP(srcIP)
+
+						}
+
+						fmt.Printf("LOOKUP PID=%d NAME=%s %s/%s[%s]:%d->%s[%s]:%d\n",
+							data.Sendmsg.Pid,
+							data.Sendmsg.Comm,
 							proto,
+							dsthost,
 							data.Lookup.DstIP,
 							data.Lookup.DstPort,
+							srchost,
 							data.Lookup.SrcIP,
 							data.Lookup.SrcPort,
 						)
 
-						fmt.Printf("PID=%d NAME=%s %s/%s:%d->%s:%d\n",
-							data.Sendmsg.Pid,
-							data.Sendmsg.Comm,
+						fmt.Printf("LOOKUP PID=%d NAME=%s %s/%s[%s]:%d->%s[%s]:%d\n",
+							data.Recvmsg.Pid,
+							data.Recvmsg.Comm,
 							proto,
+							dsthost,
 							data.Lookup.DstIP,
 							data.Lookup.DstPort,
+							srchost,
 							data.Lookup.SrcIP,
 							data.Lookup.SrcPort,
 						)
@@ -482,28 +642,15 @@ func main() {
 
 				} else if family == 10 {
 
-					fmt.Printf("Saddr6 bytes: %v\n", event.Saddr6[:])
+					// 		// fmt.Printf("STATE=3 DST IPv6=%x:%x:%x:%x\n",
+					// 		// 	event.DstIP6[0], event.DstIP6[1],
+					// 		// 	event.DstIP6[2], event.DstIP6[3])
 
-					fmt.Printf("!!!!!!!!!LOOKUP ETH=%d PID=%d SRC6=%s[%s]:%d DST6=%s:%d\n",
-						event.Ifindex,
-						event.Pid,
-						pkg.ResolveIP(srcIP6),
-						srcIP6, event.Sport,
-						dstIP6,
-						event.Dport)
+					// 		// fmt.Printf("STATE=3 SRC IPv6=%x:%x:%x:%x\n",
+					// 		// 	event.SrcIP6[0], event.SrcIP6[1],
+					// 		// 	event.SrcIP6[2], event.SrcIP6[3])
 
-					iface, err := net.InterfaceByIndex(int(event.Ifindex))
-					if err != nil {
-						fmt.Fprintf(os.Stderr, "ошибка: %v\n", err)
-						return
-					}
-
-					ipAddr := &net.IPAddr{
-						IP:   srcIP6,
-						Zone: iface.Name,
-					}
-
-					fmt.Printf("IPv6 адрес с интерфейсом: %s\n", ipAddr.String())
+					// 		// fmt.Printf("STATE=3 SPORT=%d  DPORT=%d PROTO=%d\n", event.Sport, event.Dport, event.Proto)
 
 				}
 
@@ -511,19 +658,113 @@ func main() {
 
 			if event.Sysexit == 6 {
 
-				switch event.Family {
-				case 2:
-					HandleIPEvent(event, srcIP, dstIP, &mu, eventChan_sport, eventChan_pid)
+				if event.State == 1 {
 
-				case 10:
+					mu.Lock()
+					select {
+					case eventChan_sport <- int(event.Sport):
+					default:
+						eventChan_sport <- int(event.Sport)
+						fmt.Printf("State 1: заменен порт %d\n", event.Sport)
+					}
+					mu.Unlock()
 
-					HandleIPEvent(event, srcIP6, dstIP6, &mu, eventChan_sport, eventChan_pid)
+					if dstIP.IsLoopback() {
+						dsthost = pkg.ResolveIP(dstIP)
+					} else {
+
+						dsthost, err = pkg.ResolveIP_n(dstIP)
+						if err != nil {
+							dsthost = "unknown"
+
+							//log.Println("Оdsthost шибка при разрешении исходного IP:", err)
+						} else {
+							//	fmt.Println("Исходное доменное имя для IP", dstIP, ":", dsthost)
+						}
+
+					}
+
+					srchost := pkg.ResolveIP(srcIP)
+
+					//	dsthost, err := pkg.ResolveIP_n(dstIP)
+
+					srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
+					dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
+
+					if event.Proto == 6 {
+
+						proto = "TCP"
+					}
+
+					fmt.Println("")
+					fmt.Printf("PID=%d %s:%s <- %s:%s \n", event.Pid, proto, srcAddr, proto, dstAddr)
+
+				}
+				if event.State == 2 {
+					mu.Lock()
+					select {
+					case eventChan_pid <- int(event.Pid):
+					default:
+						//fmt.Println("State 2: eventChan_pid заполнен, пропускаю запись PID")
+					}
+					mu.Unlock()
+				}
+
+				if event.State == 10 {
+					mu.Lock()
+					select {
+					case eventChan_pid <- int(event.Pid):
+					default:
+						//fmt.Println("State 10: eventChan_pid заполнен, пропускаю запись PID")
+					}
+					mu.Unlock()
+				}
+
+				select {
+
+				case xxx = <-eventChan_sport:
+
+					if dstIP.IsLoopback() {
+						dsthost = pkg.ResolveIP(dstIP)
+					} else {
+
+						dsthost, err = pkg.ResolveIP_n(dstIP)
+						if err != nil {
+							dsthost = "unknown"
+
+							//log.Println("Оdsthost шибка при разрешении исходного IP:", err)
+						} else {
+							//	fmt.Println("Исходное доменное имя для IP", dstIP, ":", dsthost)
+						}
+
+					}
+
+					srchost := pkg.ResolveIP(srcIP)
+
+					srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), xxx)
+					dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
+
+					select {
+					case xxx_pid = <-eventChan_pid:
+						//fmt.Printf("State 2: получил PID %d\n", xxx_pid)
+					default:
+						//fmt.Println("State 2: eventChan_pid пуст, PID неизвестен")
+					}
+
+					if event.Proto == 6 {
+
+						proto = "TCP"
+					}
+
+					fmt.Printf("PID=%d %s:%s -> %s:%s \n", xxx_pid, proto, srcAddr, proto, dstAddr)
+					fmt.Println("")
 
 				default:
-					continue
+					fmt.Println("")
 				}
 
 			}
+
 		}
 
 	}()

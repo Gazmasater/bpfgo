@@ -196,21 +196,20 @@ struct {
 // };
 
 struct trace_info {
-    u32 src_ip;
-    u32 dst_ip;
+    struct sockaddr_in ssrcIP;
+    struct sockaddr_in ddstIP;    
+    struct in_addr srcIP;
+    struct in_addr dstIP;
     __u16 sport;
     u32 pid;
     u32 proto;
     u32 sysexit;
     u32 state;
-    __u32 ifindex;
-    __u8 saddr6[16];
-    __u8 daddr6[16];
+    // __u8 saddr6[16];
+    // __u8 daddr6[16];
     u16 family;
-    u16 dport;
-
-   
-    char comm[64];
+    u16 dport;   
+    char comm[32];
 };
 
 
@@ -244,6 +243,7 @@ SEC("tracepoint/syscalls/sys_enter_sendto")
 int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     struct conn_info_t conn_info = {};
+
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
@@ -280,14 +280,19 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     struct trace_info info = {};
 
     struct sockaddr addr = {};
-    bpf_probe_read_kernel(info.comm, sizeof(info.comm), conn_info->comm);
 
-    bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);
+
+   if (bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr)<0) {
+    return 0;
+   }
  
     if (addr.sa_family == AF_INET) {
 
         struct sockaddr_in addr_in = {};
-        bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
+
+     if    (bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr)<0){
+        return 0;
+     }
     
     
         u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
@@ -301,10 +306,13 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
 
 
                 info.pid = pid;
-                __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+
+               if( __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm))<0){
+                return 0;
+               }
         
                 info.pid=conn_info->pid;
-                info.dst_ip=ip;
+                info.ddstIP.sin_addr.s_addr=ip;
                 info.dport = port;
                 info.family=AF_INET;  
                 info.sysexit=1;
@@ -318,17 +326,18 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
 
         bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr);
 
+        // info.dstIP6[0] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[0]);
+        // info.dstIP6[1] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[4]);
+        // info.dstIP6[2] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[8]);
+        // info.dstIP6[3] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[12]);
         u16 port = bpf_ntohs(addr_in6.sin6_port);
         
         info.pid=pid;
         info.sysexit=1;
         info.family=AF_INET6;
         info.dport=port;
-
-        bpf_probe_read_kernel(&info.daddr6, sizeof(info.daddr6), &addr_in6.sin6_addr);
-
         
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+      //  bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
     }
 
@@ -378,27 +387,36 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
     }
 
     struct trace_info info = {};
-    bpf_probe_read_kernel(info.comm, sizeof(info.comm), conn_info->comm);
-
 
     struct sockaddr addr = {};
 
     struct sockaddr_in addr_in = {};
-    bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
-    bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr);  
+
+   if (bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr)<0){
+    return 0;
+   }
+
+   if (bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr)<0){
+    return 0;
+   }  
 
     if (addr.sa_family == AF_INET) {
         struct sockaddr_in addr_in = {};
-        bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr);
+       if (bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr)<0){
+        return 0;
+       }
 
         u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
 
         u16 port = bpf_ntohs(addr_in.sin_port);
                
         info.pid = pid;
-        __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
 
-            info.src_ip=ip;
+       if (__builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm))<0){
+        return 0;
+       }
+
+            info.ssrcIP.sin_addr.s_addr=ip;
             info.sport = port;
             info.family=AF_INET;           
             info.sysexit=2;
@@ -425,7 +443,7 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
         // info.srcIP6[2] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[8]);
         // info.srcIP6[3] = bpf_ntohl(*(__u32 *)&addr_in6.sin6_addr.in6_u.u6_addr8[12]);
 
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+      //  bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
 
     }
@@ -489,7 +507,10 @@ int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
 
 
     struct msghdr *msg;
-    bpf_probe_read_user(&msg, sizeof(msg), *addr_ptr);
+
+   if (bpf_probe_read_user(&msg, sizeof(msg), *addr_ptr)<0){
+    return 0;
+   }
 
     if (!msg) {
         bpf_printk("msg is NULL for pid=%d", pid);
@@ -501,17 +522,24 @@ int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
     struct sockaddr_in sa = {};
     struct sockaddr_in6 sa6 = {};
     struct trace_info info = {};
-    bpf_probe_read_kernel(info.comm, sizeof(info.comm), conn_info->comm);
+   
+   if( __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm))<0){
+    return 0;
+   }
 
-    bpf_probe_read_user(&sa, sizeof(sa), &msg->msg_name);
-    bpf_probe_read_user(&sa6, sizeof(sa6), &msg->msg_name);
+  if  (bpf_probe_read_user(&sa, sizeof(sa), &msg->msg_name)<0){
+    return 0;
+  }
+   if (bpf_probe_read_user(&sa6, sizeof(sa6), &msg->msg_name)<0){
+    return 0;
+   }
 
     if (sa.sin_family==AF_INET) {
 
      u32   port=bpf_ntohs(sa.sin_port);
      u32   ip=bpf_ntohl(sa.sin_addr.s_addr);
      info.pid=conn_info->pid;
-     info.dst_ip=ip;
+     info.ddstIP.sin_addr.s_addr=ip;
      info.dport = port;
      info.family=AF_INET;  
      info.sysexit=11;
@@ -537,8 +565,11 @@ int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
         info.dport=port;
         info.pid=pid;
 
-
-         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+        // info.dstIP6[0] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[0]);
+        // info.dstIP6[1] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[1]);
+        // info.dstIP6[2] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[2]);
+        // info.dstIP6[3] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[3]);
+        // bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
     }
 
@@ -609,41 +640,57 @@ int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
     struct sockaddr_in sa = {};
     struct sockaddr_in6 sa6 = {};
     struct trace_info info = {};
-    bpf_probe_read_kernel(info.comm, sizeof(info.comm), conn_info->comm);
-    bpf_probe_read_user(&sa, sizeof(sa), &msg->msg_name);
-    bpf_probe_read_user(&sa6, sizeof(sa6), &msg->msg_name);
-     if (sa.sin_family == AF_INET) {
-        u32 port = bpf_ntohs(sa.sin_port);
-        u32 ip = bpf_ntohl(sa.sin_addr.s_addr);
 
-        info.pid = conn_info->pid;
-        info.src_ip = ip;
-        info.sport = port;
-        info.family = AF_INET;
-        info.sysexit = 12;
+   if( __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm))<0){
+    return 0;
+   }
 
-         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
-      } else if (sa6.sin6_family == AF_INET6) {
-        u32 port = bpf_ntohs(sa6.sin6_port);
-        if (port == 0) {
+   if (bpf_probe_read_user(&sa, sizeof(sa), &msg->msg_name)<0){
+    return 0;
+   }
+
+   if (bpf_probe_read_user(&sa6, sizeof(sa6), &msg->msg_name)<0) {
+    return 0;
+   }
+
+
+    if (sa.sin_family==AF_INET) {
+
+     u32   port=bpf_ntohs(sa.sin_port);
+     u32   ip=bpf_ntohl(sa.sin_addr.s_addr);
+     info.pid=conn_info->pid;
+     info.ssrcIP.sin_addr.s_addr=ip;
+     info.sport = port;
+     info.family=AF_INET;  
+     info.sysexit=12;
+           
+     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+
+    } else if (sa.sin_family==AF_INET6) {
+
+        u32 port=bpf_ntohs(sa6.sin6_port);
+        
+
+        if (port==0) {
             return 0;
         }
 
-        bpf_printk("sys_exit_recvmsg IP6 PORT=%d", port);
+        bpf_printk("sys_exit_recvmsg IP6 PORT=%d",port);
 
-        info.sysexit = 12;
-        info.family = AF_INET6;
-        info.sport = port;
-        info.pid = pid;
+        info.sysexit=12;
+        info.family=AF_INET6;
+        info.sport=port;
+        info.pid=pid;
 
-        if (bpf_probe_read_user(&info.saddr6, sizeof(info.saddr6), &sa6.sin6_addr) < 0) {
-            bpf_printk("failed to read saddr6");
-            return 0;
-        }
+        // info.srcIP6[0] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[0]);
+        // info.srcIP6[1] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[1]);
+        // info.srcIP6[2] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[2]);
+        // info.srcIP6[3] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[3]);
+       //  bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
-         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-     }
+    }
 
     bpf_map_delete_elem(&addrRecv_map, &pid);
     bpf_map_delete_elem(&conn_info_map, &pid);
@@ -652,46 +699,55 @@ int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
 }
 
 
+
 SEC("sk_lookup")
 int look_up(struct bpf_sk_lookup *ctx) {
     struct trace_info info = {};
-    info.ifindex=ctx->ingress_ifindex;
-
-    
-
 
     __u32 proto = ctx->protocol;
 
     if (ctx->family == AF_INET) {
-        __u32 srcIP = bpf_ntohl(ctx->local_ip4);
-        __u32 dstIP = bpf_ntohl(ctx->remote_ip4);
-        __u32 srcPort = ctx->local_port;
-        __u16 dstPort = bpf_ntohs(ctx->remote_port);
+        struct in_addr srcIP={};
+        struct in_addr dstIP={};
+     //   srcIP.s_addr=ctx->local_ip4;
+     //   dstIP.s_addr=ctx->remote_ip4;
 
-        info.src_ip = srcIP;
-        info.sport = srcPort;
-        info.dst_ip = dstIP;
-        info.dport = dstPort;
+        
+
+       // __u32 srcPort = ctx->local_port;
+     //   __u16 dstPort = bpf_ntohs(ctx->remote_port);
+
+        info.srcIP.s_addr = ctx->local_ip4;
+        info.sport = ctx->local_port;
+        info.dstIP.s_addr = ctx->remote_ip4;
+        info.dport = bpf_ntohs(ctx->remote_port);
+
         info.sysexit = 3;
         info.proto = proto;
         info.family=AF_INET;
 
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+       bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
     } else if (ctx->family == AF_INET6) {
+
+        // info.srcIP6[0]=bpf_ntohl(ctx->local_ip6[0]);
+        // info.srcIP6[1]=bpf_ntohl(ctx->local_ip6[1]);
+        // info.srcIP6[2]=bpf_ntohl(ctx->local_ip6[2]);
+        // info.srcIP6[3]=bpf_ntohl(ctx->local_ip6[3]);
+
+        // info.dstIP6[0]=bpf_ntohl(ctx->remote_ip6[0]);
+        // info.dstIP6[1]=bpf_ntohl(ctx->remote_ip6[1]);
+        // info.dstIP6[2]=bpf_ntohl(ctx->remote_ip6[2]);
+        // info.dstIP6[3]=bpf_ntohl(ctx->remote_ip6[3]);
+
         info.sport = ctx->local_port;
         info.dport = bpf_ntohs(ctx->remote_port);
         info.family=AF_INET6;
         info.sysexit = 3;
         info.proto=ctx->protocol;
-        bpf_probe_read_kernel(&info.saddr6, sizeof(info.saddr6), ctx->local_ip6);
-        bpf_probe_read_kernel(&info.daddr6, sizeof(info.daddr6), ctx->remote_ip6);
 
-        int32 *ip6 = (int32 *)info.saddr6;
 
-        bpf_printk("IPv6 src: %x:%x:%x:%x", bpf_ntohl(ip6[0]), bpf_ntohl(ip6[1]), bpf_ntohl(ip6[2]), bpf_ntohl(ip6[3]));
-
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+     //   bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
     }
 
@@ -702,46 +758,37 @@ SEC("tracepoint/sock/inet_sock_set_state")
 int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 
     struct trace_info info = {};
-    struct conn_info_t conn_info={};
 
 
     __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info));
-
-    bpf_probe_read_kernel(info.comm, sizeof(info.comm), conn_info.comm);
-
-
-
-    __u32 srcip;
-    bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr);
-    srcip = bpf_ntohl(srcip);
-
-    __u32 dstip;
-    bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr);
-    dstip = bpf_ntohl(dstip);
-       
-    __u16 sport=0;
-    
-    sport=ctx->sport;
-       
-    __u16 dport;
-    dport=ctx->dport;
-
-   __u8 state=ctx->newstate;
 
     if (ctx->family==AF_INET) {
-    if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
 
-        info.src_ip=srcip;
-        info.sport=sport;
-        info.dst_ip=dstip;
-        info.dport=dport;
+    struct in_addr  srcip={};
+    struct in_addr  dstip={};
+
+
+    bpf_get_current_comm(&info.comm, sizeof(info.comm));
+
+
+
+    if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
+     if   (bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr)<0){
+        return 0;
+     }
+
+    if (bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr)<0){
+        return 0;
+    }
+        
+        info.srcIP.s_addr=srcip.s_addr;
+        info.sport=ctx->sport;
+        info.dstIP.s_addr=dstip.s_addr;
+        info.dport=ctx->dport;
         info.sysexit=6;
         info.proto=ctx->protocol;
         info.pid=pid_tcp;
         info.state=ctx->newstate;
-        info.family=ctx->family;
-
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
     }
 
@@ -750,27 +797,31 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 
         info.sysexit=6;
         info.pid=pid_tcp;
-        info.family=ctx->family;
         info.proto=ctx->protocol;
         info.state=ctx->newstate;
-        info.sport =(ctx->sport);
-        info.dport=(ctx->dport);
-        if (bpf_probe_read_kernel(&info.saddr6, sizeof(info.saddr6), ctx->saddr_v6) < 0) {
-            return 0;
-        }
-        if (bpf_probe_read_kernel(&info.daddr6, sizeof(info.saddr6), ctx->daddr_v6) < 0) {
-            return 0;
-        }
-
-
-        
-       bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
+        info.sport = bpf_ntohs(ctx->sport);
+        // if (bpf_probe_read_kernel(&info.saddr6, sizeof(info.saddr6), ctx->saddr_v6) < 0) {
+        //     return 0;
+        // }
+      //  bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
     }
 
     return 0;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -45,7 +45,7 @@ func ResolveIP_n(ip net.IP) (string, error) {
 	return "", fmt.Errorf("доменное имя для IP %s не найдено", ip.String())
 }
 
-func Int8ToString(arr [64]int8) string {
+func Int8ToString(arr [32]int8) string {
 	b := unsafe.Slice((*byte)(unsafe.Pointer(&arr[0])), len(arr))
 	b = bytes.Trim(b, "\x00")
 	if len(b) == 0 {
