@@ -362,6 +362,11 @@ ulimit -n         # открытые дескрипторы
 ulimit -l unlimited
 ulimit -n 65535
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ulimit -l 
+2021324
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ulimit -n  
+1048576
+
 
 
 
