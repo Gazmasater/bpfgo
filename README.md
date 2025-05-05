@@ -617,37 +617,32 @@ func main() {
 }
 
 
+
+package services
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+)
+
 func GetGender(name string) string {
 	var res struct {
 		Gender string `json:"gender"`
 	}
-	http.Get(fmt.Sprintf("https://api.genderize.io/?name=%s", name)).Body.Close()
-	_ = json.NewDecoder(http.Get(fmt.Sprintf("https://api.genderize.io/?name=%s", name)).Body).Decode(&res)
+
+	resp, err := http.Get(fmt.Sprintf("https://api.genderize.io/?name=%s", name))
+	if err != nil {
+		return "" // или логгируй ошибку, или возвращай "unknown"
+	}
+	defer resp.Body.Close()
+
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return ""
+	}
+
 	return res.Gender
 }
-
-[{
-	"resource": "/home/gaz358/myprog/test/internal/services/services.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "TooManyValues",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "TooManyValues"
-		}
-	},
-	"severity": 8,
-	"message": "multiple-value http.Get(fmt.Sprintf(\"https://api.genderize.io/?name=%s\", name)) (value of type (resp *http.Response, err error)) in single-value context",
-	"source": "compiler",
-	"startLineNumber": 13,
-	"startColumn": 2,
-	"endLineNumber": 13,
-	"endColumn": 66
-}]
-
 
 
 
