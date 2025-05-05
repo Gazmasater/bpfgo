@@ -406,12 +406,8 @@ gcc -o send_udp send_udp.c
 ./send_udp
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/test/cmd$ go run .
-
-2025/05/05 13:30:53 /home/gaz358/myprog/test/internal/db/db.go:13
-[error] failed to initialize database, got error failed to connect to `host=localhost user=postgres database=people`: failed SASL auth (FATAL: password authentication failed for user "postgres" (SQLSTATE 28P01))
-2025/05/05 13:30:53 failed to connect to `host=localhost user=postgres database=people`: failed SASL auth (FATAL: password authentication failed for user "postgres" (SQLSTATE 28P01))
-exit status 1
+gaz358@gaz358-BOD-WXX9:~/myprog/test$ git add .
+fatal: not a git repository (or any of the parent directories): .git
 
 
 
