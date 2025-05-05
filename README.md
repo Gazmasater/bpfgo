@@ -618,31 +618,29 @@ func main() {
 
 
 
-package services
-
-import (
-	"encoding/json"
-	"fmt"
-	"net/http"
-)
-
-func GetGender(name string) string {
+func GetAge(name string) int {
 	var res struct {
-		Gender string `json:"gender"`
+		Age int `json:"age"`
 	}
-
-	resp, err := http.Get(fmt.Sprintf("https://api.genderize.io/?name=%s", name))
-	if err != nil {
-		return "" // или логгируй ошибку, или возвращай "unknown"
-	}
-	defer resp.Body.Close()
-
-	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return ""
-	}
-
-	return res.Gender
+	http.Get(fmt.Sprintf("https://api.agify.io/?name=%s", name)).Body.Close()
+	_ = json.NewDecoder(http.Get(fmt.Sprintf("https://api.agify.io/?name=%s", name)).Body).Decode(&res)
+	return res.Age
 }
+
+func GetNationality(name string) string {
+	var res struct {
+		Country []struct {
+			CountryID string `json:"country_id"`
+		} `json:"country"`
+	}
+	http.Get(fmt.Sprintf("https://api.nationalize.io/?name=%s", name)).Body.Close()
+	_ = json.NewDecoder(http.Get(fmt.Sprintf("https://api.nationalize.io/?name=%s", name)).Body).Decode(&res)
+	if len(res.Country) > 0 {
+		return res.Country[0].CountryID
+	}
+	return "unknown"
+}
+
 
 
 
