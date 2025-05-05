@@ -25,6 +25,9 @@ sudo -u postgres psql
 Для создания базы данных выполните команду:
 sudo -u postgres createdb mydatabase
 
+\conninfo   // Она покажет информацию о текущем подключении, включая пользователя, базу, хост и порт
+
+
 Для создания нового пользователя:
 sudo -u postgres createuser myuser --pwprompt --interactive
 
