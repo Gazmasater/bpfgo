@@ -622,8 +622,17 @@ func GetAge(name string) int {
 	var res struct {
 		Age int `json:"age"`
 	}
-	http.Get(fmt.Sprintf("https://api.agify.io/?name=%s", name)).Body.Close()
-	_ = json.NewDecoder(http.Get(fmt.Sprintf("https://api.agify.io/?name=%s", name)).Body).Decode(&res)
+
+	resp, err := http.Get(fmt.Sprintf("https://api.agify.io/?name=%s", name))
+	if err != nil {
+		return 0
+	}
+	defer resp.Body.Close()
+
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return 0
+	}
+
 	return res.Age
 }
 
@@ -633,11 +642,21 @@ func GetNationality(name string) string {
 			CountryID string `json:"country_id"`
 		} `json:"country"`
 	}
-	http.Get(fmt.Sprintf("https://api.nationalize.io/?name=%s", name)).Body.Close()
-	_ = json.NewDecoder(http.Get(fmt.Sprintf("https://api.nationalize.io/?name=%s", name)).Body).Decode(&res)
+
+	resp, err := http.Get(fmt.Sprintf("https://api.nationalize.io/?name=%s", name))
+	if err != nil {
+		return "unknown"
+	}
+	defer resp.Body.Close()
+
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return "unknown"
+	}
+
 	if len(res.Country) > 0 {
 		return res.Country[0].CountryID
 	}
+
 	return "unknown"
 }
 
