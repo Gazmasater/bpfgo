@@ -617,27 +617,13 @@ func main() {
 }
 
 
-[{
-	"resource": "/home/gaz358/myprog/test/internal/services/services.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "TooManyValues",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "TooManyValues"
-		}
-	},
-	"severity": 8,
-	"message": "multiple-value http.Get(fmt.Sprintf(\"https://api.genderize.io/?name=%s\", name)) (value of type (resp *http.Response, err error)) in single-value context",
-	"source": "compiler",
-	"startLineNumber": 13,
-	"startColumn": 2,
-	"endLineNumber": 13,
-	"endColumn": 66
-}]
+resp, err := http.Get(fmt.Sprintf("https://api.genderize.io/?name=%s", name))
+if err != nil {
+    // обработка ошибки
+    log.Fatal(err)
+}
+defer resp.Body.Close()
+// дальнейшая работа с resp
 
 
 
