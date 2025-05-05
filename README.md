@@ -406,6 +406,11 @@ gcc -o send_udp send_udp.c
 ./send_udp
 
 
+if record.LostSamples > 0 {
+				log.Printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!111lost %d samples", record.LostSamples)
+				continue
+			}
+
 
 
    
