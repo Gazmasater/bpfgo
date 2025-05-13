@@ -407,28 +407,9 @@ gcc -o send_udp send_udp.c
 
 
 
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#3",
-	"code": {
-		"value": "UndeclaredName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredName"
-		}
-	},
-	"severity": 8,
-	"message": "undefined: ntohl",
-	"source": "compiler",
-	"startLineNumber": 650,
-	"startColumn": 7,
-	"endLineNumber": 650,
-	"endColumn": 12
-}]
-
+fmt.Printf("!!!!!!!!STATE=3!!!!!!! DST IPv6=%x:%x:%x:%x\n",
+						ntohl((event.DstIP6[0])), event.DstIP6[1],
+						event.DstIP6[2], event.DstIP6[3])
 
 
 
