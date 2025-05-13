@@ -421,6 +421,14 @@ func toBytes(val uint32) []byte {
 	return buf[:]
 }
 
-bpf_sk_lookup
-
+fmt.Printf("STATE=3 SRC IPv6=%x:%x:%x:%x:%x:%x:%x:%x\n",
+						event.SrcIP6[0],
+						event.SrcIP6[1],
+						event.SrcIP6[2],
+						event.SrcIP6[3],
+						event.SrcIP6[4],
+						event.SrcIP6[5],
+						event.SrcIP6[6],
+						event.SrcIP6[7],
+					)
    
