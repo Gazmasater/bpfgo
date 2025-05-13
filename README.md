@@ -432,5 +432,14 @@ __builtin_memcpy(info.dstIP6, ctx->remote_ip6, sizeof(info.dstIP6));
         __bpf_memcpy(info.dstIP6, ctx->remote_ip6, sizeof(info.dstIP6));
 
 
+ az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+/home/gaz358/myprog/bpfgo/trace.c:753:3: error: call to undeclared function '__bpf_memcpy'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  753 |   __bpf_memcpy(info.srcIP6, ctx->local_ip6, sizeof(info.srcIP6));
+      |   ^
+1 error generated.
+Error: compile: exit status 1
+gaz358@gaz358-BOD-WXX9:~/mypr
+
+
 
    
