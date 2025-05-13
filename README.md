@@ -440,20 +440,12 @@ struct trace_info {
 } __attribute__((packed));
 
 
-        info.srcIP6=bpf_ntohl(ctx->local_ip6);
+ if (bpf_probe_read_kernel(&info.srcIP6, sizeof(info.srcIP6), ctx->local_ip6) < 0)
+            return SK_PASS;
 
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
-	"owner": "C/C++: IntelliSense",
-	"code": "513",
-	"severity": 8,
-	"message": "a value of type \"unsigned int\" cannot be assigned to an entity of type \"struct ipv6_addr_packed\"",
-	"source": "C/C++",
-	"startLineNumber": 749,
-	"startColumn": 20,
-	"endLineNumber": 749,
-	"endColumn": 21
-}]
+        if (bpf_probe_read_kernel(&info.dstIP6, sizeof(info.dstIP6), ctx->remote_ip6) < 0)
+            return SK_PASS;
+
 
 
 
