@@ -407,92 +407,91 @@ gcc -o send_udp send_udp.c
 
 
 
-struct trace_info {
-    // IPv4
-    struct sockaddr_in ssrcIP;
-    struct sockaddr_in ddstIP; 
-    struct in_addr srcIP;
-    struct in_addr dstIP;
+SEC("tracepoint/syscalls/sys_exit_sendto")
+int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    long ret = ctx->ret;
 
-    __u32 srcIP6[4];
-    __u32 dstIP6[4];
-    __u16 sport;
-    __u16 dport;
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
+    if (!conn_info) return 0;
 
-    __u32 pid;
-    __u32 proto;
-    __u32 sysexit;
-    __u32 state;
+    if (ret < 0) {
+        bpf_printk("sys_exit_sendto failed for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        return 0;
+    }
 
-    __u16 family;
+    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addrSend_map, &pid);
+    if (!addr_ptr) {
+        return 0;
+    }
 
-    char comm[32];
-} ;
-
-SEC("sk_lookup")
-int look_up(struct bpf_sk_lookup *ctx) {
     struct trace_info info = {};
 
-    __u32 proto = ctx->protocol;
+    struct sockaddr addr = {};
 
-    if (ctx->family == AF_INET) {
-        struct in_addr srcIP={};
-        struct in_addr dstIP={};
-     //   srcIP.s_addr=ctx->local_ip4;
-     //   dstIP.s_addr=ctx->remote_ip4;
 
-        
+   if (bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr)<0) {
+    return 0;
+   }
+ 
+    if (addr.sa_family == AF_INET) {
 
-       // __u32 srcPort = ctx->local_port;
-     //   __u16 dstPort = bpf_ntohs(ctx->remote_port);
+        struct sockaddr_in addr_in = {};
 
-        info.srcIP.s_addr = ctx->local_ip4;
-        info.sport = ctx->local_port;
-        info.dstIP.s_addr = ctx->remote_ip4;
-        info.dport = bpf_ntohs(ctx->remote_port);
-
-        info.sysexit = 3;
-        info.proto = proto;
-        info.family=AF_INET;
-
-       bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-    } else if (ctx->family == AF_INET6) {
-
-        info.srcIP6=bpf_ntohl(ctx->local_ip6[0]);
-        info.srcIP6=bpf_ntohl(ctx->local_ip6[1]);
-        info.srcIP6=bpf_ntohl(ctx->local_ip6[2]);
-        info.srcIP6=bpf_ntohl(ctx->local_ip6[3]);
+     if    (bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr)<0){
+        return 0;
+     }
     
-        info.dstIP6[0]=bpf_ntohl(ctx->remote_ip6[0]);
-        info.dstIP6[1]=bpf_ntohl(ctx->remote_ip6[1]);
-        info.dstIP6[2]=bpf_ntohl(ctx->remote_ip6[2]);
-        info.dstIP6[3]=bpf_ntohl(ctx->remote_ip6[3]);
+    
+        u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
 
-        info.sport = ctx->local_port;
-        info.dport = bpf_ntohs(ctx->remote_port);
-        info.family=ctx->family;
-        info.sysexit = 3;
-        info.proto=ctx->protocol;
+        u16 port = bpf_ntohs(addr_in.sin_port);
+
+        if (port==0) {
+
+            return 0;
+        }
 
 
+                info.pid = pid;
+
+               if( __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm))<0){
+                return 0;
+               }
+        
+                info.pid=conn_info->pid;
+                info.ddstIP.sin_addr.s_addr=ip;
+                info.dport = port;
+                info.family=AF_INET;  
+                info.sysexit=1;
+                      
+                bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+           
+    } else if (addr.sa_family==AF_INET6) {
+
+      
+        struct sockaddr_in6 addr_in6 = {};
+        u32 ip = bpf_ntohl(addr_in6.sin6_addr.in6_u.u6_addr32);
+
+
+        bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr);
+
+        u16 port = bpf_ntohs(addr_in6.sin6_port);
+        info.pid=pid;
+        info.sysexit=1;
+        info.family=AF_INET6;
+        info.dport=port;
+        
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
     }
 
-    return SK_PASS;
+    bpf_map_delete_elem(&addrSend_map, &pid);  
+    bpf_map_delete_elem(&conn_info_map, &pid);
+
+    return 0;
+
 }
 
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
-	"owner": "C/C++: IntelliSense",
-	"code": "137",
-	"severity": 8,
-	"message": "expression must be a modifiable lvalue",
-	"source": "C/C++",
-	"startLineNumber": 740,
-	"startColumn": 9,
-	"endLineNumber": 740,
-	"endColumn": 13
-}]
 
