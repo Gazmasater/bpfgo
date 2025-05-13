@@ -410,29 +410,31 @@ gcc -o send_udp send_udp.c
 } else if (addr.sa_family == AF_INET6) {
     struct sockaddr_in6 addr_in6 = {};
 
-    // Читаем всю структуру sockaddr_in6 из userspace одним вызовом
     if (bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr) < 0) {
         return 0;
     }
 
-    u16 port = bpf_ntohs(addr_in6.sin6_port);
-
-    info.pid = pid;
-    info.sysexit = 1;
+    u16 port6 = bpf_ntohs(addr_in6.sin6_port);
+    info.sysexit = 2;
     info.family = AF_INET6;
-    info.dport = port;
+    info.pid = conn_info->pid;
+    info.sport = port6;
 
-    // Читаем IPv6 адрес сразу
-    if (bpf_probe_read_user(info.dstIP6, sizeof(info.dstIP6),
+    // Чтение IPv6-адреса целиком через bpf_probe_read_user без цикла
+    if (bpf_probe_read_user(info.srcIP6, sizeof(info.srcIP6),
         &addr_in6.sin6_addr.in6_u.u6_addr32) < 0) {
         return 0;
     }
 
-    // Приводим к network byte order
-    info.dstIP6[0] = bpf_ntohl(info.dstIP6[0]);
-    info.dstIP6[1] = bpf_ntohl(info.dstIP6[1]);
-    info.dstIP6[2] = bpf_ntohl(info.dstIP6[2]);
-    info.dstIP6[3] = bpf_ntohl(info.dstIP6[3]);
+    // Приведение каждого сегмента IPv6 к host byte order
+    info.srcIP6[0] = bpf_ntohl(info.srcIP6[0]);
+    info.srcIP6[1] = bpf_ntohl(info.srcIP6[1]);
+    info.srcIP6[2] = bpf_ntohl(info.srcIP6[2]);
+    info.srcIP6[3] = bpf_ntohl(info.srcIP6[3]);
+
+    if (__builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm)) < 0) {
+        return 0;
+    }
 
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 }
