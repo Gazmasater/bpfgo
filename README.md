@@ -431,4 +431,24 @@ fmt.Printf("STATE=3 SRC IPv6=%x:%x:%x:%x:%x:%x:%x:%x\n",
 						event.SrcIP6[6],
 						event.SrcIP6[7],
 					)
+
+
+     func ntohs(x uint16) uint16 {
+	return (x>>8)&0xFF | (x<<8)&0xFF00
+ 
+}
+
+
+fmt.Printf("STATE=3 SRC IPv6=%x:%x:%x:%x:%x:%x:%x:%x\n",
+	ntohs(event.SrcIP6[0]),
+	ntohs(event.SrcIP6[1]),
+	ntohs(event.SrcIP6[2]),
+	ntohs(event.SrcIP6[3]),
+	ntohs(event.SrcIP6[4]),
+	ntohs(event.SrcIP6[5]),
+	ntohs(event.SrcIP6[6]),
+	ntohs(event.SrcIP6[7]),
+)
+
+
    
