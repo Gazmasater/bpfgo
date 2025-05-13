@@ -407,91 +407,35 @@ gcc -o send_udp send_udp.c
 
 
 
-SEC("tracepoint/syscalls/sys_exit_sendto")
-int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
+} else if (addr.sa_family == AF_INET6) {
+    struct sockaddr_in6 addr_in6 = {};
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
-    if (!conn_info) return 0;
-
-    if (ret < 0) {
-        bpf_printk("sys_exit_sendto failed for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map, &pid);
+    // Читаем всю структуру sockaddr_in6 из userspace одним вызовом
+    if (bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr) < 0) {
         return 0;
     }
 
-    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addrSend_map, &pid);
-    if (!addr_ptr) {
+    u16 port = bpf_ntohs(addr_in6.sin6_port);
+
+    info.pid = pid;
+    info.sysexit = 1;
+    info.family = AF_INET6;
+    info.dport = port;
+
+    // Читаем IPv6 адрес сразу
+    if (bpf_probe_read_user(info.dstIP6, sizeof(info.dstIP6),
+        &addr_in6.sin6_addr.in6_u.u6_addr32) < 0) {
         return 0;
     }
 
-    struct trace_info info = {};
+    // Приводим к network byte order
+    info.dstIP6[0] = bpf_ntohl(info.dstIP6[0]);
+    info.dstIP6[1] = bpf_ntohl(info.dstIP6[1]);
+    info.dstIP6[2] = bpf_ntohl(info.dstIP6[2]);
+    info.dstIP6[3] = bpf_ntohl(info.dstIP6[3]);
 
-    struct sockaddr addr = {};
-
-
-   if (bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr)<0) {
-    return 0;
-   }
- 
-    if (addr.sa_family == AF_INET) {
-
-        struct sockaddr_in addr_in = {};
-
-     if    (bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr)<0){
-        return 0;
-     }
-    
-    
-        u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
-
-        u16 port = bpf_ntohs(addr_in.sin_port);
-
-        if (port==0) {
-
-            return 0;
-        }
-
-
-                info.pid = pid;
-
-               if( __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm))<0){
-                return 0;
-               }
-        
-                info.pid=conn_info->pid;
-                info.ddstIP.sin_addr.s_addr=ip;
-                info.dport = port;
-                info.family=AF_INET;  
-                info.sysexit=1;
-                      
-                bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-           
-    } else if (addr.sa_family==AF_INET6) {
-
-      
-        struct sockaddr_in6 addr_in6 = {};
-        u32 ip = bpf_ntohl(addr_in6.sin6_addr.in6_u.u6_addr32);
-
-
-        bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr);
-
-        u16 port = bpf_ntohs(addr_in6.sin6_port);
-        info.pid=pid;
-        info.sysexit=1;
-        info.family=AF_INET6;
-        info.dport=port;
-        
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-    }
-
-    bpf_map_delete_elem(&addrSend_map, &pid);  
-    bpf_map_delete_elem(&conn_info_map, &pid);
-
-    return 0;
-
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 }
+
 
 
