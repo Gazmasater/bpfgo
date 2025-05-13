@@ -447,8 +447,10 @@ struct trace_info {
             return SK_PASS;
 
 
-ffff946b:c84d8f30:ffff946b
-
+info.dstIP6.a=bpf_ntohl(ctx->local_ip6[0]);
+        info.dstIP6.b=bpf_ntohl(ctx->local_ip6[1]);
+        info.dstIP6.c=bpf_ntohl(ctx->local_ip6[2]);
+        info.dstIP6.d=bpf_ntohl(ctx->local_ip6[3]);
 
 
 
