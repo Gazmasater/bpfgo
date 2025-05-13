@@ -407,48 +407,15 @@ gcc -o send_udp send_udp.c
 
 
 
-fmt.Printf("!!!!!!!!STATE=3!!!!!!! DST IPv6=%x:%x:%x:%x\n",
-	binary.BigEndian.Uint16(toBytes(event.DstIP6[0])[0:2]),
-	binary.BigEndian.Uint16(toBytes(event.DstIP6[0])[2:4]),
-	binary.BigEndian.Uint16(toBytes(event.DstIP6[1])[0:2]),
-	binary.BigEndian.Uint16(toBytes(event.DstIP6[1])[2:4]),
-)
-
-
-func toBytes(val uint32) []byte {
-	var buf [4]byte
-	binary.BigEndian.PutUint32(buf[:], val)
-	return buf[:]
-}
-
-fmt.Printf("STATE=3 SRC IPv6=%x:%x:%x:%x:%x:%x:%x:%x\n",
-						event.SrcIP6[0],
-						event.SrcIP6[1],
-						event.SrcIP6[2],
-						event.SrcIP6[3],
-						event.SrcIP6[4],
-						event.SrcIP6[5],
-						event.SrcIP6[6],
-						event.SrcIP6[7],
-					)
-
-
-     func ntohs(x uint16) uint16 {
-	return (x>>8)&0xFF | (x<<8)&0xFF00
- 
-}
-
-
-fmt.Printf("STATE=3 SRC IPv6=%x:%x:%x:%x:%x:%x:%x:%x\n",
-	ntohs(event.SrcIP6[0]),
-	ntohs(event.SrcIP6[1]),
-	ntohs(event.SrcIP6[2]),
-	ntohs(event.SrcIP6[3]),
-	ntohs(event.SrcIP6[4]),
-	ntohs(event.SrcIP6[5]),
-	ntohs(event.SrcIP6[6]),
-	ntohs(event.SrcIP6[7]),
-)
-
-
-   
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "137",
+	"severity": 8,
+	"message": "expression must be a modifiable lvalue",
+	"source": "C/C++",
+	"startLineNumber": 740,
+	"startColumn": 9,
+	"endLineNumber": 740,
+	"endColumn": 13
+}]
