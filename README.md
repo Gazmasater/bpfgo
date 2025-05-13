@@ -409,51 +409,12 @@ gcc -o send_udp send_udp.c
 
 
 
-struct ipv6_addr_packed {
-    __u32 a;
-    __u32 b;
-    __u32 c;
-    __u32 d;
-} __attribute__((packed));
-
-struct trace_info {
-    // IPv4
-    struct in_addr srcIP;
-    struct in_addr dstIP;
-
-    // IPv6 (используем при AF_INET6)
-    struct ipv6_addr_packed srcIP6;
-    struct ipv6_addr_packed dstIP6;
-
-    __u16 sport;
-    __u16 dport;
-
-    __u32 pid;
-    __u32 proto;
-    __u32 sysexit;
-    __u32 state;
-
-    __u16 family;
-    __u16 _pad;      // Выравнивание до 4 байт
-
-    char comm[32];
-} __attribute__((packed));
+__builtin_memcpy(info.srcIP6, ctx->local_ip6, sizeof(info.srcIP6));
+__builtin_memcpy(info.dstIP6, ctx->remote_ip6, sizeof(info.dstIP6));
 
 
- if (bpf_probe_read_kernel(&info.srcIP6, sizeof(info.srcIP6), ctx->local_ip6) < 0)
-            return SK_PASS;
-
-        if (bpf_probe_read_kernel(&info.dstIP6, sizeof(info.dstIP6), ctx->remote_ip6) < 0)
-            return SK_PASS;
-
-
-info.dstIP6.a=bpf_ntohl(ctx->local_ip6[0]);
-        info.dstIP6.b=bpf_ntohl(ctx->local_ip6[1]);
-        info.dstIP6.c=bpf_ntohl(ctx->local_ip6[2]);
-        info.dstIP6.d=bpf_ntohl(ctx->local_ip6[3]);
-
-
-
+  __bpf_memcpy(info.srcIP6, ctx->local_ip6, sizeof(info.srcIP6));
+        __bpf_memcpy(info.dstIP6, ctx->remote_ip6, sizeof(info.dstIP6));
 
 
 
