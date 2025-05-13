@@ -417,19 +417,28 @@ struct ipv6_addr_packed {
 } __attribute__((packed));
 
 struct trace_info {
-    __u32 srcIP;
-    __u32 dstIP;
+    // IPv4
+    struct in_addr srcIP;
+    struct in_addr dstIP;
 
+    // IPv6 (используем при AF_INET6)
     struct ipv6_addr_packed srcIP6;
     struct ipv6_addr_packed dstIP6;
 
     __u16 sport;
     __u16 dport;
 
-    __u8 proto;
-    __u8 family;
-    __u8 sysexit;
+    __u32 pid;
+    __u32 proto;
+    __u32 sysexit;
+    __u32 state;
+
+    __u16 family;
+    __u16 _pad;      // Выравнивание до 4 байт
+
+    char comm[32];
 } __attribute__((packed));
+
 
 __builtin_memcpy(&info.srcIP6, ctx->local_ip6, 16);
 __builtin_memcpy(&info.dstIP6, ctx->remote_ip6, 16);
