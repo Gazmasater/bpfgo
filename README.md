@@ -408,8 +408,18 @@ gcc -o send_udp send_udp.c
 
 
 fmt.Printf("!!!!!!!!STATE=3!!!!!!! DST IPv6=%x:%x:%x:%x\n",
-						ntohl((event.DstIP6[0])), event.DstIP6[1],
-						event.DstIP6[2], event.DstIP6[3])
+	binary.BigEndian.Uint16(toBytes(event.DstIP6[0])[0:2]),
+	binary.BigEndian.Uint16(toBytes(event.DstIP6[0])[2:4]),
+	binary.BigEndian.Uint16(toBytes(event.DstIP6[1])[0:2]),
+	binary.BigEndian.Uint16(toBytes(event.DstIP6[1])[2:4]),
+)
+
+
+func toBytes(val uint32) []byte {
+	var buf [4]byte
+	binary.BigEndian.PutUint32(buf[:], val)
+	return buf[:]
+}
 
 
 
