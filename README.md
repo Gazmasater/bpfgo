@@ -407,6 +407,8 @@ gcc -o send_udp send_udp.c
 
 
 
+__builtin_memcpy(info.srcIP6, ctx->local_ip6.addr, sizeof(info.srcIP6));
+__builtin_memcpy(info.dstIP6, ctx->remote_ip6.addr, sizeof(info.dstIP6));
 
 
 __builtin_memcpy(info.srcIP6, ctx->local_ip6, sizeof(info.srcIP6));
