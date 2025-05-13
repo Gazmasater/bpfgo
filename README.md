@@ -406,8 +406,34 @@ gcc -o send_udp send_udp.c
 ./send_udp
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/test$ git add .
-fatal: not a git repository (or any of the parent directories): .git
+SEC("sk_lookup")
+int look_up(struct bpf_sk_lookup *ctx) {
+    struct trace_info info = {};
+    info.proto = ctx->protocol;
+    info.sysexit = 3;
+    info.family = ctx->family;
+
+    if (ctx->family == AF_INET) {
+        info.srcIP = ctx->local_ip4;
+        info.dstIP = ctx->remote_ip4;
+        info.sport = ctx->local_port;
+        info.dport = bpf_ntohs(ctx->remote_port);
+
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+    } else if (ctx->family == AF_INET6) {
+        // Прямая копия без массивов
+        __builtin_memcpy(&info.srcIP6_0, ctx->local_ip6, 16);
+        __builtin_memcpy(&info.dstIP6_0, ctx->remote_ip6, 16);
+
+        info.sport = ctx->local_port;
+        info.dport = bpf_ntohs(ctx->remote_port);
+
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    }
+
+    return SK_PASS;
+}
 
 
 
