@@ -409,23 +409,31 @@ gcc -o send_udp send_udp.c
 
 
 
+struct ipv6_addr_packed {
+    __u32 a;
+    __u32 b;
+    __u32 c;
+    __u32 d;
+} __attribute__((packed));
+
 struct trace_info {
-    __u32 srcIP;           // IPv4
+    __u32 srcIP;
     __u32 dstIP;
-    __u32 srcIP6_0;        // IPv6: 4 части
-    __u32 srcIP6_1;
-    __u32 srcIP6_2;
-    __u32 srcIP6_3;
-    __u32 dstIP6_0;
-    __u32 dstIP6_1;
-    __u32 dstIP6_2;
-    __u32 dstIP6_3;
+
+    struct ipv6_addr_packed srcIP6;
+    struct ipv6_addr_packed dstIP6;
+
     __u16 sport;
     __u16 dport;
+
     __u8 proto;
     __u8 family;
     __u8 sysexit;
-};
+} __attribute__((packed));
+
+__builtin_memcpy(&info.srcIP6, ctx->local_ip6, 16);
+__builtin_memcpy(&info.dstIP6, ctx->remote_ip6, 16);
+
 
 
 
