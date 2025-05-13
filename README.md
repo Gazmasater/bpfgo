@@ -407,6 +407,82 @@ gcc -o send_udp send_udp.c
 
 
 
+struct trace_info {
+    // IPv4
+    struct sockaddr_in ssrcIP;
+    struct sockaddr_in ddstIP; 
+    struct in_addr srcIP;
+    struct in_addr dstIP;
+
+    __u32 srcIP6[4];
+    __u32 dstIP6[4];
+    __u16 sport;
+    __u16 dport;
+
+    __u32 pid;
+    __u32 proto;
+    __u32 sysexit;
+    __u32 state;
+
+    __u16 family;
+
+    char comm[32];
+} ;
+
+SEC("sk_lookup")
+int look_up(struct bpf_sk_lookup *ctx) {
+    struct trace_info info = {};
+
+    __u32 proto = ctx->protocol;
+
+    if (ctx->family == AF_INET) {
+        struct in_addr srcIP={};
+        struct in_addr dstIP={};
+     //   srcIP.s_addr=ctx->local_ip4;
+     //   dstIP.s_addr=ctx->remote_ip4;
+
+        
+
+       // __u32 srcPort = ctx->local_port;
+     //   __u16 dstPort = bpf_ntohs(ctx->remote_port);
+
+        info.srcIP.s_addr = ctx->local_ip4;
+        info.sport = ctx->local_port;
+        info.dstIP.s_addr = ctx->remote_ip4;
+        info.dport = bpf_ntohs(ctx->remote_port);
+
+        info.sysexit = 3;
+        info.proto = proto;
+        info.family=AF_INET;
+
+       bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+    } else if (ctx->family == AF_INET6) {
+
+        info.srcIP6=bpf_ntohl(ctx->local_ip6[0]);
+        info.srcIP6=bpf_ntohl(ctx->local_ip6[1]);
+        info.srcIP6=bpf_ntohl(ctx->local_ip6[2]);
+        info.srcIP6=bpf_ntohl(ctx->local_ip6[3]);
+    
+        info.dstIP6[0]=bpf_ntohl(ctx->remote_ip6[0]);
+        info.dstIP6[1]=bpf_ntohl(ctx->remote_ip6[1]);
+        info.dstIP6[2]=bpf_ntohl(ctx->remote_ip6[2]);
+        info.dstIP6[3]=bpf_ntohl(ctx->remote_ip6[3]);
+
+        info.sport = ctx->local_port;
+        info.dport = bpf_ntohs(ctx->remote_port);
+        info.family=ctx->family;
+        info.sysexit = 3;
+        info.proto=ctx->protocol;
+
+
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+    }
+
+    return SK_PASS;
+}
+
 [{
 	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
 	"owner": "C/C++: IntelliSense",
@@ -419,3 +495,4 @@ gcc -o send_udp send_udp.c
 	"endLineNumber": 740,
 	"endColumn": 13
 }]
+
