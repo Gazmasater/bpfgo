@@ -44,20 +44,10 @@ type bpfTraceInfo struct {
 		SinAddr   struct{ S_addr uint32 }
 		Pad       [8]uint8
 	}
-	SrcIP  struct{ S_addr uint32 }
-	DstIP  struct{ S_addr uint32 }
-	SrcIP6 struct {
-		A uint32
-		B uint32
-		C uint32
-		D uint32
-	}
-	DstIP6 struct {
-		A uint32
-		B uint32
-		C uint32
-		D uint32
-	}
+	SrcIP   struct{ S_addr uint32 }
+	DstIP   struct{ S_addr uint32 }
+	SrcIP6  [4]uint32
+	DstIP6  [4]uint32
 	Sport   uint16
 	Dport   uint16
 	Pid     uint32
@@ -65,8 +55,8 @@ type bpfTraceInfo struct {
 	Sysexit uint32
 	State   uint32
 	Family  uint16
-	Pad     uint16
 	Comm    [32]int8
+	_       [2]byte
 }
 
 // loadBpf returns the embedded CollectionSpec for bpf.
