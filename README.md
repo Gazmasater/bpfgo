@@ -406,6 +406,29 @@ gcc -o send_udp send_udp.c
 ./send_udp
 
 
+
+
+
+struct trace_info {
+    __u32 srcIP;           // IPv4
+    __u32 dstIP;
+    __u32 srcIP6_0;        // IPv6: 4 части
+    __u32 srcIP6_1;
+    __u32 srcIP6_2;
+    __u32 srcIP6_3;
+    __u32 dstIP6_0;
+    __u32 dstIP6_1;
+    __u32 dstIP6_2;
+    __u32 dstIP6_3;
+    __u16 sport;
+    __u16 dport;
+    __u8 proto;
+    __u8 family;
+    __u8 sysexit;
+};
+
+
+
 SEC("sk_lookup")
 int look_up(struct bpf_sk_lookup *ctx) {
     struct trace_info info = {};
