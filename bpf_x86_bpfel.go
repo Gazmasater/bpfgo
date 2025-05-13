@@ -44,16 +44,28 @@ type bpfTraceInfo struct {
 		SinAddr   struct{ S_addr uint32 }
 		Pad       [8]uint8
 	}
-	SrcIP   struct{ S_addr uint32 }
-	DstIP   struct{ S_addr uint32 }
+	SrcIP  struct{ S_addr uint32 }
+	DstIP  struct{ S_addr uint32 }
+	SrcIP6 struct {
+		A uint32
+		B uint32
+		C uint32
+		D uint32
+	}
+	DstIP6 struct {
+		A uint32
+		B uint32
+		C uint32
+		D uint32
+	}
 	Sport   uint16
-	_       [2]byte
+	Dport   uint16
 	Pid     uint32
 	Proto   uint32
 	Sysexit uint32
 	State   uint32
 	Family  uint16
-	Dport   uint16
+	Pad     uint16
 	Comm    [32]int8
 }
 

@@ -195,22 +195,37 @@ struct {
 //     char comm[64];
 // };
 
+struct ipv6_addr_packed {
+    __u32 a;
+    __u32 b;
+    __u32 c;
+    __u32 d;
+} ;
+
 struct trace_info {
+    // IPv4
     struct sockaddr_in ssrcIP;
-    struct sockaddr_in ddstIP;    
+    struct sockaddr_in ddstIP; 
     struct in_addr srcIP;
     struct in_addr dstIP;
+
+    // IPv6 (используем при AF_INET6)
+    struct ipv6_addr_packed srcIP6;
+    struct ipv6_addr_packed dstIP6;
+
     __u16 sport;
-    u32 pid;
-    u32 proto;
-    u32 sysexit;
-    u32 state;
-    // __u8 saddr6[16];
-    // __u8 daddr6[16];
-    u16 family;
-    u16 dport;   
+    __u16 dport;
+
+    __u32 pid;
+    __u32 proto;
+    __u32 sysexit;
+    __u32 state;
+
+    __u16 family;
+    __u16 _pad;      // Выравнивание до 4 байт
+
     char comm[32];
-};
+} ;
 
 
 
@@ -569,7 +584,7 @@ int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
         // info.dstIP6[1] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[1]);
         // info.dstIP6[2] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[2]);
         // info.dstIP6[3] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[3]);
-        // bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
     }
 
@@ -730,10 +745,20 @@ int look_up(struct bpf_sk_lookup *ctx) {
 
     } else if (ctx->family == AF_INET6) {
 
-        // info.srcIP6[0]=bpf_ntohl(ctx->local_ip6[0]);
-        // info.srcIP6[1]=bpf_ntohl(ctx->local_ip6[1]);
-        // info.srcIP6[2]=bpf_ntohl(ctx->local_ip6[2]);
-        // info.srcIP6[3]=bpf_ntohl(ctx->local_ip6[3]);
+
+        // info.dstIP6.a=bpf_ntohl(ctx->local_ip6[0]);
+        // info.dstIP6.b=bpf_ntohl(ctx->local_ip6[1]);
+        // info.dstIP6.c=bpf_ntohl(ctx->local_ip6[2]);
+        // info.dstIP6.d=bpf_ntohl(ctx->local_ip6[3]);
+  __bpf_memcpy(info.srcIP6, ctx->local_ip6, sizeof(info.srcIP6));
+  __bpf_memcpy(info.dstIP6, ctx->remote_ip6, sizeof(info.dstIP6));
+       
+    // if (bpf_probe_read_kernel(&info.srcIP6, sizeof(info.srcIP6), (void*)ctx->local_ip6) < 0)
+    //     return SK_PASS;
+
+    // if (bpf_probe_read_kernel(&info.dstIP6, sizeof(info.dstIP6), (void *)ctx->remote_ip6) < 0)
+    //     return SK_PASS;
+   
 
         // info.dstIP6[0]=bpf_ntohl(ctx->remote_ip6[0]);
         // info.dstIP6[1]=bpf_ntohl(ctx->remote_ip6[1]);
@@ -742,12 +767,12 @@ int look_up(struct bpf_sk_lookup *ctx) {
 
         info.sport = ctx->local_port;
         info.dport = bpf_ntohs(ctx->remote_port);
-        info.family=AF_INET6;
+        info.family=ctx->family;
         info.sysexit = 3;
         info.proto=ctx->protocol;
 
 
-     //   bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
     }
 

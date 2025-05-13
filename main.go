@@ -263,14 +263,14 @@ func main() {
 						if data.Lookup.DstIP.IsLoopback() {
 							dsthost = "localhost"
 						} else {
-							dsthost = pkg.ResolveIP(dstIP)
+							dsthost = pkg.ResolveIP(data.Lookup.DstIP)
 
 						}
 
 						if data.Lookup.SrcIP.IsLoopback() {
 							srchost = "localhost"
 						} else {
-							srchost = pkg.ResolveIP(srcIP)
+							srchost = pkg.ResolveIP(data.Lookup.SrcIP)
 
 						}
 
@@ -370,6 +370,7 @@ func main() {
 					}
 
 				} else if event.Family == 10 {
+					fmt.Println("SENDMSG66666666666666666666")
 					// port := event.Dpor
 					// pid := event.Pid
 					// fmt.Printf("STATE=11 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d  NAME=%s\n",
@@ -552,6 +553,7 @@ func main() {
 			if event.Sysexit == 3 {
 
 				family := event.Family
+				fmt.Printf("LOOKUP FAMILY=%d\n", event.Family)
 				if family == 2 {
 
 					// dstAddr := fmt.Sprintf("//%s[%s]:%d", pkg.ResolveIP(dstIP), dstIP.String(), event.Dport)
@@ -601,18 +603,18 @@ func main() {
 						if data.Lookup.DstIP.IsLoopback() {
 							dsthost = "localhost"
 						} else {
-							dsthost = pkg.ResolveIP(dstIP)
+							dsthost = pkg.ResolveIP(data.Lookup.DstIP)
 
 						}
 
 						if data.Lookup.SrcIP.IsLoopback() {
 							srchost = "localhost"
 						} else {
-							srchost = pkg.ResolveIP(srcIP)
+							srchost = pkg.ResolveIP(data.Lookup.SrcIP)
 
 						}
 
-						fmt.Printf("LOOKUP PID=%d NAME=%s %s/%s[%s]:%d->%s[%s]:%d\n",
+						fmt.Printf("LOOKUP PID=%d NAME=%s %s/%s[%s]:%d<-%s[%s]:%d\n",
 							data.Sendmsg.Pid,
 							data.Sendmsg.Comm,
 							proto,
@@ -642,15 +644,17 @@ func main() {
 
 				} else if family == 10 {
 
-					// 		// fmt.Printf("STATE=3 DST IPv6=%x:%x:%x:%x\n",
-					// 		// 	event.DstIP6[0], event.DstIP6[1],
-					// 		// 	event.DstIP6[2], event.DstIP6[3])
+					fmt.Println("IP6!!!!! LOOKUP")
 
-					// 		// fmt.Printf("STATE=3 SRC IPv6=%x:%x:%x:%x\n",
-					// 		// 	event.SrcIP6[0], event.SrcIP6[1],
-					// 		// 	event.SrcIP6[2], event.SrcIP6[3])
+					fmt.Printf("!!!!!!!!STATE=3!!!!!!! DST IPv6=%x:%x:%x:%x\n",
+						event.DstIP6.A, event.DstIP6.B,
+						event.DstIP6.C, event.DstIP6.D)
 
-					// 		// fmt.Printf("STATE=3 SPORT=%d  DPORT=%d PROTO=%d\n", event.Sport, event.Dport, event.Proto)
+					// fmt.Printf("STATE=3 SRC IPv6=%x:%x:%x:%x\n",
+					// 	event.SrcIP6[0], event.SrcIP6[1],
+					//	event.SrcIP6[2], event.SrcIP6[3]
+
+					fmt.Printf("STATE=3 SPORT=%d  DPORT=%d PROTO=%d\n", event.Sport, event.Dport, event.Proto)
 
 				}
 
