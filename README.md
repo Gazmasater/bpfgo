@@ -412,6 +412,19 @@ gcc -o send_udp send_udp.c
 __builtin_memcpy(info.srcIP6, ctx->local_ip6, sizeof(info.srcIP6));
 __builtin_memcpy(info.dstIP6, ctx->remote_ip6, sizeof(info.dstIP6));
 
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "167",
+	"severity": 8,
+	"message": "argument of type \"struct ipv6_addr_packed\" is incompatible with parameter of type \"void *\"",
+	"source": "C/C++",
+	"startLineNumber": 753,
+	"startColumn": 19,
+	"endLineNumber": 753,
+	"endColumn": 23
+}]
+
 
   __bpf_memcpy(info.srcIP6, ctx->local_ip6, sizeof(info.srcIP6));
         __bpf_memcpy(info.dstIP6, ctx->remote_ip6, sizeof(info.dstIP6));
