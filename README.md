@@ -407,29 +407,44 @@ gcc -o send_udp send_udp.c
 
 
 
-} else if (sa.sin_family==AF_INET6) {
+} else if (sa.sin_family == AF_INET6) {
+    struct sockaddr_in6 sa6_full = {};
 
-        u32 port=bpf_ntohs(sa6.sin6_port);
-        
+    // Считаем полную структуру sockaddr_in6
+    if (bpf_probe_read_user(&sa6_full, sizeof(sa6_full), &msg->msg_name) < 0) {
+        return 0;
+    }
 
-        if (port==0) {
-            return 0;
-        }
+    u32 port = bpf_ntohs(sa6_full.sin6_port);
+    if (port == 0) {
+        return 0;
+    }
 
-        bpf_printk("sys_exit_recvmsg IP6 PORT=%d",port);
+    bpf_printk("sys_exit_recvmsg IP6 PORT=%d", port);
 
-        info.sysexit=12;
-        info.family=AF_INET6;
-        info.sport=port;
-        info.pid=pid;
+    info.sysexit = 12;
+    info.family = AF_INET6;
+    info.sport = port;
+    info.pid = pid;
 
-        // info.srcIP6[0] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[0]);
-        // info.srcIP6[1] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[1]);
-        // info.srcIP6[2] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[2]);
-        // info.srcIP6[3] = bpf_ntohl(*(__u32 *)&sa6.sin6_addr.in6_u.u6_addr8[3]);
-       //  bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    // Считываем IPv6-адрес целиком
+    if (bpf_probe_read_user(info.srcIP6, sizeof(info.srcIP6),
+        &sa6_full.sin6_addr.in6_u.u6_addr32) < 0) {
+        return 0;
+    }
 
-    }}
+    // Преобразуем к host byte order
+    info.srcIP6[0] = bpf_ntohl(info.srcIP6[0]);
+    info.srcIP6[1] = bpf_ntohl(info.srcIP6[1]);
+    info.srcIP6[2] = bpf_ntohl(info.srcIP6[2]);
+    info.srcIP6[3] = bpf_ntohl(info.srcIP6[3]);
+
+    if (__builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm)) < 0) {
+        return 0;
+    }
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+}
 
 
 
