@@ -353,120 +353,152 @@ while true; do
   nc -zv 127.0.0.1 80 2>/dev/null
 done
 
-
-
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
-int main() {
-    int sock = socket(AF_INET6, SOCK_DGRAM, 0);
-    if (sock < 0) {
-        perror("socket");
-        return 1;
-    }
-
-    struct sockaddr_in6 addr = {};
-    addr.sin6_family = AF_INET6;
-    addr.sin6_addr = in6addr_any;
-    addr.sin6_port = htons(12345);
-
-    if (bind(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        perror("bind");
-        close(sock);
-        return 1;
-    }
-
-    printf("Server listening on [::]:12345\n");
-
-    char buf[256];
-    struct iovec iov = {
-        .iov_base = buf,
-        .iov_len = sizeof(buf)
-    };
-
-    struct sockaddr_in6 src_addr = {};
-    struct msghdr msg = {
-        .msg_name = &src_addr,
-        .msg_namelen = sizeof(src_addr),
-        .msg_iov = &iov,
-        .msg_iovlen = 1,
-    };
-
-    ssize_t n = recvmsg(sock, &msg, 0);
-    if (n < 0) {
-        perror("recvmsg");
-        close(sock);
-        return 1;
-    }
-
-    char addr_str[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET6, &src_addr.sin6_addr, addr_str, sizeof(addr_str));
-
-    printf("Received %zd bytes from [%s]:%d: %.*s\n",
-           n, addr_str, ntohs(src_addr.sin6_port), (int)n, buf);
-
-    close(sock);
-    return 0;
-}
-
-
-
-
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
-int main() {
-    int sock = socket(AF_INET6, SOCK_DGRAM, 0);
-    if (sock < 0) {
-        perror("socket");
-        return 1;
-    }
-
-    struct sockaddr_in6 dest = {};
-    dest.sin6_family = AF_INET6;
-    inet_pton(AF_INET6, "::1", &dest.sin6_addr);
-    dest.sin6_port = htons(12345);
-
-    const char *msg = "hello from client via sendmsg";
-    struct iovec iov = {
-        .iov_base = (void *)msg,
-        .iov_len = strlen(msg)
-    };
-
-    struct msghdr msgh = {
-        .msg_name = &dest,
-        .msg_namelen = sizeof(dest),
-        .msg_iov = &iov,
-        .msg_iovlen = 1,
-    };
-
-    ssize_t sent = sendmsg(sock, &msgh, 0);
-    if (sent < 0) {
-        perror("sendmsg");
-        close(sock);
-        return 1;
-    }
-
-    printf("Client sent %zd bytes to [::1]:12345\n", sent);
-
-    close(sock);
-    return 0;
-}
-
-
-
 gcc server.c -o server
 gcc client.c -o client
+
+
+SEC("tracepoint/syscalls/sys_enter_sendmsg")
+int trace_sendmsg_enter(struct sys_enter_sendmsg_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct conn_info_t conn_info = {};
+    
+
+    conn_info.pid = pid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+
+    struct msghdr *addr = (struct msghdr *)ctx->msg;  
+
+    bpf_printk("sys_enter_sendmsg addr=%p",addr);
+    bpf_map_update_elem(&addrSend_map, &pid, &addr, BPF_ANY);
+
+
+    return 0;
+}
+
+
+SEC("tracepoint/syscalls/sys_exit_sendmsg")
+int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    long ret = ctx->ret;
+
+
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
+    if (!conn_info) {
+        bpf_printk("No conn_info for pid=%d", pid);
+        return 0;
+    }
+
+    if (ret < 0) {
+        bpf_printk("recvmsg failed for PID=%d", pid);
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        return 0;
+    }
+
+
+
+    // Получаем указатель на msghdr
+    struct msghdr **addr_ptr = bpf_map_lookup_elem(&addrSend_map, &pid);
+    if (!addr_ptr) {
+        bpf_printk("No addr_ptr for pid=%d", pid);
+        return 0;
+    }
+
+
+
+    struct msghdr *msg;
+
+   if (bpf_probe_read_user(&msg, sizeof(msg), *addr_ptr)<0){
+    return 0;
+   }
+
+    if (!msg) {
+        bpf_printk("msg is NULL for pid=%d", pid);
+        return 0;
+    }
+
+    
+    struct sockaddr_in sa = {};
+    struct sockaddr_in6 sa6 = {};
+    struct trace_info info = {};
+   
+   if( __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm))<0){
+    return 0;
+   }
+
+  if  (bpf_probe_read_user(&sa, sizeof(sa), &msg->msg_name)<0){
+    return 0;
+  }
+   if (bpf_probe_read_user(&sa6, sizeof(sa6), &msg->msg_name)<0){
+    return 0;
+   }
+
+  //    bpf_printk("SENDMSG6 NAME=%s ",conn_info->comm);
+
+
+
+    if (sa.sin_family==AF_INET) {
+
+     u32   port=bpf_ntohs(sa.sin_port);
+     u32   ip=bpf_ntohl(sa.sin_addr.s_addr);
+     info.pid=conn_info->pid;
+     info.ddstIP.sin_addr.s_addr=ip;
+     info.dport = port;
+     info.family=AF_INET;  
+     info.sysexit=11;
+     info.proto=conn_info->proto;
+     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+
+    } else if (sa.sin_family==AF_INET6) {
+
+
+
+    struct sockaddr_in6 sa6_full = {};
+    // Считаем полную структуру IPv6 адреса
+    if (bpf_probe_read_user(&sa6_full, sizeof(sa6_full), &msg->msg_name) < 0) {
+        return 0;
+    }
+
+
+
+    u32 port = bpf_ntohs(sa6_full.sin6_port);
+    if (port == 0) {
+        return 0;
+    }
+
+    bpf_printk("sys_exit_sendmsg IP6 PORT=%d", port);
+
+    info.sysexit = 11;
+    info.family = AF_INET6;
+    info.dport = port;
+    info.pid = conn_info->pid;
+    info.proto = conn_info->proto;
+
+
+    // Копируем IPv6 адрес одним вызовом
+    if (bpf_probe_read_user(info.dstIP6, sizeof(info.dstIP6),
+        &sa6_full.sin6_addr.in6_u.u6_addr32) < 0) {
+    bpf_printk("SENDMSG6 ERROR");
+
+        return 0;
+    }
+
+    bpf_printk("SENDMSG6 NAME=%s FAMILY=%d PORT=%d",conn_info->comm, sa.sin_family,port);
+
+
+    
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+    }
+
+    bpf_map_delete_elem(&addrSend_map, &pid);
+    bpf_map_delete_elem(&conn_info_map, &pid);
+    return 0;
+}
+
 
 
 
