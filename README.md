@@ -483,6 +483,8 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
         info.sport = port;
         info.family=AF_INET;           
         info.pid=pid;
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
                     
     } else if (addr.sa_family==AF_INET6) {
 
@@ -520,6 +522,7 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
     return 0;
 
 }
+
 
 
 
