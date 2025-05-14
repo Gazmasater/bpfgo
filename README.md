@@ -596,6 +596,9 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
     }
 
 
+bpf_printk("sizeof(trace_info) = %d\n", (int)sizeof(struct trace_info));
+
+
 
     bpf_map_delete_elem(&addrRecv_map, &pid);
     bpf_map_delete_elem(&conn_info_map, &pid);
