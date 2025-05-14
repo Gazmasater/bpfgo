@@ -361,7 +361,7 @@ struct
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 1024);
     __type(key, u32);
-    __type(value, struct sockaddr);
+    __type(value, struct sockaddr*);
 } addrSend_map SEC(".maps");
 
 struct
@@ -369,7 +369,7 @@ struct
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 1024);
     __type(key, u32);
-    __type(value, struct sockaddr);
+    __type(value, struct sockaddr*);
 } addrRecv_map SEC(".maps");
 
 SEC("tracepoint/syscalls/sys_enter_sendto")
@@ -605,6 +605,14 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
     return 0;
 
 }
+
+
+u16 family = 0;
+if (bpf_probe_read_user(&family, sizeof(family), (void *)*addr_ptr) < 0) {
+    bpf_printk("recvfrom: cannot read sa_family\n");
+    return 0;
+}
+
 
 
 
