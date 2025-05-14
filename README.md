@@ -372,6 +372,28 @@ struct
     __type(value, struct sockaddr);
 } addrRecv_map SEC(".maps");
 
+SEC("tracepoint/syscalls/sys_enter_sendto")
+int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct conn_info_t conn_info = {};
+
+    conn_info.pid = pid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+    
+    if (!ctx->addr) return 0;
+
+
+    struct sockaddr *addr = (struct sockaddr *)ctx->addr;  
+
+    bpf_map_update_elem(&addrSend_map, &pid, &addr, BPF_ANY);
+
+
+    return 0;
+}
+
+
 SEC("tracepoint/syscalls/sys_exit_sendto")
 int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
@@ -447,7 +469,7 @@ info.pid = conn_info->pid;
     info.family = AF_INET6;
     info.dport = port;
 
-    if (bpf_probe_read_kernel(info.dstIP6, sizeof(info.dstIP6),&addr_in6.sin6_addr) < 0) {
+    if (bpf_probe_read_kernel(info.ddstIP6, sizeof(info.ddstIP6),&addr_in6.sin6_addr) < 0) {
         return 0;
     }        
 
@@ -472,6 +494,9 @@ int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx) {
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+
+    if (!ctx->addr) return 0;
+
 
     struct sockaddr *addr = (struct sockaddr *)ctx->addr;  
 
@@ -560,7 +585,7 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
     info.sport = port6;
 
     // Чтение IPv6-адреса целиком через bpf_probe_read_user без цикла
-    if (bpf_probe_read_user(&info.srcIP6, sizeof(info.srcIP6), &addr_in6.sin6_addr) < 0) {
+    if (bpf_probe_read_user(&info.ssrcIP6, sizeof(info.ssrcIP6), &addr_in6.sin6_addr) < 0) {
     return 0;
 }
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
@@ -580,9 +605,6 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
     return 0;
 
 }
-
-
-if (!ctx->addr) return 0;
 
 
 
