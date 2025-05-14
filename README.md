@@ -357,12 +357,90 @@ gcc server.c -o server
 gcc client.c -o client
 
 
-struct in6_addr tmp6 = {};
-if (bpf_probe_read_user(&tmp6, sizeof(tmp6), &sa6_full.sin6_addr) < 0) {
-    bpf_printk("SENDMSG6 ERROR");
+
+
+
+SEC("tracepoint/syscalls/sys_exit_sendmsg")
+int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    long ret = ctx->ret;
+
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
+    if (!conn_info) return 0;
+
+    if (ret < 0) {
+        bpf_printk("sys_exit_sendmsg failed for PID=%d\n", pid);
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        return 0;
+    }
+
+    struct msghdr **msg_ptr = bpf_map_lookup_elem(&addrSend_map, &pid);
+    if (!msg_ptr) {
+        return 0;
+    }
+
+    struct msghdr *msg = NULL;
+    if (bpf_probe_read_user(&msg, sizeof(msg), *msg_ptr) < 0) {
+        return 0;
+    }
+
+    if (!msg) return 0;
+
+    struct trace_info info = {};
+    __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+    info.sysexit = 11;
+    info.pid = conn_info->pid;
+
+    // Пробуем прочитать family из msg->msg_name
+    u16 family = 0;
+    if (bpf_probe_read_user(&family, sizeof(family), (void *)msg->msg_name) < 0) {
+        return 0;
+    }
+
+    if (family == AF_INET) {
+        struct sockaddr_in sa = {};
+        if (bpf_probe_read_user(&sa, sizeof(sa), (void *)msg->msg_name) < 0) {
+            return 0;
+        }
+
+        u16 port = bpf_ntohs(sa.sin_port);
+        if (port == 0) return 0;
+
+        info.family = AF_INET;
+        info.dport = port;
+        info.ddstIP.sin_addr.s_addr = sa.sin_addr.s_addr;
+
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+    } else if (family == AF_INET6) {
+        u16 port = 0;
+        __u8 tmp6[16] = {};
+
+        if (bpf_probe_read_user(&port, sizeof(port), ((char *)msg->msg_name) + 2) < 0) {
+            bpf_printk("SENDMSG6: port read failed");
+            return 0;
+        }
+
+        info.family = AF_INET6;
+        info.dport = bpf_ntohs(port);
+
+        if (bpf_probe_read_user(tmp6, sizeof(tmp6), ((char *)msg->msg_name) + 8) < 0) {
+            bpf_printk("SENDMSG6: addr read failed");
+            return 0;
+        }
+
+        __builtin_memcpy(&info.dstIP6, tmp6, sizeof(tmp6));
+
+        bpf_printk("SENDMSG6 pid=%d port=%d", pid, info.dport);
+
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    }
+
+    bpf_map_delete_elem(&addrSend_map, &pid);
+    bpf_map_delete_elem(&conn_info_map, &pid);
     return 0;
 }
-__builtin_memcpy(&info.dstIP6, &tmp6, sizeof(tmp6));
+
 
 
 
