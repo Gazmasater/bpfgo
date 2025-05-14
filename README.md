@@ -370,3 +370,21 @@ fmt.Printf("STATE=12 IPv6 PID=%d IPv6=%x.%x.%x.%x.%x.%x.%x.%x:%d NAME=%s\n",
 						port,
 						pkg.Int8ToString(event.Comm),
 					)
+
+
+     func IPv6FromUint16(words [8]uint16) net.IP {
+    b := make([]byte, 16)
+    for i := 0; i < 8; i++ {
+        binary.BigEndian.PutUint16(b[i*2:], words[i])
+    }
+    return net.IP(b)
+}
+
+
+fmt.Printf("STATE=12 IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
+    pid,
+    IPv6FromUint16(event.SsrcIP6).String(),
+    port,
+    pkg.Int8ToString(event.Comm),
+)
+
