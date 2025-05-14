@@ -453,3 +453,7 @@ info.pid = conn_info->pid;
     return 0;
 
 }
+
+
+__builtin_memcpy(&info.ddstIP6, &addr_in6.sin6_addr.in6_u.u6_addr16, sizeof(info.ddstIP6));
+
