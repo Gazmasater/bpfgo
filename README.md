@@ -582,6 +582,7 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
 }
 
 
+if (!ctx->addr) return 0;
 
 
 
