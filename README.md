@@ -388,3 +388,15 @@ fmt.Printf("STATE=12 IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
     pkg.Int8ToString(event.Comm),
 )
 
+
+func IPv6FromUint16LE(words [8]uint16) net.IP {
+    b := make([]byte, 16)
+    for i := 0; i < 8; i++ {
+        // Меняем порядок байтов: little-endian → big-endian
+        b[i*2] = byte(words[i] >> 8)
+        b[i*2+1] = byte(words[i] & 0xff)
+    }
+    return net.IP(b)
+}
+
+
