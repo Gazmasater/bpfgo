@@ -357,56 +357,9 @@ gcc server.c -o server
 gcc client.c -o client
 
 
-SEC("tracepoint/sock/inet_sock_set_state")
-int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
+    __builtin_memcpy(&info.srcIP6, ctx->saddr_v6, sizeof(info.srcIP6));
+    __builtin_memcpy(&info.dstIP6, ctx->daddr_v6, sizeof(info.dstIP6));
 
-    struct trace_info info = {};
-
-
-    __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
-
-    if (ctx->family==AF_INET) {
-
-    struct in_addr  srcip={};
-    struct in_addr  dstip={};
-
-
-    bpf_get_current_comm(&info.comm, sizeof(info.comm));
-
-
-
-    if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
-     if   (bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr)<0){
-        return 0;
-     }
-
-    if (bpf_probe_read_kernel(&dstip, sizeof(dstip), ctx->daddr)<0){
-        return 0;
-    }
-        
-        info.srcIP.s_addr=srcip.s_addr;
-        info.sport=ctx->sport;
-        info.dstIP.s_addr=dstip.s_addr;
-        info.dport=ctx->dport;
-        info.sysexit=6;
-        info.proto=ctx->protocol;
-        info.pid=pid_tcp;
-        info.state=ctx->newstate;
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    }
-
-    } else if (ctx->family==AF_INET6) {
-
-        info.sysexit=6;
-        info.pid=pid_tcp;
-        info.proto=ctx->protocol;
-        info.state=ctx->newstate;
-        info.sport = bpf_ntohs(ctx->sport);
-     
-    }
-
-    return 0;
-}
 
 
 
