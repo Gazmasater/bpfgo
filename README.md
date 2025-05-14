@@ -614,6 +614,14 @@ if (bpf_probe_read_user(&family, sizeof(family), (void *)*addr_ptr) < 0) {
 }
 
 
+    struct in6_addr tmp6 = {};
+    if (bpf_probe_read_user(&tmp6, sizeof(tmp6), &addr_in6.sin6_addr) < 0) {
+        return 0;
+    }
+
+    __builtin_memcpy(&info.ssrcIP6, &tmp6, sizeof(tmp6));
+
+
 
 
 
