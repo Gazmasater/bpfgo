@@ -357,25 +357,14 @@ gcc server.c -o server
 gcc client.c -o client
 
 
-import (
-	"encoding/binary"
-	"net"
-)
-
-func IPv6FromBEWords(words [8]uint16) net.IP {
+func IPv6FromLEWords(words [8]uint16) net.IP {
 	ip := make(net.IP, 16)
 	for i := 0; i < 8; i++ {
-		v := binary.BigEndian.Uint16([]byte{
-			byte(words[i] >> 8),
-			byte(words[i]),
-		})
-		ip[i*2] = byte(v >> 8)
-		ip[i*2+1] = byte(v)
+		// Переводим little-endian → big-endian
+		ip[i*2] = byte(words[i])
+		ip[i*2+1] = byte(words[i] >> 8)
 	}
 	return ip
 }
-
-
-
 
 
