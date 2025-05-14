@@ -355,13 +355,118 @@ done
 
 
 
-__u8 tmp6[16] = {};
-// offsetof(struct sockaddr_in6, sin6_addr) = 8 (на 64-битах)
-if (bpf_probe_read_user(tmp6, sizeof(tmp6), ((char *)*addr_ptr) + 8) < 0) {
-    bpf_printk("READ_DIRECT_FAIL\n");
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+int main() {
+    int sock = socket(AF_INET6, SOCK_DGRAM, 0);
+    if (sock < 0) {
+        perror("socket");
+        return 1;
+    }
+
+    struct sockaddr_in6 addr = {};
+    addr.sin6_family = AF_INET6;
+    addr.sin6_addr = in6addr_any;
+    addr.sin6_port = htons(12345);
+
+    if (bind(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("bind");
+        close(sock);
+        return 1;
+    }
+
+    printf("Server listening on [::]:12345\n");
+
+    char buf[256];
+    struct iovec iov = {
+        .iov_base = buf,
+        .iov_len = sizeof(buf)
+    };
+
+    struct sockaddr_in6 src_addr = {};
+    struct msghdr msg = {
+        .msg_name = &src_addr,
+        .msg_namelen = sizeof(src_addr),
+        .msg_iov = &iov,
+        .msg_iovlen = 1,
+    };
+
+    ssize_t n = recvmsg(sock, &msg, 0);
+    if (n < 0) {
+        perror("recvmsg");
+        close(sock);
+        return 1;
+    }
+
+    char addr_str[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET6, &src_addr.sin6_addr, addr_str, sizeof(addr_str));
+
+    printf("Received %zd bytes from [%s]:%d: %.*s\n",
+           n, addr_str, ntohs(src_addr.sin6_port), (int)n, buf);
+
+    close(sock);
     return 0;
 }
-__builtin_memcpy(&info.ssrcIP6, tmp6, sizeof(tmp6));
+
+
+
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+int main() {
+    int sock = socket(AF_INET6, SOCK_DGRAM, 0);
+    if (sock < 0) {
+        perror("socket");
+        return 1;
+    }
+
+    struct sockaddr_in6 dest = {};
+    dest.sin6_family = AF_INET6;
+    inet_pton(AF_INET6, "::1", &dest.sin6_addr);
+    dest.sin6_port = htons(12345);
+
+    const char *msg = "hello from client via sendmsg";
+    struct iovec iov = {
+        .iov_base = (void *)msg,
+        .iov_len = strlen(msg)
+    };
+
+    struct msghdr msgh = {
+        .msg_name = &dest,
+        .msg_namelen = sizeof(dest),
+        .msg_iov = &iov,
+        .msg_iovlen = 1,
+    };
+
+    ssize_t sent = sendmsg(sock, &msgh, 0);
+    if (sent < 0) {
+        perror("sendmsg");
+        close(sock);
+        return 1;
+    }
+
+    printf("Client sent %zd bytes to [::1]:12345\n", sent);
+
+    close(sock);
+    return 0;
+}
+
+
+
+gcc server.c -o server
+gcc client.c -o client
 
 
 
