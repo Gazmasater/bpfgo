@@ -555,9 +555,9 @@ int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
     struct sockaddr_in6 sa6 = {};
     struct trace_info info = {};
    
-   if( __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm))<0){
-    return 0;
-   }
+   __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+    
+   
 
   if  (bpf_probe_read_user(&sa, sizeof(sa), &msg->msg_name)<0){
     return 0;
@@ -638,8 +638,6 @@ int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
     bpf_map_delete_elem(&conn_info_map, &pid);
     return 0;
 }
-
-
 
 
 SEC("tracepoint/syscalls/sys_enter_recvmsg")
