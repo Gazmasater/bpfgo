@@ -357,14 +357,15 @@ gcc server.c -o server
 gcc client.c -o client
 
 
-func IPv6FromUint16LE(words [8]uint16) net.IP {
+func IPv6FromUint16BE(words [8]uint16) net.IP {
 	b := make([]byte, 16)
 	for i := 0; i < 8; i++ {
-		// Меняем порядок байтов: little-endian → big-endian
-		b[i*2] = byte(words[i] >> 8)
-		b[i*2+1] = byte(words[i] & 0xff)
+		n := ntohs(words[i]) // преобразуем в хост-порядок
+		b[i*2] = byte(n >> 8)
+		b[i*2+1] = byte(n & 0xff)
 	}
 	return net.IP(b)
 }
+
 
 
