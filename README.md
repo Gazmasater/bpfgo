@@ -625,6 +625,20 @@ if (bpf_probe_read_user(&family, sizeof(family), (void *)*addr_ptr) < 0) {
     __builtin_memcpy(&info.ssrcIP6, &tmp6, sizeof(tmp6));
 
 
+    [{
+	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "29",
+	"severity": 8,
+	"message": "expected an expression",
+	"source": "C/C++",
+	"startLineNumber": 479,
+	"startColumn": 5,
+	"endLineNumber": 479,
+	"endColumn": 15
+}]
+
+
 
 
 
