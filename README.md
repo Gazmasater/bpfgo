@@ -357,103 +357,14 @@ gcc server.c -o server
 gcc client.c -o client
 
 
-SEC("tracepoint/syscalls/sys_exit_sendto")
-int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
-
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
-    if (!conn_info) return 0;
-
-    if (ret < 0) {
-        bpf_printk("sys_exit_sendto failed for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map, &pid);
-        return 0;
-    }
-
-    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addrSend_map, &pid);
-    if (!addr_ptr) {
-        return 0;
-    }
-
-    struct trace_info info = {};
-
-    struct sockaddr addr = {};
-
-
-   if (bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr)<0) {
-    return 0;
-   }
-
-   __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
-
-  
-
-info.sysexit=1;
-info.pid = conn_info->pid;
-
-    if (addr.sa_family == AF_INET) {
-
-        struct sockaddr_in addr_in = {};
-
-     if    (bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr)<0){
-        return 0;
-     }
-    
-    
-        u32 ip = (addr_in.sin_addr.s_addr);
-
-        u16 port = bpf_ntohs(addr_in.sin_port);
-
-        if (port==0) {
-
-            return 0;
-        }
-
-
-                info.pid=conn_info->pid;
-                info.ddstIP.sin_addr.s_addr=ip;
-                info.dport = port;
-                info.family=AF_INET;  
-                      
-           
-    } else if (addr.sa_family==AF_INET6) {
-
-      
-    struct sockaddr_in6 addr_in6 = {};
-
-    // Читаем всю структуру sockaddr_in6 из userspace одним вызовом
-    if (bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr) < 0) {
-        return 0;
-    }
-
-    u16 port = bpf_ntohs(addr_in6.sin6_port);
-
-    info.family = AF_INET6;
-    info.dport = port;
-
-        info.ddstIP6[0] =  bpf_ntohs(addr_in6.sin6_addr.in6_u.u6_addr16[0]);
-        info.ddstIP6[1] =  bpf_ntohs(addr_in6.sin6_addr.in6_u.u6_addr16[1]);
-        info.ddstIP6[2] =  bpf_ntohs(addr_in6.sin6_addr.in6_u.u6_addr16[2]);
-        info.ddstIP6[3] =  bpf_ntohs(addr_in6.sin6_addr.in6_u.u6_addr16[3]);
-        info.ddstIP6[4] =  bpf_ntohs(addr_in6.sin6_addr.in6_u.u6_addr16[4]);
-        info.ddstIP6[5] =  bpf_ntohs(addr_in6.sin6_addr.in6_u.u6_addr16[5]);
-        info.ddstIP6[6] =  bpf_ntohs(addr_in6.sin6_addr.in6_u.u6_addr16[6]);
-        info.ddstIP6[7] =  bpf_ntohs(addr_in6.sin6_addr.in6_u.u6_addr16[7]);
-
-
-    }
-
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-
-    bpf_map_delete_elem(&addrSend_map, &pid);  
-    bpf_map_delete_elem(&conn_info_map, &pid);
-
-    return 0;
-
+func IPv6FromUint16LE(words [8]uint16) net.IP {
+	b := make([]byte, 16)
+	for i := 0; i < 8; i++ {
+		// Меняем порядок байтов: little-endian → big-endian
+		b[i*2] = byte(words[i] >> 8)
+		b[i*2+1] = byte(words[i] & 0xff)
+	}
+	return net.IP(b)
 }
 
-
-__builtin_memcpy(&info.ddstIP6, &addr_in6.sin6_addr.in6_u.u6_addr16, sizeof(info.ddstIP6));
 
