@@ -363,7 +363,6 @@ int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
-
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
     if (!conn_info) {
         bpf_printk("No conn_info for pid=%d", pid);
@@ -371,107 +370,67 @@ int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
     }
 
     if (ret < 0) {
-        bpf_printk("recvmsg failed for PID=%d", pid);
+        bpf_printk("sendmsg failed for PID=%d", pid);
         bpf_map_delete_elem(&conn_info_map, &pid);
         return 0;
     }
 
-    // Получаем указатель на msghdr
     struct msghdr **addr_ptr = bpf_map_lookup_elem(&addrSend_map, &pid);
     if (!addr_ptr) {
         bpf_printk("No addr_ptr for pid=%d", pid);
         return 0;
     }
 
-    struct msghdr *msg;
-
-   if (bpf_probe_read_user(&msg, sizeof(msg), *addr_ptr)<0){
-    return 0;
-   }
-
-    if (!msg) {
-        bpf_printk("msg is NULL for pid=%d", pid);
+    struct msghdr *msg = NULL;
+    if (bpf_probe_read_user(&msg, sizeof(msg), *addr_ptr) < 0 || !msg) {
+        bpf_printk("Failed to read msghdr for pid=%d", pid);
         return 0;
     }
 
+    struct sockaddr sa_check = {};
+    if (bpf_probe_read_user(&sa_check, sizeof(sa_check), msg->msg_name) < 0) {
+        bpf_printk("Failed to read sa_family");
+        return 0;
+    }
 
-    struct sockaddr_in sa = {};
-    struct sockaddr_in6 sa6 = {};
     struct trace_info info = {};
-   
-   __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
-    
-   
-
-  if  (bpf_probe_read_user(&sa, sizeof(sa), &msg->msg_name)<0){
-    return 0;
-  }
-   if (bpf_probe_read_user(&sa6, sizeof(sa6), &msg->msg_name)<0){
-    return 0;
-   }
-
-  //    bpf_printk("SENDMSG6 NAME=%s ",conn_info->comm);
-
-
-
-    if (sa.sin_family==AF_INET) {
-
-     u32   port=bpf_ntohs(sa.sin_port);
-     u32   ip=bpf_ntohl(sa.sin_addr.s_addr);
-     info.pid=conn_info->pid;
-     info.ddstIP.sin_addr.s_addr=ip;
-     info.dport = port;
-     info.family=AF_INET;  
-     info.sysexit=11;
-     info.proto=conn_info->proto;
-     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-
-    } else if (sa.sin_family==AF_INET6) {
-
-
-
-    struct sockaddr_in6 sa6_full = {};
-    // Считаем полную структуру IPv6 адреса
-    if (bpf_probe_read_user(&sa6_full, sizeof(sa6_full), &msg->msg_name) < 0) {
-        return 0;
-    }
-
-
-    u32 port = bpf_ntohs(sa6_full.sin6_port);
-    if (port == 0) {
-        return 0;
-    }
-
-    bpf_printk("sys_exit_sendmsg IP6 PORT=%d", port);
-
-    info.sysexit = 11;
-    info.family = AF_INET6;
-    info.dport = port;
+    __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
     info.pid = conn_info->pid;
     info.proto = conn_info->proto;
+    info.sysexit = 11;
 
-    struct in6_addr tmp6 = {};
-    if (bpf_probe_read_user(&tmp6, sizeof(tmp6),  ((char *)*addr_ptr)+8 ) < 0) {
-        bpf_printk("SENDMSG6 ERROR");
-        return 0;
-    }
-    __builtin_memcpy(&info.dstIP6, &tmp6, sizeof(tmp6));
+    if (sa_check.sa_family == AF_INET) {
+        struct sockaddr_in sa = {};
+        if (bpf_probe_read_user(&sa, sizeof(sa), msg->msg_name) < 0) {
+            return 0;
+        }
 
+        info.family = AF_INET;
+        info.dport = bpf_ntohs(sa.sin_port);
+        info.ddstIP.sin_addr.s_addr = bpf_ntohl(sa.sin_addr.s_addr);
 
-    bpf_printk("SENDMSG6 NAME=%s FAMILY=%d PORT=%d",conn_info->comm, sa.sin_family,port);
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
+    } else if (sa_check.sa_family == AF_INET6) {
+        struct sockaddr_in6 sa6 = {};
+        if (bpf_probe_read_user(&sa6, sizeof(sa6), msg->msg_name) < 0) {
+            return 0;
+        }
 
-    
+        info.family = AF_INET6;
+        info.dport = bpf_ntohs(sa6.sin6_port);
+        __builtin_memcpy(&info.dstIP6, &sa6.sin6_addr, sizeof(sa6.sin6_addr));
 
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+        bpf_printk("SENDMSG6 NAME=%s FAMILY=%d PORT=%d", info.comm, sa6.sin6_family, info.dport);
 
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
     }
 
     bpf_map_delete_elem(&addrSend_map, &pid);
     bpf_map_delete_elem(&conn_info_map, &pid);
     return 0;
 }
+
 
 
 
