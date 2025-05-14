@@ -360,11 +360,12 @@ gcc client.c -o client
 func IPv6Raw(words [8]uint16) net.IP {
 	ip := make(net.IP, 16)
 	for i := 0; i < 8; i++ {
-		ip[i*2] = byte(words[i] >> 8)
-		ip[i*2+1] = byte(words[i])
+		ip[i*2] = byte(words[i] >> 8)      // старший байт
+		ip[i*2+1] = byte(words[i] & 0xff)  // младший байт
 	}
 	return ip
 }
+
 
 
 
