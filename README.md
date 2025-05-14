@@ -353,158 +353,35 @@ while true; do
   nc -zv 127.0.0.1 80 2>/dev/null
 done
 
+struct trace_info {
+    // IPv4
+    struct sockaddr_in ssrcIP;
+    struct sockaddr_in ddstIP; 
+    struct in_addr srcIP;
+    struct in_addr dstIP;
+
+    __u32 srcIP6[4];    //sk_lookup
+    __u32 dstIP6[4];    //sk_lookup
+     __u16 ssrcIP6[8];
+    __u16 ddstIP6[8];
+
+    __u16 sport;
+    __u16 dport;
+
+    __u32 pid;
+    __u32 proto;
+    __u32 sysexit;
+    __u32 state;
+
+    __u16 family;
+
+    char comm[32];
+} ;
 
 
 
-struct
-{
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 1024);
-    __type(key, u32);
-    __type(value, struct sockaddr*);
-} addrSend_map SEC(".maps");
-
-struct
-{
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 1024);
-    __type(key, u32);
-    __type(value, struct sockaddr*);
-} addrRecv_map SEC(".maps");
-
-SEC("tracepoint/syscalls/sys_enter_sendto")
-int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    struct conn_info_t conn_info = {};
-
-    conn_info.pid = pid;
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-
-    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
-    
-    if (!ctx->addr) return 0;
 
 
-    struct sockaddr *addr = (struct sockaddr *)ctx->addr;  
-
-    bpf_map_update_elem(&addrSend_map, &pid, &addr, BPF_ANY);
-
-
-    return 0;
-}
-
-
-SEC("tracepoint/syscalls/sys_exit_sendto")
-int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
-
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
-    if (!conn_info) return 0;
-
-    if (ret < 0) {
-        bpf_printk("sys_exit_sendto failed for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map, &pid);
-        return 0;
-    }
-
-    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addrSend_map, &pid);
-    if (!addr_ptr) {
-        return 0;
-    }
-
-    struct trace_info info = {};
-
-    struct sockaddr addr = {};
-
-
-   if (bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr)<0) {
-    return 0;
-   }
-
-   __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
-
-  
-
-info.sysexit=1;
-info.pid = conn_info->pid;
-
-    if (addr.sa_family == AF_INET) {
-
-        struct sockaddr_in addr_in = {};
-
-     if    (bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr)<0){
-        return 0;
-     }
-    
-    
-        u32 ip = (addr_in.sin_addr.s_addr);
-
-        u16 port = bpf_ntohs(addr_in.sin_port);
-
-        if (port==0) {
-
-            return 0;
-        }
-
-
-                info.pid=conn_info->pid;
-                info.ddstIP.sin_addr.s_addr=ip;
-                info.dport = port;
-                info.family=AF_INET;  
-                      
-           
-    } else if (addr.sa_family==AF_INET6) {
-
-      
-    struct sockaddr_in6 addr_in6 = {};
-
-    // Читаем всю структуру sockaddr_in6 из userspace одним вызовом
-    if (bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr) < 0) {
-        return 0;
-    }
-
-    u16 port = bpf_ntohs(addr_in6.sin6_port);
-
-    info.family = AF_INET6;
-    info.dport = port;
-
-    if (bpf_probe_read_kernel(info.ddstIP6, sizeof(info.ddstIP6),&addr_in6.sin6_addr) < 0) {
-        return 0;
-    }        
-
-    }
-
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-
-    bpf_map_delete_elem(&addrSend_map, &pid);  
-    bpf_map_delete_elem(&conn_info_map, &pid);
-
-    return 0;
-
-}
-
-SEC("tracepoint/syscalls/sys_enter_recvfrom")
-int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    struct conn_info_t conn_info = {};
-
-    conn_info.pid = pid;
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-
-    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
-
-    if (!ctx->addr) return 0;
-
-
-    struct sockaddr *addr = (struct sockaddr *)ctx->addr;  
-
-    bpf_map_update_elem(&addrRecv_map, &pid, &addr, BPF_ANY);
-
-
-    return 0;
-}
 
 
 SEC("tracepoint/syscalls/sys_exit_recvfrom")
@@ -536,9 +413,12 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
     return 0;
    }
 
+
    if (bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr)<0){
     return 0;
    }  
+
+
 
     __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
         
@@ -547,6 +427,7 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
 
 
     if (addr.sa_family == AF_INET) {
+
         struct sockaddr_in addr_in = {};
        if (bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr)<0){
         return 0;
@@ -573,30 +454,44 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
                     
     } else if (addr.sa_family==AF_INET6) {
 
+
+
     struct sockaddr_in6 addr_in6 = {};
 
     if (bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr) < 0) {
         return 0;
     }
 
+
+
     u16 port6 = bpf_ntohs(addr_in6.sin6_port);
     info.family = AF_INET6;
     info.pid = conn_info->pid;
     info.sport = port6;
 
+
     // Чтение IPv6-адреса целиком через bpf_probe_read_user без цикла
-    if (bpf_probe_read_user(&info.ssrcIP6, sizeof(info.ssrcIP6), &addr_in6.sin6_addr) < 0) {
-    return 0;
-}
+//     if (bpf_probe_read_user(&info.ssrcIP6, sizeof(info.ssrcIP6), &addr_in6.sin6_addr) < 0) {
+//     return 0;
+// }
+
+
+
+ struct in6_addr tmp6 = {};
+    if (bpf_probe_read_user(&tmp6, sizeof(tmp6), &addr_in6.sin6_addr) < 0) {
+        return 0;
+    }
+
+    __builtin_memcpy(&info.ssrcIP6, &tmp6, sizeof(tmp6));
+
+  
+
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
 
 
 
     }
-
-
-bpf_printk("sizeof(trace_info) = %d\n", (int)sizeof(struct trace_info));
 
 
 
@@ -608,37 +503,4 @@ bpf_printk("sizeof(trace_info) = %d\n", (int)sizeof(struct trace_info));
     return 0;
 
 }
-
-
-u16 family = 0;
-if (bpf_probe_read_user(&family, sizeof(family), (void *)*addr_ptr) < 0) {
-    bpf_printk("recvfrom: cannot read sa_family\n");
-    return 0;
-}
-
-
-    struct in6_addr tmp6 = {};
-    if (bpf_probe_read_user(&tmp6, sizeof(tmp6), &addr_in6.sin6_addr) < 0) {
-        return 0;
-    }
-
-    __builtin_memcpy(&info.ssrcIP6, &tmp6, sizeof(tmp6));
-
-
-    [{
-	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
-	"owner": "C/C++: IntelliSense",
-	"code": "29",
-	"severity": 8,
-	"message": "expected an expression",
-	"source": "C/C++",
-	"startLineNumber": 479,
-	"startColumn": 5,
-	"endLineNumber": 479,
-	"endColumn": 15
-}]
-
-
-
-
 
