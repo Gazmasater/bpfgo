@@ -357,102 +357,16 @@ gcc server.c -o server
 gcc client.c -o client
 
 
-
-SEC("tracepoint/syscalls/sys_exit_sendmsg")
-int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
-
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
-    if (!conn_info) {
-        bpf_printk("No conn_info for pid=%d", pid);
-        return 0;
-    }
-
-    if (ret < 0) {
-        bpf_printk("sendmsg failed for PID=%d", pid);
-        bpf_map_delete_elem(&conn_info_map, &pid);
-        return 0;
-    }
-
-    struct msghdr **addr_ptr = bpf_map_lookup_elem(&addrSend_map, &pid);
-    if (!addr_ptr) {
-        bpf_printk("No addr_ptr for pid=%d", pid);
-        return 0;
-    }
-
-    struct msghdr *msg_ptr = NULL;
-    if (bpf_probe_read_user(&msg_ptr, sizeof(msg_ptr), *addr_ptr) < 0 || !msg_ptr) {
-        bpf_printk("Failed to read msg pointer for pid=%d", pid);
-        return 0;
-    }
-
-    struct msghdr msg = {};
-    if (bpf_probe_read_user(&msg, sizeof(msg), msg_ptr) < 0) {
-        bpf_printk("Failed to read msghdr contents");
-        return 0;
-    }
-
-    // Проверяем наличие msg_name
-    if (!msg.msg_name || msg.msg_namelen < sizeof(struct sockaddr)) {
-        bpf_printk("msg_name invalid or too short for pid=%d", pid);
-        return 0;
-    }
-
-    struct sockaddr sa_check = {};
-    if (bpf_probe_read_user(&sa_check, sizeof(sa_check), msg.msg_name) < 0) {
-        bpf_printk("Failed to read sa_family");
-        return 0;
-    }
-
-    struct trace_info info = {};
-    __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
-    info.pid = conn_info->pid;
-    info.proto = conn_info->proto;
-    info.sysexit = 11;
-
-    if (sa_check.sa_family == AF_INET) {
-        if (msg.msg_namelen < sizeof(struct sockaddr_in)) {
-            bpf_printk("msg_namelen too short for IPv4");
-            return 0;
-        }
-
-        struct sockaddr_in sa = {};
-        if (bpf_probe_read_user(&sa, sizeof(sa), msg.msg_name) < 0) {
-            return 0;
-        }
-
-        info.family = AF_INET;
-        info.dport = bpf_ntohs(sa.sin_port);
-        info.ddstIP.sin_addr.s_addr = bpf_ntohl(sa.sin_addr.s_addr);
-
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-    } else if (sa_check.sa_family == AF_INET6) {
-        if (msg.msg_namelen < sizeof(struct sockaddr_in6)) {
-            bpf_printk("msg_namelen too short for IPv6");
-            return 0;
-        }
-
-        struct sockaddr_in6 sa6 = {};
-        if (bpf_probe_read_user(&sa6, sizeof(sa6), msg.msg_name) < 0) {
-            return 0;
-        }
-
-        info.family = AF_INET6;
-        info.dport = bpf_ntohs(sa6.sin6_port);
-        __builtin_memcpy(&info.dstIP6, &sa6.sin6_addr, sizeof(sa6.sin6_addr));
-
-        bpf_printk("SENDMSG6 NAME=%s FAMILY=%d PORT=%d", info.comm, sa6.sin6_family, info.dport);
-
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    }
-
-    bpf_map_delete_elem(&addrSend_map, &pid);
-    bpf_map_delete_elem(&conn_info_map, &pid);
-    return 0;
-}
-
-
-
-
+fmt.Printf("STATE=12 IPv6 PID=%d IPv6=%x.%x.%x.%x.%x.%x.%x.%x:%d NAME=%s\n",
+						pid,
+						event.SsrcIP6[0],
+						event.SsrcIP6[1],
+						event.SsrcIP6[2],
+						event.SsrcIP6[3],
+						event.SsrcIP6[4],
+						event.SsrcIP6[5],
+						event.SsrcIP6[6],
+						event.SsrcIP6[7],
+						port,
+						pkg.Int8ToString(event.Comm),
+					)
