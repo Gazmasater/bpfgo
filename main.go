@@ -223,10 +223,10 @@ func main() {
 			)
 
 			ddstIP := net.IPv4(
-				byte(event.DdstIP.SinAddr.S_addr>>24),
-				byte(event.DdstIP.SinAddr.S_addr>>16),
-				byte(event.DdstIP.SinAddr.S_addr>>8),
 				byte(event.DdstIP.SinAddr.S_addr),
+				byte(event.DdstIP.SinAddr.S_addr>>8),
+				byte(event.DdstIP.SinAddr.S_addr>>16),
+				byte(event.DdstIP.SinAddr.S_addr>>24),
 			)
 
 			if pkg.Int8ToString(event.Comm) == executableName {
@@ -306,11 +306,16 @@ func main() {
 					port := event.Dport
 
 					pid := event.Pid
-					fmt.Printf("STATE=1 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d NAME=%s\n",
+					fmt.Printf("STATE=1 IPv6 PID=%d IPv6=%x.%x.%x.%x.%x.%x.%x.%x:%d NAME=%s\n",
 						pid,
-						event.DstIP6[0], event.DstIP6[1],
-						event.DstIP6[2], event.DstIP6[3],
-
+						event.DdstIP6[0],
+						event.DdstIP6[1],
+						event.DdstIP6[2],
+						event.DdstIP6[3],
+						event.DdstIP6[4],
+						event.DdstIP6[5],
+						event.DdstIP6[6],
+						event.DdstIP6[7],
 						port,
 						pkg.Int8ToString(event.Comm),
 					)
@@ -320,6 +325,8 @@ func main() {
 			}
 
 			if event.Sysexit == 11 {
+
+				fmt.Printf("SENDMSG!!!!!!!!!!!!! FAMILY=%d\n", event.Family)
 
 				if event.Family == 2 {
 
@@ -371,15 +378,15 @@ func main() {
 
 				} else if event.Family == 10 {
 					fmt.Println("SENDMSG66666666666666666666")
-					// port := event.Dpor
-					// pid := event.Pid
-					// fmt.Printf("STATE=11 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d  NAME=%s\n",
-					// 	pid,
-					// 	event.DstIP6[0], event.DstIP6[1],
-					// 	event.DstIP6[2], event.DstIP6[3]
-					// 	port,
-					// 	pkg.Int8ToString(event.Comm),
-					// )
+					port := event.Dport
+					pid := event.Pid
+					fmt.Printf("STATE=11 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d  NAME=%s\n",
+						pid,
+						event.DstIP6[0], event.DstIP6[1],
+						event.DstIP6[2], event.DstIP6[3],
+						port,
+						pkg.Int8ToString(event.Comm),
+					)
 
 				}
 
@@ -457,14 +464,21 @@ func main() {
 					// 	data.Recvmsg.SrcPort)
 
 				} else if event.Family == 10 {
-					// port := event.Sport
-					// pid := event.Pid
-					// fmt.Printf("STATE2 IPv6 PID=%d IPv6=%x:%x:%x:%x:%d\n",
-					// 	pid,
-					// 	event.SrcIP6[0], event.SrcIP6[1],
-					// 	event.SrcIP6[2], event.SrcIP6[3],
-					// 	port,
-					// )
+					port := event.Sport
+					pid := event.Pid
+					fmt.Printf("STATE=2 IPv6 PID=%d IPv6=%x.%x.%x.%x.%x.%x.%x.%x:%d NAME=%s\n",
+						pid,
+						event.SsrcIP6[0],
+						event.SsrcIP6[1],
+						event.SsrcIP6[2],
+						event.SsrcIP6[3],
+						event.SsrcIP6[4],
+						event.SsrcIP6[5],
+						event.SsrcIP6[6],
+						event.SsrcIP6[7],
+						port,
+						pkg.Int8ToString(event.Comm),
+					)
 
 				}
 
@@ -520,31 +534,14 @@ func main() {
 					}
 
 				} else if event.Family == 10 {
-					// port := event.Sport
-					// pid := event.Pid
-					// fmt.Printf("STATE=12 IPv6 PID=%d srcIPv6=%x:%x:%x:%x:%d\n",
-					// 	pid,
-					// 	event.SrcIP6[0], event.SrcIP6[1],
-					// 	event.SrcIP6[2], event.SrcIP6[3],
-					// 	port,
-					// )
-
-					// eventDstIP6 := [4]uint32{
-					// 	event.SrcIP6[0],
-					// 	event.SrcIP6[1],
-					// 	event.SrcIP6[2],
-					// 	event.SrcIP6[3],
-					// }
-
-					// ipBytes := []byte{
-					// 	byte(eventDstIP6[0] >> 24), byte(eventDstIP6[0] >> 16), byte(eventDstIP6[0] >> 8), byte(eventDstIP6[0]),
-					// 	byte(eventDstIP6[1] >> 24), byte(eventDstIP6[1] >> 16), byte(eventDstIP6[1] >> 8), byte(eventDstIP6[1]),
-					// 	byte(eventDstIP6[2] >> 24), byte(eventDstIP6[2] >> 16), byte(eventDstIP6[2] >> 8), byte(eventDstIP6[2]),
-					// 	byte(eventDstIP6[3] >> 24), byte(eventDstIP6[3] >> 16), byte(eventDstIP6[3] >> 8), byte(eventDstIP6[3]),
-					// }
-
-					// ip := net.IP(ipBytes)
-					// fmt.Printf("STATE=12 SHRT IPv6:=%s%d\n", ip.String(), event.Sport)
+					port := event.Sport
+					pid := event.Pid
+					fmt.Printf("STATE=12 IPv6 PID=%d srcIPv6=%x:%x:%x:%x:%d\n",
+						pid,
+						event.SrcIP6[0], event.SrcIP6[1],
+						event.SrcIP6[2], event.SrcIP6[3],
+						port,
+					)
 
 				}
 

@@ -26,11 +26,6 @@ type bpfConnInfoT struct {
 	_       [3]byte
 }
 
-type bpfSockaddr struct {
-	SaFamily  uint16
-	SaDataMin [14]int8
-}
-
 type bpfTraceInfo struct {
 	SsrcIP struct {
 		SinFamily uint16
@@ -48,6 +43,8 @@ type bpfTraceInfo struct {
 	DstIP   struct{ S_addr uint32 }
 	SrcIP6  [4]uint32
 	DstIP6  [4]uint32
+	SsrcIP6 [8]uint16
+	DdstIP6 [8]uint16
 	Sport   uint16
 	Dport   uint16
 	Pid     uint32
@@ -117,12 +114,11 @@ type bpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
-	AddrRecvMap     *ebpf.MapSpec `ebpf:"addrRecv_map"`
-	AddrSendMap     *ebpf.MapSpec `ebpf:"addrSend_map"`
-	AddrSockNameMap *ebpf.MapSpec `ebpf:"addrSockName_map"`
-	ConnInfoMap     *ebpf.MapSpec `ebpf:"conn_info_map"`
-	Ipv6Events      *ebpf.MapSpec `ebpf:"ipv6_events"`
-	TraceEvents     *ebpf.MapSpec `ebpf:"trace_events"`
+	AddrRecvMap *ebpf.MapSpec `ebpf:"addrRecv_map"`
+	AddrSendMap *ebpf.MapSpec `ebpf:"addrSend_map"`
+	ConnInfoMap *ebpf.MapSpec `ebpf:"conn_info_map"`
+	Ipv6Events  *ebpf.MapSpec `ebpf:"ipv6_events"`
+	TraceEvents *ebpf.MapSpec `ebpf:"trace_events"`
 }
 
 // bpfVariableSpecs contains global variables before they are loaded into the kernel.
@@ -152,19 +148,17 @@ func (o *bpfObjects) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
-	AddrRecvMap     *ebpf.Map `ebpf:"addrRecv_map"`
-	AddrSendMap     *ebpf.Map `ebpf:"addrSend_map"`
-	AddrSockNameMap *ebpf.Map `ebpf:"addrSockName_map"`
-	ConnInfoMap     *ebpf.Map `ebpf:"conn_info_map"`
-	Ipv6Events      *ebpf.Map `ebpf:"ipv6_events"`
-	TraceEvents     *ebpf.Map `ebpf:"trace_events"`
+	AddrRecvMap *ebpf.Map `ebpf:"addrRecv_map"`
+	AddrSendMap *ebpf.Map `ebpf:"addrSend_map"`
+	ConnInfoMap *ebpf.Map `ebpf:"conn_info_map"`
+	Ipv6Events  *ebpf.Map `ebpf:"ipv6_events"`
+	TraceEvents *ebpf.Map `ebpf:"trace_events"`
 }
 
 func (m *bpfMaps) Close() error {
 	return _BpfClose(
 		m.AddrRecvMap,
 		m.AddrSendMap,
-		m.AddrSockNameMap,
 		m.ConnInfoMap,
 		m.Ipv6Events,
 		m.TraceEvents,
