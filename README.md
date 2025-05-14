@@ -353,35 +353,28 @@ while true; do
   nc -zv 127.0.0.1 80 2>/dev/null
 done
 
-struct trace_info {
-    // IPv4
-    struct sockaddr_in ssrcIP;
-    struct sockaddr_in ddstIP; 
-    struct in_addr srcIP;
-    struct in_addr dstIP;
-
-    __u32 srcIP6[4];    //sk_lookup
-    __u32 dstIP6[4];    //sk_lookup
-     __u16 ssrcIP6[8];
-    __u16 ddstIP6[8];
-
-    __u16 sport;
-    __u16 dport;
-
-    __u32 pid;
-    __u32 proto;
-    __u32 sysexit;
-    __u32 state;
-
-    __u16 family;
-
-    char comm[32];
-} ;
 
 
+SEC("tracepoint/syscalls/sys_enter_recvfrom")
+int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct conn_info_t conn_info = {};
+
+    conn_info.pid = pid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+
+    if (!ctx->addr) return 0;
 
 
+    struct sockaddr *addr = (struct sockaddr *)ctx->addr;  
 
+    bpf_map_update_elem(&addrRecv_map, &pid, &addr, BPF_ANY);
+
+
+    return 0;
+}
 
 
 SEC("tracepoint/syscalls/sys_exit_recvfrom")
@@ -468,39 +461,13 @@ int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
     info.family = AF_INET6;
     info.pid = conn_info->pid;
     info.sport = port6;
-
+    bpf_printk("RECVFROM ");
 
     // Чтение IPv6-адреса целиком через bpf_probe_read_user без цикла
-//     if (bpf_probe_read_user(&info.ssrcIP6, sizeof(info.ssrcIP6), &addr_in6.sin6_addr) < 0) {
-//     return 0;
-// }
+    if (bpf_probe_read_user(&info.ssrcIP6, sizeof(info.ssrcIP6), &addr_in6.sin6_addr) < 0) {
+            bpf_printk("RECVFROM ERROR");
 
-
-
- struct in6_addr tmp6 = {};
-    if (bpf_probe_read_user(&tmp6, sizeof(tmp6), &addr_in6.sin6_addr) < 0) {
-        return 0;
-    }
-
-    __builtin_memcpy(&info.ssrcIP6, &tmp6, sizeof(tmp6));
-
-  
-
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-
-
-
-    }
-
-
-
-    bpf_map_delete_elem(&addrRecv_map, &pid);
-    bpf_map_delete_elem(&conn_info_map, &pid);
-
-
- 
     return 0;
-
 }
+
 
