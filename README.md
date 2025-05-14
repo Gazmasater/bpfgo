@@ -381,14 +381,26 @@ int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
         return 0;
     }
 
-    struct msghdr *msg = NULL;
-    if (bpf_probe_read_user(&msg, sizeof(msg), *addr_ptr) < 0 || !msg) {
-        bpf_printk("Failed to read msghdr for pid=%d", pid);
+    struct msghdr *msg_ptr = NULL;
+    if (bpf_probe_read_user(&msg_ptr, sizeof(msg_ptr), *addr_ptr) < 0 || !msg_ptr) {
+        bpf_printk("Failed to read msg pointer for pid=%d", pid);
+        return 0;
+    }
+
+    struct msghdr msg = {};
+    if (bpf_probe_read_user(&msg, sizeof(msg), msg_ptr) < 0) {
+        bpf_printk("Failed to read msghdr contents");
+        return 0;
+    }
+
+    // Проверяем наличие msg_name
+    if (!msg.msg_name || msg.msg_namelen < sizeof(struct sockaddr)) {
+        bpf_printk("msg_name invalid or too short for pid=%d", pid);
         return 0;
     }
 
     struct sockaddr sa_check = {};
-    if (bpf_probe_read_user(&sa_check, sizeof(sa_check), msg->msg_name) < 0) {
+    if (bpf_probe_read_user(&sa_check, sizeof(sa_check), msg.msg_name) < 0) {
         bpf_printk("Failed to read sa_family");
         return 0;
     }
@@ -400,8 +412,13 @@ int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
     info.sysexit = 11;
 
     if (sa_check.sa_family == AF_INET) {
+        if (msg.msg_namelen < sizeof(struct sockaddr_in)) {
+            bpf_printk("msg_namelen too short for IPv4");
+            return 0;
+        }
+
         struct sockaddr_in sa = {};
-        if (bpf_probe_read_user(&sa, sizeof(sa), msg->msg_name) < 0) {
+        if (bpf_probe_read_user(&sa, sizeof(sa), msg.msg_name) < 0) {
             return 0;
         }
 
@@ -412,8 +429,13 @@ int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
     } else if (sa_check.sa_family == AF_INET6) {
+        if (msg.msg_namelen < sizeof(struct sockaddr_in6)) {
+            bpf_printk("msg_namelen too short for IPv6");
+            return 0;
+        }
+
         struct sockaddr_in6 sa6 = {};
-        if (bpf_probe_read_user(&sa6, sizeof(sa6), msg->msg_name) < 0) {
+        if (bpf_probe_read_user(&sa6, sizeof(sa6), msg.msg_name) < 0) {
             return 0;
         }
 
