@@ -486,3 +486,10 @@ int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx) {
     return 0;
 }
 
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+/home/gaz358/myprog/bpfgo/trace.c:243:16: warning: expression result unused [-Wunused-value]
+  243 |     conn_info->comm;
+      |     ~~~~~~~~~  ^~~~
+1 warning generated.
+
