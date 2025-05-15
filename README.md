@@ -360,3 +360,7 @@ gcc client.c -o client
 
   //  __builtin_memcpy(&info.ssrcIP6, ctx->saddr_v6, sizeof(info.ssrcIP6));
   //  __builtin_memcpy(&info.ddstIP6, ctx->daddr_v6, sizeof(info.ddstIP6));
+
+
+  bpf_core_read(&info.ddstIP6, sizeof(info.ddstIP6), &ctx->daddr_v6);
+
