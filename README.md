@@ -358,4 +358,5 @@ gcc client.c -o client
 
 
 
-inet_sock_set_state
+  //  __builtin_memcpy(&info.ssrcIP6, ctx->saddr_v6, sizeof(info.ssrcIP6));
+  //  __builtin_memcpy(&info.ddstIP6, ctx->daddr_v6, sizeof(info.ddstIP6));
