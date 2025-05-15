@@ -687,11 +687,19 @@ int look_up(struct bpf_sk_lookup *ctx) {
         info.srcIP6[1]=bpf_ntohl(ctx->local_ip6[1]);
         info.srcIP6[2]=bpf_ntohl(ctx->local_ip6[2]);
         info.srcIP6[3]=bpf_ntohl(ctx->local_ip6[3]);
+
+       // bpf_core_read(&info.srcIP6, sizeof(info.srcIP6), ctx->local_ip6);
+
+
+
     
         info.dstIP6[0]=bpf_ntohl(ctx->remote_ip6[0]);
         info.dstIP6[1]=bpf_ntohl(ctx->remote_ip6[1]);
         info.dstIP6[2]=bpf_ntohl(ctx->remote_ip6[2]);
         info.dstIP6[3]=bpf_ntohl(ctx->remote_ip6[3]);
+
+      //  bpf_core_read(&info.dstIP6, sizeof(info.dstIP6), ctx->remote_ip6);
+
 
         info.sport = ctx->local_port;
         info.dport = bpf_ntohs(ctx->remote_port);
@@ -714,6 +722,8 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 
 
     __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
+    bpf_get_current_comm(&info.comm, sizeof(info.comm));
+
 
     if (ctx->family==AF_INET) {
 
@@ -721,7 +731,6 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
     struct in_addr  dstip={};
 
 
-    bpf_get_current_comm(&info.comm, sizeof(info.comm));
 
 
 
@@ -748,12 +757,17 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
     } else if (ctx->family==AF_INET6) {
 
         info.sysexit=6;
+        info.family=AF_INET6;
         info.pid=pid_tcp;
         info.proto=ctx->protocol;
         info.state=ctx->newstate;
-        info.sport = bpf_ntohs(ctx->sport);
-    __builtin_memcpy(&info.srcIP6, ctx->saddr_v6, sizeof(info.srcIP6));
-    __builtin_memcpy(&info.dstIP6, ctx->daddr_v6, sizeof(info.dstIP6));
+        info.sport = (ctx->sport);
+        info.dport=(ctx->dport);
+
+    bpf_core_read(&info.ddstIP6, sizeof(info.ddstIP6), &ctx->daddr_v6);
+    bpf_core_read(&info.ssrcIP6, sizeof(info.ssrcIP6), &ctx->saddr_v6);
+
+
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
      

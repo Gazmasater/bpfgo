@@ -643,6 +643,33 @@ func main() {
 
 			if event.Sysexit == 6 {
 
+				if event.Family == 10 {
+
+					sport := event.Sport
+					dport := event.Dport
+					pid := event.Pid
+
+					fmt.Printf("TCP IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
+						pid,
+						IPv6FromLEWords4(event.SsrcIP6).String(),
+						sport,
+						pkg.Int8ToString(event.Comm),
+					)
+
+					fmt.Printf("TCP IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
+						pid,
+						IPv6FromLEWords4(event.DdstIP6).String(),
+						dport,
+						pkg.Int8ToString(event.Comm),
+					)
+					fmt.Printf("!!!!!TCP IPv6 !!!!!!PID=%d  NAME=%s\n",
+						event.Pid,
+
+						pkg.Int8ToString(event.Comm),
+					)
+
+				}
+
 				if event.State == 1 {
 
 					mu.Lock()
@@ -700,6 +727,7 @@ func main() {
 					select {
 					case eventChan_pid <- int(event.Pid):
 					default:
+
 						//fmt.Println("State 10: eventChan_pid заполнен, пропускаю запись PID")
 					}
 					mu.Unlock()
@@ -760,6 +788,16 @@ func main() {
 }
 
 func IPv6FromLEWords(words [8]uint16) net.IP {
+	ip := make(net.IP, 16)
+	for i := 0; i < 8; i++ {
+		// Переводим little-endian → big-endian
+		ip[i*2] = byte(words[i])
+		ip[i*2+1] = byte(words[i] >> 8)
+	}
+	return ip
+}
+
+func IPv6FromLEWords4(words [8]uint16) net.IP {
 	ip := make(net.IP, 16)
 	for i := 0; i < 8; i++ {
 		// Переводим little-endian → big-endian
