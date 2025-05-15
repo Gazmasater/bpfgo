@@ -358,9 +358,10 @@ gcc client.c -o client
 
 
 
-  //  __builtin_memcpy(&info.ssrcIP6, ctx->saddr_v6, sizeof(info.ssrcIP6));
-  //  __builtin_memcpy(&info.ddstIP6, ctx->daddr_v6, sizeof(info.ddstIP6));
+  info.srcIP6[0]=bpf_ntohl(ctx->local_ip6[0]);
+        info.srcIP6[1]=bpf_ntohl(ctx->local_ip6[1]);
+        info.srcIP6[2]=bpf_ntohl(ctx->local_ip6[2]);
+        info.srcIP6[3]=bpf_ntohl(ctx->local_ip6[3]);
 
-
-  bpf_core_read(&info.ddstIP6, sizeof(info.ddstIP6), &ctx->daddr_v6);
+       // bpf_core_read(&info.srcIP6, sizeof(info.srcIP6), &ctx->local_ip6);
 
