@@ -1,48 +1,95 @@
-SEC("tracepoint/sock/inet_sock_set_state")
-int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
-    struct trace_info info = {};
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, u32);
+    __type(value, struct sockaddr);
+} addrSend_map SEC(".maps");
 
-    __u32 pid_tcp = bpf_get_current_pid_tgid() >> 32;
-    bpf_get_current_comm(&info.comm, sizeof(info.comm));
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, u32);
+    __type(value, struct sockaddr);
+} addrRecv_map SEC(".maps");
 
-    if (ctx->family == AF_INET) {
-        if (ctx->newstate == TCP_ESTABLISHED ||
-            ctx->newstate == TCP_SYN_SENT ||
-            ctx->newstate == TCP_LISTEN) {
 
-            __u32 ip_src = 0, ip_dst = 0;
-            __builtin_memcpy(&ip_src, ctx->saddr, sizeof(ip_src));
-            __builtin_memcpy(&ip_dst, ctx->daddr, sizeof(ip_dst));
+SEC("tracepoint/syscalls/sys_enter_sendto")
+int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct conn_info_t conn_info = {};
 
-            info.srcIP.s_addr = ip_src;
-            info.dstIP.s_addr = ip_dst;
-            info.sport = ctx->sport;
-            info.dport = ctx->dport;
-            info.sysexit = 6;
-            info.proto = ctx->protocol;
-            info.pid = pid_tcp;
-            info.state = ctx->newstate;
-            info.family = AF_INET;
+    conn_info.pid = pid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
-            bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-        }
-    } else if (ctx->family == AF_INET6) {
-        info.sysexit = 6;
-        info.family = AF_INET6;
-        info.pid = pid_tcp;
-        info.proto = ctx->protocol;
-        info.state = ctx->newstate;
-        info.sport = ctx->sport;
-        info.dport = ctx->dport;
+    const struct sockaddr *addr_ptr = (const struct sockaddr *)ctx->args[4];
+    if (!addr_ptr)
+        return 0;
 
-        bpf_core_read(&info.ddstIP6, sizeof(info.ddstIP6), &ctx->daddr_v6);
-        bpf_core_read(&info.ssrcIP6, sizeof(info.ssrcIP6), &ctx->saddr_v6);
+    struct sockaddr addr = {};
+    if (bpf_core_read_user(&addr, sizeof(addr), addr_ptr) < 0)
+        return 0;
 
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    bpf_map_update_elem(&addrSend_map, &pid, &addr, BPF_ANY);
+    return 0;
+}
+
+
+SEC("tracepoint/syscalls/sys_exit_sendto")
+int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    long ret = ctx->ret;
+
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
+    if (!conn_info)
+        return 0;
+
+    if (ret < 0) {
+        bpf_map_delete_elem(&conn_info_map, &pid);
+        return 0;
     }
+
+    struct sockaddr *addr = bpf_map_lookup_elem(&addrSend_map, &pid);
+    if (!addr)
+        return 0;
+
+    struct trace_info info = {};
+    __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+    info.sysexit = 1;
+    info.pid = conn_info->pid;
+
+    if (addr->sa_family == AF_INET) {
+        struct sockaddr_in addr_in = {};
+        if (bpf_core_read_user(&addr_in, sizeof(addr_in), addr) < 0)
+            return 0;
+
+        u32 ip = addr_in.sin_addr.s_addr;
+        u16 port = bpf_ntohs(addr_in.sin_port);
+        if (port == 0)
+            return 0;
+
+        info.ddstIP.sin_addr.s_addr = ip;
+        info.dport = port;
+        info.family = AF_INET;
+
+    } else if (addr->sa_family == AF_INET6) {
+        struct sockaddr_in6 addr_in6 = {};
+        if (bpf_core_read_user(&addr_in6, sizeof(addr_in6), addr) < 0)
+            return 0;
+
+        u16 port = bpf_ntohs(addr_in6.sin6_port);
+        info.family = AF_INET6;
+        info.dport = port;
+        __builtin_memcpy(&info.ddstIP6, &addr_in6.sin6_addr.in6_u.u6_addr16, sizeof(info.ddstIP6));
+    }
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    bpf_map_delete_elem(&addrSend_map, &pid);
+    bpf_map_delete_elem(&conn_info_map, &pid);
 
     return 0;
 }
+
 
 
 
