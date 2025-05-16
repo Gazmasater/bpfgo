@@ -39,16 +39,7 @@ struct sys_enter_sendto_args
 };
 
 
-struct sys_exit_sendto_args
-{
-    unsigned short common_type;
-    unsigned char common_flags;
-    unsigned char common_preempt_count;
-    int common_pid;
-    int __syscall_nr;
-    int pad1;
-    long ret;
-};
+
 
 struct sys_enter_sendmsg_args {
 
@@ -61,19 +52,6 @@ struct sys_enter_sendmsg_args {
     int fd;
     struct user_msghdr * msg; 
     unsigned int flags;      
-
-
-};
-
-struct sys_exit_sendmsg_args {
-
-    unsigned short common_type;       
-    unsigned char common_flags;    
-    unsigned char common_preempt_count;    
-    int common_pid;   
-    int __syscall_nr; 
-    int pad;
-    long ret; 
 
 
 };
@@ -92,19 +70,6 @@ struct sys_enter_recvmsg_args {
 
 };
 
-
-struct sys_exit_recvmsg_args{
-
-        unsigned short common_type;       
-        unsigned char common_flags;    
-        unsigned char common_preempt_count;    
-        int common_pid;   
-        int __syscall_nr; 
-        int pad;
-        long ret; 
-
-};
-
 struct sys_enter_recvfrom_args {
     unsigned short common_type;
     unsigned char common_flags;
@@ -119,19 +84,6 @@ struct sys_enter_recvfrom_args {
     struct sockaddr *addr;
     int *addr_len;
 };
-
-
-
-struct sys_exit_recvfrom_args {
-    unsigned short common_type;
-    unsigned char common_flags;
-    unsigned char common_preempt_count;
-    int common_pid;
-    int __syscall_nr;
-    int pad1;
-    int ret;
-};
-
 
 struct
 {
@@ -170,9 +122,6 @@ struct
 struct {
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
 } ipv6_events SEC(".maps");
-
-
-
 
 struct trace_info {
     // IPv4
@@ -235,7 +184,7 @@ int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
 
 
 SEC("tracepoint/syscalls/sys_exit_sendto")
-int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
+int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
@@ -243,83 +192,50 @@ int trace_sendto_exit(struct sys_exit_sendto_args *ctx) {
     if (!conn_info) return 0;
 
     if (ret < 0) {
-        bpf_printk("sys_exit_sendto failed for PID=%d\n", pid);
         bpf_map_delete_elem(&conn_info_map, &pid);
         return 0;
     }
 
     struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addrSend_map, &pid);
-    if (!addr_ptr) {
-        return 0;
-    }
+    if (!addr_ptr) return 0;
 
     struct trace_info info = {};
-
     struct sockaddr addr = {};
 
+    if (bpf_core_read_user(&addr, sizeof(addr), *addr_ptr) < 0) return 0;
 
-   if (bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr)<0) {
-    return 0;
-   }
-
-   __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
-
-  
-
-info.sysexit=1;
-info.pid = conn_info->pid;
+    __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+    info.sysexit = 1;
+    info.pid = conn_info->pid;
 
     if (addr.sa_family == AF_INET) {
-
         struct sockaddr_in addr_in = {};
+        if (bpf_core_read_user(&addr_in, sizeof(addr_in), *addr_ptr) < 0) return 0;
 
-     if    (bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr)<0){
-        return 0;
-     }
-    
-    
-        u32 ip = (addr_in.sin_addr.s_addr);
-
+        u32 ip = addr_in.sin_addr.s_addr;
         u16 port = bpf_ntohs(addr_in.sin_port);
+        if (port == 0) return 0;
 
-        if (port==0) {
+        info.ddstIP.sin_addr.s_addr = ip;
+        info.dport = port;
+        info.family = AF_INET;
 
-            return 0;
-        }
+    } else if (addr.sa_family == AF_INET6) {
+        struct sockaddr_in6 addr_in6 = {};
+        if (bpf_core_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr) < 0) return 0;
 
-
-                info.pid=conn_info->pid;
-                info.ddstIP.sin_addr.s_addr=ip;
-                info.dport = port;
-                info.family=AF_INET;  
-                      
-           
-    } else if (addr.sa_family==AF_INET6) {
-
-      
-    struct sockaddr_in6 addr_in6 = {};
-
-    // Читаем всю структуру sockaddr_in6 из userspace одним вызовом
-    if (bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr) < 0) {
-        return 0;
-    }
-
-    u16 port = bpf_ntohs(addr_in6.sin6_port);
-
-    info.family = AF_INET6;
-    info.dport = port;
-     __builtin_memcpy(&info.ddstIP6, &addr_in6.sin6_addr.in6_u.u6_addr16, sizeof(info.ddstIP6));
-
+        u16 port = bpf_ntohs(addr_in6.sin6_port);
+        info.family = AF_INET6;
+        info.dport = port;
+        __builtin_memcpy(&info.ddstIP6, &addr_in6.sin6_addr.in6_u.u6_addr16, sizeof(info.ddstIP6));
     }
 
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
-
-    bpf_map_delete_elem(&addrSend_map, &pid);  
+    bpf_map_delete_elem(&addrSend_map, &pid);
     bpf_map_delete_elem(&conn_info_map, &pid);
 
     return 0;
-
 }
 
 SEC("tracepoint/syscalls/sys_enter_recvfrom")
@@ -345,7 +261,7 @@ int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx) {
 
 
 SEC("tracepoint/syscalls/sys_exit_recvfrom")
-int trace_recvfrom_exit(struct sys_exit_recvfrom_args *ctx) {
+int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
@@ -465,7 +381,7 @@ int trace_sendmsg_enter(struct sys_enter_sendmsg_args *ctx) {
 
 
 SEC("tracepoint/syscalls/sys_exit_sendmsg")
-int trace_sendmsg_exit(struct sys_exit_sendmsg_args *ctx) {
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
@@ -573,7 +489,7 @@ int trace_recvmsg_enter(struct sys_enter_recvmsg_args *ctx) {
 
 
 SEC("tracepoint/syscalls/sys_exit_recvmsg")
-int trace_recvmsg_exit(struct sys_exit_recvmsg_args *ctx) {
+int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     long ret = ctx->ret;
 
@@ -729,10 +645,6 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
 
     struct in_addr  srcip={};
     struct in_addr  dstip={};
-
-
-
-
 
     if (ctx->newstate == TCP_ESTABLISHED||ctx->newstate == TCP_SYN_SENT||ctx->newstate==TCP_LISTEN) {
      if   (bpf_probe_read_kernel(&srcip, sizeof(srcip), ctx->saddr)<0){
