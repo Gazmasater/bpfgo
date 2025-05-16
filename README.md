@@ -38,16 +38,22 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
     return 0;
 }
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
-/home/gaz358/myprog/bpfgo/trace.c:576:31: error: incompatible pointer to integer conversion assigning to '__be32' (aka 'unsigned int') from '__u8[4]' (aka 'unsigned char[4]') [-Wint-conversion]
-  576 |             info.srcIP.s_addr = ctx->saddr;
-      |                               ^ ~~~~~~~~~~
-/home/gaz358/myprog/bpfgo/trace.c:577:31: error: incompatible pointer to integer conversion assigning to '__be32' (aka 'unsigned int') from '__u8[4]' (aka 'unsigned char[4]') [-Wint-conversion]
-  577 |             info.dstIP.s_addr = ctx->daddr;
-      |                               ^ ~~~~~~~~~~
-2 errors generated.
-Error: compile: exit status 1
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
+Если ты контролируешь vmlinux.h, можешь проверить, как определены поля:
+
+
+grep saddr vmlinux.h
+Если там:
+
+
+__u8 saddr[4];
+— то всё выше верно.
+
+Если:
+
+
+__be32 saddr;
+— то дело в конфликте типов при генерации, и нужно обновить или переопределить vmlinux.h.
 
 
 
