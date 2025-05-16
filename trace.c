@@ -22,68 +22,6 @@ struct conn_info_t
     char comm[64];
 };
 
-struct sys_enter_sendto_args
-{
-    unsigned short common_type;
-    unsigned char common_flags;
-    unsigned char common_preempt_count;
-    int common_pid;
-    int __syscall_nr;
-    int fd;
-    int pad1;
-    void *buff;
-    size_t len;
-    unsigned int flags;
-    struct sockaddr *addr;
-    int addr_len;
-};
-
-
-
-
-struct sys_enter_sendmsg_args {
-
-    unsigned short common_type;      
-    unsigned char common_flags;      
-    unsigned char common_preempt_count;     
-    int common_pid;   
-    int __syscall_nr;
-    int  pad;  
-    int fd;
-    struct user_msghdr * msg; 
-    unsigned int flags;      
-
-
-};
-
-struct sys_enter_recvmsg_args {
-        unsigned short common_type;      
-        unsigned char common_flags;      
-        unsigned char common_preempt_count;     
-        int common_pid;   
-
-        int __syscall_nr; 
-        int fd;
-        int  pad;   
-        struct user_msghdr * msg; 
-        unsigned int flags;      
-
-};
-
-struct sys_enter_recvfrom_args {
-    unsigned short common_type;
-    unsigned char common_flags;
-    unsigned char common_preempt_count;
-    int common_pid;
-    int __syscall_nr;
-    int pad1;
-    int fd;
-    void *ubuf;
-    size_t size;
-    unsigned int flags;
-    struct sockaddr *addr;
-    int *addr_len;
-};
 
 struct
 {
@@ -162,19 +100,19 @@ const struct trace_info *unused __attribute__((unused));
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 SEC("tracepoint/syscalls/sys_enter_sendto")
-int trace_sendto_enter(struct sys_enter_sendto_args *ctx) {
+int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     struct conn_info_t conn_info = {};
+    
 
     conn_info.pid = pid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
-    
-    if (!ctx->addr) return 0;
 
-
-    struct sockaddr *addr = (struct sockaddr *)ctx->addr;  
+    const struct sockaddr *addr = (const struct sockaddr *)ctx->args[4];
+    if (!addr)
+        return 0;
 
     bpf_map_update_elem(&addrSend_map, &pid, &addr, BPF_ANY);
 
@@ -239,7 +177,7 @@ int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx) {
 }
 
 SEC("tracepoint/syscalls/sys_enter_recvfrom")
-int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx) {
+int trace_recvfrom_enter(struct trace_event_raw_sys_enter *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     struct conn_info_t conn_info = {};
 
@@ -248,10 +186,10 @@ int trace_recvfrom_enter(struct sys_enter_recvfrom_args *ctx) {
 
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
-    if (!ctx->addr) return 0;
+    if (!ctx->args[4]) return 0;
 
 
-    struct sockaddr *addr = (struct sockaddr *)ctx->addr;  
+    struct sockaddr *addr = (struct sockaddr *)ctx->args[4];  
 
     bpf_map_update_elem(&addrRecv_map, &pid, &addr, BPF_ANY);
 
@@ -360,7 +298,7 @@ int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx) {
 }
 
 SEC("tracepoint/syscalls/sys_enter_sendmsg")
-int trace_sendmsg_enter(struct sys_enter_sendmsg_args *ctx) {
+int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     struct conn_info_t conn_info = {};
     
@@ -370,7 +308,7 @@ int trace_sendmsg_enter(struct sys_enter_sendmsg_args *ctx) {
 
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
-    struct msghdr *addr = (struct msghdr *)ctx->msg;  
+    struct msghdr *addr = (struct msghdr *)ctx->args[1];  
 
     bpf_printk("sys_enter_sendmsg addr=%p",addr);
     bpf_map_update_elem(&addrSend_map, &pid, &addr, BPF_ANY);
@@ -468,7 +406,7 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx) {
 }
 
 SEC("tracepoint/syscalls/sys_enter_recvmsg")
-int trace_recvmsg_enter(struct sys_enter_recvmsg_args *ctx) {
+int trace_recvmsg_enter(struct trace_event_raw_sys_enter *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
     struct conn_info_t conn_info = {};
     
@@ -478,7 +416,7 @@ int trace_recvmsg_enter(struct sys_enter_recvmsg_args *ctx) {
 
     bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
 
-    struct msghdr *addr = (struct msghdr *)ctx->msg;  
+    struct msghdr *addr = (struct msghdr *)ctx->args[1];  
 
     bpf_printk("sys_enter_recvmsg addr=%p",addr);
     bpf_map_update_elem(&addrRecv_map, &pid, &addr, BPF_ANY);
@@ -604,11 +542,6 @@ int look_up(struct bpf_sk_lookup *ctx) {
         info.srcIP6[2]=bpf_ntohl(ctx->local_ip6[2]);
         info.srcIP6[3]=bpf_ntohl(ctx->local_ip6[3]);
 
-       // bpf_core_read(&info.srcIP6, sizeof(info.srcIP6), ctx->local_ip6);
-
-
-
-    
         info.dstIP6[0]=bpf_ntohl(ctx->remote_ip6[0]);
         info.dstIP6[1]=bpf_ntohl(ctx->remote_ip6[1]);
         info.dstIP6[2]=bpf_ntohl(ctx->remote_ip6[2]);
