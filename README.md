@@ -128,4 +128,15 @@ int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx) {
     return 0;
 }
 
+struct sockaddr addr_copy = {};
+bpf_core_read_user(&addr_copy, sizeof(addr_copy), addr);
+bpf_map_update_elem(&addrSend_map, &pid, &addr_copy, BPF_ANY);
+
+// Было:
+__type(value, struct sockaddr *);
+
+// Стало:
+__type(value, struct sockaddr);
+
+
 
