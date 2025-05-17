@@ -155,7 +155,7 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		const buffLen = 4096 * 4
+		const buffLen = 4096 * 3
 		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
 		if err != nil {
 			log.Fatalf("failed to create perf reader: %s", err)
@@ -177,18 +177,6 @@ func main() {
 				return
 			}
 
-			// count++
-
-			// if time.Since(start) >= time.Second {
-			// 	fmt.Printf("%%%%%%%%%%%%%%%%%%%%%%%%%%5Events/sec: %d\n", count)
-			// 	count = 0
-			// 	start = time.Now()
-			// }
-
-			// if record.LostSamples > 0 {
-			// 	log.Printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!111lost %d samples", record.LostSamples)
-			// 	continue
-			// }
 			if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
 				log.Println("!!!!!!!!!!!!!!!!!!!!!!!invalid event size!!!!!!!!!!!!!!!!!!")
 				continue
@@ -205,10 +193,10 @@ func main() {
 			)
 
 			ssrcIP := net.IPv4(
-				byte(event.SsrcIP.SinAddr.S_addr),
-				byte(event.SsrcIP.SinAddr.S_addr>>8),
-				byte(event.SsrcIP.SinAddr.S_addr>>16),
-				byte(event.SsrcIP.SinAddr.S_addr>>24),
+				byte(event.SrcIP.S_addr),
+				byte(event.SrcIP.S_addr>>8),
+				byte(event.SrcIP.S_addr>>16),
+				byte(event.SrcIP.S_addr>>24),
 			)
 
 			dstIP := net.IPv4(
@@ -219,10 +207,10 @@ func main() {
 			)
 
 			ddstIP := net.IPv4(
-				byte(event.DdstIP.SinAddr.S_addr),
-				byte(event.DdstIP.SinAddr.S_addr>>8),
-				byte(event.DdstIP.SinAddr.S_addr>>16),
-				byte(event.DdstIP.SinAddr.S_addr>>24),
+				byte(event.DstIP.S_addr),
+				byte(event.DstIP.S_addr>>8),
+				byte(event.DstIP.S_addr>>16),
+				byte(event.DstIP.S_addr>>24),
 			)
 
 			if pkg.Int8ToString(event.Comm) == executableName {

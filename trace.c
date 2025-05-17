@@ -63,8 +63,6 @@ struct {
 
 struct trace_info {
     // IPv4
-    struct sockaddr_in ssrcIP;
-    struct sockaddr_in ddstIP; 
     struct in_addr srcIP;
     struct in_addr dstIP;
     __u32 srcIP6[4];    
@@ -148,7 +146,7 @@ int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx) {
         u16 port = bpf_ntohs(addr_in.sin_port);
         if (port == 0) return 0;
 
-        info.ddstIP.sin_addr.s_addr = ip;
+        info.dstIP.s_addr = ip;
         info.dport = port;
         info.family = AF_INET;
 
@@ -253,7 +251,7 @@ int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx) {
 
       
 
-        info.ssrcIP.sin_addr.s_addr=ip;
+        info.srcIP.s_addr=ip;
         info.sport = port;
         info.family=AF_INET;           
         info.pid=pid;
@@ -363,7 +361,7 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx) {
      u32   port=bpf_ntohs(sa.sin_port);
      u32   ip=bpf_ntohl(sa.sin_addr.s_addr);
      info.pid=conn_info->pid;
-     info.ddstIP.sin_addr.s_addr=ip;
+     info.dstIP.s_addr=ip;
      info.dport = port;
      info.family=AF_INET;  
      info.proto=conn_info->proto;
@@ -470,7 +468,7 @@ int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx) {
      u32   port=bpf_ntohs(sa.sin_port);
      u32   ip=bpf_ntohl(sa.sin_addr.s_addr);
      info.pid=conn_info->pid;
-     info.ssrcIP.sin_addr.s_addr=ip;
+     info.srcIP.s_addr=ip;
      info.sport = port;
      info.family=AF_INET;  
            

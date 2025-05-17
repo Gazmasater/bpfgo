@@ -27,18 +27,6 @@ type bpfConnInfoT struct {
 }
 
 type bpfTraceInfo struct {
-	SsrcIP struct {
-		SinFamily uint16
-		SinPort   uint16
-		SinAddr   struct{ S_addr uint32 }
-		Pad       [8]uint8
-	}
-	DdstIP struct {
-		SinFamily uint16
-		SinPort   uint16
-		SinAddr   struct{ S_addr uint32 }
-		Pad       [8]uint8
-	}
 	SrcIP   struct{ S_addr uint32 }
 	DstIP   struct{ S_addr uint32 }
 	SrcIP6  [4]uint32
