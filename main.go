@@ -155,7 +155,7 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		const buffLen = 8196
+		const buffLen = 4096 * 4
 		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
 		if err != nil {
 			log.Fatalf("failed to create perf reader: %s", err)
@@ -166,9 +166,6 @@ func main() {
 		if len(executableName) > 2 {
 			executableName = executableName[2:]
 		}
-
-		// count := 0
-		// start := time.Now()
 
 		for {
 			record, err := rd.Read()
@@ -192,7 +189,6 @@ func main() {
 			// 	log.Printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!111lost %d samples", record.LostSamples)
 			// 	continue
 			// }
-
 			if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
 				log.Println("!!!!!!!!!!!!!!!!!!!!!!!invalid event size!!!!!!!!!!!!!!!!!!")
 				continue
