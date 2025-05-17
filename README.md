@@ -15,6 +15,10 @@
         bpf_core_read_user(&info.srcIP6, sizeof(info.srcIP6), ctx->local_ip6);
 
 
+        bpf_core_read(info.dstIP6, 16, &ctx->remote_ip6[0]); // 16 байт == 4 * 4
+
+
+
 
 
 
