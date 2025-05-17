@@ -1,27 +1,31 @@
-struct trace_info {
-    // IPv4
-    struct sockaddr_in ssrcIP;
-    struct sockaddr_in ddstIP; 
-    struct in_addr srcIP;
-    struct in_addr dstIP;
+type bpfTraceInfo struct {
+	SsrcIP struct {
+		SinFamily uint16
+		SinPort   uint16
+		SinAddr   struct{ S_addr uint32 }
+		Pad       [8]uint8
+	}
+	DdstIP struct {
+		SinFamily uint16
+		SinPort   uint16
+		SinAddr   struct{ S_addr uint32 }
+		Pad       [8]uint8
+	}
+	SrcIP   struct{ S_addr uint32 }
+	DstIP   struct{ S_addr uint32 }
+	SrcIP6  [4]uint32
+	DstIP6  [4]uint32
+	Pid     uint32
+	Proto   uint32
+	Sysexit uint16
+	Sport   uint16
+	Dport   uint16
+	State   uint16
+	Family  uint16
+	Comm    [32]int8
+	_       [2]byte
+}
 
-    __u32 srcIP6[4];    
-    __u32 dstIP6[4];   
-    //  __u16 ssrcIP6[8];
-    // __u16 ddstIP6[8];
-
-    __u16 sport;
-    __u16 dport;
-
-    __u32 pid;
-    __u32 proto;
-    __u32 sysexit;
-    __u32 state;
-
-    __u16 family;
-
-    char comm[32];
-} ;
 
 
 
