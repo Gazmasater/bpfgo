@@ -1,102 +1,73 @@
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 1024);
-    __type(key, u32);
-    __type(value, struct sockaddr);
-} addrSend_map SEC(".maps");
+package firewall
 
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 1024);
-    __type(key, u32);
-    __type(value, struct sockaddr);
-} addrRecv_map SEC(".maps");
+import (
+	"github.com/google/nftables/expr"
+	"golang.org/x/sys/unix"
+)
 
-
-SEC("tracepoint/syscalls/sys_enter_sendto")
-int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    struct conn_info_t conn_info = {};
-
-    conn_info.pid = pid;
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
-
-    const struct sockaddr *addr_ptr = (const struct sockaddr *)ctx->args[4];
-    if (!addr_ptr)
-        return 0;
-
-    struct sockaddr addr = {};
-    if (bpf_core_read_user(&addr, sizeof(addr), addr_ptr) < 0)
-        return 0;
-
-    bpf_map_update_elem(&addrSend_map, &pid, &addr, BPF_ANY);
-    return 0;
+// BuildExprsL4protoTCP возвращает выражения для правила:
+// meta l4proto tcp counter log accept
+func BuildExprsL4protoTCP() []expr.Any {
+	return []expr.Any{
+		&expr.Meta{
+			Key:      expr.MetaKeyL4PROTO,
+			Register: 1,
+		},
+		&expr.Cmp{
+			Op:       expr.CmpOpEq,
+			Register: 1,
+			Data:     []byte{unix.IPPROTO_TCP},
+		},
+		&expr.Counter{},
+		&expr.Log{},
+		&expr.Verdict{
+			Kind: expr.VerdictAccept,
+		},
+	}
 }
 
 
-SEC("tracepoint/syscalls/sys_exit_sendto")
-int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
+package firewall
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
-    if (!conn_info)
-        return 0;
+import (
+	"bytes"
+	"os/exec"
+	"testing"
 
-    if (ret < 0) {
-        bpf_map_delete_elem(&conn_info_map, &pid);
-        return 0;
-    }
+	"github.com/google/nftables"
+)
 
-    struct sockaddr *addr = bpf_map_lookup_elem(&addrSend_map, &pid);
-    if (!addr)
-        return 0;
+func TestBuildExprsL4protoTCP(t *testing.T) {
+	c := &nftables.Conn{}
+	table := &nftables.Table{Name: "testtbl", Family: nftables.TableFamilyINet}
+	c.AddTable(table)
 
-    struct trace_info info = {};
-    __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
-    info.sysexit = 1;
-    info.pid = conn_info->pid;
+	chain := &nftables.Chain{
+		Name:     "testchain",
+		Table:    table,
+		Type:     nftables.ChainTypeFilter,
+		Hooknum:  nftables.ChainHookInput,
+		Priority: nftables.ChainPriorityFilter,
+	}
+	c.AddChain(chain)
 
-    if (addr->sa_family == AF_INET) {
-        struct sockaddr_in addr_in = {};
-        if (bpf_core_read_user(&addr_in, sizeof(addr_in), addr) < 0)
-            return 0;
+	rule := &nftables.Rule{
+		Table: table,
+		Chain: chain,
+		Exprs: BuildExprsL4protoTCP(),
+	}
+	c.AddRule(rule)
+	if err := c.Flush(); err != nil {
+		t.Fatalf("flush failed: %v", err)
+	}
 
-        u32 ip = addr_in.sin_addr.s_addr;
-        u16 port = bpf_ntohs(addr_in.sin_port);
-        if (port == 0)
-            return 0;
+	out, err := exec.Command("nft", "-nn", "list", "ruleset").CombinedOutput()
+	if err != nil {
+		t.Fatalf("nft list ruleset failed: %v\n%s", err, out)
+	}
 
-        info.ddstIP.sin_addr.s_addr = ip;
-        info.dport = port;
-        info.family = AF_INET;
-
-    } else if (addr->sa_family == AF_INET6) {
-        struct sockaddr_in6 addr_in6 = {};
-        if (bpf_core_read_user(&addr_in6, sizeof(addr_in6), addr) < 0)
-            return 0;
-
-        u16 port = bpf_ntohs(addr_in6.sin6_port);
-        info.family = AF_INET6;
-        info.dport = port;
-        __builtin_memcpy(&info.ddstIP6, &addr_in6.sin6_addr.in6_u.u6_addr16, sizeof(info.ddstIP6));
-    }
-
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    bpf_map_delete_elem(&addrSend_map, &pid);
-    bpf_map_delete_elem(&conn_info_map, &pid);
-
-    return 0;
+	expected := []byte("meta l4proto tcp counter packets 0 bytes 0 log accept")
+	if !bytes.Contains(out, expected) {
+		t.Errorf("expected rule not found in output\nExpected: %q\nGot:\n%s", expected, out)
+	}
 }
-
-
-
-
-
-
-
-
-
-
-
