@@ -68,10 +68,10 @@ struct trace_info {
     struct in_addr srcIP;
     struct in_addr dstIP;
 
-    __u32 srcIP6[4];    //sk_lookup
-    __u32 dstIP6[4];    //sk_lookup
-     __u16 ssrcIP6[8];
-    __u16 ddstIP6[8];
+    __u32 srcIP6[4];    
+    __u32 dstIP6[4];   
+    //  __u16 ssrcIP6[8];
+    // __u16 ddstIP6[8];
 
     __u16 sport;
     __u16 dport;
@@ -165,7 +165,7 @@ int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx) {
         u16 port = bpf_ntohs(addr_in6.sin6_port);
         info.family = AF_INET6;
         info.dport = port;
-        __builtin_memcpy(&info.ddstIP6, &addr_in6.sin6_addr.in6_u.u6_addr16, sizeof(info.ddstIP6));
+        __builtin_memcpy(&info.dstIP6, &addr_in6.sin6_addr.in6_u.u6_addr32, sizeof(info.dstIP6));
     }
 
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
@@ -284,7 +284,7 @@ int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx) {
     info.sport = port6;
 
 
-     __builtin_memcpy(&info.ssrcIP6, &addr_in6.sin6_addr.in6_u.u6_addr16, sizeof(info.ssrcIP6));
+     __builtin_memcpy(&info.srcIP6, &addr_in6.sin6_addr.in6_u.u6_addr32, sizeof(info.srcIP6));
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
     }
@@ -393,7 +393,7 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx) {
         info.dport=port;
         info.pid=pid;
 
-        __builtin_memcpy(&info.ddstIP6, &sa6.sin6_addr.in6_u.u6_addr16, sizeof(info.ddstIP6));
+        __builtin_memcpy(&info.dstIP6, &sa6.sin6_addr.in6_u.u6_addr32, sizeof(info.dstIP6));
 
 
          bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
@@ -500,7 +500,7 @@ int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx) {
 
 
 
-        __builtin_memcpy(&info.ssrcIP6, &sa6.sin6_addr.in6_u.u6_addr16, sizeof(info.ssrcIP6));
+        __builtin_memcpy(&info.srcIP6, &sa6.sin6_addr.in6_u.u6_addr32, sizeof(info.srcIP6));
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
     }
@@ -601,8 +601,8 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
         info.sport = ctx->sport;
         info.dport = ctx->dport;
 
-        bpf_core_read(&info.ddstIP6, sizeof(info.ddstIP6), &ctx->daddr_v6);
-        bpf_core_read(&info.ssrcIP6, sizeof(info.ssrcIP6), &ctx->saddr_v6);
+        bpf_core_read(&info.dstIP6, sizeof(info.dstIP6), &ctx->daddr_v6);
+        bpf_core_read(&info.srcIP6, sizeof(info.srcIP6), &ctx->saddr_v6);
 
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
     }

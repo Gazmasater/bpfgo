@@ -43,8 +43,6 @@ type bpfTraceInfo struct {
 	DstIP   struct{ S_addr uint32 }
 	SrcIP6  [4]uint32
 	DstIP6  [4]uint32
-	SsrcIP6 [8]uint16
-	DdstIP6 [8]uint16
 	Sport   uint16
 	Dport   uint16
 	Pid     uint32
