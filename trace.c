@@ -529,18 +529,15 @@ int look_up(struct bpf_sk_lookup *ctx) {
 
     } else if (ctx->family == AF_INET6) {
 
-        info.srcIP6[0]=bpf_ntohl(ctx->local_ip6[0]);
-        info.srcIP6[1]=bpf_ntohl(ctx->local_ip6[1]);
-        info.srcIP6[2]=bpf_ntohl(ctx->local_ip6[2]);
-        info.srcIP6[3]=bpf_ntohl(ctx->local_ip6[3]);
+        info.srcIP6[0]=(ctx->local_ip6[0]);
+        info.srcIP6[1]=(ctx->local_ip6[1]);
+        info.srcIP6[2]=(ctx->local_ip6[2]);
+        info.srcIP6[3]=(ctx->local_ip6[3]);
 
-        info.dstIP6[0]=bpf_ntohl(ctx->remote_ip6[0]);
-        info.dstIP6[1]=bpf_ntohl(ctx->remote_ip6[1]);
-        info.dstIP6[2]=bpf_ntohl(ctx->remote_ip6[2]);
-        info.dstIP6[3]=bpf_ntohl(ctx->remote_ip6[3]);
-
-      //  bpf_core_read(&info.dstIP6, sizeof(info.dstIP6), ctx->remote_ip6);
-
+        info.dstIP6[0]=(ctx->remote_ip6[0]);
+        info.dstIP6[1]=(ctx->remote_ip6[1]);
+        info.dstIP6[2]=(ctx->remote_ip6[2]);
+        info.dstIP6[3]=(ctx->remote_ip6[3]);
 
         info.sport = ctx->local_port;
         info.dport = bpf_ntohs(ctx->remote_port);

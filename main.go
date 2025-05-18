@@ -155,7 +155,7 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		const buffLen = 4096 * 3
+		const buffLen = 4096 * 4
 		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
 		if err != nil {
 			log.Fatalf("failed to create perf reader: %s", err)
@@ -192,21 +192,7 @@ func main() {
 				byte(event.SrcIP.S_addr>>24),
 			)
 
-			ssrcIP := net.IPv4(
-				byte(event.SrcIP.S_addr),
-				byte(event.SrcIP.S_addr>>8),
-				byte(event.SrcIP.S_addr>>16),
-				byte(event.SrcIP.S_addr>>24),
-			)
-
 			dstIP := net.IPv4(
-				byte(event.DstIP.S_addr),
-				byte(event.DstIP.S_addr>>8),
-				byte(event.DstIP.S_addr>>16),
-				byte(event.DstIP.S_addr>>24),
-			)
-
-			ddstIP := net.IPv4(
 				byte(event.DstIP.S_addr),
 				byte(event.DstIP.S_addr>>8),
 				byte(event.DstIP.S_addr>>16),
@@ -231,7 +217,7 @@ func main() {
 					}
 
 					data.Sendmsg = &Sendmsg{
-						DstIP:   ddstIP,
+						DstIP:   dstIP,
 						DstPort: port,
 						Pid:     event.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
@@ -292,7 +278,7 @@ func main() {
 					pid := event.Pid
 					fmt.Printf("SENDTO IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
 						pid,
-						IPv6FromLEWords(event.DstIP6).String(),
+						pkg.IPv6FromLEWords(event.DstIP6).String(),
 						port,
 						pkg.Int8ToString(event.Comm),
 					)
@@ -312,7 +298,7 @@ func main() {
 						eventMap[port] = data
 					}
 					data.Sendmsg = &Sendmsg{
-						DstIP:   ddstIP,
+						DstIP:   dstIP,
 						DstPort: port,
 						Pid:     event.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
@@ -356,7 +342,7 @@ func main() {
 					pid := event.Pid
 					fmt.Printf("SENDMSG IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
 						pid,
-						IPv6FromLEWords(event.DstIP6).String(),
+						pkg.IPv6FromLEWords(event.DstIP6).String(),
 						port,
 						pkg.Int8ToString(event.Comm),
 					)
@@ -376,7 +362,7 @@ func main() {
 						eventMap[port] = data
 					}
 					data.Recvmsg = &Recvmsg{
-						SrcIP:   ssrcIP,
+						SrcIP:   srcIP,
 						SrcPort: port,
 						Pid:     event.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
@@ -431,17 +417,12 @@ func main() {
 
 					}
 
-					// fmt.Printf("DATA_RECVFROM PID=%d srcIP=%s:%d\n",
-					// 	data.Recvmsg.Pid,
-					// 	data.Recvmsg.SrcIP,
-					// 	data.Recvmsg.SrcPort)
-
 				} else if event.Family == 10 {
 					port := event.Sport
 					pid := event.Pid
 					fmt.Printf("RECVFROM IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
 						pid,
-						IPv6FromLEWords(event.SrcIP6).String(),
+						pkg.IPv6FromLEWords(event.SrcIP6).String(),
 						port,
 						pkg.Int8ToString(event.Comm),
 					)
@@ -461,7 +442,7 @@ func main() {
 						eventMap[port] = data
 					}
 					data.Recvmsg = &Recvmsg{
-						SrcIP:   ssrcIP,
+						SrcIP:   srcIP,
 						SrcPort: port,
 						Pid:     event.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
@@ -505,7 +486,7 @@ func main() {
 
 					fmt.Printf("RECVMSG IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
 						pid,
-						IPv6FromLEWords(event.SrcIP6).String(),
+						pkg.IPv6FromLEWords(event.SrcIP6).String(),
 						port,
 						pkg.Int8ToString(event.Comm),
 					)
@@ -606,18 +587,12 @@ func main() {
 
 				} else if family == 10 {
 
-					fmt.Printf("LOOKUP SRC IPv6=%x:%x:%x:%x\n",
-						(event.SrcIP6[0]),
-						(event.SrcIP6[1]),
-						(event.SrcIP6[2]),
-						(event.SrcIP6[3]),
+					fmt.Printf("LOOKUP SRC IPv6=%s\n",
+						pkg.IPv6FromLEWords(event.SrcIP6),
 					)
 
-					fmt.Printf("LOOKUP DST IPv6=%x:%x:%x:%x\n",
-						(event.DstIP6[0]),
-						(event.DstIP6[1]),
-						(event.DstIP6[2]),
-						(event.DstIP6[3]),
+					fmt.Printf("LOOKUP DST IPv6=%s\n",
+						pkg.IPv6FromLEWords(event.DstIP6),
 					)
 					fmt.Printf("LOOKUP SPORT=%d  DPORT=%d PROTO=%d\n", event.Sport, event.Dport, event.Proto)
 
@@ -635,14 +610,14 @@ func main() {
 
 					fmt.Printf("TCP IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
 						pid,
-						IPv6FromLEWords4(event.SrcIP6).String(),
+						pkg.IPv6FromLEWords(event.SrcIP6).String(),
 						sport,
 						pkg.Int8ToString(event.Comm),
 					)
 
 					fmt.Printf("TCP IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
 						pid,
-						IPv6FromLEWords4(event.DstIP6).String(),
+						pkg.IPv6FromLEWords(event.DstIP6).String(),
 						dport,
 						pkg.Int8ToString(event.Comm),
 					)
@@ -769,26 +744,4 @@ func main() {
 	fmt.Println("Press Ctrl+C to exit")
 	<-stop
 	fmt.Println("Exiting...")
-}
-
-func IPv6FromLEWords(words [4]uint32) net.IP {
-	ip := make(net.IP, 16)
-	for i := 0; i < 4; i++ {
-		ip[i*4+0] = byte(words[i])
-		ip[i*4+1] = byte(words[i] >> 8)
-		ip[i*4+2] = byte(words[i] >> 16)
-		ip[i*4+3] = byte(words[i] >> 24)
-	}
-	return ip
-}
-
-func IPv6FromLEWords4(words [4]uint32) net.IP {
-	ip := make(net.IP, 16)
-	for i := 0; i < 4; i++ {
-		ip[i*4+0] = byte(words[i])
-		ip[i*4+1] = byte(words[i] >> 8)
-		ip[i*4+2] = byte(words[i] >> 16)
-		ip[i*4+3] = byte(words[i] >> 24)
-	}
-	return ip
 }
