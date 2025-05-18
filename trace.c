@@ -219,8 +219,8 @@ int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx) {
     long ret = ctx->ret;
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
-    if (!conn_info) return 0;
-
+    if (!conn_info)
+        return 0;
     if (ret < 0) {
         bpf_printk("sys_exit_recvfrom failed for PID=%d\n", pid);
         bpf_map_delete_elem(&conn_info_map, &pid);
@@ -228,88 +228,71 @@ int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx) {
     }
 
     struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addrRecv_map, &pid);
-    if (!addr_ptr) {
+    if (!addr_ptr)
         return 0;
-    }
 
     struct trace_info info = {};
-
-    struct sockaddr addr = {};
-
-    struct sockaddr_in addr_in = {};
-
-   if (bpf_core_read_user(&addr_in, sizeof(addr_in), *addr_ptr)<0){
-    return 0;
-   }
-
-
-   if (bpf_core_read_user(&addr, sizeof(addr), *addr_ptr)<0){
-    return 0;
-   }  
-
-
-
     __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
-        
-       
-    info.sysexit=2;
+    info.sysexit = 2;
+    info.pid     = pid;
 
+    /* читаем семейство адреса */
+    __u16 family;
+    if (BPF_CORE_READ_USER_INTO(&family, *addr_ptr, sa_family) < 0)
+        goto cleanup;
 
-    if (addr.sa_family == AF_INET) {
+    if (family == AF_INET) {
+        __u32 ip;
+        __u16 port;
+        /* кастим на sockaddr_in и читаем поля */
+        if (BPF_CORE_READ_USER_INTO(&ip,
+                (struct sockaddr_in *)*addr_ptr,
+                sin_addr.s_addr) < 0 ||
+            BPF_CORE_READ_USER_INTO(&port,
+                (struct sockaddr_in *)*addr_ptr,
+                sin_port) < 0)
+            goto cleanup;
 
-        struct sockaddr_in addr_in = {};
-       if (bpf_core_read_user(&addr_in, sizeof(addr_in), *addr_ptr)<0){
-        return 0;
-       }
+        /* приводим к хост-байт-ордру */
+        ip   = bpf_ntohl(ip);
+        port = bpf_ntohs(port);
+        if (port == 0)
+            goto cleanup;
 
-        u32 ip = bpf_ntohl(addr_in.sin_addr.s_addr);
+        info.srcIP.s_addr = ip;
+        info.sport        = port;
+        info.family       = AF_INET;
 
-        u16 port = bpf_ntohs(addr_in.sin_port);
-
-        if (port== 0) {
-        return 0;
-        }
-               
-        info.pid = pid;
-
-      
-
-        info.srcIP.s_addr=ip;
-        info.sport = port;
-        info.family=AF_INET;           
-        info.pid=pid;
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
-                    
-    } else if (addr.sa_family==AF_INET6) {
+    } else if (family == AF_INET6) {
+        __u16 port6;
+        /* кастим на sockaddr_in6 и читаем порт */
+        if (BPF_CORE_READ_USER_INTO(&port6,
+                (struct sockaddr_in6 *)*addr_ptr,
+                sin6_port) < 0)
+            goto cleanup;
 
+        port6 = bpf_ntohs(port6);
+        if (port6 == 0)
+            goto cleanup;
 
+        info.family = AF_INET6;
+        info.sport  = port6;
 
-    struct sockaddr_in6 addr_in6 = {};
+        /* читаем весь массив u6_addr32 за один вызов */
+        if (BPF_CORE_READ_USER_INTO(&info.srcIP6,
+                (struct sockaddr_in6 *)*addr_ptr,
+                sin6_addr.in6_u.u6_addr32) < 0)
+            goto cleanup;
 
-    if (bpf_core_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr) < 0) {
-        return 0;
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
     }
 
-
-
-    u16 port6 = bpf_ntohs(addr_in6.sin6_port);
-    info.family = AF_INET6;
-    info.pid = conn_info->pid;
-    info.sport = port6;
-
-
-     __builtin_memcpy(&info.srcIP6, &addr_in6.sin6_addr.in6_u.u6_addr32, sizeof(info.srcIP6));
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-    }
+cleanup:
     bpf_map_delete_elem(&addrRecv_map, &pid);
     bpf_map_delete_elem(&conn_info_map, &pid);
-
-
- 
     return 0;
-
 }
 
 SEC("tracepoint/syscalls/sys_enter_sendmsg")
