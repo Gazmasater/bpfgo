@@ -152,3 +152,30 @@ cleanup:
     return 0;
 }
 
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "136",
+	"severity": 8,
+	"message": "struct \"sockaddr\" has no field \"sin_addr\"",
+	"source": "C/C++",
+	"startLineNumber": 155,
+	"startColumn": 15,
+	"endLineNumber": 155,
+	"endColumn": 38
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "136",
+	"severity": 8,
+	"message": "struct \"sockaddr\" has no field \"sin_port\"",
+	"source": "C/C++",
+	"startLineNumber": 156,
+	"startColumn": 13,
+	"endLineNumber": 156,
+	"endColumn": 36
+}]
+
