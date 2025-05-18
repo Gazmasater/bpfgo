@@ -215,12 +215,12 @@ int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx) {
 
     struct sockaddr_in addr_in = {};
 
-   if (bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr)<0){
+   if (bpf_core_read_user(&addr_in, sizeof(addr_in), *addr_ptr)<0){
     return 0;
    }
 
 
-   if (bpf_probe_read_user(&addr, sizeof(addr), *addr_ptr)<0){
+   if (bpf_core_read_user(&addr, sizeof(addr), *addr_ptr)<0){
     return 0;
    }  
 
@@ -235,7 +235,7 @@ int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx) {
     if (addr.sa_family == AF_INET) {
 
         struct sockaddr_in addr_in = {};
-       if (bpf_probe_read_user(&addr_in, sizeof(addr_in), *addr_ptr)<0){
+       if (bpf_core_read_user(&addr_in, sizeof(addr_in), *addr_ptr)<0){
         return 0;
        }
 
@@ -264,7 +264,7 @@ int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx) {
 
     struct sockaddr_in6 addr_in6 = {};
 
-    if (bpf_probe_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr) < 0) {
+    if (bpf_core_read_user(&addr_in6, sizeof(addr_in6), *addr_ptr) < 0) {
         return 0;
     }
 
@@ -336,7 +336,7 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx) {
     }
 
     struct msghdr *msg;
-    bpf_probe_read_user(&msg, sizeof(msg), *addr_ptr);
+    bpf_core_read_user(&msg, sizeof(msg), *addr_ptr);
 
     if (!msg) {
         bpf_printk("msg is NULL for pid=%d", pid);
@@ -353,8 +353,8 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx) {
     info.sysexit=11;
 
 
-    bpf_probe_read_user(&sa, sizeof(sa), &msg->msg_name);
-    bpf_probe_read_user(&sa6, sizeof(sa6), &msg->msg_name);
+    bpf_core_read_user(&sa, sizeof(sa), &msg->msg_name);
+    bpf_core_read_user(&sa6, sizeof(sa6), &msg->msg_name);
 
     if (sa.sin_family==AF_INET) {
 
@@ -444,7 +444,7 @@ int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx) {
     }
 
     struct msghdr *msg;
-    bpf_probe_read_user(&msg, sizeof(msg), *addr_ptr);
+    bpf_core_read_user(&msg, sizeof(msg), *addr_ptr);
 
     if (!msg) {
         bpf_printk("msg is NULL for pid=%d", pid);
@@ -457,8 +457,8 @@ int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx) {
     __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
 
 
-    bpf_probe_read_user(&sa, sizeof(sa), &msg->msg_name);
-    bpf_probe_read_user(&sa6, sizeof(sa6), &msg->msg_name);
+    bpf_core_read_user(&sa, sizeof(sa), &msg->msg_name);
+    bpf_core_read_user(&sa6, sizeof(sa6), &msg->msg_name);
     info.sysexit=12;
 
 
