@@ -103,7 +103,6 @@ type bpfMapSpecs struct {
 	AddrRecvMap *ebpf.MapSpec `ebpf:"addrRecv_map"`
 	AddrSendMap *ebpf.MapSpec `ebpf:"addrSend_map"`
 	ConnInfoMap *ebpf.MapSpec `ebpf:"conn_info_map"`
-	Ipv6Events  *ebpf.MapSpec `ebpf:"ipv6_events"`
 	TraceEvents *ebpf.MapSpec `ebpf:"trace_events"`
 }
 
@@ -137,7 +136,6 @@ type bpfMaps struct {
 	AddrRecvMap *ebpf.Map `ebpf:"addrRecv_map"`
 	AddrSendMap *ebpf.Map `ebpf:"addrSend_map"`
 	ConnInfoMap *ebpf.Map `ebpf:"conn_info_map"`
-	Ipv6Events  *ebpf.Map `ebpf:"ipv6_events"`
 	TraceEvents *ebpf.Map `ebpf:"trace_events"`
 }
 
@@ -146,7 +144,6 @@ func (m *bpfMaps) Close() error {
 		m.AddrRecvMap,
 		m.AddrSendMap,
 		m.ConnInfoMap,
-		m.Ipv6Events,
 		m.TraceEvents,
 	)
 }
