@@ -138,8 +138,9 @@ if (ret < 0)
 
     struct trace_info info = {};
 
-    __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+   __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
 
+  
     info.sysexit = 1;
     info.pid     = conn_info->pid;
 
@@ -408,8 +409,6 @@ if (ret < 0)
         info.dport=port;
         info.pid=pid;
 
-       // __builtin_memcpy(&info.dstIP6, &sa6.sin6_addr.in6_u.u6_addr32, sizeof(info.dstIP6));
-
         if (BPF_CORE_READ_INTO(&info.dstIP6, &sa6, sin6_addr.in6_u.u6_addr32) < 0)
     goto cleanup;
 
@@ -525,10 +524,6 @@ if (ret < 0)
         info.family=AF_INET6;
         info.sport=port;
         info.pid=pid;
-
-
-
-      //  __builtin_memcpy(&info.srcIP6, &sa6.sin6_addr.in6_u.u6_addr32, sizeof(info.srcIP6));
 
         if (BPF_CORE_READ_INTO(&info.srcIP6, &sa6, sin6_addr.in6_u.u6_addr32) < 0)
     goto cleanup;
