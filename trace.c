@@ -117,7 +117,12 @@ int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx) {
 SEC("tracepoint/syscalls/sys_exit_sendto")
 int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
+
+    __s64 ret;
+if (BPF_CORE_READ_INTO(&ret, ctx, ret) < 0)
+    return 0;
+if (ret < 0)
+    goto cleanup;
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
     if (!conn_info)
@@ -132,7 +137,9 @@ int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx) {
 
 
     struct trace_info info = {};
+
     __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+
     info.sysexit = 1;
     info.pid     = conn_info->pid;
 
@@ -214,7 +221,12 @@ int trace_recvfrom_enter(struct trace_event_raw_sys_enter *ctx) {
 SEC("tracepoint/syscalls/sys_exit_recvfrom")
 int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
+
+__s64 ret;
+if (BPF_CORE_READ_INTO(&ret, ctx, ret) < 0)
+    return 0;
+if (ret < 0)
+    goto cleanup;
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
     if (!conn_info)
@@ -318,8 +330,12 @@ int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx) {
 SEC("tracepoint/syscalls/sys_exit_sendmsg")
 int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
 
+__s64 ret;
+if (BPF_CORE_READ_INTO(&ret, ctx, ret) < 0)
+    return 0;
+if (ret < 0)
+    goto cleanup;
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
     if (!conn_info) {
@@ -392,7 +408,10 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx) {
         info.dport=port;
         info.pid=pid;
 
-        __builtin_memcpy(&info.dstIP6, &sa6.sin6_addr.in6_u.u6_addr32, sizeof(info.dstIP6));
+       // __builtin_memcpy(&info.dstIP6, &sa6.sin6_addr.in6_u.u6_addr32, sizeof(info.dstIP6));
+
+        if (BPF_CORE_READ_INTO(&info.dstIP6, &sa6, sin6_addr.in6_u.u6_addr32) < 0)
+    goto cleanup;
 
 
          bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
@@ -432,8 +451,12 @@ int trace_recvmsg_enter(struct trace_event_raw_sys_enter *ctx) {
 SEC("tracepoint/syscalls/sys_exit_recvmsg")
 int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx) {
     u32 pid = bpf_get_current_pid_tgid() >> 32;
-    long ret = ctx->ret;
-
+    
+__s64 ret;
+if (BPF_CORE_READ_INTO(&ret, ctx, ret) < 0)
+    return 0;
+if (ret < 0)
+    goto cleanup;
     
 
     struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
@@ -505,7 +528,10 @@ int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx) {
 
 
 
-        __builtin_memcpy(&info.srcIP6, &sa6.sin6_addr.in6_u.u6_addr32, sizeof(info.srcIP6));
+      //  __builtin_memcpy(&info.srcIP6, &sa6.sin6_addr.in6_u.u6_addr32, sizeof(info.srcIP6));
+
+        if (BPF_CORE_READ_INTO(&info.srcIP6, &sa6, sin6_addr.in6_u.u6_addr32) < 0)
+    goto cleanup;
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
     }
