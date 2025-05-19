@@ -136,7 +136,6 @@ int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx) {
     info.sysexit = 1;
     info.pid     = conn_info->pid;
 
-    /* читаем семейство из sockaddr::sa_family */
     __u16 family;
     if (BPF_CORE_READ_USER_INTO(&family, *addr_ptr, sa_family) < 0)
         goto cleanup;
@@ -144,7 +143,6 @@ int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx) {
     if (family == AF_INET) {
         __u32 ip;
         __u16 port;
-        /* кастим на sockaddr_in и читаем sin_addr.s_addr и sin_port */
         if (BPF_CORE_READ_USER_INTO(&ip,
                 (struct sockaddr_in *)*addr_ptr,
                 sin_addr.s_addr) < 0 ||
@@ -580,28 +578,24 @@ int trace_tcp_est(struct trace_event_raw_inet_sock_set_state *ctx) {
             ctx->newstate == TCP_SYN_SENT ||
             ctx->newstate == TCP_LISTEN) {
 
-            __u32 ip_src = 0, ip_dst = 0;
-            __builtin_memcpy(&ip_src, ctx->saddr, sizeof(ip_src));
-            __builtin_memcpy(&ip_dst, ctx->daddr, sizeof(ip_dst));
+        BPF_CORE_READ_INTO(&info.srcIP.s_addr, ctx, saddr);
+        BPF_CORE_READ_INTO(&info.dstIP.s_addr, ctx, daddr);
 
-            info.srcIP.s_addr = ip_src;
-            info.dstIP.s_addr = ip_dst;    
-            info.proto = ctx->protocol;
-            info.pid = pid_tcp;
-            info.state = ctx->newstate;
-            info.family = AF_INET;
-
-            bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+        info.proto = ctx->protocol;
+        info.pid = pid_tcp;
+        info.state = ctx->newstate;
+        info.family = AF_INET;
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
         }
     } else if (ctx->family == AF_INET6) {
+
         info.family = AF_INET6;
         info.pid = pid_tcp;
         info.proto = ctx->protocol;
         info.state = ctx->newstate;
        
-
-        bpf_core_read(&info.dstIP6, sizeof(info.dstIP6), &ctx->daddr_v6);
-        bpf_core_read(&info.srcIP6, sizeof(info.srcIP6), &ctx->saddr_v6);
+        BPF_CORE_READ_INTO(&info.dstIP6, ctx, daddr_v6);
+        BPF_CORE_READ_INTO(&info.srcIP6, ctx, saddr_v6);
 
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
     }
