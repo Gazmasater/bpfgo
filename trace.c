@@ -575,6 +575,8 @@ int look_up(struct bpf_sk_lookup *ctx) {
         info.dstIP6[1]=(ctx->remote_ip6[1]);
         info.dstIP6[2]=(ctx->remote_ip6[2]);
         info.dstIP6[3]=(ctx->remote_ip6[3]);
+        info.sysexit = 3;
+
 
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
