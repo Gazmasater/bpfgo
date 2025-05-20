@@ -546,23 +546,22 @@ int look_up(struct bpf_sk_lookup *ctx) {
     struct trace_info info = {};
 
     __u32 proto = ctx->protocol;
-      
-
-       info.sport = ctx->local_port;
-       info.dport = bpf_ntohs(ctx->remote_port);
-        info.proto = proto;
-        info.sysexit = 3;
 
     if (ctx->family == AF_INET) {
         struct in_addr srcIP={};
         struct in_addr dstIP={};
+    
 
-   
-    info.srcIP.s_addr = ctx->local_ip4;
-    info.dstIP.s_addr = ctx->remote_ip4;
-    info.family=AF_INET;
+        info.srcIP.s_addr = ctx->local_ip4;
+        info.sport = ctx->local_port;
+        info.dstIP.s_addr = ctx->remote_ip4;
+        info.dport = bpf_ntohs(ctx->remote_port);
 
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+        info.sysexit = 3;
+        info.proto = proto;
+        info.family=AF_INET;
+
+       bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
     } else if (ctx->family == AF_INET6) {
 
@@ -575,7 +574,12 @@ int look_up(struct bpf_sk_lookup *ctx) {
         info.dstIP6[1]=(ctx->remote_ip6[1]);
         info.dstIP6[2]=(ctx->remote_ip6[2]);
         info.dstIP6[3]=(ctx->remote_ip6[3]);
+
+        info.sport = ctx->local_port;
+        info.dport = bpf_ntohs(ctx->remote_port);
+        info.family=ctx->family;
         info.sysexit = 3;
+        info.proto=ctx->protocol;
 
 
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
