@@ -1,51 +1,23 @@
 
-SEC("sk_lookup")
-int look_up(struct bpf_sk_lookup *ctx) {
-    struct trace_info info = {};
+struct trace_info {
+    union {
+        struct in_addr srcIP;
+        __u32 srcIP6[4];
+    };
+    union {
+        struct in_addr dstIP;
+        __u32 dstIP6[4];
+    };
+    __u32 pid;
+    __u32 proto;
+    char comm[16];
+    // объединяем 5 u16 полей в два 32-битных
+    struct {
+        __u32 sysexit : 10; // 10 бит — обычно хватит
+        __u32 sport   : 16;
+        __u32 dport   : 16;
+        __u32 state   : 8;
+        __u32 family  : 8;
+    };
+};
 
-    __u32 proto = ctx->protocol;
-    info.sysexit = 3;
-    info.family=ctx->family;
-
-
-
-    if (ctx->family == AF_INET) {
-        struct in_addr srcIP={};
-        struct in_addr dstIP={};
-    
-
-        info.srcIP.s_addr = ctx->local_ip4;
-        info.sport = ctx->local_port;
-        info.dstIP.s_addr = ctx->remote_ip4;
-        info.dport = bpf_ntohs(ctx->remote_port);
-
-        info.proto = proto;
-
-bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-    } else if (ctx->family == AF_INET6) {
-
-        info.srcIP6[0]=(ctx->local_ip6[0]);
-        info.srcIP6[1]=(ctx->local_ip6[1]);
-        info.srcIP6[2]=(ctx->local_ip6[2]);
-        info.srcIP6[3]=(ctx->local_ip6[3]);
-
-        info.dstIP6[0]=(ctx->remote_ip6[0]);
-        info.dstIP6[1]=(ctx->remote_ip6[1]);
-        info.dstIP6[2]=(ctx->remote_ip6[2]);
-        info.dstIP6[3]=(ctx->remote_ip6[3]);
-
-        info.sport = ctx->local_port;
-        info.dport = bpf_ntohs(ctx->remote_port);
-        info.proto=ctx->protocol;
-
-
-bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-    }
-
-    return SK_PASS;
-}
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
-2025/05/21 03:49:09 failed to load bpf objects: field LookUp: program look_up: load program: invalid argument: cannot pass map_type 27 into func bpf_perf_event_output#25 (62 line(s) omitted)
