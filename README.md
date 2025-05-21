@@ -48,3 +48,15 @@ int udp_monitor(struct __sk_buff *skb) {
     return TC_ACT_OK;
 }
 
+InetSock, err := link.Tracepoint("sock", "inet_sock_set_state", objs.TraceTcpEst, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint inet_sock_set_state: %s", err)
+	}
+	defer InetSock.Close()
+
+	skLookupLink, err := link.AttachNetNs(int(netns.Fd()), objs.LookUp)
+	if err != nil {
+		log.Fatalf("failed to attach sk_lookup program: %v", err)
+	}
+	defer skLookupLink.Close()
+
