@@ -1,15 +1,15 @@
 
+#include <linux/in6.h> // для struct in6_addr
+
 struct trace_info {
-    union {
-        struct {
-            struct in_addr srcIP;
-            struct in_addr dstIP;
-        } v4;
-        struct {
-            __u32 srcIP6[4];
-            __u32 dstIP6[4];
-        } v6;
-    } ip;
+    // IPv4
+    struct in_addr srcIP;
+    struct in_addr dstIP;
+
+    // IPv6
+    struct in6_addr srcIP6;
+    struct in6_addr dstIP6;
+
     __u32 pid;
     __u32 proto;
     __u16 sport;
@@ -19,4 +19,5 @@ struct trace_info {
     __u8 state;
     char comm[32];
 };
+
 
