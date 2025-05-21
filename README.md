@@ -49,5 +49,7 @@ int trace_udp(struct trace_event_raw_net_dev_template *ctx)
     return 0;
 }
 
-char _license[] SEC("license") = "GPL";
-
+az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
+[sudo] password for gaz358: 
+2025/05/21 23:47:16 failed to load bpf objects: field TraceUdp: program trace_udp: load program: invalid argument: unknown func bpf_skb_load_bytes#26 (24 line(s) omitted)
+gaz358@gaz358-BOD-WXX9:~/myprog/bpf
