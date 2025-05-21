@@ -29,8 +29,8 @@ type bpfConnInfoT struct {
 type bpfTraceInfo struct {
 	SrcIP   struct{ S_addr uint32 }
 	DstIP   struct{ S_addr uint32 }
-	SrcIP6  [4]uint32
-	DstIP6  [4]uint32
+	SrcIP6  struct{ In6U struct{ U6Addr8 [16]uint8 } }
+	DstIP6  struct{ In6U struct{ U6Addr8 [16]uint8 } }
 	Pid     uint32
 	Proto   uint32
 	Sport   uint16

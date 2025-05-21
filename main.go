@@ -274,11 +274,11 @@ func main() {
 
 				} else if family == 10 {
 					port := event.Dport
-
+					ip6 := pkg.IPv6FromLEWords(IPv6BytesToWords(event.DstIP6.In6U.U6Addr8))
 					pid := event.Pid
 					fmt.Printf("SENDTO IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
 						pid,
-						pkg.IPv6FromLEWords(event.DstIP6).String(),
+						ip6.String(),
 						port,
 						pkg.Int8ToString(event.Comm),
 					)
@@ -340,9 +340,11 @@ func main() {
 				} else if event.Family == 10 {
 					port := event.Dport
 					pid := event.Pid
+					ip6 := pkg.IPv6FromLEWords(IPv6BytesToWords(event.DstIP6.In6U.U6Addr8))
+
 					fmt.Printf("SENDMSG IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
 						pid,
-						pkg.IPv6FromLEWords(event.DstIP6).String(),
+						ip6.String(),
 						port,
 						pkg.Int8ToString(event.Comm),
 					)
@@ -420,9 +422,11 @@ func main() {
 				} else if event.Family == 10 {
 					port := event.Sport
 					pid := event.Pid
+					ip6 := pkg.IPv6FromLEWords(IPv6BytesToWords(event.SrcIP6.In6U.U6Addr8))
+
 					fmt.Printf("RECVFROM IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
 						pid,
-						pkg.IPv6FromLEWords(event.SrcIP6).String(),
+						ip6,
 						port,
 						pkg.Int8ToString(event.Comm),
 					)
@@ -483,10 +487,11 @@ func main() {
 				} else if event.Family == 10 {
 					port := event.Sport
 					pid := event.Pid
+					ip6 := pkg.IPv6FromLEWords(IPv6BytesToWords(event.SrcIP6.In6U.U6Addr8))
 
 					fmt.Printf("RECVMSG IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
 						pid,
-						pkg.IPv6FromLEWords(event.SrcIP6).String(),
+						ip6.String(),
 						port,
 						pkg.Int8ToString(event.Comm),
 					)
@@ -586,13 +591,16 @@ func main() {
 					}
 
 				} else if family == 10 {
+					ip6 := pkg.IPv6FromLEWords(IPv6BytesToWords(event.SrcIP6.In6U.U6Addr8))
 
 					fmt.Printf("LOOKUP SRC IPv6=%s\n",
-						pkg.IPv6FromLEWords(event.SrcIP6),
+						ip6,
 					)
 
+					ip6_d := pkg.IPv6FromLEWords(IPv6BytesToWords(event.DstIP6.In6U.U6Addr8))
+
 					fmt.Printf("LOOKUP DST IPv6=%s\n",
-						pkg.IPv6FromLEWords(event.DstIP6),
+						ip6_d,
 					)
 					fmt.Printf("LOOKUP SPORT=%d  DPORT=%d PROTO=%d\n", event.Sport, event.Dport, event.Proto)
 
@@ -607,17 +615,20 @@ func main() {
 					sport := event.Sport
 					dport := event.Dport
 					pid := event.Pid
+					ip6_s := pkg.IPv6FromLEWords(IPv6BytesToWords(event.SrcIP6.In6U.U6Addr8))
 
 					fmt.Printf("TCP IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
 						pid,
-						pkg.IPv6FromLEWords(event.SrcIP6).String(),
+						ip6_s.String(),
 						sport,
 						pkg.Int8ToString(event.Comm),
 					)
 
+					ip6_d := pkg.IPv6FromLEWords(IPv6BytesToWords(event.DstIP6.In6U.U6Addr8))
+
 					fmt.Printf("TCP IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
 						pid,
-						pkg.IPv6FromLEWords(event.DstIP6).String(),
+						ip6_d,
 						dport,
 						pkg.Int8ToString(event.Comm),
 					)
@@ -744,4 +755,15 @@ func main() {
 	fmt.Println("Press Ctrl+C to exit")
 	<-stop
 	fmt.Println("Exiting...")
+}
+
+func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
+	var words [4]uint32
+	for i := 0; i < 4; i++ {
+		words[i] = uint32(addr[i*4]) |
+			uint32(addr[i*4+1])<<8 |
+			uint32(addr[i*4+2])<<16 |
+			uint32(addr[i*4+3])<<24
+	}
+	return words
 }

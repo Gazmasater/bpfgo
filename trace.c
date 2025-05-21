@@ -66,8 +66,9 @@ struct trace_info {
     struct in_addr dstIP;
 
      // IPv6
-    __u32 srcIP6[4];    
-    __u32 dstIP6[4];   
+    struct in6_addr srcIP6;
+    struct in6_addr dstIP6;
+
     
     __u32 pid;
     __u32 proto;
@@ -569,16 +570,19 @@ int look_up(struct bpf_sk_lookup *ctx) {
 
     } else if (ctx->family == AF_INET6) {
 
-        info.srcIP6[0]=(ctx->local_ip6[0]);
-        info.srcIP6[1]=(ctx->local_ip6[1]);
-        info.srcIP6[2]=(ctx->local_ip6[2]);
-        info.srcIP6[3]=(ctx->local_ip6[3]);
+ 
 
-        info.dstIP6[0]=(ctx->remote_ip6[0]);
-        info.dstIP6[1]=(ctx->remote_ip6[1]);
-        info.dstIP6[2]=(ctx->remote_ip6[2]);
-        info.dstIP6[3]=(ctx->remote_ip6[3]);
+info.srcIP6.in6_u.u6_addr32[0]=ctx->local_ip6[0];
+info.srcIP6.in6_u.u6_addr32[1]=ctx->local_ip6[1];
+info.srcIP6.in6_u.u6_addr32[2]=ctx->local_ip6[2];
+info.srcIP6.in6_u.u6_addr32[3]=ctx->local_ip6[3];
+info.dstIP6.in6_u.u6_addr32[0]=ctx->remote_ip6[0];
+info.dstIP6.in6_u.u6_addr32[1]=ctx->remote_ip6[1];
+info.dstIP6.in6_u.u6_addr32[2]=ctx->remote_ip6[2];
+info.dstIP6.in6_u.u6_addr32[3]=ctx->remote_ip6[3];
 
+
+      
         info.sport = ctx->local_port;
         info.dport = bpf_ntohs(ctx->remote_port);
         info.proto=ctx->protocol;
