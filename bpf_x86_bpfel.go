@@ -33,13 +33,12 @@ type bpfTraceInfo struct {
 	DstIP6  [4]uint32
 	Pid     uint32
 	Proto   uint32
-	Sysexit uint16
 	Sport   uint16
 	Dport   uint16
-	State   uint16
 	Family  uint16
+	Sysexit uint8
+	State   uint8
 	Comm    [32]int8
-	_       [2]byte
 }
 
 // loadBpf returns the embedded CollectionSpec for bpf.

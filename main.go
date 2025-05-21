@@ -155,7 +155,7 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		const buffLen = 4096 * 4
+		const buffLen = 4096 * 6
 		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
 		if err != nil {
 			log.Fatalf("failed to create perf reader: %s", err)

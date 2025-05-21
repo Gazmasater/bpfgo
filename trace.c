@@ -71,11 +71,13 @@ struct trace_info {
     
     __u32 pid;
     __u32 proto;
-    __u16 sysexit;
     __u16 sport;
     __u16 dport;
-    __u16 state;
     __u16 family;
+    __u8 sysexit;
+    __u8 state;
+
+
     char comm[32];
 } ;
 
