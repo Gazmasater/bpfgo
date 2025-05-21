@@ -1,5 +1,5 @@
-#define ETH_P_IP    0x0800  // Интернет-протокол (IPv4)
-ETH_P_IPV6 = 0x86DD
+#define TC_ACT_OK 0
+#define IPPROTO_UDP 17
 
 
 #include <linux/bpf.h>
@@ -8,48 +8,43 @@ ETH_P_IPV6 = 0x86DD
 #include <linux/ip.h>
 #include <linux/udp.h>
 
-SEC("tracepoint/net/netif_receive_skb")
-int trace_udp(struct trace_event_raw_net_dev_template *ctx)
-{
-    struct ethhdr eth = {};
-    struct iphdr ip = {};
-    struct udphdr udp = {};
-    int ret;
+SEC("tc")
+int udp_monitor(struct __sk_buff *skb) {
+    void *data = (void *)(long)skb->data;
+    void *data_end = (void *)(long)skb->data_end;
 
-    // Сначала Ethernet-заголовок
-    ret = bpf_skb_load_bytes(ctx->skbaddr, 0, &eth, sizeof(eth));
-    if (ret < 0)
-        return 0;
+    // Проверка на размер ethernet header
+    if (data + sizeof(struct ethhdr) > data_end)
+        return TC_ACT_OK;
 
-    if (eth.h_proto != __bpf_htons(ETH_P_IP))
-        return 0;
+    struct ethhdr *eth = data;
 
-    // IP-заголовок
-    ret = bpf_skb_load_bytes(ctx->skbaddr, sizeof(eth), &ip, sizeof(ip));
-    if (ret < 0)
-        return 0;
+    // Только IPv4
+    if (eth->h_proto != __bpf_htons(ETH_P_IP))
+        return TC_ACT_OK;
 
-    if (ip.protocol != IPPROTO_UDP)
-        return 0;
+    // Проверка на размер IP header
+    struct iphdr *ip = data + sizeof(struct ethhdr);
+    if ((void *)ip + sizeof(struct iphdr) > data_end)
+        return TC_ACT_OK;
 
-    // UDP-заголовок (ip.ihl — длина IP заголовка в 32-битных словах)
-    int ip_header_len = ip.ihl * 4;
-    ret = bpf_skb_load_bytes(ctx->skbaddr, sizeof(eth) + ip_header_len, &udp, sizeof(udp));
-    if (ret < 0)
-        return 0;
+    // Только UDP
+    if (ip->protocol != IPPROTO_UDP)
+        return TC_ACT_OK;
 
-    // Готово! Вот твои данные:
-    __u32 src_ip = ip.saddr;
-    __u32 dst_ip = ip.daddr;
-    __u16 src_port = __bpf_ntohs(udp.source);
-    __u16 dst_port = __bpf_ntohs(udp.dest);
+    int ip_header_len = ip->ihl * 4;
+    struct udphdr *udp = data + sizeof(struct ethhdr) + ip_header_len;
+    if ((void *)udp + sizeof(struct udphdr) > data_end)
+        return TC_ACT_OK;
 
-    // ...дальнейшая логика
+    // Получаем адреса и порты
+    __u32 src_ip = ip->saddr;
+    __u32 dst_ip = ip->daddr;
+    __u16 src_port = __bpf_ntohs(udp->source);
+    __u16 dst_port = __bpf_ntohs(udp->dest);
 
-    return 0;
+    bpf_printk("UDP: %x:%d -> %x:%d\n", src_ip, src_port, dst_ip, dst_port);
+
+    return TC_ACT_OK;
 }
 
-az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
-[sudo] password for gaz358: 
-2025/05/21 23:47:16 failed to load bpf objects: field TraceUdp: program trace_udp: load program: invalid argument: unknown func bpf_skb_load_bytes#26 (24 line(s) omitted)
-gaz358@gaz358-BOD-WXX9:~/myprog/bpf
