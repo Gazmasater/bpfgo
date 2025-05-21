@@ -21,3 +21,17 @@ struct trace_info {
 };
 
 
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "137",
+	"severity": 8,
+	"message": "expression must be a modifiable lvalue",
+	"source": "C/C++",
+	"startLineNumber": 573,
+	"startColumn": 9,
+	"endLineNumber": 573,
+	"endColumn": 13
+}]
+
+
