@@ -1,35 +1,24 @@
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "IncompatibleAssign",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "IncompatibleAssign"
-		}
-	},
-	"severity": 8,
-	"message": "cannot use event.DstIP6.In6U (variable of type struct{U6Addr8 [16]uint8}) as [4]uint32 value in argument to pkg.IPv6FromLEWords",
-	"source": "compiler",
-	"startLineNumber": 281,
-	"startColumn": 27,
-	"endLineNumber": 281,
-	"endColumn": 44
-}]
-
-func IPv6FromLEWords(words [4]uint32) net.IP {
-	ip := make(net.IP, 16)
+// Преобразование 16 байт в 4 слова uint32 little-endian
+func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
+	var words [4]uint32
 	for i := 0; i < 4; i++ {
-		ip[i*4+0] = byte(words[i])
-		ip[i*4+1] = byte(words[i] >> 8)
-		ip[i*4+2] = byte(words[i] >> 16)
-		ip[i*4+3] = byte(words[i] >> 24)
+		words[i] = uint32(addr[i*4]) |
+			uint32(addr[i*4+1])<<8 |
+			uint32(addr[i*4+2])<<16 |
+			uint32(addr[i*4+3])<<24
 	}
-	return ip
+	return words
 }
 
 
 
+
+if family == 10 {
+	fmt.Printf("LOOKUP SRC IPv6=%s\n",
+		pkg.IPv6FromLEWords(IPv6BytesToWords(event.SrcIP6)),
+	)
+	fmt.Printf("LOOKUP DST IPv6=%s\n",
+		pkg.IPv6FromLEWords(IPv6BytesToWords(event.DstIP6)),
+	)
+	fmt.Printf("LOOKUP SPORT=%d  DPORT=%d PROTO=%d\n", event.Sport, event.Dport, event.Proto)
+}
