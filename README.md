@@ -1,50 +1,165 @@
-SEC("kprobe/udp_sendmsg")
-int kprobe_udp_sendmsg(struct pt_regs *ctx)
-{
-    struct sock *sk = (struct sock *)PT_REGS_PARM1(ctx);
-    struct msghdr *msg = (struct msghdr *)PT_REGS_PARM2(ctx);
+Да, это отличный пример теста, в котором заранее задано ожидаемое строковое представление для правила nftables!
 
-    struct trace_info info = {};
-    info.pid = bpf_get_current_pid_tgid() >> 32;
-    info.proto = IPPROTO_UDP;
-    info.sysexit = 0;
-    info.state = 0;
-    bpf_get_current_comm(&info.comm, sizeof(info.comm));
+Как это устроено:
+Ты формируешь Go-структуру (nftables.Rule с набором expr.Any — выражений).
 
-    __u16 family = 0;
-    BPF_CORE_READ_INTO(&family, sk, __sk_common.skc_family);
-    info.family = family;
+Далее для каждого выражения описываешь, что внутри: например, &expr.Meta, &expr.Cmp, &expr.Counter, &expr.Log, &expr.Verdict и их параметры.
 
-    // --- КОРРЕКТНОЕ ЧТЕНИЕ УКАЗАТЕЛЯ msg_name ---
-    void *msg_name = NULL;
-    bpf_probe_read_kernel(&msg_name, sizeof(msg_name), &msg->msg_name);
-    if (!msg_name)
-        return 0;
+В поле expected — строка, которую реально выдает nft CLI для этого правила:
 
-    if (family == AF_INET) {
-        BPF_CORE_READ_INTO(&info.srcIP.s_addr, sk, __sk_common.skc_rcv_saddr);
-        BPF_CORE_READ_INTO(&info.sport, sk, __sk_common.skc_num);
+perl
 
-        struct sockaddr_in addr = {};
-        if (bpf_probe_read_user(&addr, sizeof(addr), msg_name) < 0)
-            return 0;
+meta l4proto tcp counter packets 0 bytes 0 log accept
+В самом тесте сравниваешь результат своей функции (которая преобразует Rule к строке) с этим эталоном.
 
-        info.dport = bpf_ntohs(addr.sin_port);
-        info.dstIP.s_addr = addr.sin_addr.s_addr;
-    } else if (family == AF_INET6) {
-        BPF_CORE_READ_INTO(&info.srcIP6, sk, __sk_common.skc_v6_rcv_saddr);
-        BPF_CORE_READ_INTO(&info.sport, sk, __sk_common.skc_num);
+Как реализовать такой тест (шаблон)
 
-        struct sockaddr_in6 addr6 = {};
-        if (bpf_probe_read_user(&addr6, sizeof(addr6), msg_name) < 0)
-            return 0;
-
-        info.dport = bpf_ntohs(addr6.sin6_port);
-        __builtin_memcpy(&info.dstIP6, &addr6.sin6_addr, sizeof(struct in6_addr));
+func TestRuleString(t *testing.T) {
+    tests := []struct {
+        name     string
+        exprs    *nftables.Rule
+        expected string
+    }{
+        {
+            name: "Expression 1",
+            exprs: &nftables.Rule{
+                Exprs: []expr.Any{
+                    &expr.Meta{Key: expr.MetaKeyL4PROTO, Register: 1},
+                    &expr.Cmp{
+                        Op:      expr.CmpOpEq,
+                        Register: 1,
+                        Data:    []byte{unix.IPPROTO_TCP},
+                    },
+                    &expr.Counter{},
+                    &expr.Log{},
+                    &expr.Verdict{Kind: expr.VerdictAccept},
+                },
+            },
+            expected: "meta l4proto tcp counter packets 0 bytes 0 log accept",
+        },
     }
 
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    return 0;
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            got := RuleToString(tt.exprs) // твоя функция преобразования rule в строку
+            if got != tt.expected {
+                t.Errorf("expected %q, got %q", tt.expected, got)
+            }
+        })
+    }
 }
+Как получить строку для поля expected
+Создай правило через nft CLI или библиотеку:
+
+
+nft add rule inet filter input meta l4proto tcp counter log accept
+Сделай вывод правил:
+
+
+nft list table inet filter
+Скопируй строку из вывода, например:
+
+perl
+
+meta l4proto tcp counter packets 0 bytes 0 log accept
+Поставь её в поле expected в тесте.
+
+Как выглядит рабочий пайплайн теста
+Описываешь exprs как структуру (Go-код).
+
+Указываешь эталонную строку (поле expected) — копию из вывода nft CLI.
+
+Сравниваешь результат работы своего рендера с этой строкой.
+
+Если не совпало — либо баг в рендере, либо правило не эквивалентно.
+
+Такой подход и есть best practice для unit-test'ов генераторов правил nftables!
+
+Если нужна функция RuleToString, которая превращает Go-структуру в строку, похожую на nft CLI, тоже могу показать пример реализации.
+Если нужно сделать автотест для блока с hash (как обсуждали выше), аналогично делай:
+
+Сначала руками через nft CLI,
+
+копируй вывод,
+
+пиши unit-тест по этому шаблону.
+
+Хочешь пример для конкретного hash/chain — дай знать, подгоню под твой кейс!
+
+
+
+
+
+
+Вы сказали:
+проверить есть ли nftables
+
+
+ChatGPT сказал:
+Чтобы проверить, установлен ли nftables на системе (Linux), есть несколько стандартных способов:
+
+1. В терминале вручную
+Выполни команду:
+
+which nft
+
+nft --version
+Если nftables установлен, команда выведет путь к бинарнику (например, /usr/sbin/nft) или версию, например:
+
+scss
+
+nftables v1.0.2 (Lafayette)
+2. Через пакетный менеджер
+Для Debian/Ubuntu:
+
+dpkg -l | grep nftables
+Для CentOS/RHEL/Fedora:
+
+rpm -q nftables
+или
+
+
+dnf list installed | grep nftables
+
+
+
+func TestRuleString(t *testing.T) {
+    tests := []struct {
+        name     string
+        exprs    *nftables.Rule
+        expected string
+    }{
+        {
+            name: "Expression 1",
+            exprs: &nftables.Rule{
+                Exprs: []expr.Any{
+                    &expr.Meta{Key: expr.MetaKeyL4PROTO, Register: 1},
+                    &expr.Cmp{
+                        Op:      expr.CmpOpEq,
+                        Register: 1,
+                        Data:    []byte{unix.IPPROTO_TCP},
+                    },
+                    &expr.Counter{},
+                    &expr.Log{},
+                    &expr.Verdict{Kind: expr.VerdictAccept},
+                },
+            },
+            expected: "meta l4proto tcp counter packets 0 bytes 0 log accept",
+        },
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            got := RuleToString(tt.exprs) // твоя функция преобразования rule в строку
+            if got != tt.expected {
+                t.Errorf("expected %q, got %q", tt.expected, got)
+            }
+        })
+    }
+}
+
+
+
+
 
 
