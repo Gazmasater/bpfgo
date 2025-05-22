@@ -15,12 +15,20 @@ int kprobe_udp_sendmsg(struct pt_regs *ctx)
     BPF_CORE_READ_INTO(&family, sk, __sk_common.skc_family);
     info.family = family;
 
+    // --- КОРРЕКТНОЕ ЧТЕНИЕ УКАЗАТЕЛЯ msg_name ---
+    void *msg_name = NULL;
+    bpf_probe_read_kernel(&msg_name, sizeof(msg_name), &msg->msg_name);
+    if (!msg_name)
+        return 0;
+
     if (family == AF_INET) {
         BPF_CORE_READ_INTO(&info.srcIP.s_addr, sk, __sk_common.skc_rcv_saddr);
         BPF_CORE_READ_INTO(&info.sport, sk, __sk_common.skc_num);
 
         struct sockaddr_in addr = {};
-        bpf_probe_read_user(&addr, sizeof(addr), msg->msg_name);
+        if (bpf_probe_read_user(&addr, sizeof(addr), msg_name) < 0)
+            return 0;
+
         info.dport = bpf_ntohs(addr.sin_port);
         info.dstIP.s_addr = addr.sin_addr.s_addr;
     } else if (family == AF_INET6) {
@@ -28,7 +36,9 @@ int kprobe_udp_sendmsg(struct pt_regs *ctx)
         BPF_CORE_READ_INTO(&info.sport, sk, __sk_common.skc_num);
 
         struct sockaddr_in6 addr6 = {};
-        bpf_probe_read_user(&addr6, sizeof(addr6), msg->msg_name);
+        if (bpf_probe_read_user(&addr6, sizeof(addr6), msg_name) < 0)
+            return 0;
+
         info.dport = bpf_ntohs(addr6.sin6_port);
         __builtin_memcpy(&info.dstIP6, &addr6.sin6_addr, sizeof(struct in6_addr));
     }
@@ -37,9 +47,4 @@ int kprobe_udp_sendmsg(struct pt_regs *ctx)
     return 0;
 }
 
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
-[sudo] password for gaz358: 
-2025/05/23 00:41:01 failed to load bpf objects: field KprobeUdpSendmsg: program kprobe_udp_sendmsg: load program: permission denied: 57: (79) r3 = *(u64 *)(r9 +0): R9 invalid mem access 'scalar' (80 line(s) omitted)
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
