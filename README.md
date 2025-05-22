@@ -122,7 +122,14 @@ func TestRuleString(t *testing.T) {
 
 
 
-
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go$ sudo nft list table inet filter
+table inet filter {
+        chain input {
+                type filter hook input priority filter; policy accept;
+                meta l4proto tcp counter packets 22 bytes 1412 log accept
+        }
+}
+gaz358@gaz358-BOD-
 
 
 
