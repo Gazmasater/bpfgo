@@ -48,11 +48,12 @@ func TestRuleString(t *testing.T) {
         })
     }
 }
-Как получить строку для поля expected
-Создай правило через nft CLI или библиотеку:
 
 
-nft add rule inet filter input meta l4proto tcp counter log accept
+sudo nft add table inet filter
+sudo nft add chain inet filter input { type filter hook input priority 0 \; policy accept \; }
+sudo nft add rule inet filter input meta l4proto tcp counter log accept
+
 Сделай вывод правил:
 
 
@@ -120,12 +121,6 @@ func TestRuleString(t *testing.T) {
 }
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go$ sudo nft add rule inet filter input meta l4proto tcp counter log accept
-[sudo] password for gaz358: 
-Error: Could not process rule: No such file or directory
-add rule inet filter input meta l4proto tcp counter log accept
-              ^^^^^^
-gaz358@gaz358-BOD-WXX9:~/mypro
 
 
 
