@@ -84,45 +84,6 @@ meta l4proto tcp counter packets 0 bytes 0 log accept
 
 пиши unit-тест по этому шаблону.
 
-Хочешь пример для конкретного hash/chain — дай знать, подгоню под твой кейс!
-
-
-
-
-
-
-Вы сказали:
-проверить есть ли nftables
-
-
-ChatGPT сказал:
-Чтобы проверить, установлен ли nftables на системе (Linux), есть несколько стандартных способов:
-
-1. В терминале вручную
-Выполни команду:
-
-which nft
-
-nft --version
-Если nftables установлен, команда выведет путь к бинарнику (например, /usr/sbin/nft) или версию, например:
-
-scss
-
-nftables v1.0.2 (Lafayette)
-2. Через пакетный менеджер
-Для Debian/Ubuntu:
-
-dpkg -l | grep nftables
-Для CentOS/RHEL/Fedora:
-
-rpm -q nftables
-или
-
-
-dnf list installed | grep nftables
-
-
-
 func TestRuleString(t *testing.T) {
     tests := []struct {
         name     string
@@ -157,6 +118,14 @@ func TestRuleString(t *testing.T) {
         })
     }
 }
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go$ sudo nft add rule inet filter input meta l4proto tcp counter log accept
+[sudo] password for gaz358: 
+Error: Could not process rule: No such file or directory
+add rule inet filter input meta l4proto tcp counter log accept
+              ^^^^^^
+gaz358@gaz358-BOD-WXX9:~/mypro
 
 
 
