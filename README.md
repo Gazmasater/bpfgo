@@ -36,3 +36,10 @@ int kprobe_udp_sendmsg(struct pt_regs *ctx)
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
     return 0;
 }
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
+[sudo] password for gaz358: 
+2025/05/23 00:41:01 failed to load bpf objects: field KprobeUdpSendmsg: program kprobe_udp_sendmsg: load program: permission denied: 57: (79) r3 = *(u64 *)(r9 +0): R9 invalid mem access 'scalar' (80 line(s) omitted)
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
