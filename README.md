@@ -1,7 +1,71 @@
-SEC("lsm/socket_sendmsg")
-int BPF_PROG(socket_sendmsg, struct socket *sock, struct msghdr *msg, int size)
+#include <linux/bpf.h>
+#include <bpf/bpf_helpers.h>
+#include <linux/ptrace.h>
+#include <linux/in.h>
+#include <linux/ipv6.h>
+#include <linux/ip.h>
+#include <linux/udp.h>
+#include <net/sock.h>
+
+struct trace_info {
+    struct in_addr srcIP;
+    struct in_addr dstIP;
+    struct in6_addr srcIP6;
+    struct in6_addr dstIP6;
+
+    __u32 pid;
+    __u32 proto;
+    __u16 sport;
+    __u16 dport;
+    __u16 family;
+    __u8 sysexit;
+    __u8 state;
+    char comm[32];
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+} trace_events SEC(".maps");
+
+SEC("kprobe/udp_sendmsg")
+int kprobe_udp_sendmsg(struct pt_regs *ctx)
 {
-    bpf_printk("Sending message of size %d\n", size);
-    return 0; // вернуть ненулевое значение, чтобы заблокировать операцию
+    struct sock *sk = (struct sock *)PT_REGS_PARM1(ctx);
+    struct msghdr *msg = (struct msghdr *)PT_REGS_PARM2(ctx);
+    struct trace_info info = {};
+    info.pid = bpf_get_current_pid_tgid() >> 32;
+    info.proto = IPPROTO_UDP; // 17
+
+    bpf_get_current_comm(&info.comm, sizeof(info.comm));
+
+    __u16 family = 0;
+    BPF_CORE_READ_INTO(&family, sk, __sk_common.skc_family);
+    info.family = family;
+
+    // Source (локальный) адрес и порт
+    if (family == AF_INET) {
+        BPF_CORE_READ_INTO(&info.srcIP.s_addr, sk, __sk_common.skc_rcv_saddr);
+        BPF_CORE_READ_INTO(&info.sport, sk, __sk_common.skc_num);
+
+        // Дестинейшн из msg->msg_name
+        struct sockaddr_in addr = {};
+        bpf_probe_read_user(&addr, sizeof(addr), msg->msg_name);
+        info.dport = bpf_ntohs(addr.sin_port);
+        info.dstIP.s_addr = addr.sin_addr.s_addr;
+    } else if (family == AF_INET6) {
+        BPF_CORE_READ_INTO(&info.srcIP6, sk, __sk_common.skc_v6_rcv_saddr);
+        BPF_CORE_READ_INTO(&info.sport, sk, __sk_common.skc_num);
+
+        struct sockaddr_in6 addr6 = {};
+        bpf_probe_read_user(&addr6, sizeof(addr6), msg->msg_name);
+        info.dport = bpf_ntohs(addr6.sin6_port);
+        __builtin_memcpy(&info.dstIP6, &addr6.sin6_addr, sizeof(struct in6_addr));
+    }
+
+    // Можно добавить фильтрацию, если нужно
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    return 0;
 }
 
+char LICENSE[] SEC("license") = "GPL";
