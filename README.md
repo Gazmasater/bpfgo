@@ -2,71 +2,58 @@ package encoders
 
 import (
 	"testing"
+
 	"github.com/google/nftables"
 	"github.com/google/nftables/expr"
 	"github.com/stretchr/testify/suite"
 )
 
-type dupEncodersTestSuite struct {
+type dupEncoderTestSuite struct {
 	suite.Suite
 }
 
-func (sui *dupEncodersTestSuite) Test_DupExprToString() {
+func (sui *dupEncoderTestSuite) Test_DupExprToString() {
 	testData := []struct {
 		name     string
-		setup    func(ctx *ctx)
 		exprs    nftables.Rule
 		expected string
 	}{
 		{
-			name: "Dup to address",
-			setup: func(ctx *ctx) {
-				ctx.reg.Set(regID(1), regVal{HumanExpr: "1.2.3.4"})
-			},
+			name: "dup to address",
 			exprs: nftables.Rule{
 				Exprs: []expr.Any{
-					&expr.Dup{
-						RegAddr: 1, // берём адрес из регистра 1
-					},
+					// Кладём адрес в регистр 1 (например, 10.1.2.3)
+					&expr.Immediate{Register: 1, Data: []byte{10, 1, 2, 3}},
+					&expr.Dup{RegAddr: 1},
 				},
 			},
-			expected: "dup to 1.2.3.4",
+			expected: "dup to 10.1.2.3",
 		},
 		{
-			name: "Dup to address and device",
-			setup: func(ctx *ctx) {
-				ctx.reg.Set(regID(1), regVal{HumanExpr: "10.1.1.1"})
-				ctx.reg.Set(regID(2), regVal{HumanExpr: "eth0"})
-			},
+			name: "dup to address and device",
 			exprs: nftables.Rule{
 				Exprs: []expr.Any{
-					&expr.Dup{
-						RegAddr: 1,
-						RegDev:  2,
-					},
+					// Кладём адрес в регистр 1
+					&expr.Immediate{Register: 1, Data: []byte{192, 168, 100, 200}},
+					// Кладём строку (имя интерфейса) в регистр 2
+					&expr.Immediate{Register: 2, Data: []byte("eth10")},
+					&expr.Dup{RegAddr: 1, RegDev: 2},
 				},
 			},
-			expected: "dup to 10.1.1.1 device eth0",
+			expected: "dup to 192.168.100.200 device eth10",
 		},
 		{
-			name: "Dup to device only",
-			setup: func(ctx *ctx) {
-				ctx.reg.Set(regID(2), regVal{HumanExpr: "eth1"})
-			},
+			name: "dup only device",
 			exprs: nftables.Rule{
 				Exprs: []expr.Any{
-					&expr.Dup{
-						RegDev: 2,
-					},
+					&expr.Immediate{Register: 2, Data: []byte("br-lan")},
+					&expr.Dup{RegDev: 2},
 				},
 			},
 			expected: "dup",
 		},
 		{
-			name: "Dup no params",
-			setup: func(ctx *ctx) {
-				// Ничего не делаем, нет адреса и девайса
-			},
+			name: "dup no params",
 			exprs: nftables.Rule{
 				Exprs: []expr.Any{
 					&expr.Dup{},
@@ -75,101 +62,75 @@ func (sui *dupEncodersTestSuite) Test_DupExprToString() {
 			expected: "dup",
 		},
 	}
+
 	for _, t := range testData {
 		sui.Run(t.name, func() {
-			c := newCtx() // или свой способ создания *ctx
-			if t.setup != nil {
-				t.setup(c)
-			}
-			enc := NewRuleExprEncoder(&t.exprs)
-			enc.ctx = c
-			str, err := enc.Format()
+			str, err := NewRuleExprEncoder(&t.exprs).Format()
 			sui.Require().NoError(err)
 			sui.Require().Equal(t.expected, str)
 		})
 	}
 }
 
-func (sui *dupEncodersTestSuite) Test_DupExprToJSON() {
+func (sui *dupEncoderTestSuite) Test_DupExprToJSON() {
 	testData := []struct {
-		name     string
-		setup    func(ctx *ctx)
-		exprs    nftables.Rule
-		expected string
+		name    string
+		exprs   nftables.Rule
+		expJson string
 	}{
 		{
-			name: "Dup to address",
-			setup: func(ctx *ctx) {
-				ctx.reg.Set(regID(1), regVal{Data: "1.2.3.4"})
-			},
+			name: "dup to address",
 			exprs: nftables.Rule{
 				Exprs: []expr.Any{
-					&expr.Dup{
-						RegAddr: 1,
-					},
+					&expr.Immediate{Register: 1, Data: []byte{10, 1, 2, 3}},
+					&expr.Dup{RegAddr: 1},
 				},
 			},
-			expected: `{"dup":{"addr":"1.2.3.4"}}`,
+			expJson: `{"dup":{"addr":"10.1.2.3","dev":null}}`,
 		},
 		{
-			name: "Dup to address and device",
-			setup: func(ctx *ctx) {
-				ctx.reg.Set(regID(1), regVal{Data: "10.1.1.1"})
-				ctx.reg.Set(regID(2), regVal{Data: "eth0"})
-			},
+			name: "dup to address and device",
 			exprs: nftables.Rule{
 				Exprs: []expr.Any{
-					&expr.Dup{
-						RegAddr: 1,
-						RegDev:  2,
-					},
+					&expr.Immediate{Register: 1, Data: []byte{192, 168, 100, 200}},
+					&expr.Immediate{Register: 2, Data: []byte("eth10")},
+					&expr.Dup{RegAddr: 1, RegDev: 2},
 				},
 			},
-			expected: `{"dup":{"addr":"10.1.1.1","dev":"eth0"}}`,
+			expJson: `{"dup":{"addr":"192.168.100.200","dev":"eth10"}}`,
 		},
 		{
-			name: "Dup to device only",
-			setup: func(ctx *ctx) {
-				ctx.reg.Set(regID(2), regVal{Data: "eth1"})
-			},
+			name: "dup only device",
 			exprs: nftables.Rule{
 				Exprs: []expr.Any{
-					&expr.Dup{
-						RegDev: 2,
-					},
+					&expr.Immediate{Register: 2, Data: []byte("br-lan")},
+					&expr.Dup{RegDev: 2},
 				},
 			},
-			expected: `{"dup":{"dev":"eth1"}}`,
+			expJson: `{"dup":{"addr":null,"dev":"br-lan"}}`,
 		},
 		{
-			name: "Dup no params",
-			setup: func(ctx *ctx) {},
+			name: "dup no params",
 			exprs: nftables.Rule{
 				Exprs: []expr.Any{
 					&expr.Dup{},
 				},
 			},
-			expected: `{"dup":{"addr":null,"dev":null}}`,
+			expJson: `{"dup":{"addr":null,"dev":null}}`,
 		},
 	}
+
 	for _, t := range testData {
 		sui.Run(t.name, func() {
-			c := newCtx() // или свой способ создания *ctx
-			if t.setup != nil {
-				t.setup(c)
-			}
-			enc := NewRuleExprEncoder(&t.exprs)
-			enc.ctx = c
-			b, err := enc.MarshalJSON()
+			b, err := NewRuleExprEncoder(&t.exprs).MarshalJSON()
 			sui.Require().NoError(err)
-			sui.Require().JSONEq(t.expected, string(b))
+			sui.Require().JSONEq(t.expJson, string(b))
 		})
 	}
 }
 
-// Подключаем сьют к тестам
-func Test_DupEncoders(t *testing.T) {
-	suite.Run(t, new(dupEncodersTestSuite))
+func Test_DupEncoder(t *testing.T) {
+	suite.Run(t, new(dupEncoderTestSuite))
 }
 
 
