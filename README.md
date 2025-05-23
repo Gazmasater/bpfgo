@@ -59,7 +59,7 @@ func (sui *dupEncoderTestSuite) Test_DupExprToString() {
 					&expr.Log{},
 				},
 			},
-			expected: "oifname lo @ll,16,4 3232235786 counter packets 0 bytes 0 log",
+			expected: "meta oifname lo ip daddr 192.168.1.10 counter packets 0 bytes 0 log",
 		},
 	}
 
