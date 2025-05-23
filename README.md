@@ -14,7 +14,7 @@ sudo nft list table ip test
 		},
 	},
 	expected: "dup to 10.1.2.3",
-}
+},
 
 sudo nft add rule ip test prerouting dup to 10.1.2.3
 
@@ -24,15 +24,15 @@ sudo nft add rule ip test prerouting dup to 10.1.2.3
 	exprs: nftables.Rule{
 		Exprs: []expr.Any{
 			&expr.Immediate{Register: 1, Data: []byte("192.168.1.10")},
-			&expr.Immediate{Register: 2, Data: []byte("eth0")},
+			&expr.Immediate{Register: 2, Data: []byte("lo")},
 			&expr.Dup{RegAddr: 1, RegDev: 2},
 		},
 	},
-	expected: "dup to 192.168.1.10 device eth0",
-}
+	expected: "dup to 192.168.1.10 device lo",
+},
 
 
-sudo nft add rule ip test prerouting dup to 192.168.1.10 device eth0
+sudo nft add rule ip test prerouting dup to 192.168.1.10 device lo
 
 
 
