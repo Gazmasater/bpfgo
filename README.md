@@ -1,32 +1,9 @@
-{
-    name: "Only Counter",
-    exprs: nftables.Rule{
-        Exprs: []expr.Any{
-            &expr.Counter{},
-        },
-    },
-    expected: "counter packets 0 bytes 0",
-},
-{
-    name: "Only Log",
-    exprs: nftables.Rule{
-        Exprs: []expr.Any{
-            &expr.Log{},
-        },
-    },
-    expected: "log",
-},
-{
-    name: "Only Limit",
-    exprs: nftables.Rule{
-        Exprs: []expr.Any{
-            &expr.Limit{Rate: 1, Unit: expr.LimitUnitSecond},
-        },
-    },
-    expected: "limit rate 1/second",
-},
-
-
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ ip link show
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+2: wlp0s20f3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DORMANT group default qlen 1000
+    link/ether e4:fd:45:a8:ec:0b brd ff:ff:ff:ff:ff:ff
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
 
 
 
