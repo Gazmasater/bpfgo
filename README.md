@@ -59,7 +59,7 @@ func (sui *dupEncoderTestSuite) Test_DupExprToString() {
 					&expr.Log{},
 				},
 			},
-			expected: "meta oifname lo ip daddr 192.168.1.10 counter packets 0 bytes 0 log",
+			expected: "oifname lo ip daddr 192.168.1.10 counter packets 0 bytes 0 log",
 		},
 	}
 
@@ -74,19 +74,6 @@ func (sui *dupEncoderTestSuite) Test_DupExprToString() {
 
 func Test_DupEncoder(t *testing.T) {
 	suite.Run(t, new(dupEncoderTestSuite))
-}
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add table ip test
-sudo nft add chain ip test prerouting '{ type nat hook prerouting priority 0; }'
-[sudo] password for gaz358: 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting oifname "lo" ip daddr 192.168.1.10 counter log
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft list table ip test
-table ip test {
-        chain prerouting {
-                type nat hook prerouting priority filter; policy accept;
-                oifname "lo" ip daddr 192.168.1.10 counter packets 0 bytes 0 log
-        }
 }
 
 gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test
@@ -110,6 +97,7 @@ gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test
 FAIL
 exit status 1
 FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.008s
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
 
 
 
