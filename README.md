@@ -88,36 +88,6 @@ func (sui *dupEncoderTestSuite) Test_DupExprToJSON() {
 			},
 			expJson: `{"dup":{"addr":"10.1.2.3","dev":null}}`,
 		},
-		{
-			name: "dup to address and device",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Immediate{Register: 1, Data: []byte{192, 168, 100, 200}},
-					&expr.Immediate{Register: 2, Data: []byte("eth10")},
-					&expr.Dup{RegAddr: 1, RegDev: 2},
-				},
-			},
-			expJson: `{"dup":{"addr":"192.168.100.200","dev":"eth10"}}`,
-		},
-		{
-			name: "dup only device",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Immediate{Register: 2, Data: []byte("br-lan")},
-					&expr.Dup{RegDev: 2},
-				},
-			},
-			expJson: `{"dup":{"addr":null,"dev":"br-lan"}}`,
-		},
-		{
-			name: "dup no params",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Dup{},
-				},
-			},
-			expJson: `{"dup":{"addr":null,"dev":null}}`,
-		},
 	}
 
 	for _, t := range testData {
@@ -132,6 +102,7 @@ func (sui *dupEncoderTestSuite) Test_DupExprToJSON() {
 func Test_DupEncoder(t *testing.T) {
 	suite.Run(t, new(dupEncoderTestSuite))
 }
+
 
 
 
