@@ -4,35 +4,27 @@ sudo nft add rule ip test prerouting dup to 10.1.2.3
 sudo nft list table ip test
 
 
-
 {
-	name: "dup to address",
+	name: "oifname ip daddr counter log",
 	exprs: nftables.Rule{
 		Exprs: []expr.Any{
-			&expr.Immediate{Register: 1, Data: []byte("10.1.2.3")},
-			&expr.Dup{RegAddr: 1},
+			&expr.Meta{Key: expr.MetaKeyOIFNAME, Register: 1},
+			&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte("eth0")},
+			&expr.Payload{DestRegister: 1, Base: 0, Offset: 16, Len: 4},
+			&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{192, 168, 1, 10}},
+			&expr.Counter{},
+			&expr.Log{},
 		},
 	},
-	expected: "dup to 10.1.2.3",
-},
-
-sudo nft add rule ip test prerouting dup to 10.1.2.3
+	expected: "meta oifname eth0 ip daddr 192.168.1.10 counter packets 0 bytes 0 log",
+}
 
 
-{
-	name: "dup to address and device",
-	exprs: nftables.Rule{
-		Exprs: []expr.Any{
-			&expr.Immediate{Register: 1, Data: []byte("192.168.1.10")},
-			&expr.Immediate{Register: 2, Data: []byte("lo")},
-			&expr.Dup{RegAddr: 1, RegDev: 2},
-		},
-	},
-	expected: "dup to 192.168.1.10 device lo",
-},
+sudo nft add rule ip test prerouting oifname "eth0" ip daddr 192.168.1.10 counter log
 
 
-sudo nft add rule ip test prerouting dup to 192.168.1.10 device lo
+
+
 
 
 
