@@ -121,6 +121,9 @@ gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$
     expected: "ip daddr 192.168.1.10",
 },
 
+sudo nft add rule ip test prerouting ip daddr 192.168.1.10
+
+
 
 
 
