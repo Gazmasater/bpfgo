@@ -101,6 +101,29 @@ gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$
 
 
 
+{
+    name: "ip daddr cmp",
+    exprs: nftables.Rule{
+        Exprs: []expr.Any{
+            &expr.Payload{
+                DestRegister: 1,
+                Base:         expr.PayloadBaseNetworkHeader, // обычно = 0
+                Offset:       16, // ip daddr offset
+                Len:          4,  // IPv4
+            },
+            &expr.Cmp{
+                Op:       expr.CmpOpEq,
+                Register: 1,
+                Data:     []byte{192, 168, 1, 10},
+            },
+        },
+    },
+    expected: "ip daddr 192.168.1.10",
+},
+
+
+
+
 
 
 
