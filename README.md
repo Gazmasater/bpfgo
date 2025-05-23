@@ -1,20 +1,13 @@
-testData := []struct {
-    name     string
-    exprs    nftables.Rule
-    preRun   func()
-    expected string
-}{
-    {
-        name: "Only Accept",
-        exprs: nftables.Rule{
-            Exprs: []expr.Any{
-                &expr.Verdict{Kind: expr.VerdictAccept},
-            },
+{
+    name: "Empty Cmp",
+    exprs: nftables.Rule{
+        Exprs: []expr.Any{
+            &expr.Cmp{},
         },
-        expected: "accept",
     },
-    // ... остальные кейсы ...
-}
+    expected: "cmp reg0 == 0x0", // или что-то похожее по encoder'у
+},
+
 
 
 
