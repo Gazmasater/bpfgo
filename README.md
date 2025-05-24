@@ -76,3 +76,108 @@ func Test_DupEncoder(t *testing.T) {
 	suite.Run(t, new(dupEncoderTestSuite))
 }
 
+
+package encoders
+
+import (
+	"testing"
+
+	"github.com/google/nftables"
+	"github.com/google/nftables/expr"
+	"github.com/stretchr/testify/suite"
+)
+
+type ctEncoderTestSuite struct {
+	suite.Suite
+}
+
+func (sui *ctEncoderTestSuite) Test_CtExprToString() {
+	testData := []struct {
+		name     string
+		exprs    nftables.Rule
+		expected string
+	}{
+		{
+			name: "ct state",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeySTATE,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Register: 1,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // established,related (битовая маска)
+					},
+				},
+			},
+			expected: "ct state established,related",
+		},
+		{
+			name: "ct direction",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeyDIRECTION,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Register: 1,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{0x00}, // original
+					},
+				},
+			},
+			expected: "ct direction original",
+		},
+		{
+			name: "ct protocol",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeyPROTOCOL,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Register: 1,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{6}, // TCP
+					},
+				},
+			},
+			expected: "ct protocol tcp",
+		},
+		{
+			name: "ct mark",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeyMARK,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Register: 1,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{0x01, 0x00, 0x00, 0x00},
+					},
+				},
+			},
+			expected: "ct mark 1",
+		},
+	}
+
+	for _, t := range testData {
+		sui.Run(t.name, func() {
+			str, err := NewRuleExprEncoder(&t.exprs).Format()
+			sui.Require().NoError(err)
+			sui.Require().Equal(t.expected, str)
+		})
+	}
+}
+
+func Test_CtEncoder(t *testing.T) {
+	suite.Run(t, new(ctEncoderTestSuite))
+}
+
+
