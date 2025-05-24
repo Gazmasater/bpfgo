@@ -193,5 +193,168 @@ suite.Run(t, new(dupEncoderTestSuite))
 
 
 
+1. ct state с несколькими статусами
+nft:
+
+
+ct state new,established,related accept
+Go:
+
+
+{
+	name: "ct state multi",
+	exprs: nftables.Rule{
+		Exprs: []expr.Any{
+			&expr.Ct{
+				Key:      expr.CtKeySTATE,
+				Register: 1,
+			},
+			&expr.Cmp{
+				Register: 1,
+				Op:       expr.CmpOpEq,
+				// new = 0x01, established = 0x02, related = 0x04, итого mask = 0x07
+				Data:     []byte{0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+			},
+			&expr.Verdict{Kind: expr.VerdictAccept},
+		},
+	},
+	expected: "ct state new,established,related accept",
+},
+2. ct direction reply
+nft:
+
+
+ct direction reply accept
+Go:
+
+
+{
+	name: "ct direction reply",
+	exprs: nftables.Rule{
+		Exprs: []expr.Any{
+			&expr.Ct{
+				Key:      expr.CtKeyDIRECTION,
+				Register: 1,
+			},
+			&expr.Cmp{
+				Register: 1,
+				Op:       expr.CmpOpEq,
+				Data:     []byte{0x01}, // reply
+			},
+			&expr.Verdict{Kind: expr.VerdictAccept},
+		},
+	},
+	expected: "ct direction reply accept",
+},
+3. ct mark с более сложным значением
+nft:
+
+
+ct mark 255 accept
+Go:
+
+
+{
+	name: "ct mark 255",
+	exprs: nftables.Rule{
+		Exprs: []expr.Any{
+			&expr.Ct{
+				Key:      expr.CtKeyMARK,
+				Register: 1,
+			},
+			&expr.Cmp{
+				Register: 1,
+				Op:       expr.CmpOpEq,
+				Data:     []byte{0xff, 0x00, 0x00, 0x00},
+			},
+			&expr.Verdict{Kind: expr.VerdictAccept},
+		},
+	},
+	expected: "ct mark 255 accept",
+},
+4. ct expiration
+nft:
+
+
+ct expiration 5s accept
+Go:
+
+
+{
+	name: "ct expiration 5s",
+	exprs: nftables.Rule{
+		Exprs: []expr.Any{
+			&expr.Ct{
+				Key:      expr.CtKeyEXPIRATION,
+				Register: 1,
+			},
+			&expr.Cmp{
+				Register: 1,
+				Op:       expr.CmpOpEq,
+				// 5000 мс (5 секунд) — в LE uint32
+				Data:     []byte{0x88, 0x13, 0x00, 0x00},
+			},
+			&expr.Verdict{Kind: expr.VerdictAccept},
+		},
+	},
+	expected: "ct expiration 5s accept",
+},
+5. ct protocol udp
+nft:
+
+
+ct protocol udp accept
+Go:
+
+
+{
+	name: "ct protocol udp",
+	exprs: nftables.Rule{
+		Exprs: []expr.Any{
+			&expr.Ct{
+				Key:      expr.CtKeyPROTOCOL,
+				Register: 1,
+			},
+			&expr.Cmp{
+				Register: 1,
+				Op:       expr.CmpOpEq,
+				Data:     []byte{17}, // UDP
+			},
+			&expr.Verdict{Kind: expr.VerdictAccept},
+		},
+	},
+	expected: "ct protocol udp accept",
+},
+6. ct status
+Если твой энкодер поддерживает status:
+
+
+ct status assured accept
+Go:
+
+
+{
+	name: "ct status assured",
+	exprs: nftables.Rule{
+		Exprs: []expr.Any{
+			&expr.Ct{
+				Key:      expr.CtKeySTATUS,
+				Register: 1,
+			},
+			&expr.Cmp{
+				Register: 1,
+				Op:       expr.CmpOpEq,
+				// 0x04 — ASSURED (по bitmask, как и для state)
+				Data:     []byte{0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+			},
+			&expr.Verdict{Kind: expr.VerdictAccept},
+		},
+	},
+	expected: "ct status assured accept",
+},
+
+
+
+
 
 
