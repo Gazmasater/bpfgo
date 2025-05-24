@@ -4,6 +4,11 @@ sudo nft add rule ip test prerouting dup to 10.1.2.3
 sudo nft list table ip test
 sudo nft add rule ip test prerouting oifname "lo" ip daddr 192.168.1.10 counter log
 
+sudo nft add rule ip test prerouting ct state established,related accept
+sudo nft add rule ip test prerouting ct direction original accept
+sudo nft add rule ip test prerouting ct protocol tcp accept
+sudo nft add rule ip test prerouting ct mark 1 accept
+
 
 
 package encoders
@@ -110,9 +115,10 @@ func (sui *ctEncoderTestSuite) Test_CtExprToString() {
 						Op:       expr.CmpOpEq,
 						Data:     []byte{0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // established,related (битовая маска)
 					},
+					&expr.Verdict{Kind: expr.VerdictAccept},
 				},
 			},
-			expected: "ct state established,related",
+			expected: "ct state established,related accept",
 		},
 		{
 			name: "ct direction",
@@ -127,9 +133,10 @@ func (sui *ctEncoderTestSuite) Test_CtExprToString() {
 						Op:       expr.CmpOpEq,
 						Data:     []byte{0x00}, // original
 					},
+					&expr.Verdict{Kind: expr.VerdictAccept},
 				},
 			},
-			expected: "ct direction original",
+			expected: "ct direction original accept",
 		},
 		{
 			name: "ct protocol",
@@ -144,9 +151,10 @@ func (sui *ctEncoderTestSuite) Test_CtExprToString() {
 						Op:       expr.CmpOpEq,
 						Data:     []byte{6}, // TCP
 					},
+					&expr.Verdict{Kind: expr.VerdictAccept},
 				},
 			},
-			expected: "ct protocol tcp",
+			expected: "ct protocol tcp accept",
 		},
 		{
 			name: "ct mark",
@@ -161,9 +169,10 @@ func (sui *ctEncoderTestSuite) Test_CtExprToString() {
 						Op:       expr.CmpOpEq,
 						Data:     []byte{0x01, 0x00, 0x00, 0x00},
 					},
+					&expr.Verdict{Kind: expr.VerdictAccept},
 				},
 			},
-			expected: "ct mark 1",
+			expected: "ct mark 1 accept",
 		},
 	}
 
@@ -178,25 +187,6 @@ func (sui *ctEncoderTestSuite) Test_CtExprToString() {
 
 func Test_CtEncoder(t *testing.T) {
 	suite.Run(t, new(ctEncoderTestSuite))
-}
-
-
-sudo nft add table ip test
-sudo nft add chain ip test prerouting '{ type nat hook prerouting priority 0; }'
-sudo nft add rule ip test prerouting ct state established,related accept
-sudo nft add rule ip test prerouting ct direction original accept
-sudo nft add rule ip test prerouting ct protocol tcp accept
-sudo nft add rule ip test prerouting ct mark 1 accept
-
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft list table ip test
-table ip test {
-        chain prerouting {
-                type nat hook prerouting priority filter; policy accept;
-                ct state established,related accept
-                ct direction original accept
-                ct protocol tcp accept
-                ct mark 0x00000001 accept
-        }
 }
 
 
