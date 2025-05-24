@@ -376,6 +376,10 @@ Go:
 		// },
 
 
+  sudo nft add rule ip test prerouting ct state new,established,related accept
+
+
+
 
 
 
