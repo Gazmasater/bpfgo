@@ -188,5 +188,16 @@ sudo nft add rule ip test prerouting ct direction original accept
 sudo nft add rule ip test prerouting ct protocol tcp accept
 sudo nft add rule ip test prerouting ct mark 1 accept
 
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft list table ip test
+table ip test {
+        chain prerouting {
+                type nat hook prerouting priority filter; policy accept;
+                ct state established,related accept
+                ct direction original accept
+                ct protocol tcp accept
+                ct mark 0x00000001 accept
+        }
+}
+
 
 
