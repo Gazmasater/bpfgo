@@ -12,6 +12,55 @@ sudo nft add rule ip test prerouting ct mark 1 accept
 
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test
+Actual=ct state new accept
+Expected=ct state new accept
+Actual=ct state established,related accept
+Expected=ct state established,related accept
+Actual=ct state established,related,new accept
+Expected=ct state new,established,related accept
+Actual=ct state invalid accept
+Expected=ct state invalid accept
+Actual=ct state invalid,established,new accept
+Expected=ct state new,established,invalid accept
+--- FAIL: Test_CtEncoder (0.00s)
+    --- FAIL: Test_CtEncoder/Test_CtExprToString (0.00s)
+        --- FAIL: Test_CtEncoder/Test_CtExprToString/ct_state_new,established,related (0.00s)
+            ct_test.go:122: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/ct_test.go:122
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Not equal: 
+                                        expected: "ct state new,established,related accept"
+                                        actual  : "ct state established,related,new accept"
+                                    
+                                        Diff:
+                                        --- Expected
+                                        +++ Actual
+                                        @@ -1 +1 @@
+                                        -ct state new,established,related accept
+                                        +ct state established,related,new accept
+                        Test:           Test_CtEncoder/Test_CtExprToString/ct_state_new,established,related
+        --- FAIL: Test_CtEncoder/Test_CtExprToString/ct_state_new,established,invalid (0.00s)
+            ct_test.go:122: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/ct_test.go:122
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Not equal: 
+                                        expected: "ct state new,established,invalid accept"
+                                        actual  : "ct state invalid,established,new accept"
+                                    
+                                        Diff:
+                                        --- Expected
+                                        +++ Actual
+                                        @@ -1 +1 @@
+                                        -ct state new,established,invalid accept
+                                        +ct state invalid,established,new accept
+                        Test:           Test_CtEncoder/Test_CtExprToString/ct_state_new,established,invalid
+FAIL
+exit status 1
+FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.008s
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+
+
 package encoders
 
 import (
@@ -23,15 +72,7 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-// Обычно CtStateBit* лучше брать из библиотеки expr, если они есть.
-// Если нет — объяви вручную (эквивалентно ядру Linux):
-const (
-	CtStateBitNEW         = 0x01
-	CtStateBitESTABLISHED = 0x02
-	CtStateBitRELATED     = 0x04
-	CtStateBitINVALID     = 0x08
-	CtStateBitUNTRACKED   = 0x20
-)
+// Объявляем константы битов CT state (если вдруг их нет в expr)
 
 type ctEncoderTestSuite struct {
 	suite.Suite
@@ -149,4 +190,5 @@ func (sui *ctEncoderTestSuite) Test_CtExprToString() {
 func Test_CtEncoder(t *testing.T) {
 	suite.Run(t, new(ctEncoderTestSuite))
 }
+
 
