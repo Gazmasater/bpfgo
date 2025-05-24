@@ -12,11 +12,8 @@ sudo nft add rule ip test prerouting ct mark 1 accept
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ git branch -M main
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ git remote add origin git@github.com:Gazmasater/nft.git
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ git push -u origin main
-error: src refspec main does not match any
-error: failed to push some refs to 'github.com:Gazmasater/nft.git'
+git branch -M main
+
 
 
 
