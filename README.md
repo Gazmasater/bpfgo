@@ -355,6 +355,28 @@ Go:
 
 
 
+// {
+		// 	name: "ct state multi",
+		// 	exprs: nftables.Rule{
+		// 		Exprs: []expr.Any{
+		// 			&expr.Ct{
+		// 				Key:      expr.CtKeySTATE,
+		// 				Register: 1,
+		// 			},
+		// 			&expr.Cmp{
+		// 				Register: 1,
+		// 				Op:       expr.CmpOpEq,
+		// 				// new = 0x01, established = 0x02, related = 0x04, итого mask = 0x07
+		// 				Data: []byte{0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+		// 			},
+		// 			&expr.Verdict{Kind: expr.VerdictAccept},
+		// 		},
+		// 	},
+		// 	expected: "ct state new,established,related accept",
+		// },
+
+
+
 
 
 
