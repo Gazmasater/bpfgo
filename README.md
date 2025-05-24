@@ -20,26 +20,7 @@ const (
 	CtStateBitUNTRACKED   CtState = CtState(expr.CtStateBitUNTRACKED)
 )
 
-[{
-	"resource": "/home/gaz358/myprog/nft-go/internal/expr-encoders/ct_test.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "IncompatibleAssign",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "IncompatibleAssign"
-		}
-	},
-	"severity": 8,
-	"message": "cannot use CtStateBitNEW (constant 8 of uint32 type CtState) as byte value in array or slice literal",
-	"source": "compiler",
-	"startLineNumber": 35,
-	"startColumn": 24,
-	"endLineNumber": 35,
-	"endColumn": 37
-}]
+Data: []byte{byte(CtStateBitNEW), 0, 0, 0, 0, 0, 0, 0},
+
 
 
