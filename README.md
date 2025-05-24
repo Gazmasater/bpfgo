@@ -15,262 +15,114 @@ sudo nft add rule ip test prerouting ct mark 1 accept
 package encoders
 
 import (
-	"fmt"
 	"testing"
-
-	"github.com/google/nftables"
 	"github.com/google/nftables/expr"
 	"github.com/stretchr/testify/suite"
+	"time"
 )
 
-// Объявляем константы битов CT state (если вдруг их нет в expr)
-
-type ctEncoderTestSuite struct {
+type dynsetEncoderTestSuite struct {
 	suite.Suite
 }
 
-func (sui *ctEncoderTestSuite) Test_CtExprToString() {
+func (sui *dynsetEncoderTestSuite) Test_DynsetEncodeIR() {
 	testData := []struct {
 		name     string
-		exprs    nftables.Rule
+		dynset   *expr.Dynset
+		ctx      *ctx
 		expected string
 	}{
 		{
-			name: "ct state new",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{
-						Key:      expr.CtKeySTATE,
-						Register: 1,
-					},
-					&expr.Cmp{
-						Register: 1,
-						Op:       expr.CmpOpEq,
-						Data:     []byte{byte(CtStateBitNEW), 0, 0, 0, 0, 0, 0, 0}, // только new
-					},
-					&expr.Verdict{Kind: expr.VerdictAccept},
-				},
+			name: "add to set",
+			dynset: &expr.Dynset{
+				Operation:  DynSetOPAdd,
+				SetName:    "myset",
+				SrcRegKey:  1,
+				Timeout:    0,
 			},
-			expected: "ct state new accept",
+			ctx: &ctx{
+				rule: &RuleStub{},
+				reg:  map[regID]regVal{1: {HumanExpr: "10.0.0.1"}},
+			},
+			expected: "add @myset { 10.0.0.1 }",
 		},
 		{
-			name: "ct state established,related",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{
-						Key:      expr.CtKeySTATE,
-						Register: 1,
-					},
-					&expr.Cmp{
-						Register: 1,
-						Op:       expr.CmpOpEq,
-						Data:     []byte{byte(CtStateBitESTABLISHED | CtStateBitRELATED), 0, 0, 0, 0, 0, 0, 0},
-					},
-					&expr.Verdict{Kind: expr.VerdictAccept},
-				},
+			name: "add to set with timeout",
+			dynset: &expr.Dynset{
+				Operation:  DynSetOPAdd,
+				SetName:    "myset",
+				SrcRegKey:  1,
+				Timeout:    5 * time.Second,
 			},
-			expected: "ct state established,related accept",
+			ctx: &ctx{
+				rule: &RuleStub{},
+				reg:  map[regID]regVal{1: {HumanExpr: "192.168.0.2"}},
+			},
+			expected: "add @myset { 192.168.0.2 timeout 5s }",
 		},
 		{
-			name: "ct state new,established,related",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{
-						Key:      expr.CtKeySTATE,
-						Register: 1,
-					},
-					&expr.Cmp{
-						Register: 1,
-						Op:       expr.CmpOpEq,
-						Data:     []byte{byte(CtStateBitNEW | CtStateBitESTABLISHED | CtStateBitRELATED), 0, 0, 0, 0, 0, 0, 0},
-					},
-					&expr.Verdict{Kind: expr.VerdictAccept},
-				},
+			name: "update set",
+			dynset: &expr.Dynset{
+				Operation:  DynSetOPUpdate,
+				SetName:    "myset",
+				SrcRegKey:  1,
 			},
-			expected: "ct state new,established,related accept",
+			ctx: &ctx{
+				rule: &RuleStub{},
+				reg:  map[regID]regVal{1: {HumanExpr: "testkey"}},
+			},
+			expected: "update @myset { testkey }",
 		},
 		{
-			name: "ct state invalid",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{
-						Key:      expr.CtKeySTATE,
-						Register: 1,
-					},
-					&expr.Cmp{
-						Register: 1,
-						Op:       expr.CmpOpEq,
-						Data:     []byte{byte(CtStateBitINVALID), 0, 0, 0, 0, 0, 0, 0}, // только invalid
-					},
-					&expr.Verdict{Kind: expr.VerdictAccept},
-				},
+			name: "delete from set",
+			dynset: &expr.Dynset{
+				Operation:  DynSetOPDelete,
+				SetName:    "myset",
+				SrcRegKey:  1,
 			},
-			expected: "ct state invalid accept",
-		},
-		{
-			name: "ct state new,established,invalid",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{
-						Key:      expr.CtKeySTATE,
-						Register: 1,
-					},
-					&expr.Cmp{
-						Register: 1,
-						Op:       expr.CmpOpEq,
-						Data:     []byte{byte(CtStateBitNEW | CtStateBitESTABLISHED | CtStateBitINVALID), 0, 0, 0, 0, 0, 0, 0},
-					},
-					&expr.Verdict{Kind: expr.VerdictAccept},
-				},
+			ctx: &ctx{
+				rule: &RuleStub{},
+				reg:  map[regID]regVal{1: {HumanExpr: "192.168.1.100"}},
 			},
-			expected: "ct state new,established,invalid accept",
-		},
-
-		{
-			name: "ct state new,established,related,invalid",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{
-						Key:      expr.CtKeySTATE,
-						Register: 1,
-					},
-					&expr.Cmp{
-						Register: 1,
-						Op:       expr.CmpOpEq,
-						Data:     []byte{byte(CtStateBitNEW | CtStateBitESTABLISHED | CtStateBitRELATED | CtStateBitINVALID), 0, 0, 0, 0, 0, 0, 0},
-					},
-					&expr.Verdict{Kind: expr.VerdictAccept},
-				},
-			},
-			expected: "ct state new,established,related,invalid accept",
-		},
-		{
-			name: "ct state new,untracked",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{
-						Key:      expr.CtKeySTATE,
-						Register: 1,
-					},
-					&expr.Cmp{
-						Register: 1,
-						Op:       expr.CmpOpEq,
-						Data:     []byte{byte(CtStateBitNEW | CtStateBitUNTRACKED), 0, 0, 0, 0, 0, 0, 0},
-					},
-					&expr.Verdict{Kind: expr.VerdictAccept},
-				},
-			},
-			expected: "ct state new,untracked accept",
-		},
-
-		{
-			name: "ct state not established",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{
-						Key:      expr.CtKeySTATE,
-						Register: 1,
-					},
-					&expr.Cmp{
-						Register: 1,
-						Op:       expr.CmpOpNeq, // НЕ established
-						Data:     []byte{byte(CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0},
-					},
-					&expr.Verdict{Kind: expr.VerdictAccept},
-				},
-			},
-			expected: "ct state != established accept",
-		},
-		{
-			name: "ct state invalid drop",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{
-						Key:      expr.CtKeySTATE,
-						Register: 1,
-					},
-					&expr.Cmp{
-						Register: 1,
-						Op:       expr.CmpOpEq,
-						Data:     []byte{byte(CtStateBitINVALID), 0, 0, 0, 0, 0, 0, 0},
-					},
-					&expr.Verdict{Kind: expr.VerdictDrop},
-				},
-			},
-			expected: "ct state invalid drop",
-		},
-		{
-			name: "ct state established ct expiration 5s",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{
-						Key:      expr.CtKeySTATE,
-						Register: 1,
-					},
-					&expr.Cmp{
-						Register: 1,
-						Op:       expr.CmpOpEq,
-						Data:     []byte{byte(CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0},
-					},
-					&expr.Ct{
-						Key:      expr.CtKeyEXPIRATION,
-						Register: 2,
-					},
-					&expr.Cmp{
-						Register: 2,
-						Op:       expr.CmpOpEq,
-						Data:     []byte{0x88, 0x13, 0x00, 0x00}, // 5000 мс = 5s
-					},
-					&expr.Verdict{Kind: expr.VerdictAccept},
-				},
-			},
-			expected: "ct state established ct expiration 5s accept",
-		},
-
-		{
-			name: "ct state established ct protocol tcp",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{
-						Key:      expr.CtKeySTATE,
-						Register: 1,
-					},
-					&expr.Cmp{
-						Register: 1,
-						Op:       expr.CmpOpEq,
-						Data:     []byte{byte(CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0},
-					},
-					&expr.Ct{
-						Key:      expr.CtKeyPROTOCOL,
-						Register: 2,
-					},
-					&expr.Cmp{
-						Register: 2,
-						Op:       expr.CmpOpEq,
-						Data:     []byte{6}, // TCP
-					},
-					&expr.Verdict{Kind: expr.VerdictAccept},
-				},
-			},
-			expected: "ct state established ct protocol tcp accept",
+			expected: "delete @myset { 192.168.1.100 }",
 		},
 	}
 
-	for _, t := range testData {
-		sui.Run(t.name, func() {
-			str, err := NewRuleExprEncoder(&t.exprs).Format()
+	for _, tt := range testData {
+		sui.Run(tt.name, func() {
+			enc := &dynsetEncoder{dynset: tt.dynset}
+			node, err := enc.EncodeIR(tt.ctx)
 			sui.Require().NoError(err)
-			fmt.Printf("Actual=%s\n", str)
-			fmt.Printf("Expected=%s\n", t.expected)
-			sui.Require().Equal(t.expected, str)
+			sui.Require().Equal(tt.expected, node.String())
 		})
 	}
 }
 
-func Test_CtEncoder(t *testing.T) {
-	suite.Run(t, new(ctEncoderTestSuite))
+// Простой stub для ctx и Rule (можешь заменить на свои типы, если они другие)
+type RuleStub struct{}
+
+func (r *RuleStub) String() string { return "" }
+
+type regVal struct {
+	HumanExpr string
 }
 
+type ctx struct {
+	rule *RuleStub
+	reg  map[regID]regVal
+}
+
+func (c *ctx) regID(id int) regVal {
+	return c.reg[regID(id)]
+}
+
+type regID int
+
+func (r regID) String() string { return "" }
+
+func Test_DynsetEncoder(t *testing.T) {
+	suite.Run(t, new(dynsetEncoderTestSuite))
+}
 
 
 
