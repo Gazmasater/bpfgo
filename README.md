@@ -12,100 +12,141 @@ sudo nft add rule ip test prerouting ct mark 1 accept
 
 
 
-const (
-	CtStateBitINVALID     CtState = CtState(expr.CtStateBitINVALID)
-	CtStateBitESTABLISHED CtState = CtState(expr.CtStateBitESTABLISHED)
-	CtStateBitRELATED     CtState = CtState(expr.CtStateBitRELATED)
-	CtStateBitNEW         CtState = CtState(expr.CtStateBitNEW)
-	CtStateBitUNTRACKED   CtState = CtState(expr.CtStateBitUNTRACKED)
+package encoders
+
+import (
+	"fmt"
+	"testing"
+
+	"github.com/google/nftables"
+	"github.com/google/nftables/expr"
+	"github.com/stretchr/testify/suite"
 )
 
-[{
-	"resource": "/home/gaz358/myprog/nft-go/internal/expr-encoders/ct_test.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "IncompatibleAssign",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "IncompatibleAssign"
-		}
-	},
-	"severity": 8,
-	"message": "cannot use CtStateBitESTABLISHED | CtStateBitRELATED (constant 6 of uint32 type CtState) as byte value in array or slice literal",
-	"source": "compiler",
-	"startLineNumber": 53,
-	"startColumn": 24,
-	"endLineNumber": 53,
-	"endColumn": 65
-}]
+// Обычно CtStateBit* лучше брать из библиотеки expr, если они есть.
+// Если нет — объяви вручную (эквивалентно ядру Linux):
+const (
+	CtStateBitNEW         = 0x01
+	CtStateBitESTABLISHED = 0x02
+	CtStateBitRELATED     = 0x04
+	CtStateBitINVALID     = 0x08
+	CtStateBitUNTRACKED   = 0x20
+)
 
-[{
-	"resource": "/home/gaz358/myprog/nft-go/internal/expr-encoders/ct_test.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "IncompatibleAssign",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "IncompatibleAssign"
-		}
-	},
-	"severity": 8,
-	"message": "cannot use CtStateBitNEW | CtStateBitESTABLISHED | CtStateBitRELATED (constant 14 of uint32 type CtState) as byte value in array or slice literal",
-	"source": "compiler",
-	"startLineNumber": 72,
-	"startColumn": 24,
-	"endLineNumber": 72,
-	"endColumn": 81
-}]
+type ctEncoderTestSuite struct {
+	suite.Suite
+}
 
-[{
-	"resource": "/home/gaz358/myprog/nft-go/internal/expr-encoders/ct_test.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "IncompatibleAssign",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "IncompatibleAssign"
-		}
-	},
-	"severity": 8,
-	"message": "cannot use CtStateBitINVALID (constant 1 of uint32 type CtState) as byte value in array or slice literal",
-	"source": "compiler",
-	"startLineNumber": 90,
-	"startColumn": 24,
-	"endLineNumber": 90,
-	"endColumn": 41
-}]
+func (sui *ctEncoderTestSuite) Test_CtExprToString() {
+	testData := []struct {
+		name     string
+		exprs    nftables.Rule
+		expected string
+	}{
+		{
+			name: "ct state new",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeySTATE,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Register: 1,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{byte(CtStateBitNEW), 0, 0, 0, 0, 0, 0, 0}, // только new
+					},
+					&expr.Verdict{Kind: expr.VerdictAccept},
+				},
+			},
+			expected: "ct state new accept",
+		},
+		{
+			name: "ct state established,related",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeySTATE,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Register: 1,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{byte(CtStateBitESTABLISHED | CtStateBitRELATED), 0, 0, 0, 0, 0, 0, 0},
+					},
+					&expr.Verdict{Kind: expr.VerdictAccept},
+				},
+			},
+			expected: "ct state established,related accept",
+		},
+		{
+			name: "ct state new,established,related",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeySTATE,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Register: 1,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{byte(CtStateBitNEW | CtStateBitESTABLISHED | CtStateBitRELATED), 0, 0, 0, 0, 0, 0, 0},
+					},
+					&expr.Verdict{Kind: expr.VerdictAccept},
+				},
+			},
+			expected: "ct state new,established,related accept",
+		},
+		{
+			name: "ct state invalid",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeySTATE,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Register: 1,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{byte(CtStateBitINVALID), 0, 0, 0, 0, 0, 0, 0}, // только invalid
+					},
+					&expr.Verdict{Kind: expr.VerdictAccept},
+				},
+			},
+			expected: "ct state invalid accept",
+		},
+		{
+			name: "ct state new,established,invalid",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeySTATE,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Register: 1,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{byte(CtStateBitNEW | CtStateBitESTABLISHED | CtStateBitINVALID), 0, 0, 0, 0, 0, 0, 0},
+					},
+					&expr.Verdict{Kind: expr.VerdictAccept},
+				},
+			},
+			expected: "ct state new,established,invalid accept",
+		},
+	}
 
-[{
-	"resource": "/home/gaz358/myprog/nft-go/internal/expr-encoders/ct_test.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "IncompatibleAssign",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "IncompatibleAssign"
-		}
-	},
-	"severity": 8,
-	"message": "cannot use CtStateBitNEW | CtStateBitESTABLISHED | CtStateBitINVALID (constant 11 of uint32 type CtState) as byte value in array or slice literal",
-	"source": "compiler",
-	"startLineNumber": 110,
-	"startColumn": 24,
-	"endLineNumber": 110,
-	"endColumn": 81
-}]
+	for _, t := range testData {
+		sui.Run(t.name, func() {
+			str, err := NewRuleExprEncoder(&t.exprs).Format()
+			sui.Require().NoError(err)
+			fmt.Printf("Actual=%s\n", str)
+			fmt.Printf("Expected=%s\n", t.expected)
+			sui.Require().Equal(t.expected, str)
+		})
+	}
+}
 
+func Test_CtEncoder(t *testing.T) {
+	suite.Run(t, new(ctEncoderTestSuite))
+}
 
