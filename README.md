@@ -78,13 +78,10 @@ func (sui *dupEncoderTestSuite) Test_DupExprToString() {
 }
 
 func Test_DupEncoder(t *testing.T) {
-	suite.Run(t, new(dupEncoderTestSuite))
-}
-
-
-package encoders
+	package encoders
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/google/nftables"
@@ -180,6 +177,9 @@ func (sui *ctEncoderTestSuite) Test_CtExprToString() {
 		sui.Run(t.name, func() {
 			str, err := NewRuleExprEncoder(&t.exprs).Format()
 			sui.Require().NoError(err)
+			fmt.Printf("Actual=%s\n", str)
+			fmt.Printf("Expected=%s\n", t.expected)
+
 			sui.Require().Equal(t.expected, str)
 		})
 	}
@@ -188,6 +188,10 @@ func (sui *ctEncoderTestSuite) Test_CtExprToString() {
 func Test_CtEncoder(t *testing.T) {
 	suite.Run(t, new(ctEncoderTestSuite))
 }
+suite.Run(t, new(dupEncoderTestSuite))
+}
+
+
 
 
 
