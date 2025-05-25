@@ -9,6 +9,17 @@ sudo nft add rule ip test prerouting ct direction original accept
 sudo nft add rule ip test prerouting ct protocol tcp accept
 sudo nft add rule ip test prerouting ct mark 1 accept
 
+const (
+	IPPROTO_ICMP = 1
+	IPPROTO_TCP  = 6
+	IPPROTO_UDP  = 17
+	IPPROTO_GRE  = 47
+	IPPROTO_ESP  = 50
+	IPPROTO_AH   = 51
+	IPPROTO_SCTP = 132
+)
+
+
 
 {
 	name: "ct protocol tcp",
