@@ -92,6 +92,7 @@ func Test_DynsetEncoder(t *testing.T) {
 }
 
 
+
 gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test
 --- FAIL: Test_DynsetEncoder (0.00s)
     --- FAIL: Test_DynsetEncoder/Test_DynsetEncodeIR (0.00s)
