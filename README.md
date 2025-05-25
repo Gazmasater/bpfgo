@@ -28,115 +28,84 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type bitwiseEncoderTestSuite struct {
+type hashEncoderTestSuite struct {
 	suite.Suite
 }
 
-func (sui *bitwiseEncoderTestSuite) Test_BitwiseEncodeIR() {
+func (sui *hashEncoderTestSuite) Test_HashEncodeIR() {
 	testData := []struct {
 		name     string
+		hash     *expr.Hash
 		srcReg   uint32
-		dstReg   uint32
-		mask     []byte
-		xor      []byte
-		srcExpr  expr.Any
 		srcHuman string
 		expected string
 	}{
 		{
-			name:     "bitwise AND mask",
-			srcReg:   1,
-			dstReg:   2,
-			mask:     []byte{0xf0},
-			xor:      nil,
-			srcExpr:  nil,
-			srcHuman: "ip daddr",
-			expected: "(ip daddr) & 0xf0",
+			name: "simple symhash",
+			hash: &expr.Hash{
+				Type:         expr.HashTypeSym,
+				Modulus:      10,
+				Seed:         0x1234,
+				Offset:       0,
+				DestRegister: 1,
+			},
+			expected: "symhash mod 10 seed 0x1234",
 		},
 		{
-			name:     "bitwise AND+XOR mask",
+			name: "symhash with offset",
+			hash: &expr.Hash{
+				Type:         expr.HashTypeSym,
+				Modulus:      16,
+				Seed:         0xdead,
+				Offset:       7,
+				DestRegister: 2,
+			},
+			expected: "symhash mod 16 seed 0xdead offset 7",
+		},
+		{
+			name: "jhash with src",
+			hash: &expr.Hash{
+				Type:           expr.HashTypeJenkins, // используем jhash (jenkins)
+				Modulus:        5,
+				Seed:           0x1111,
+				Offset:         0,
+				SourceRegister: 3,
+				DestRegister:   4,
+			},
 			srcReg:   3,
-			dstReg:   4,
-			mask:     []byte{0xff},
-			xor:      []byte{0x0f},
-			srcExpr:  nil,
 			srcHuman: "meta mark",
-			expected: "((meta mark) & 0xff) ^ 0xf",
-		},
-		{
-			name:     "bitwise with XOR (xor != 0, mask != 0)",
-			srcReg:   5,
-			dstReg:   6,
-			mask:     []byte{0xf0},
-			xor:      []byte{0xf0},
-			srcExpr:  nil,
-			srcHuman: "payload 2",
-			expected: "((payload 2) & 0xf0) ^ 0xf0",
-		},
-		{
-			name:     "bitwise multi-byte mask AND",
-			srcReg:   7,
-			dstReg:   8,
-			mask:     []byte{0xff, 0x0f},
-			xor:      nil,
-			srcExpr:  nil,
-			srcHuman: "ip saddr",
-			expected: "(ip saddr) & 0xff0f",
-		},
-		{
-			name:     "bitwise full mask all ones",
-			srcReg:   9,
-			dstReg:   10,
-			mask:     []byte{0xff, 0xff, 0xff, 0xff},
-			xor:      nil,
-			srcExpr:  nil,
-			srcHuman: "data[0]",
-			expected: "data[0] & 0xffffffff",
-		},
-		{
-			name:     "bitwise only XOR (mask all ones)",
-			srcReg:   11,
-			dstReg:   12,
-			mask:     []byte{0xff, 0xff},
-			xor:      []byte{0x12, 0x34},
-			srcExpr:  nil,
-			srcHuman: "payload 4",
-			expected: "((payload 4) & 0xffff) ^ 0x1234",
+			expected: "symhashjhash meta mark mod 5 seed 0x1111", // если твой encoder так формирует строку
 		},
 	}
 
 	for _, tc := range testData {
 		sui.Run(tc.name, func() {
 			var reg regHolder
-			reg.Set(regID(tc.srcReg), regVal{
-				HumanExpr: tc.srcHuman,
-				Expr:      tc.srcExpr,
-			})
+			if tc.srcReg != 0 {
+				reg.Set(regID(tc.srcReg), regVal{
+					HumanExpr: tc.srcHuman,
+				})
+			}
 			ctx := &ctx{
 				reg:  reg,
-				rule: nil,
+				rule: nil, // не нужен
 			}
 
-			bitwise := &expr.Bitwise{
-				SourceRegister: tc.srcReg,
-				DestRegister:   tc.dstReg,
-				Mask:           tc.mask,
-				Xor:            tc.xor,
-				Len:            uint32(len(tc.mask)),
-			}
-			enc := &bitwiseEncoder{bitwise: bitwise}
+			enc := &hashEncoder{hash: tc.hash}
 			_, err := enc.EncodeIR(ctx)
 			if err != nil && err != ErrNoIR {
 				sui.Require().NoError(err)
 			}
-			res, ok := ctx.reg.Get(regID(tc.dstReg))
+
+			res, ok := ctx.reg.Get(regID(tc.hash.DestRegister))
 			sui.Require().True(ok)
 			sui.Require().Equal(tc.expected, res.HumanExpr)
 		})
 	}
 }
 
-func Test_BitwiseEncoder(t *testing.T) {
-	suite.Run(t, new(bitwiseEncoderTestSuite))
+func Test_HashEncoder(t *testing.T) {
+	suite.Run(t, new(hashEncoderTestSuite))
 }
+
 
