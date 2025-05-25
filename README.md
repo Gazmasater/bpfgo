@@ -93,81 +93,10 @@ func Test_DynsetEncoder(t *testing.T) {
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test
---- FAIL: Test_DynsetEncoder (0.00s)
-    --- FAIL: Test_DynsetEncoder/Test_DynsetEncodeIR (0.00s)
-        --- FAIL: Test_DynsetEncoder/Test_DynsetEncodeIR/add (0.00s)
-            dynset_test.go:64: 
-                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/dynset_test.go:64
-                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                        Error:          Received unexpected error:
-                                        ctx has no rule
-                                        github.com/Morwran/nft-go/internal/expr-encoders.(*dynsetEncoder).EncodeIR
-                                                /home/gaz358/myprog/nft-go/internal/expr-encoders/dynset.go:28
-                                        github.com/Morwran/nft-go/internal/expr-encoders.(*dynsetEncoderTestSuite).Test_DynsetEncodeIR.func1
-                                                /home/gaz358/myprog/nft-go/internal/expr-encoders/dynset_test.go:63
-                                        github.com/stretchr/testify/suite.(*Suite).Run.func1
-                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                                        testing.tRunner
-                                                /home/gaz358/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.2.linux-amd64/src/testing/testing.go:1792
-                                        runtime.goexit
-                                                /home/gaz358/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.2.linux-amd64/src/runtime/asm_amd64.s:1700
-                        Test:           Test_DynsetEncoder/Test_DynsetEncodeIR/add
-        --- FAIL: Test_DynsetEncoder/Test_DynsetEncodeIR/add_with_timeout (0.00s)
-            dynset_test.go:64: 
-                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/dynset_test.go:64
-                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                        Error:          Received unexpected error:
-                                        ctx has no rule
-                                        github.com/Morwran/nft-go/internal/expr-encoders.(*dynsetEncoder).EncodeIR
-                                                /home/gaz358/myprog/nft-go/internal/expr-encoders/dynset.go:28
-                                        github.com/Morwran/nft-go/internal/expr-encoders.(*dynsetEncoderTestSuite).Test_DynsetEncodeIR.func1
-                                                /home/gaz358/myprog/nft-go/internal/expr-encoders/dynset_test.go:63
-                                        github.com/stretchr/testify/suite.(*Suite).Run.func1
-                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                                        testing.tRunner
-                                                /home/gaz358/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.2.linux-amd64/src/testing/testing.go:1792
-                                        runtime.goexit
-                                                /home/gaz358/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.2.linux-amd64/src/runtime/asm_amd64.s:1700
-                        Test:           Test_DynsetEncoder/Test_DynsetEncodeIR/add_with_timeout
-        --- FAIL: Test_DynsetEncoder/Test_DynsetEncodeIR/update (0.00s)
-            dynset_test.go:64: 
-                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/dynset_test.go:64
-                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                        Error:          Received unexpected error:
-                                        ctx has no rule
-                                        github.com/Morwran/nft-go/internal/expr-encoders.(*dynsetEncoder).EncodeIR
-                                                /home/gaz358/myprog/nft-go/internal/expr-encoders/dynset.go:28
-                                        github.com/Morwran/nft-go/internal/expr-encoders.(*dynsetEncoderTestSuite).Test_DynsetEncodeIR.func1
-                                                /home/gaz358/myprog/nft-go/internal/expr-encoders/dynset_test.go:63
-                                        github.com/stretchr/testify/suite.(*Suite).Run.func1
-                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                                        testing.tRunner
-                                                /home/gaz358/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.2.linux-amd64/src/testing/testing.go:1792
-                                        runtime.goexit
-                                                /home/gaz358/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.2.linux-amd64/src/runtime/asm_amd64.s:1700
-                        Test:           Test_DynsetEncoder/Test_DynsetEncodeIR/update
-        --- FAIL: Test_DynsetEncoder/Test_DynsetEncodeIR/delete (0.00s)
-            dynset_test.go:64: 
-                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/dynset_test.go:64
-                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                        Error:          Received unexpected error:
-                                        ctx has no rule
-                                        github.com/Morwran/nft-go/internal/expr-encoders.(*dynsetEncoder).EncodeIR
-                                                /home/gaz358/myprog/nft-go/internal/expr-encoders/dynset.go:28
-                                        github.com/Morwran/nft-go/internal/expr-encoders.(*dynsetEncoderTestSuite).Test_DynsetEncodeIR.func1
-                                                /home/gaz358/myprog/nft-go/internal/expr-encoders/dynset_test.go:63
-                                        github.com/stretchr/testify/suite.(*Suite).Run.func1
-                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                                        testing.tRunner
-                                                /home/gaz358/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.2.linux-amd64/src/testing/testing.go:1792
-                                        runtime.goexit
-                                                /home/gaz358/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.2.linux-amd64/src/runtime/asm_amd64.s:1700
-                        Test:           Test_DynsetEncoder/Test_DynsetEncodeIR/delete
-FAIL
-exit status 1
-FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.008s
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+ctx := &ctx{
+				reg:  reg,
+				rule: &nftables.Rule{}, // исправление здесь!
+			}
 
 
 
