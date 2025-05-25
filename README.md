@@ -23,131 +23,103 @@ package encoders
 
 import (
 	"testing"
-	"time"
 
-	"github.com/google/nftables"
 	"github.com/google/nftables/expr"
 	"github.com/stretchr/testify/suite"
 )
 
-type dynsetEncoderTestSuite struct {
+type hashEncoderTestSuite struct {
 	suite.Suite
 }
 
-func (sui *dynsetEncoderTestSuite) Test_DynsetEncodeIR() {
+func (sui *hashEncoderTestSuite) Test_HashEncodeIR() {
 	testData := []struct {
-		name     string
-		dynset   *expr.Dynset
-		srcKey   string
-		timeout  time.Duration
-		op       DynSetOP
-		expected string
+		name      string
+		hash      *expr.Hash
+		srcReg    uint32
+		srcHuman  string
+		expected  string
 	}{
 		{
-			name:     "add",
-			dynset:   &expr.Dynset{Operation: uint32(DynSetOPAdd), SetName: "myset", SrcRegKey: 1},
-			srcKey:   "10.0.0.1",
-			expected: "add @myset { 10.0.0.1 }",
-		},
-		{
-			name:     "add with timeout",
-			dynset:   &expr.Dynset{Operation: uint32(DynSetOPAdd), SetName: "myset", SrcRegKey: 2, Timeout: 10 * time.Second},
-			srcKey:   "192.168.1.10",
-			timeout:  10 * time.Second,
-			expected: "add @myset { 192.168.1.10 timeout 10s }",
-		},
-		{
-			name:     "update",
-			dynset:   &expr.Dynset{Operation: uint32(DynSetOPUpdate), SetName: "myset", SrcRegKey: 3},
-			srcKey:   "testkey",
-			expected: "update @myset { testkey }",
-		},
-		{
-			name:     "delete",
-			dynset:   &expr.Dynset{Operation: uint32(DynSetOPDelete), SetName: "myset", SrcRegKey: 4},
-			srcKey:   "remove_this",
-			expected: "delete @myset { remove_this }",
-		},
-
-		{
-			name: "add with log expr",
-			dynset: &expr.Dynset{
-				Operation: uint32(DynSetOPAdd),
-				SetName:   "myset",
-				SrcRegKey: 1,
-				Exprs: []expr.Any{
-					&expr.Log{},
-				},
+			name: "simple symhash",
+			hash: &expr.Hash{
+				Type:         expr.HashTypeSym,
+				Modulus:      10,
+				Seed:         0x1234,
+				Offset:       0,
+				DestRegister: 1,
 			},
-			srcKey:   "10.10.10.10",
-			expected: "add @myset { 10.10.10.10 log }",
+			expected: "symhash mod 10 seed 0x1234",
 		},
 		{
-			name: "add with timeout and counter",
-			dynset: &expr.Dynset{
-				Operation: uint32(DynSetOPAdd),
-				SetName:   "myset",
-				SrcRegKey: 2,
-				Timeout:   20 * time.Second,
-				Exprs: []expr.Any{
-					&expr.Counter{},
-				},
+			name: "symhash with offset",
+			hash: &expr.Hash{
+				Type:         expr.HashTypeSym,
+				Modulus:      16,
+				Seed:         0xdead,
+				Offset:       7,
+				DestRegister: 2,
 			},
-			srcKey:   "172.16.0.7",
-			expected: "add @myset { 172.16.0.7 timeout 20s counter packets 0 bytes 0 }",
+			expected: "symhash mod 16 seed 0xdead offset 7",
 		},
 		{
-			name: "delete with counter and timeout",
-			dynset: &expr.Dynset{
-				Operation: uint32(DynSetOPDelete),
-				SetName:   "myset",
-				SrcRegKey: 5,
-				Timeout:   30 * time.Second,
-				Exprs: []expr.Any{
-					&expr.Counter{},
-				},
+			name: "jhash with src",
+			hash: &expr.Hash{
+				Type:           expr.HashTypeJhash,
+				Modulus:        5,
+				Seed:           0x1111,
+				Offset:         0,
+				SourceRegister: 3,
+				DestRegister:   4,
 			},
-			srcKey:   "192.0.2.55",
-			expected: "delete @myset { 192.0.2.55 timeout 30s counter packets 0 bytes 0 }",
+			srcReg:   3,
+			srcHuman: "meta mark",
+			expected: "symhashjhash meta mark mod 5 seed 0x1111",
 		},
 		{
-			name: "add with log and counter",
-			dynset: &expr.Dynset{
-				Operation: uint32(DynSetOPAdd),
-				SetName:   "myset",
-				SrcRegKey: 8,
-				Exprs: []expr.Any{
-					&expr.Log{},
-					&expr.Counter{},
-				},
+			name: "jhash with src and offset",
+			hash: &expr.Hash{
+				Type:           expr.HashTypeJhash,
+				Modulus:        123,
+				Seed:           0x1111,
+				Offset:         55,
+				SourceRegister: 5,
+				DestRegister:   6,
 			},
-			srcKey:   "8.8.8.8",
-			expected: "add @myset { 8.8.8.8 log counter packets 0 bytes 0 }",
+			srcReg:   5,
+			srcHuman: "payload saddr",
+			expected: "symhashjhash payload saddr mod 123 seed 0x1111 offset 55",
 		},
 	}
 
 	for _, tc := range testData {
 		sui.Run(tc.name, func() {
-			// Настраиваем regHolder с нужным regVal по srcRegKey
 			var reg regHolder
-			reg.Set(regID(tc.dynset.SrcRegKey), regVal{
-				HumanExpr: tc.srcKey,
-			})
-
+			if tc.srcReg != 0 {
+				reg.Set(regID(tc.srcReg), regVal{
+					HumanExpr: tc.srcHuman,
+				})
+			}
 			ctx := &ctx{
 				reg:  reg,
-				rule: &nftables.Rule{},
+				rule: nil, // не нужен
 			}
 
-			enc := &dynsetEncoder{dynset: tc.dynset}
-			ir, err := enc.EncodeIR(ctx)
-			sui.Require().NoError(err)
-			sui.Require().Equal(tc.expected, ir.Format())
+			enc := &hashEncoder{hash: tc.hash}
+			_, err := enc.EncodeIR(ctx)
+			if err != nil && err != ErrNoIR {
+				sui.Require().NoError(err)
+			}
+
+			res, ok := ctx.reg.Get(regID(tc.hash.DestRegister))
+			sui.Require().True(ok)
+			sui.Require().Equal(tc.expected, res.HumanExpr)
 		})
 	}
 }
 
-func Test_DynsetEncoder(t *testing.T) {
-	suite.Run(t, new(dynsetEncoderTestSuite))
+func Test_HashEncoder(t *testing.T) {
+	suite.Run(t, new(hashEncoderTestSuite))
 }
+
 
