@@ -19,129 +19,19 @@ sudo nft add rule ip test prerouting update @myset { testkey }
 
 
 
-package encoders
-
-import (
-	"testing"
-
-	"github.com/google/nftables/expr"
-	"github.com/stretchr/testify/suite"
-)
-
-type hashEncoderTestSuite struct {
-	suite.Suite
-}
-
-func (sui *hashEncoderTestSuite) Test_HashEncodeIR() {
-	testData := []struct {
-		name      string
-		hash      *expr.Hash
-		srcReg    uint32
-		srcHuman  string
-		expected  string
-	}{
-		{
-			name: "simple symhash",
-			hash: &expr.Hash{
-				Type:         expr.HashTypeSym,
-				Modulus:      10,
-				Seed:         0x1234,
-				Offset:       0,
-				DestRegister: 1,
-			},
-			expected: "symhash mod 10 seed 0x1234",
-		},
-		{
-			name: "symhash with offset",
-			hash: &expr.Hash{
-				Type:         expr.HashTypeSym,
-				Modulus:      16,
-				Seed:         0xdead,
-				Offset:       7,
-				DestRegister: 2,
-			},
-			expected: "symhash mod 16 seed 0xdead offset 7",
-		},
-		{
-			name: "jhash with src",
-			hash: &expr.Hash{
-				Type:           expr.HashTypeJhash,
-				Modulus:        5,
-				Seed:           0x1111,
-				Offset:         0,
-				SourceRegister: 3,
-				DestRegister:   4,
-			},
-			srcReg:   3,
-			srcHuman: "meta mark",
-			expected: "symhashjhash meta mark mod 5 seed 0x1111",
-		},
-		{
-			name: "jhash with src and offset",
-			hash: &expr.Hash{
-				Type:           expr.HashTypeJhash,
-				Modulus:        123,
-				Seed:           0x1111,
-				Offset:         55,
-				SourceRegister: 5,
-				DestRegister:   6,
-			},
-			srcReg:   5,
-			srcHuman: "payload saddr",
-			expected: "symhashjhash payload saddr mod 123 seed 0x1111 offset 55",
-		},
-	}
-
-	for _, tc := range testData {
-		sui.Run(tc.name, func() {
-			var reg regHolder
-			if tc.srcReg != 0 {
-				reg.Set(regID(tc.srcReg), regVal{
-					HumanExpr: tc.srcHuman,
-				})
-			}
-			ctx := &ctx{
-				reg:  reg,
-				rule: nil, // не нужен
-			}
-
-			enc := &hashEncoder{hash: tc.hash}
-			_, err := enc.EncodeIR(ctx)
-			if err != nil && err != ErrNoIR {
-				sui.Require().NoError(err)
-			}
-
-			res, ok := ctx.reg.Get(regID(tc.hash.DestRegister))
-			sui.Require().True(ok)
-			sui.Require().Equal(tc.expected, res.HumanExpr)
-		})
-	}
-}
-
-func Test_HashEncoder(t *testing.T) {
-	suite.Run(t, new(hashEncoderTestSuite))
-}
-
-[{
-	"resource": "/home/gaz358/myprog/nft-go/internal/expr-encoders/hash_test.go",
-	"owner": "_generated_diagnostic_collection_name_#2",
-	"code": {
-		"value": "UndeclaredImportedName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredImportedName"
-		}
+{
+	name: "jhash with src",
+	hash: &expr.Hash{
+		Type:           expr.HashTypeJenkins, // используем jhash (jenkins)
+		Modulus:        5,
+		Seed:           0x1111,
+		Offset:         0,
+		SourceRegister: 3,
+		DestRegister:   4,
 	},
-	"severity": 8,
-	"message": "undefined: expr.HashTypeJhash",
-	"source": "compiler",
-	"startLineNumber": 47,
-	"startColumn": 26,
-	"endLineNumber": 47,
-	"endColumn": 39
-}]
+	srcReg:   3,
+	srcHuman: "meta mark",
+	expected: "symhashjhash meta mark mod 5 seed 0x1111", // если твой encoder так формирует строку
+},
 
 
