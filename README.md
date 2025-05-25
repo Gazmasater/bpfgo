@@ -138,3 +138,17 @@ sudo nft add rule ip test prerouting symhash jhash meta mark mod 5 seed 0x1111
 
 
 
+
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting jhash ip saddr mod 123 seed 0xbeef offset 42
+Error: syntax error, unexpected newline
+add rule ip test prerouting jhash ip saddr mod 123 seed 0xbeef offset 42
+                                                                        ^
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting symhash jhash ip saddr mod 123 seed 0xbeef offset 42
+Error: syntax error, unexpected jhash, expecting mod
+add rule ip test prerouting symhash jhash ip saddr mod 123 seed 0xbeef offset 42
+                                    ^^^^^
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+
+
+
+
