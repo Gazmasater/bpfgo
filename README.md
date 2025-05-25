@@ -94,6 +94,11 @@ func Test_ConnlimitEncoder(t *testing.T) {
 }
 
 
+nft add rule ip test prerouting ct count 5 accept
+nft add rule ip test prerouting ct count over 10 accept
+
+
+
 
 
 
