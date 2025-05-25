@@ -33,49 +33,80 @@ type dynsetEncoderTestSuite struct {
 	suite.Suite
 }
 
-func (sui *dynsetEncoderTestSuite) Test_DynsetEncodeIR() {
+func (sui *dynsetEncoderTestSuite) Test_DynsetEncodeIR_Complex() {
 	testData := []struct {
 		name     string
 		dynset   *expr.Dynset
 		srcKey   string
-		timeout  time.Duration
-		op       DynSetOP
+		srcData  string
 		expected string
 	}{
 		{
-			name:     "add",
-			dynset:   &expr.Dynset{Operation: uint32(DynSetOPAdd), SetName: "myset", SrcRegKey: 1},
-			srcKey:   "10.0.0.1",
-			expected: "add @myset { 10.0.0.1 }",
+			name:   "add with log expr",
+			dynset: &expr.Dynset{
+				Operation: uint32(DynSetOPAdd),
+				SetName:   "myset",
+				SrcRegKey: 1,
+				Exprs: []expr.Any{
+					&expr.Log{},
+				},
+			},
+			srcKey:   "10.10.10.10",
+			expected: "add @myset { 10.10.10.10 log }",
 		},
 		{
-			name:     "add with timeout",
-			dynset:   &expr.Dynset{Operation: uint32(DynSetOPAdd), SetName: "myset", SrcRegKey: 2, Timeout: 10 * time.Second},
-			srcKey:   "192.168.1.10",
-			timeout:  10 * time.Second,
-			expected: "add @myset { 192.168.1.10 timeout 10s }",
+			name:   "add with timeout and counter",
+			dynset: &expr.Dynset{
+				Operation: uint32(DynSetOPAdd),
+				SetName:   "myset",
+				SrcRegKey: 2,
+				Timeout:   20 * time.Second,
+				Exprs: []expr.Any{
+					&expr.Counter{},
+				},
+			},
+			srcKey:   "172.16.0.7",
+			expected: "add @myset { 172.16.0.7 timeout 20s counter packets 0 bytes 0 }",
 		},
 		{
-			name:     "update",
-			dynset:   &expr.Dynset{Operation: uint32(DynSetOPUpdate), SetName: "myset", SrcRegKey: 3},
-			srcKey:   "testkey",
-			expected: "update @myset { testkey }",
+			name:   "update with map style (srcRegData)",
+			dynset: &expr.Dynset{
+				Operation:  uint32(DynSetOPUpdate),
+				SetName:    "myset",
+				SrcRegKey:  3,
+				SrcRegData: 4,
+			},
+			srcKey:   "mapkey",
+			srcData:  "mapval",
+			expected: "update @myset { mapkey : mapval }",
 		},
 		{
-			name:     "delete",
-			dynset:   &expr.Dynset{Operation: uint32(DynSetOPDelete), SetName: "myset", SrcRegKey: 4},
-			srcKey:   "remove_this",
-			expected: "delete @myset { remove_this }",
+			name:   "delete with counter and timeout",
+			dynset: &expr.Dynset{
+				Operation: uint32(DynSetOPDelete),
+				SetName:   "myset",
+				SrcRegKey: 5,
+				Timeout:   30 * time.Second,
+				Exprs: []expr.Any{
+					&expr.Counter{},
+				},
+			},
+			srcKey:   "192.0.2.55",
+			expected: "delete @myset { 192.0.2.55 timeout 30s counter packets 0 bytes 0 }",
 		},
 	}
 
 	for _, tc := range testData {
 		sui.Run(tc.name, func() {
-			// Настраиваем regHolder с нужным regVal по srcRegKey
 			var reg regHolder
 			reg.Set(regID(tc.dynset.SrcRegKey), regVal{
 				HumanExpr: tc.srcKey,
 			})
+			if tc.dynset.SrcRegData != 0 && tc.srcData != "" {
+				reg.Set(regID(tc.dynset.SrcRegData), regVal{
+					HumanExpr: tc.srcData,
+				})
+			}
 
 			ctx := &ctx{
 				reg:  reg,
@@ -85,7 +116,7 @@ func (sui *dynsetEncoderTestSuite) Test_DynsetEncodeIR() {
 			enc := &dynsetEncoder{dynset: tc.dynset}
 			ir, err := enc.EncodeIR(ctx)
 			sui.Require().NoError(err)
-			sui.Require().Equal(tc.expected, ir.Format())
+			sui.Require().Equal(tc.expected, ir.String())
 		})
 	}
 }
@@ -93,6 +124,7 @@ func (sui *dynsetEncoderTestSuite) Test_DynsetEncodeIR() {
 func Test_DynsetEncoder(t *testing.T) {
 	suite.Run(t, new(dynsetEncoderTestSuite))
 }
+
 
 
 
