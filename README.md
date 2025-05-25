@@ -43,6 +43,8 @@ func (sui *counterEncoderTestSuite) Test_CounterEncodeIR() {
 			enc := &counterEncoder{counter: tc.counter}
 			ir, err := enc.EncodeIR(ctx)
 			sui.Require().NoError(err)
+			fmt.Printf("Expected=%s\n", tc.expected)
+			fmt.Printf("ir.Format=%s\n", ir.Format())
 			sui.Require().Equal(tc.expected, ir.Format())
 		})
 	}
@@ -78,6 +80,7 @@ func (sui *counterEncoderTestSuite) Test_CounterEncodeJSON() {
 func Test_CounterEncoder(t *testing.T) {
 	suite.Run(t, new(counterEncoderTestSuite))
 }
+
 
 
 
