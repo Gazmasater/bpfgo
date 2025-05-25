@@ -139,15 +139,95 @@ sudo nft add rule ip test prerouting symhash jhash meta mark mod 5 seed 0x1111
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting jhash ip saddr mod 123 seed 0xbeef offset 42
-Error: syntax error, unexpected newline
-add rule ip test prerouting jhash ip saddr mod 123 seed 0xbeef offset 42
-                                                                        ^
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting symhash jhash ip saddr mod 123 seed 0xbeef offset 42
-Error: syntax error, unexpected jhash, expecting mod
-add rule ip test prerouting symhash jhash ip saddr mod 123 seed 0xbeef offset 42
-                                    ^^^^^
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+package encoders
+
+import (
+	"testing"
+
+	"github.com/google/nftables/expr"
+	"github.com/stretchr/testify/suite"
+)
+
+type counterEncoderTestSuite struct {
+	suite.Suite
+}
+
+func (sui *counterEncoderTestSuite) Test_CounterEncodeIR() {
+	testData := []struct {
+		name     string
+		counter  *expr.Counter
+		expected string
+	}{
+		{
+			name:     "default counter (zeroes)",
+			counter:  &expr.Counter{},
+			expected: "counter packets 0 bytes 0",
+		},
+		{
+			name:     "counter with values (ignored in IR)",
+			counter:  &expr.Counter{Packets: 123, Bytes: 456},
+			expected: "counter packets 0 bytes 0", // IR всегда статичен
+		},
+	}
+
+	for _, tc := range testData {
+		sui.Run(tc.name, func() {
+			ctx := &ctx{}
+			enc := &counterEncoder{counter: tc.counter}
+			ir, err := enc.EncodeIR(ctx)
+			sui.Require().NoError(err)
+			sui.Require().Equal(tc.expected, ir.Format())
+		})
+	}
+}
+
+func (sui *counterEncoderTestSuite) Test_CounterEncodeJSON() {
+	testData := []struct {
+		name     string
+		counter  *expr.Counter
+		expected string
+	}{
+		{
+			name:     "default counter (zeroes)",
+			counter:  &expr.Counter{},
+			expected: `{"counter":{"bytes":0,"packets":0}}`,
+		},
+		{
+			name:     "counter with values",
+			counter:  &expr.Counter{Bytes: 987654, Packets: 321},
+			expected: `{"counter":{"bytes":987654,"packets":321}}`,
+		},
+	}
+
+	for _, tc := range testData {
+		sui.Run(tc.name, func() {
+			ctx := &ctx{}
+			enc := &counterEncoder{counter: tc.counter}
+			data, err := enc.EncodeJSON(ctx)
+			sui.Require().NoError(err)
+			sui.Require().JSONEq(tc.expected, string(data))
+		})
+	}
+}
+
+func Test_CounterEncoder(t *testing.T) {
+	suite.Run(t, new(counterEncoderTestSuite))
+}
+
+
+# 1. Самое базовое правило с counter
+sudo nft add table ip test
+sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0; }'
+sudo nft add rule ip test prerouting counter
+
+# 2. Counter может быть совмещён с другими условиями, например:
+sudo nft add rule ip test prerouting ip saddr 10.0.0.1 counter
+
+# 3. Можно добавить правило в любую цепочку, например, postrouting:
+sudo nft add chain ip test postrouting '{ type filter hook postrouting priority 0; }'
+sudo nft add rule ip test postrouting counter
+
+
 
 
 
