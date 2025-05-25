@@ -18,19 +18,6 @@ sudo nft add rule ip test prerouting update @myset { testkey }
 
 
 
-package encoders
-
-import (
-	"testing"
-
-	"github.com/google/nftables/expr"
-	"github.com/stretchr/testify/suite"
-)
-
-type bitwiseEncoderTestSuite struct {
-	suite.Suite
-}
-
 func (sui *bitwiseEncoderTestSuite) Test_BitwiseEncodeIR() {
 	testData := []struct {
 		name     string
@@ -63,7 +50,7 @@ func (sui *bitwiseEncoderTestSuite) Test_BitwiseEncodeIR() {
 			expected: "((meta mark) & 0xff) ^ 0xf",
 		},
 		{
-			name:     "bitwise with OR (edge)",
+			name:     "bitwise with XOR (xor != 0, mask != 0)",
 			srcReg:   5,
 			dstReg:   6,
 			mask:     []byte{0xf0},
@@ -71,6 +58,77 @@ func (sui *bitwiseEncoderTestSuite) Test_BitwiseEncodeIR() {
 			srcExpr:  nil,
 			srcHuman: "payload 2",
 			expected: "((payload 2) & 0xf0) ^ 0xf0",
+		},
+		// ---- Расширенные кейсы ----
+		{
+			name:     "bitwise multi-byte mask AND",
+			srcReg:   7,
+			dstReg:   8,
+			mask:     []byte{0xff, 0x0f},
+			xor:      nil,
+			srcExpr:  nil,
+			srcHuman: "ip saddr",
+			expected: "(ip saddr) & 0xff0f",
+		},
+		{
+			name:     "bitwise full mask all ones",
+			srcReg:   9,
+			dstReg:   10,
+			mask:     []byte{0xff, 0xff, 0xff, 0xff},
+			xor:      nil,
+			srcExpr:  nil,
+			srcHuman: "data[0]",
+			expected: "(data[0]) & 0xffffffff",
+		},
+		{
+			name:     "bitwise only XOR (mask all ones)",
+			srcReg:   11,
+			dstReg:   12,
+			mask:     []byte{0xff, 0xff},
+			xor:      []byte{0x12, 0x34},
+			srcExpr:  nil,
+			srcHuman: "payload 4",
+			expected: "((payload 4) & 0xffff) ^ 0x1234",
+		},
+		{
+			name:     "bitwise only XOR (mask zeros)",
+			srcReg:   13,
+			dstReg:   14,
+			mask:     []byte{0x00, 0x00},
+			xor:      []byte{0xff, 0xff},
+			srcExpr:  nil,
+			srcHuman: "payload 6",
+			expected: "(payload 6) & 0x0",
+		},
+		{
+			name:     "bitwise no mask (nil mask, xor)",
+			srcReg:   15,
+			dstReg:   16,
+			mask:     nil,
+			xor:      []byte{0x1},
+			srcExpr:  nil,
+			srcHuman: "meta priority",
+			expected: "(meta priority) & 0x0 ^ 0x1",
+		},
+		{
+			name:     "bitwise with srcExpr (Ct)",
+			srcReg:   17,
+			dstReg:   18,
+			mask:     []byte{0xf0},
+			xor:      []byte{0x0a},
+			srcExpr:  &expr.Ct{}, // Здесь мы проверяем, что buildCtWithMask сработает
+			srcHuman: "ct state",
+			expected: "ct state 0xf0",
+		},
+		{
+			name:     "bitwise with srcExpr (Payload)",
+			srcReg:   19,
+			dstReg:   20,
+			mask:     []byte{0xa5},
+			xor:      nil,
+			srcExpr:  &expr.Payload{},
+			srcHuman: "payload mark",
+			expected: "payload mark 0xa5",
 		},
 	}
 
@@ -95,7 +153,6 @@ func (sui *bitwiseEncoderTestSuite) Test_BitwiseEncodeIR() {
 			}
 			enc := &bitwiseEncoder{bitwise: bitwise}
 			_, err := enc.EncodeIR(ctx)
-			// Архитектурно допускаем отсутствие IR
 			if err != nil && err != ErrNoIR {
 				sui.Require().NoError(err)
 			}
@@ -106,9 +163,6 @@ func (sui *bitwiseEncoderTestSuite) Test_BitwiseEncodeIR() {
 	}
 }
 
-func Test_BitwiseEncoder(t *testing.T) {
-	suite.Run(t, new(bitwiseEncoderTestSuite))
-}
 
 
 
