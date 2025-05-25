@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/nftables"
 	"github.com/google/nftables/expr"
 	"github.com/stretchr/testify/suite"
 )
@@ -75,8 +76,10 @@ func (sui *dynsetEncoderTestSuite) Test_DynsetEncodeIR() {
 			reg.Set(regID(tc.dynset.SrcRegKey), regVal{
 				HumanExpr: tc.srcKey,
 			})
+
 			ctx := &ctx{
-				reg: reg,
+				reg:  reg,
+				rule: &nftables.Rule{},
 			}
 
 			enc := &dynsetEncoder{dynset: tc.dynset}
@@ -91,12 +94,6 @@ func Test_DynsetEncoder(t *testing.T) {
 	suite.Run(t, new(dynsetEncoderTestSuite))
 }
 
-
-
-ctx := &ctx{
-				reg:  reg,
-				rule: &nftables.Rule{}, // исправление здесь!
-			}
 
 
 
