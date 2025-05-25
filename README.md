@@ -8,79 +8,97 @@ sudo nft add rule ip test prerouting oifname "lo" ip daddr 192.168.1.10 counter 
 package encoders
 
 import (
-	"fmt"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/nftables/expr"
 	"github.com/stretchr/testify/suite"
+	"golang.org/x/sys/unix"
 )
 
-type counterEncoderTestSuite struct {
+type connlimitEncoderTestSuite struct {
 	suite.Suite
 }
 
-func (sui *counterEncoderTestSuite) Test_CounterEncodeIR() {
+func (sui *connlimitEncoderTestSuite) Test_ConnlimitEncodeIR() {
 	testData := []struct {
-		name     string
-		counter  *expr.Counter
-		expected string
+		name      string
+		connlimit *expr.Connlimit
+		expected  string
 	}{
 		{
-			name:     "default counter (zeroes)",
-			counter:  &expr.Counter{},
-			expected: "counter packets 0 bytes 0",
+			name:      "simple count",
+			connlimit: &expr.Connlimit{Count: 5, Flags: 0},
+			expected:  "ct count 5",
 		},
 		{
-			name:     "counter with values (ignored in IR)",
-			counter:  &expr.Counter{Packets: 123, Bytes: 456},
-			expected: "counter packets 0 bytes 0", // IR всегда статичен
+			name:      "over count (NFT_LIMIT_F_INV)",
+			connlimit: &expr.Connlimit{Count: 10, Flags: unix.NFT_LIMIT_F_INV},
+			expected:  "ct count over 10",
 		},
 	}
 
 	for _, tc := range testData {
 		sui.Run(tc.name, func() {
 			ctx := &ctx{}
-			enc := &counterEncoder{counter: tc.counter}
+			enc := &connlimitEncoder{connlimit: tc.connlimit}
 			ir, err := enc.EncodeIR(ctx)
 			sui.Require().NoError(err)
-			fmt.Printf("Expected=%s\n", tc.expected)
-			fmt.Printf("ir.Format=%s\n", ir.Format())
 			sui.Require().Equal(tc.expected, ir.Format())
 		})
 	}
 }
 
-func (sui *counterEncoderTestSuite) Test_CounterEncodeJSON() {
+func (sui *connlimitEncoderTestSuite) Test_ConnlimitEncodeJSON() {
 	testData := []struct {
-		name     string
-		counter  *expr.Counter
-		expected string
+		name      string
+		connlimit *expr.Connlimit
+		expected  map[string]interface{}
 	}{
 		{
-			name:     "default counter (zeroes)",
-			counter:  &expr.Counter{},
-			expected: `{"counter":{"bytes":0,"packets":0}}`,
+			name:      "simple count",
+			connlimit: &expr.Connlimit{Count: 7, Flags: 0},
+			expected: map[string]interface{}{
+				"ct count": map[string]interface{}{
+					"val": float64(7), // json.Unmarshal превращает в float64
+					"inv": false,
+				},
+			},
+		},
+		{
+			name:      "over count (NFT_LIMIT_F_INV)",
+			connlimit: &expr.Connlimit{Count: 20, Flags: unix.NFT_LIMIT_F_INV},
+			expected: map[string]interface{}{
+				"ct count": map[string]interface{}{
+					"val": float64(20),
+					"inv": true,
+				},
+			},
 		},
 	}
 
 	for _, tc := range testData {
 		sui.Run(tc.name, func() {
 			ctx := &ctx{}
-			enc := &counterEncoder{counter: tc.counter}
+			enc := &connlimitEncoder{connlimit: tc.connlimit}
 			data, err := enc.EncodeJSON(ctx)
 			sui.Require().NoError(err)
-			fmt.Printf("Expected=%s\n", tc.expected)
-			fmt.Printf("DATA=%s\n", string(data))
 
-			sui.Require().JSONEq(tc.expected, string(data))
+			var got map[string]interface{}
+			sui.Require().NoError(json.Unmarshal(data, &got))
+			sui.Require().Equal(tc.expected, got)
 		})
 	}
 }
 
-func Test_CounterEncoder(t *testing.T) {
-	suite.Run(t, new(counterEncoderTestSuite))
+func Test_ConnlimitEncoder(t *testing.T) {
+	suite.Run(t, new(connlimitEncoderTestSuite))
 }
 
+
+sudo nft add rule ip test prerouting ct count 5 accept
+
+sudo nft add rule ip test prerouting ct count over 10 accept
 
 
 
