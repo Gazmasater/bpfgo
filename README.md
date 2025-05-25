@@ -18,241 +18,173 @@ sudo nft add rule ip test prerouting update @myset { testkey }
 
 
 
-func (sui *bitwiseEncoderTestSuite) Test_BitwiseEncodeIR() {
-	testData := []struct {
-		name     string
-		srcReg   uint32
-		dstReg   uint32
-		mask     []byte
-		xor      []byte
-		srcExpr  expr.Any
-		srcHuman string
-		expected string
-	}{
-		{
-			name:     "bitwise AND mask",
-			srcReg:   1,
-			dstReg:   2,
-			mask:     []byte{0xf0},
-			xor:      nil,
-			srcExpr:  nil,
-			srcHuman: "ip daddr",
-			expected: "(ip daddr) & 0xf0",
-		},
-		{
-			name:     "bitwise AND+XOR mask",
-			srcReg:   3,
-			dstReg:   4,
-			mask:     []byte{0xff},
-			xor:      []byte{0x0f},
-			srcExpr:  nil,
-			srcHuman: "meta mark",
-			expected: "((meta mark) & 0xff) ^ 0xf",
-		},
-		{
-			name:     "bitwise with XOR (xor != 0, mask != 0)",
-			srcReg:   5,
-			dstReg:   6,
-			mask:     []byte{0xf0},
-			xor:      []byte{0xf0},
-			srcExpr:  nil,
-			srcHuman: "payload 2",
-			expected: "((payload 2) & 0xf0) ^ 0xf0",
-		},
-		// ---- Расширенные кейсы ----
-		{
-			name:     "bitwise multi-byte mask AND",
-			srcReg:   7,
-			dstReg:   8,
-			mask:     []byte{0xff, 0x0f},
-			xor:      nil,
-			srcExpr:  nil,
-			srcHuman: "ip saddr",
-			expected: "(ip saddr) & 0xff0f",
-		},
-		{
-			name:     "bitwise full mask all ones",
-			srcReg:   9,
-			dstReg:   10,
-			mask:     []byte{0xff, 0xff, 0xff, 0xff},
-			xor:      nil,
-			srcExpr:  nil,
-			srcHuman: "data[0]",
-			expected: "(data[0]) & 0xffffffff",
-		},
-		{
-			name:     "bitwise only XOR (mask all ones)",
-			srcReg:   11,
-			dstReg:   12,
-			mask:     []byte{0xff, 0xff},
-			xor:      []byte{0x12, 0x34},
-			srcExpr:  nil,
-			srcHuman: "payload 4",
-			expected: "((payload 4) & 0xffff) ^ 0x1234",
-		},
-		{
-			name:     "bitwise only XOR (mask zeros)",
-			srcReg:   13,
-			dstReg:   14,
-			mask:     []byte{0x00, 0x00},
-			xor:      []byte{0xff, 0xff},
-			srcExpr:  nil,
-			srcHuman: "payload 6",
-			expected: "(payload 6) & 0x0",
-		},
-		{
-			name:     "bitwise no mask (nil mask, xor)",
-			srcReg:   15,
-			dstReg:   16,
-			mask:     nil,
-			xor:      []byte{0x1},
-			srcExpr:  nil,
-			srcHuman: "meta priority",
-			expected: "(meta priority) & 0x0 ^ 0x1",
-		},
-		{
-			name:     "bitwise with srcExpr (Ct)",
-			srcReg:   17,
-			dstReg:   18,
-			mask:     []byte{0xf0},
-			xor:      []byte{0x0a},
-			srcExpr:  &expr.Ct{}, // Здесь мы проверяем, что buildCtWithMask сработает
-			srcHuman: "ct state",
-			expected: "ct state 0xf0",
-		},
-		{
-			name:     "bitwise with srcExpr (Payload)",
-			srcReg:   19,
-			dstReg:   20,
-			mask:     []byte{0xa5},
-			xor:      nil,
-			srcExpr:  &expr.Payload{},
-			srcHuman: "payload mark",
-			expected: "payload mark 0xa5",
-		},
+package encoders
+
+import (
+	"encoding/json"
+	"testing"
+
+	"github.com/google/nftables/expr"
+)
+
+// Заглушки ошибок, если не экспортируются из основного кода
+var (
+	ErrNoIR   = errors.New("no IR")
+	ErrNoJSON = errors.New("no JSON")
+)
+
+func TestHashEncoder_EncodeIR_Symhash(t *testing.T) {
+	ctx := &ctx{}
+	hash := &expr.Hash{
+		Type:         expr.HashTypeSym,
+		Modulus:      5,
+		Seed:         42,
+		Offset:       0,
+		DestRegister: 3,
 	}
+	enc := &hashEncoder{hash: hash}
 
-	for _, tc := range testData {
-		sui.Run(tc.name, func() {
-			var reg regHolder
-			reg.Set(regID(tc.srcReg), regVal{
-				HumanExpr: tc.srcHuman,
-				Expr:      tc.srcExpr,
-			})
-			ctx := &ctx{
-				reg:  reg,
-				rule: nil,
-			}
-
-			bitwise := &expr.Bitwise{
-				SourceRegister: tc.srcReg,
-				DestRegister:   tc.dstReg,
-				Mask:           tc.mask,
-				Xor:            tc.xor,
-				Len:            uint32(len(tc.mask)),
-			}
-			enc := &bitwiseEncoder{bitwise: bitwise}
-			_, err := enc.EncodeIR(ctx)
-			if err != nil && err != ErrNoIR {
-				sui.Require().NoError(err)
-			}
-			res, ok := ctx.reg.Get(regID(tc.dstReg))
-			sui.Require().True(ok)
-			sui.Require().Equal(tc.expected, res.HumanExpr)
-		})
+	ir, err := enc.EncodeIR(ctx)
+	if err != ErrNoIR {
+		t.Fatalf("expected ErrNoIR, got: %v", err)
+	}
+	if ir != nil {
+		t.Error("expected IR to be nil for symhash")
+	}
+	val, ok := ctx.reg.Get(regID(3))
+	if !ok {
+		t.Fatal("expected value in dest register")
+	}
+	want := "symhash mod 5 seed 0x2a"
+	if val.HumanExpr != want {
+		t.Errorf("expected HumanExpr %q, got %q", want, val.HumanExpr)
 	}
 }
 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test
---- FAIL: Test_BitwiseEncoder (0.00s)
-    --- FAIL: Test_BitwiseEncoder/Test_BitwiseEncodeIR (0.00s)
-        --- FAIL: Test_BitwiseEncoder/Test_BitwiseEncodeIR/bitwise_full_mask_all_ones (0.00s)
-            bitwise_test.go:154: 
-                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/bitwise_test.go:154
-                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                        Error:          Not equal: 
-                                        expected: "(data[0]) & 0xffffffff"
-                                        actual  : "data[0] & 0xffffffff"
-                                    
-                                        Diff:
-                                        --- Expected
-                                        +++ Actual
-                                        @@ -1 +1 @@
-                                        -(data[0]) & 0xffffffff
-                                        +data[0] & 0xffffffff
-                        Test:           Test_BitwiseEncoder/Test_BitwiseEncodeIR/bitwise_full_mask_all_ones
-        --- FAIL: Test_BitwiseEncoder/Test_BitwiseEncodeIR/bitwise_only_XOR_(mask_zeros) (0.00s)
-            bitwise_test.go:154: 
-                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/bitwise_test.go:154
-                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                        Error:          Not equal: 
-                                        expected: "(payload 6) & 0x0"
-                                        actual  : "((payload 6) & 0xffff) | 0xffff"
-                                    
-                                        Diff:
-                                        --- Expected
-                                        +++ Actual
-                                        @@ -1 +1 @@
-                                        -(payload 6) & 0x0
-                                        +((payload 6) & 0xffff) | 0xffff
-                        Test:           Test_BitwiseEncoder/Test_BitwiseEncodeIR/bitwise_only_XOR_(mask_zeros)
-        --- FAIL: Test_BitwiseEncoder/Test_BitwiseEncodeIR/bitwise_no_mask_(nil_mask,_xor) (0.00s)
-            bitwise_test.go:154: 
-                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/bitwise_test.go:154
-                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                        Error:          Not equal: 
-                                        expected: "(meta priority) & 0x0 ^ 0x1"
-                                        actual  : "((meta priority) & 0x1) | 0x1"
-                                    
-                                        Diff:
-                                        --- Expected
-                                        +++ Actual
-                                        @@ -1 +1 @@
-                                        -(meta priority) & 0x0 ^ 0x1
-                                        +((meta priority) & 0x1) | 0x1
-                        Test:           Test_BitwiseEncoder/Test_BitwiseEncodeIR/bitwise_no_mask_(nil_mask,_xor)
-        --- FAIL: Test_BitwiseEncoder/Test_BitwiseEncodeIR/bitwise_with_srcExpr_(Ct) (0.00s)
-            bitwise_test.go:154: 
-                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/bitwise_test.go:154
-                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                        Error:          Not equal: 
-                                        expected: "ct state 0xf0"
-                                        actual  : "ct state untracked"
-                                    
-                                        Diff:
-                                        --- Expected
-                                        +++ Actual
-                                        @@ -1 +1 @@
-                                        -ct state 0xf0
-                                        +ct state untracked
-                        Test:           Test_BitwiseEncoder/Test_BitwiseEncodeIR/bitwise_with_srcExpr_(Ct)
-        --- FAIL: Test_BitwiseEncoder/Test_BitwiseEncodeIR/bitwise_with_srcExpr_(Payload) (0.00s)
-            panic.go:262: test panicked: runtime error: invalid memory address or nil pointer dereference
-                goroutine 31 [running]:
-                runtime/debug.Stack()
-                        /home/gaz358/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.2.linux-amd64/src/runtime/debug/stack.go:26 +0x5e
-                github.com/stretchr/testify/suite.failOnPanic(0xc00024e000, {0x879040, 0xca3540})
-                        /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:89 +0x37
-                github.com/stretchr/testify/suite.recoverAndFailOnPanic(0xc00024e000)
-                        /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:83 +0x35
-                panic({0x879040?, 0xca3540?})
-                        /home/gaz358/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.2.linux-amd64/src/runtime/panic.go:792 +0x132
-                github.com/Morwran/nft-go/internal/expr-encoders.(*payloadEncoder).buildPlWithMask(0xc000080cf0, 0xc000080e48, {0xc0001e98f3, 0x1, 0x1})
-                        /home/gaz358/myprog/nft-go/internal/expr-encoders/payload.go:87 +0x82
-                github.com/Morwran/nft-go/internal/expr-encoders.(*bitwiseEncoder).EncodeIR(0x8867e0?, 0xc000080e48)
-                        /home/gaz358/myprog/nft-go/internal/expr-encoders/bitwise.go:46 +0x1d0
-                github.com/Morwran/nft-go/internal/expr-encoders.(*bitwiseEncoderTestSuite).Test_BitwiseEncodeIR.func1()
-                        /home/gaz358/myprog/nft-go/internal/expr-encoders/bitwise_test.go:148 +0x214
-                github.com/stretchr/testify/suite.(*Suite).Run.func1(0xc00024e000)
-                        /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115 +0x169
-                testing.tRunner(0xc00024e000, 0xc000214b00)
-                        /home/gaz358/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.2.linux-amd64/src/testing/testing.go:1792 +0xf4
-                created by testing.(*T).Run in goroutine 21
-                        /home/gaz358/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.2.linux-amd64/src/testing/testing.go:1851 +0x413
-FAIL
-exit status 1
-FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.009s
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+func TestHashEncoder_EncodeIR_Jhash_WithSrcReg(t *testing.T) {
+	ctx := &ctx{}
+	ctx.reg.Set(2, regVal{HumanExpr: "foobar"})
+	hash := &expr.Hash{
+		Type:           expr.HashTypeJHash,
+		Modulus:        100,
+		Seed:           0xdead,
+		Offset:         7,
+		SourceRegister: 2,
+		DestRegister:   4,
+	}
+	enc := &hashEncoder{hash: hash}
+
+	ir, err := enc.EncodeIR(ctx)
+	if err != ErrNoIR {
+		t.Fatalf("expected ErrNoIR, got: %v", err)
+	}
+	val, ok := ctx.reg.Get(regID(4))
+	if !ok {
+		t.Fatal("expected value in dest register")
+	}
+	want := "symhashjhash foobar mod 100 seed 0xdead offset 7"
+	if val.HumanExpr != want {
+		t.Errorf("expected HumanExpr %q, got %q", want, val.HumanExpr)
+	}
+}
+
+func TestHashEncoder_EncodeIR_MissingSrcReg(t *testing.T) {
+	ctx := &ctx{}
+	hash := &expr.Hash{
+		Type:           expr.HashTypeJHash,
+		SourceRegister: 7,
+		DestRegister:   1,
+	}
+	enc := &hashEncoder{hash: hash}
+	_, err := enc.EncodeIR(ctx)
+	if err == nil {
+		t.Fatal("expected error due to missing source register, got nil")
+	}
+}
+
+func TestHashEncoder_EncodeIR_InvalidDestReg(t *testing.T) {
+	ctx := &ctx{}
+	hash := &expr.Hash{
+		Type:    expr.HashTypeSym,
+		Modulus: 2,
+		Seed:    2,
+	}
+	enc := &hashEncoder{hash: hash}
+	_, err := enc.EncodeIR(ctx)
+	if err == nil {
+		t.Fatal("expected error due to invalid dest register, got nil")
+	}
+}
+
+func TestHashEncoder_EncodeJSON_Symhash(t *testing.T) {
+	ctx := &ctx{}
+	hash := &expr.Hash{
+		Type:         expr.HashTypeSym,
+		Modulus:      15,
+		Seed:         9,
+		Offset:       0,
+		DestRegister: 8,
+	}
+	enc := &hashEncoder{hash: hash}
+	_, err := enc.EncodeJSON(ctx)
+	if err != ErrNoJSON {
+		t.Fatalf("expected ErrNoJSON, got: %v", err)
+	}
+	val, ok := ctx.reg.Get(regID(8))
+	if !ok {
+		t.Fatal("expected value in dest register")
+	}
+	js, err := json.Marshal(val.Data)
+	if err != nil {
+		t.Errorf("could not marshal json: %v", err)
+	}
+	if !json.Valid(js) {
+		t.Errorf("invalid JSON produced: %s", js)
+	}
+}
+
+func TestHashEncoder_EncodeJSON_Jhash_WithSrcReg(t *testing.T) {
+	ctx := &ctx{}
+	ctx.reg.Set(1, regVal{Data: "DATA!"})
+	hash := &expr.Hash{
+		Type:           expr.HashTypeJHash,
+		Modulus:        8,
+		Seed:           7,
+		Offset:         1,
+		SourceRegister: 1,
+		DestRegister:   6,
+	}
+	enc := &hashEncoder{hash: hash}
+	_, err := enc.EncodeJSON(ctx)
+	if err != ErrNoJSON {
+		t.Fatalf("expected ErrNoJSON, got: %v", err)
+	}
+	val, ok := ctx.reg.Get(regID(6))
+	if !ok {
+		t.Fatal("expected value in dest register")
+	}
+	js, err := json.Marshal(val.Data)
+	if err != nil {
+		t.Errorf("could not marshal json: %v", err)
+	}
+	if !json.Valid(js) {
+		t.Errorf("invalid JSON produced: %s", js)
+	}
+}
+
+func TestHashEncoder_EncodeJSON_InvalidDestReg(t *testing.T) {
+	ctx := &ctx{}
+	hash := &expr.Hash{
+		Type:    expr.HashTypeSym,
+		Modulus: 1,
+		Seed:    1,
+	}
+	enc := &hashEncoder{hash: hash}
+	_, err := enc.EncodeJSON(ctx)
+	if err == nil {
+		t.Fatal("expected error due to invalid dest register, got nil")
+	}
+}
 
 
 
