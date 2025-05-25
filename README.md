@@ -94,4 +94,49 @@ sudo nft add rule ip test prerouting update @myset { testkey }
 &expr.Dynset{Operation: DynSetOPDelete, SetName: "myset", SrcRegKey: 4}
 
 
+[{
+	"resource": "/home/gaz358/myprog/nft-go/internal/expr-encoders/dynset_test.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "IncompatibleAssign",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "IncompatibleAssign"
+		}
+	},
+	"severity": 8,
+	"message": "cannot use DynSetOPAdd (constant 0 of uint32 type DynSetOP) as uint32 value in struct literal",
+	"source": "compiler",
+	"startLineNumber": 26,
+	"startColumn": 38,
+	"endLineNumber": 26,
+	"endColumn": 49
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/nft-go/internal/expr-encoders/dynset_test.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "IncompatibleAssign",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "IncompatibleAssign"
+		}
+	},
+	"severity": 8,
+	"message": "cannot use DynSetOPUpdate (constant 1 of uint32 type DynSetOP) as uint32 value in struct literal",
+	"source": "compiler",
+	"startLineNumber": 39,
+	"startColumn": 38,
+	"endLineNumber": 39,
+	"endColumn": 52
+}]
+
+
 
