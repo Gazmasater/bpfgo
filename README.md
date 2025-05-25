@@ -124,4 +124,17 @@ func Test_HashEncoder(t *testing.T) {
 }
 
 
+sudo nft add rule ip test prerouting jhash ip saddr mod 123 seed 0xbeef offset 42
+
+sudo nft add rule ip test prerouting symhash jhash ip saddr mod 123 seed 0xbeef offset 42
+
+sudo nft add rule ip test prerouting symhash mod 10 seed 0x1234
+
+sudo nft add rule ip test prerouting symhash mod 16 seed 0xdead offset 7
+
+sudo nft add rule ip test prerouting jhash meta mark mod 5 seed 0x1111
+
+sudo nft add rule ip test prerouting symhash jhash meta mark mod 5 seed 0x1111
+
+
 
