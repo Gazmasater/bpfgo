@@ -9,89 +9,262 @@ sudo nft add rule ip test prerouting ct direction original accept
 sudo nft add rule ip test prerouting ct protocol tcp accept
 sudo nft add rule ip test prerouting ct mark 1 accept
 
-func (c CtState) String() string {
-	var st []string
+package encoders
 
-	if c&CtStateBitNEW != 0 {
-		st = append(st, "new")
-	}
-	if c&CtStateBitESTABLISHED != 0 {
-		st = append(st, "established")
-	}
-	if c&CtStateBitRELATED != 0 {
-		st = append(st, "related")
-	}
-	if c&CtStateBitINVALID != 0 {
-		st = append(st, "invalid")
-	}
-	if c&CtStateBitUNTRACKED != 0 {
-		st = append(st, "untracked")
-	}
+import (
+	"testing"
 
-	return strings.Join(st, ",")
+	"github.com/google/nftables"
+	"github.com/google/nftables/expr"
+	"github.com/stretchr/testify/suite"
+)
+
+// Объявляем константы битов CT state (если вдруг их нет в expr)
+
+type ctEncoderTestSuite struct {
+	suite.Suite
 }
 
+func (sui *ctEncoderTestSuite) Test_CtExprToString() {
+	testData := []struct {
+		name     string
+		exprs    nftables.Rule
+		expected string
+	}{
+		{
+			name: "ct state new",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeySTATE,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Register: 1,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{byte(CtStateBitNEW), 0, 0, 0, 0, 0, 0, 0}, // только new
+					},
+					&expr.Verdict{Kind: expr.VerdictAccept},
+				},
+			},
+			expected: "ct state new accept",
+		},
+		{
+			name: "ct state established,related",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeySTATE,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Register: 1,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{byte(CtStateBitESTABLISHED | CtStateBitRELATED), 0, 0, 0, 0, 0, 0, 0},
+					},
+					&expr.Verdict{Kind: expr.VerdictAccept},
+				},
+			},
+			expected: "ct state established,related accept",
+		},
+		{
+			name: "ct state new,established,related",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeySTATE,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Register: 1,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{byte(CtStateBitESTABLISHED | CtStateBitNEW | CtStateBitRELATED), 0, 0, 0, 0, 0, 0, 0},
+					},
+					&expr.Verdict{Kind: expr.VerdictAccept},
+				},
+			},
+			expected: "ct state new,established,related accept",
+		},
+		{
+			name: "ct state invalid",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeySTATE,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Register: 1,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{byte(CtStateBitINVALID), 0, 0, 0, 0, 0, 0, 0}, // только invalid
+					},
+					&expr.Verdict{Kind: expr.VerdictAccept},
+				},
+			},
+			expected: "ct state invalid accept",
+		},
+		{
+			name: "ct state new,established,invalid",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeySTATE,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Register: 1,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{byte(CtStateBitNEW | CtStateBitESTABLISHED | CtStateBitINVALID), 0, 0, 0, 0, 0, 0, 0},
+					},
+					&expr.Verdict{Kind: expr.VerdictAccept},
+				},
+			},
+			expected: "ct state new,established,invalid accept",
+		},
 
+		{
+			name: "ct state new,established,related,invalid",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeySTATE,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Register: 1,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{byte(CtStateBitNEW | CtStateBitESTABLISHED | CtStateBitRELATED | CtStateBitINVALID), 0, 0, 0, 0, 0, 0, 0},
+					},
+					&expr.Verdict{Kind: expr.VerdictAccept},
+				},
+			},
+			expected: "ct state new,established,related,invalid accept",
+		},
+		{
+			name: "ct state new,untracked",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeySTATE,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Register: 1,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{byte(CtStateBitNEW | CtStateBitUNTRACKED), 0, 0, 0, 0, 0, 0, 0},
+					},
+					&expr.Verdict{Kind: expr.VerdictAccept},
+				},
+			},
+			expected: "ct state new,untracked accept",
+		},
 
-az358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ git add .
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ git commit -m "my first commit"
-[main (root-commit) 4ee132d] my first commit
- 42 files changed, 4467 insertions(+)
- create mode 100644 bitwise.go
- create mode 100644 byteorder.go
- create mode 100644 cmp.go
- create mode 100644 connlimit.go
- create mode 100644 counter.go
- create mode 100644 ct.go
- create mode 100644 ct_test.go
- create mode 100644 dup.go
- create mode 100644 dup_test
- create mode 100644 dynset.go
- create mode 100644 dynset_test.go
- create mode 100644 encoders.go
- create mode 100644 encoders_test.go
- create mode 100644 exthdr.go
- create mode 100644 fib.go
- create mode 100644 flow_offload.go
- create mode 100644 hash.go
- create mode 100644 immediate.go
- create mode 100644 ir.go
- create mode 100644 limit.go
- create mode 100644 log.go
- create mode 100644 lookup.go
- create mode 100644 masq.go
- create mode 100644 match.go
- create mode 100644 meta.go
- create mode 100644 nat.go
- create mode 100644 notrack.go
- create mode 100644 numgen.go
- create mode 100644 objref.go
- create mode 100644 payload.go
- create mode 100644 queue.go
- create mode 100644 quota.go
- create mode 100644 range.go
- create mode 100644 redirect.go
- create mode 100644 registry.go
- create mode 100644 reject.go
- create mode 100644 rt.go
- create mode 100644 set.go
- create mode 100644 socket.go
- create mode 100644 target.go
- create mode 100644 tproxy.go
- create mode 100644 verdict.go
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ git push -u origin main
-git@github.com: Permission denied (publickey).
-fatal: Could not read from remote repository.
+		{
+			name: "ct state not established",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeySTATE,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Register: 1,
+						Op:       expr.CmpOpNeq, // НЕ established
+						Data:     []byte{byte(CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0},
+					},
+					&expr.Verdict{Kind: expr.VerdictAccept},
+				},
+			},
+			expected: "ct state != established accept",
+		},
+		{
+			name: "ct state invalid drop",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeySTATE,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Register: 1,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{byte(CtStateBitINVALID), 0, 0, 0, 0, 0, 0, 0},
+					},
+					&expr.Verdict{Kind: expr.VerdictDrop},
+				},
+			},
+			expected: "ct state invalid drop",
+		},
+		{
+			name: "ct state established ct expiration 5s",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeySTATE,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Register: 1,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{byte(CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0},
+					},
+					&expr.Ct{
+						Key:      expr.CtKeyEXPIRATION,
+						Register: 2,
+					},
+					&expr.Cmp{
+						Register: 2,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{0x88, 0x13, 0x00, 0x00}, // 5000 мс = 5s
+					},
+					&expr.Verdict{Kind: expr.VerdictAccept},
+				},
+			},
+			expected: "ct state established ct expiration 5s accept",
+		},
 
-Please make sure you have the correct access rights
-and the repository exists.
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ git branch -M main
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ git push -u origin main
-git@github.com: Permission denied (publickey).
-fatal: Could not read from remote repository.
+		{
+			name: "ct state established ct protocol tcp",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeySTATE,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Register: 1,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{byte(CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0},
+					},
+					&expr.Ct{
+						Key:      expr.CtKeyPROTOCOL,
+						Register: 2,
+					},
+					&expr.Cmp{
+						Register: 2,
+						Op:       expr.CmpOpEq,
+						Data:     []byte{6}, // TCP
+					},
+					&expr.Verdict{Kind: expr.VerdictAccept},
+				},
+			},
+			expected: "ct state established ct protocol tcp accept",
+		},
+	}
 
-Please make sure you have the correct access rights
-and the repository exists.
+	for _, t := range testData {
+		sui.Run(t.name, func() {
+			str, err := NewRuleExprEncoder(&t.exprs).Format()
+			sui.Require().NoError(err)
+			sui.Require().Equal(t.expected, str)
+		})
+	}
+}
+
+func Test_CtEncoder(t *testing.T) {
+	suite.Run(t, new(ctEncoderTestSuite))
+}
+
 
 
 
