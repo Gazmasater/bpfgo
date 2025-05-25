@@ -33,16 +33,43 @@ type dynsetEncoderTestSuite struct {
 	suite.Suite
 }
 
-func (sui *dynsetEncoderTestSuite) Test_DynsetEncodeIR_Complex() {
+func (sui *dynsetEncoderTestSuite) Test_DynsetEncodeIR() {
 	testData := []struct {
 		name     string
 		dynset   *expr.Dynset
 		srcKey   string
-		srcData  string
+		timeout  time.Duration
+		op       DynSetOP
 		expected string
 	}{
 		{
-			name:   "add with log expr",
+			name:     "add",
+			dynset:   &expr.Dynset{Operation: uint32(DynSetOPAdd), SetName: "myset", SrcRegKey: 1},
+			srcKey:   "10.0.0.1",
+			expected: "add @myset { 10.0.0.1 }",
+		},
+		{
+			name:     "add with timeout",
+			dynset:   &expr.Dynset{Operation: uint32(DynSetOPAdd), SetName: "myset", SrcRegKey: 2, Timeout: 10 * time.Second},
+			srcKey:   "192.168.1.10",
+			timeout:  10 * time.Second,
+			expected: "add @myset { 192.168.1.10 timeout 10s }",
+		},
+		{
+			name:     "update",
+			dynset:   &expr.Dynset{Operation: uint32(DynSetOPUpdate), SetName: "myset", SrcRegKey: 3},
+			srcKey:   "testkey",
+			expected: "update @myset { testkey }",
+		},
+		{
+			name:     "delete",
+			dynset:   &expr.Dynset{Operation: uint32(DynSetOPDelete), SetName: "myset", SrcRegKey: 4},
+			srcKey:   "remove_this",
+			expected: "delete @myset { remove_this }",
+		},
+
+		{
+			name: "add with log expr",
 			dynset: &expr.Dynset{
 				Operation: uint32(DynSetOPAdd),
 				SetName:   "myset",
@@ -55,7 +82,7 @@ func (sui *dynsetEncoderTestSuite) Test_DynsetEncodeIR_Complex() {
 			expected: "add @myset { 10.10.10.10 log }",
 		},
 		{
-			name:   "add with timeout and counter",
+			name: "add with timeout and counter",
 			dynset: &expr.Dynset{
 				Operation: uint32(DynSetOPAdd),
 				SetName:   "myset",
@@ -69,19 +96,7 @@ func (sui *dynsetEncoderTestSuite) Test_DynsetEncodeIR_Complex() {
 			expected: "add @myset { 172.16.0.7 timeout 20s counter packets 0 bytes 0 }",
 		},
 		{
-			name:   "update with map style (srcRegData)",
-			dynset: &expr.Dynset{
-				Operation:  uint32(DynSetOPUpdate),
-				SetName:    "myset",
-				SrcRegKey:  3,
-				SrcRegData: 4,
-			},
-			srcKey:   "mapkey",
-			srcData:  "mapval",
-			expected: "update @myset { mapkey : mapval }",
-		},
-		{
-			name:   "delete with counter and timeout",
+			name: "delete with counter and timeout",
 			dynset: &expr.Dynset{
 				Operation: uint32(DynSetOPDelete),
 				SetName:   "myset",
@@ -98,15 +113,11 @@ func (sui *dynsetEncoderTestSuite) Test_DynsetEncodeIR_Complex() {
 
 	for _, tc := range testData {
 		sui.Run(tc.name, func() {
+			// Настраиваем regHolder с нужным regVal по srcRegKey
 			var reg regHolder
 			reg.Set(regID(tc.dynset.SrcRegKey), regVal{
 				HumanExpr: tc.srcKey,
 			})
-			if tc.dynset.SrcRegData != 0 && tc.srcData != "" {
-				reg.Set(regID(tc.dynset.SrcRegData), regVal{
-					HumanExpr: tc.srcData,
-				})
-			}
 
 			ctx := &ctx{
 				reg:  reg,
@@ -116,7 +127,7 @@ func (sui *dynsetEncoderTestSuite) Test_DynsetEncodeIR_Complex() {
 			enc := &dynsetEncoder{dynset: tc.dynset}
 			ir, err := enc.EncodeIR(ctx)
 			sui.Require().NoError(err)
-			sui.Require().Equal(tc.expected, ir.String())
+			sui.Require().Equal(tc.expected, ir.Format())
 		})
 	}
 }
@@ -124,6 +135,60 @@ func (sui *dynsetEncoderTestSuite) Test_DynsetEncodeIR_Complex() {
 func Test_DynsetEncoder(t *testing.T) {
 	suite.Run(t, new(dynsetEncoderTestSuite))
 }
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test
+--- FAIL: Test_DynsetEncoder (0.00s)
+    --- FAIL: Test_DynsetEncoder/Test_DynsetEncodeIR (0.00s)
+        --- FAIL: Test_DynsetEncoder/Test_DynsetEncodeIR/add_with_log_expr (0.00s)
+            dynset_test.go:110: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/dynset_test.go:110
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Not equal: 
+                                        expected: "add @myset { 10.10.10.10 log }"
+                                        actual  : "add @myset { 10.10.10.10 log log }"
+                                    
+                                        Diff:
+                                        --- Expected
+                                        +++ Actual
+                                        @@ -1 +1 @@
+                                        -add @myset { 10.10.10.10 log }
+                                        +add @myset { 10.10.10.10 log log }
+                        Test:           Test_DynsetEncoder/Test_DynsetEncodeIR/add_with_log_expr
+        --- FAIL: Test_DynsetEncoder/Test_DynsetEncodeIR/add_with_timeout_and_counter (0.00s)
+            dynset_test.go:110: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/dynset_test.go:110
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Not equal: 
+                                        expected: "add @myset { 172.16.0.7 timeout 20s counter packets 0 bytes 0 }"
+                                        actual  : "add @myset { 172.16.0.7 counter packets 0 bytes 0 timeout 20s counter packets 0 bytes 0 }"
+                                    
+                                        Diff:
+                                        --- Expected
+                                        +++ Actual
+                                        @@ -1 +1 @@
+                                        -add @myset { 172.16.0.7 timeout 20s counter packets 0 bytes 0 }
+                                        +add @myset { 172.16.0.7 counter packets 0 bytes 0 timeout 20s counter packets 0 bytes 0 }
+                        Test:           Test_DynsetEncoder/Test_DynsetEncodeIR/add_with_timeout_and_counter
+        --- FAIL: Test_DynsetEncoder/Test_DynsetEncodeIR/delete_with_counter_and_timeout (0.00s)
+            dynset_test.go:110: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/dynset_test.go:110
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Not equal: 
+                                        expected: "delete @myset { 192.0.2.55 timeout 30s counter packets 0 bytes 0 }"
+                                        actual  : "delete @myset { 192.0.2.55 counter packets 0 bytes 0 timeout 30s counter packets 0 bytes 0 }"
+                                    
+                                        Diff:
+                                        --- Expected
+                                        +++ Actual
+                                        @@ -1 +1 @@
+                                        -delete @myset { 192.0.2.55 timeout 30s counter packets 0 bytes 0 }
+                                        +delete @myset { 192.0.2.55 counter packets 0 bytes 0 timeout 30s counter packets 0 bytes 0 }
+                        Test:           Test_DynsetEncoder/Test_DynsetEncodeIR/delete_with_counter_and_timeout
+FAIL
+exit status 1
+FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.008s
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
 
 
 
