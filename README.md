@@ -18,179 +18,136 @@ sudo nft add rule ip test prerouting update @myset { testkey }
 
 
 
+
 package encoders
 
 import (
-	"encoding/json"
 	"testing"
+	"time"
 
+	"github.com/google/nftables"
 	"github.com/google/nftables/expr"
+	"github.com/stretchr/testify/suite"
 )
 
-// Заглушки ошибок, если не экспортируются из основного кода
-var (
-	ErrNoIR   = errors.New("no IR")
-	ErrNoJSON = errors.New("no JSON")
-)
+type dynsetEncoderTestSuite struct {
+	suite.Suite
+}
 
-func TestHashEncoder_EncodeIR_Symhash(t *testing.T) {
-	ctx := &ctx{}
-	hash := &expr.Hash{
-		Type:         expr.HashTypeSym,
-		Modulus:      5,
-		Seed:         42,
-		Offset:       0,
-		DestRegister: 3,
-	}
-	enc := &hashEncoder{hash: hash}
+func (sui *dynsetEncoderTestSuite) Test_DynsetEncodeIR() {
+	testData := []struct {
+		name     string
+		dynset   *expr.Dynset
+		srcKey   string
+		timeout  time.Duration
+		op       DynSetOP
+		expected string
+	}{
+		{
+			name:     "add",
+			dynset:   &expr.Dynset{Operation: uint32(DynSetOPAdd), SetName: "myset", SrcRegKey: 1},
+			srcKey:   "10.0.0.1",
+			expected: "add @myset { 10.0.0.1 }",
+		},
+		{
+			name:     "add with timeout",
+			dynset:   &expr.Dynset{Operation: uint32(DynSetOPAdd), SetName: "myset", SrcRegKey: 2, Timeout: 10 * time.Second},
+			srcKey:   "192.168.1.10",
+			timeout:  10 * time.Second,
+			expected: "add @myset { 192.168.1.10 timeout 10s }",
+		},
+		{
+			name:     "update",
+			dynset:   &expr.Dynset{Operation: uint32(DynSetOPUpdate), SetName: "myset", SrcRegKey: 3},
+			srcKey:   "testkey",
+			expected: "update @myset { testkey }",
+		},
+		{
+			name:     "delete",
+			dynset:   &expr.Dynset{Operation: uint32(DynSetOPDelete), SetName: "myset", SrcRegKey: 4},
+			srcKey:   "remove_this",
+			expected: "delete @myset { remove_this }",
+		},
 
-	ir, err := enc.EncodeIR(ctx)
-	if err != ErrNoIR {
-		t.Fatalf("expected ErrNoIR, got: %v", err)
+		{
+			name: "add with log expr",
+			dynset: &expr.Dynset{
+				Operation: uint32(DynSetOPAdd),
+				SetName:   "myset",
+				SrcRegKey: 1,
+				Exprs: []expr.Any{
+					&expr.Log{},
+				},
+			},
+			srcKey:   "10.10.10.10",
+			expected: "add @myset { 10.10.10.10 log }",
+		},
+		{
+			name: "add with timeout and counter",
+			dynset: &expr.Dynset{
+				Operation: uint32(DynSetOPAdd),
+				SetName:   "myset",
+				SrcRegKey: 2,
+				Timeout:   20 * time.Second,
+				Exprs: []expr.Any{
+					&expr.Counter{},
+				},
+			},
+			srcKey:   "172.16.0.7",
+			expected: "add @myset { 172.16.0.7 timeout 20s counter packets 0 bytes 0 }",
+		},
+		{
+			name: "delete with counter and timeout",
+			dynset: &expr.Dynset{
+				Operation: uint32(DynSetOPDelete),
+				SetName:   "myset",
+				SrcRegKey: 5,
+				Timeout:   30 * time.Second,
+				Exprs: []expr.Any{
+					&expr.Counter{},
+				},
+			},
+			srcKey:   "192.0.2.55",
+			expected: "delete @myset { 192.0.2.55 timeout 30s counter packets 0 bytes 0 }",
+		},
+		{
+			name: "add with log and counter",
+			dynset: &expr.Dynset{
+				Operation: uint32(DynSetOPAdd),
+				SetName:   "myset",
+				SrcRegKey: 8,
+				Exprs: []expr.Any{
+					&expr.Log{},
+					&expr.Counter{},
+				},
+			},
+			srcKey:   "8.8.8.8",
+			expected: "add @myset { 8.8.8.8 log counter packets 0 bytes 0 }",
+		},
 	}
-	if ir != nil {
-		t.Error("expected IR to be nil for symhash")
-	}
-	val, ok := ctx.reg.Get(regID(3))
-	if !ok {
-		t.Fatal("expected value in dest register")
-	}
-	want := "symhash mod 5 seed 0x2a"
-	if val.HumanExpr != want {
-		t.Errorf("expected HumanExpr %q, got %q", want, val.HumanExpr)
+
+	for _, tc := range testData {
+		sui.Run(tc.name, func() {
+			// Настраиваем regHolder с нужным regVal по srcRegKey
+			var reg regHolder
+			reg.Set(regID(tc.dynset.SrcRegKey), regVal{
+				HumanExpr: tc.srcKey,
+			})
+
+			ctx := &ctx{
+				reg:  reg,
+				rule: &nftables.Rule{},
+			}
+
+			enc := &dynsetEncoder{dynset: tc.dynset}
+			ir, err := enc.EncodeIR(ctx)
+			sui.Require().NoError(err)
+			sui.Require().Equal(tc.expected, ir.Format())
+		})
 	}
 }
 
-func TestHashEncoder_EncodeIR_Jhash_WithSrcReg(t *testing.T) {
-	ctx := &ctx{}
-	ctx.reg.Set(2, regVal{HumanExpr: "foobar"})
-	hash := &expr.Hash{
-		Type:           expr.HashTypeJHash,
-		Modulus:        100,
-		Seed:           0xdead,
-		Offset:         7,
-		SourceRegister: 2,
-		DestRegister:   4,
-	}
-	enc := &hashEncoder{hash: hash}
-
-	ir, err := enc.EncodeIR(ctx)
-	if err != ErrNoIR {
-		t.Fatalf("expected ErrNoIR, got: %v", err)
-	}
-	val, ok := ctx.reg.Get(regID(4))
-	if !ok {
-		t.Fatal("expected value in dest register")
-	}
-	want := "symhashjhash foobar mod 100 seed 0xdead offset 7"
-	if val.HumanExpr != want {
-		t.Errorf("expected HumanExpr %q, got %q", want, val.HumanExpr)
-	}
+func Test_DynsetEncoder(t *testing.T) {
+	suite.Run(t, new(dynsetEncoderTestSuite))
 }
-
-func TestHashEncoder_EncodeIR_MissingSrcReg(t *testing.T) {
-	ctx := &ctx{}
-	hash := &expr.Hash{
-		Type:           expr.HashTypeJHash,
-		SourceRegister: 7,
-		DestRegister:   1,
-	}
-	enc := &hashEncoder{hash: hash}
-	_, err := enc.EncodeIR(ctx)
-	if err == nil {
-		t.Fatal("expected error due to missing source register, got nil")
-	}
-}
-
-func TestHashEncoder_EncodeIR_InvalidDestReg(t *testing.T) {
-	ctx := &ctx{}
-	hash := &expr.Hash{
-		Type:    expr.HashTypeSym,
-		Modulus: 2,
-		Seed:    2,
-	}
-	enc := &hashEncoder{hash: hash}
-	_, err := enc.EncodeIR(ctx)
-	if err == nil {
-		t.Fatal("expected error due to invalid dest register, got nil")
-	}
-}
-
-func TestHashEncoder_EncodeJSON_Symhash(t *testing.T) {
-	ctx := &ctx{}
-	hash := &expr.Hash{
-		Type:         expr.HashTypeSym,
-		Modulus:      15,
-		Seed:         9,
-		Offset:       0,
-		DestRegister: 8,
-	}
-	enc := &hashEncoder{hash: hash}
-	_, err := enc.EncodeJSON(ctx)
-	if err != ErrNoJSON {
-		t.Fatalf("expected ErrNoJSON, got: %v", err)
-	}
-	val, ok := ctx.reg.Get(regID(8))
-	if !ok {
-		t.Fatal("expected value in dest register")
-	}
-	js, err := json.Marshal(val.Data)
-	if err != nil {
-		t.Errorf("could not marshal json: %v", err)
-	}
-	if !json.Valid(js) {
-		t.Errorf("invalid JSON produced: %s", js)
-	}
-}
-
-func TestHashEncoder_EncodeJSON_Jhash_WithSrcReg(t *testing.T) {
-	ctx := &ctx{}
-	ctx.reg.Set(1, regVal{Data: "DATA!"})
-	hash := &expr.Hash{
-		Type:           expr.HashTypeJHash,
-		Modulus:        8,
-		Seed:           7,
-		Offset:         1,
-		SourceRegister: 1,
-		DestRegister:   6,
-	}
-	enc := &hashEncoder{hash: hash}
-	_, err := enc.EncodeJSON(ctx)
-	if err != ErrNoJSON {
-		t.Fatalf("expected ErrNoJSON, got: %v", err)
-	}
-	val, ok := ctx.reg.Get(regID(6))
-	if !ok {
-		t.Fatal("expected value in dest register")
-	}
-	js, err := json.Marshal(val.Data)
-	if err != nil {
-		t.Errorf("could not marshal json: %v", err)
-	}
-	if !json.Valid(js) {
-		t.Errorf("invalid JSON produced: %s", js)
-	}
-}
-
-func TestHashEncoder_EncodeJSON_InvalidDestReg(t *testing.T) {
-	ctx := &ctx{}
-	hash := &expr.Hash{
-		Type:    expr.HashTypeSym,
-		Modulus: 1,
-		Seed:    1,
-	}
-	enc := &hashEncoder{hash: hash}
-	_, err := enc.EncodeJSON(ctx)
-	if err == nil {
-		t.Fatal("expected error due to invalid dest register, got nil")
-	}
-}
-
-
-
-
-
-
-
-
 
