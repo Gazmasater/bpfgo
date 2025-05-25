@@ -122,4 +122,26 @@ func Test_HashEncoder(t *testing.T) {
 	suite.Run(t, new(hashEncoderTestSuite))
 }
 
+[{
+	"resource": "/home/gaz358/myprog/nft-go/internal/expr-encoders/hash_test.go",
+	"owner": "_generated_diagnostic_collection_name_#2",
+	"code": {
+		"value": "UndeclaredImportedName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredImportedName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: expr.HashTypeJhash",
+	"source": "compiler",
+	"startLineNumber": 47,
+	"startColumn": 26,
+	"endLineNumber": 47,
+	"endColumn": 39
+}]
+
 
