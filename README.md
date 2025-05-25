@@ -4,7 +4,6 @@ sudo nft add rule ip test prerouting dup to 10.1.2.3
 sudo nft list table ip test
 sudo nft add rule ip test prerouting oifname "lo" ip daddr 192.168.1.10 counter log
 
-
 package encoders
 
 import (
@@ -96,9 +95,31 @@ func Test_ConnlimitEncoder(t *testing.T) {
 }
 
 
-sudo nft add rule ip test prerouting ct count 5 accept
-
-sudo nft add rule ip test prerouting ct count over 10 accept
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go  test
+--- FAIL: Test_ConnlimitEncoder (0.00s)
+    --- FAIL: Test_ConnlimitEncoder/Test_ConnlimitEncodeJSON (0.00s)
+        --- FAIL: Test_ConnlimitEncoder/Test_ConnlimitEncodeJSON/simple_count (0.00s)
+            connlimit_test.go:82: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/connlimit_test.go:82
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Not equal: 
+                                        expected: map[string]interface {}{"ct count":map[string]interface {}{"inv":false, "val":7}}
+                                        actual  : map[string]interface {}{"ct count":map[string]interface {}{"val":7}}
+                                    
+                                        Diff:
+                                        --- Expected
+                                        +++ Actual
+                                        @@ -1,4 +1,3 @@
+                                         (map[string]interface {}) (len=1) {
+                                        - (string) (len=8) "ct count": (map[string]interface {}) (len=2) {
+                                        -  (string) (len=3) "inv": (bool) false,
+                                        + (string) (len=8) "ct count": (map[string]interface {}) (len=1) {
+                                           (string) (len=3) "val": (float64) 7
+                        Test:           Test_ConnlimitEncoder/Test_ConnlimitEncodeJSON/simple_count
+FAIL
+exit status 1
+FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.008s
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
 
 
 
