@@ -21,18 +21,10 @@ table inet test {
 }
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip6 test prerouting exthdr type routing accept
-Error: syntax error, unexpected type
-add rule ip6 test prerouting exthdr type routing accept
-                                    ^^^^
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip6 test prerouting exthdr  
-routing accept
-Error: syntax error, unexpected string
-add rule ip6 test prerouting exthdr routing accept
-                                    ^^^^^^^
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ nft --version
-nftables v1.0.9 (Old Doc Yak #3)
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+sudo nft add rule ip6 test prerouting exthdr dst exists accept
+sudo nft add rule ip6 test prerouting exthdr hopopts exists accept
+sudo nft add rule ip6 test prerouting exthdr frag exists accept
+sudo nft add rule ip6 test prerouting exthdr routing exists accept
 
 
 
