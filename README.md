@@ -1,6 +1,8 @@
 sudo nft add table inet test
 sudo nft add chain inet test prerouting '{ type filter hook prerouting priority 0; }'
 sudo nft add rule inet test prerouting exthdr dst exists accept
+sudo nft add rule inet test prerouting ip6 exthdr hdrlength 60 counter log prefix "dstopt match" accept
+
 
 sudo nft list ruleset
 
@@ -8,83 +10,30 @@ sudo nft list ruleset
 
 
 
-func (sui *exthdrEncoderTestSuite) Test_ExthdrComplexCases() {
-	testData := []struct {
-		name     string
-		exprs    nftables.Rule
-		expected string
-	}{
-		{
-			name: "exthdr with offset/len",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Exthdr{
-						Op:     expr.ExthdrOpIpv6,
-						Type:   43, // Routing Header
-						Offset: 4,
-						Len:    2,
-						Flags:  0,
-					},
-					&expr.Verdict{Kind: expr.VerdictDrop},
-				},
-			},
-			expected: "ip option @43,4,2 drop",
-		},
-		{
-			name: "exthdr dst exists, with register set",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Exthdr{
-						Op:           expr.ExthdrOpIpv6,
-						Type:         60,
-						Offset:       0,
-						Len:          0,
-						Flags:        unix.NFT_EXTHDR_F_PRESENT,
-						DestRegister: 2,
-					},
-					&expr.Immediate{Register: 2, Data: []byte{0x42}},
-					&expr.Verdict{Kind: expr.VerdictAccept},
-				},
-			},
-			expected: "reset ip option 60 0x42 accept",
-		},
-	}
-
-	for _, tc := range testData {
-		sui.Run(tc.name, func() {
-			str, err := NewRuleExprEncoder(&tc.exprs).Format()
-			sui.Require().NoError(err)
-			sui.Require().Equal(tc.expected, str)
-		})
-	}
-}
-
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test
---- FAIL: Test_ExthdrEncoder (0.00s)
-    --- FAIL: Test_ExthdrEncoder/Test_ExthdrDstExistsAccept (0.00s)
-        --- FAIL: Test_ExthdrEncoder/Test_ExthdrDstExistsAccept/exthdr_dst_exists,_with_register_set (0.00s)
-            exthdr_test.go:79: 
-                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/exthdr_test.go:79
-                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                        Error:          Not equal: 
-                                        expected: "reset ip option 60 0x42 accept"
-                                        actual  : "accept"
-                                    
-                                        Diff:
-                                        --- Expected
-                                        +++ Actual
-                                        @@ -1 +1 @@
-                                        -reset ip option 60 0x42 accept
-                                        +accept
-                        Test:           Test_ExthdrEncoder/Test_ExthdrDstExistsAccept/exthdr_dst_exists,_with_register_set
-FAIL
-exit status 1
-FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.007s
-
-
-
+{
+    name: "complex exthdr: reg, cmp, counter, log, accept",
+    exprs: nftables.Rule{
+        Exprs: []expr.Any{
+            &expr.Exthdr{
+                Op:           expr.ExthdrOpIpv6,
+                Type:         60,
+                Offset:       0,
+                Len:          0,
+                Flags:        unix.NFT_EXTHDR_F_PRESENT,
+                DestRegister: 1,
+            },
+            &expr.Cmp{
+                Register: 1,
+                Op:       expr.CmpOpEq,
+                Data:     []byte{0x42},
+            },
+            &expr.Counter{},
+            &expr.Log{Data: []byte("dstopt match\x00"), Key: 1},
+            &expr.Verdict{Kind: expr.VerdictAccept},
+        },
+    },
+    expected: `reset ip option 60 == 66 counter packets 0 bytes 0 log prefix "dstopt match" accept`, // "66" это 0x42
+},
 
 
 
