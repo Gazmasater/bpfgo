@@ -68,6 +68,9 @@ func Test_ExthdrEncoder(t *testing.T) {
 }
 
 
+sudo nft add rule inet test prerouting ip6 option 43 accept
+
+
 
 
 
