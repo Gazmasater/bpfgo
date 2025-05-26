@@ -9,23 +9,39 @@ sudo nft list ruleset
 
 
 
+func (sui *exthdrEncoderTestSuite) Test_Ip6Nexthdr60_LogCounterAccept() {
+    testData := []struct {
+        name     string
+        exprs    nftables.Rule
+        expected string
+    }{
         {
-            name: "ip6 nexthdr 60 counter log accept",
+            name: "ip6 nexthdr 60 log counter accept",
             exprs: nftables.Rule{
                 Exprs: []expr.Any{
-                    &expr.Meta{Key: expr.MetaKeyL4PROTO, Register: 1},
+                    &expr.Meta{Key: expr.MetaKeyL4PROTO, Register: 1}, // l4proto = nexthdr
                     &expr.Cmp{
                         Register: 1,
                         Op:       expr.CmpOpEq,
-                        Data:     []byte{60}, // 60 — Destination Options Header
+                        Data:     []byte{60}, // 60 - Destination Options Header
                     },
+                    &expr.Log{Data: []byte("dstopt match\x00"), Key: 1}, // log prefix
                     &expr.Counter{},
-                    &expr.Log{Data: []byte("dstopt match\x00"), Key: 1}, // log с префиксом
                     &expr.Verdict{Kind: expr.VerdictAccept},
                 },
             },
-            expected: `meta l4proto 60 counter packets 0 bytes 0 log prefix "dstopt match" accept`,
+            expected: `meta l4proto 60 log prefix "dstopt match" counter packets 0 bytes 0 accept`,
         },
+    }
+
+    for _, tc := range testData {
+        sui.Run(tc.name, func() {
+            str, err := NewRuleExprEncoder(&tc.exprs).Format()
+            sui.Require().NoError(err)
+            sui.Require().Equal(tc.expected, str)
+        })
+    }
+}
 
 
 
