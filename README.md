@@ -46,13 +46,12 @@ func (sui *exthdrEncoderTestSuite) Test_Ip6Nexthdr60_LogCounterAccept() {
 
 
 
-sudo nft add rule inet test prerouting ip6 nexthdr 60 log prefix "dstopt match" counter accept
+sudo nft add rule inet test prerouting ip6 nexthdr 60 counter log prefix "dstopt match" accept
+sudo nft add rule inet test prerouting ip6 nexthdr 60 log prefix "dstopt match" accept
 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule inet test prerouting ip6 nexthdr 60 log prefix "dstopt match" counter accept
-Error: syntax error, unexpected counter
-add rule inet test prerouting ip6 nexthdr 60 log prefix dstopt match counter accept
-                                                                     ^^^^^^^
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+sudo nft add rule inet test prerouting ip6 nexthdr 60 log prefix "dstopt match"
+sudo nft add rule inet test prerouting ip6 nexthdr 60 accept
+
 
 
 
