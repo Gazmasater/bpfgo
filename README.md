@@ -6,6 +6,13 @@ sudo nft add rule inet test prerouting ip6 exthdr hdrlength 60 counter log prefi
 
 sudo nft list ruleset
 
+table inet test {
+        chain prerouting {
+                type filter hook prerouting priority filter; policy accept;
+                exthdr dst exists accept
+        }
+}
+
 
 
 
