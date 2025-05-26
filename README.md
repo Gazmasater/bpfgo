@@ -23,94 +23,71 @@ sudo nft add rule inet test mychain reset tcp option @7,2,4
 package encoders
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/google/nftables/expr"
 	"github.com/stretchr/testify/suite"
+	"golang.org/x/sys/unix"
 )
 
-type exthdrEncoderTestSuite struct {
+type exthdrEncoderIRTestSuite struct {
 	suite.Suite
 }
 
-func (sui *exthdrEncoderTestSuite) Test_ExthdrExprToJSON() {
+func (sui *exthdrEncoderIRTestSuite) Test_ExthdrExprToIR() {
 	testData := []struct {
-		name           string
-		exthdr         *expr.Exthdr
-		regSetup       func(*ctx)
-		expectedKey    string
-		expectedBase   uint8
-		expectedOffset uint32
-		expectedLen    uint32
-		expectedErr    string
-		mangleCheck    bool
-		mangleValue    string
+		name        string
+		exthdr      *expr.Exthdr
+		regSetup    func(*ctx)
+		expected    string
+		expectedErr string
 	}{
 		{
-			name: "DestRegister json tcp option",
+			name: "DestRegister exthdr",
 			exthdr: &expr.Exthdr{
 				DestRegister: 1,
 				Type:         5,
 				Offset:       0,
 				Len:          4,
 				Op:           expr.ExthdrOpTcpopt,
+				Flags:        unix.NFT_EXTHDR_F_PRESENT,
 			},
-			expectedKey:  "tcp option",
-			expectedBase: 5, expectedOffset: 0, expectedLen: 4,
+			expected: "tcp option 5",
 		},
 		{
-			name: "DestRegister json ip option",
-			exthdr: &expr.Exthdr{
-				DestRegister: 3,
-				Type:         7,
-				Offset:       1,
-				Len:          2,
-				Op:           expr.ExthdrOpIpv6,
-			},
-			expectedKey:  "ip option",
-			expectedBase: 7, expectedOffset: 1, expectedLen: 2,
-		},
-		{
-			name: "SourceRegister json with mangle",
+			name: "SourceRegister exthdr set",
 			exthdr: &expr.Exthdr{
 				SourceRegister: 2,
-				Type:           4,
-				Offset:         8,
-				Len:            5,
+				Type:           10,
+				Offset:         1,
+				Len:            8,
 				Op:             expr.ExthdrOpIpv6,
 			},
 			regSetup: func(ctx *ctx) {
-				ctx.reg.Set(regID(2), regVal{Data: "custom"})
+				ctx.reg.Set(regID(2), regVal{HumanExpr: "someval"})
 			},
-			expectedKey:    "ip option",
-			expectedBase:   4,
-			expectedOffset: 8,
-			expectedLen:    5,
-			mangleCheck:    true,
-			mangleValue:    "custom",
+			expected: "ip option @10,1,8 set someval",
+		},
+		{
+			name: "reset exthdr",
+			exthdr: &expr.Exthdr{
+				Type:   4,
+				Op:     expr.ExthdrOpIpv6,
+				Offset: 2,
+				Len:    1,
+			},
+			expected: "reset ip option @4,2,1",
 		},
 		{
 			name: "SourceRegister missing in ctx",
 			exthdr: &expr.Exthdr{
-				SourceRegister: 5,
-				Type:           2,
-				Offset:         3,
-				Len:            1,
+				SourceRegister: 7,
+				Type:           4,
 				Op:             expr.ExthdrOpIpv6,
+				Offset:         1,
+				Len:            2,
 			},
 			expectedErr: "has no expression",
-		},
-		{
-			name: "reset exthdr to json",
-			exthdr: &expr.Exthdr{
-				Type:   7,
-				Offset: 2,
-				Len:    4,
-				Op:     expr.ExthdrOpTcpopt,
-			},
-			expectedKey:  "tcp option",
-			expectedBase: 7, expectedOffset: 2, expectedLen: 4,
 		},
 	}
 
@@ -121,76 +98,38 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrExprToJSON() {
 				tc.regSetup(ctx)
 			}
 			enc := &exthdrEncoder{extdhdr: tc.exthdr}
-			b, err := enc.EncodeJSON(ctx)
+			ir, err := enc.EncodeIR(ctx)
 			if tc.expectedErr != "" {
 				sui.Require().Error(err)
 				sui.Require().Contains(err.Error(), tc.expectedErr)
-				return
-			}
-			if tc.exthdr.DestRegister != 0 {
-				sui.Require().ErrorIs(err, ErrNoJSON)
-				val, ok := ctx.reg.Get(regID(tc.exthdr.DestRegister))
-				sui.Require().True(ok)
-				hdr, ok := val.Data.(map[string]interface{})
-				sui.Require().True(ok)
-				v := hdr[tc.expectedKey]
-				var hdrVal map[string]interface{}
-				// struct → map через marshal/unmarshal если надо
-				if m, ok := v.(map[string]interface{}); ok {
-					hdrVal = m
-				} else {
-					data, _ := json.Marshal(v)
-					json.Unmarshal(data, &hdrVal)
-				}
-				sui.Require().Equal(float64(tc.expectedBase), hdrVal["base"])
-				sui.Require().Equal(float64(tc.expectedOffset), hdrVal["offset"])
-				sui.Require().Equal(float64(tc.expectedLen), hdrVal["len"])
-				sui.Require().Nil(b)
-			} else if tc.exthdr.SourceRegister != 0 {
-				if tc.mangleCheck {
-					var mangle map[string]map[string]interface{}
-					sui.Require().NoError(err)
-					sui.Require().NoError(json.Unmarshal(b, &mangle))
-					mval := mangle["mangle"]
-					keyObj := mval["key"]
-					var keyMap map[string]interface{}
-					// ключ может быть struct, маршалим и размаршаливаем
-					if m, ok := keyObj.(map[string]interface{}); ok {
-						keyMap = m[tc.expectedKey].(map[string]interface{})
-					} else {
-						tmp, _ := json.Marshal(keyObj)
-						var tmpMap map[string]interface{}
-						json.Unmarshal(tmp, &tmpMap)
-						keyMap = tmpMap[tc.expectedKey].(map[string]interface{})
-					}
-					sui.Require().Equal(float64(tc.expectedBase), keyMap["base"])
-					sui.Require().Equal(float64(tc.expectedOffset), keyMap["offset"])
-					sui.Require().Equal(float64(tc.expectedLen), keyMap["len"])
-					sui.Require().Equal(tc.mangleValue, mval["value"])
-				}
 			} else {
-				var hdr map[string]interface{}
-				sui.Require().NoError(err)
-				sui.Require().NoError(json.Unmarshal(b, &hdr))
-				v := hdr[tc.expectedKey]
-				var hdrVal map[string]interface{}
-				if m, ok := v.(map[string]interface{}); ok {
-					hdrVal = m
+				if tc.exthdr.DestRegister != 0 {
+					sui.Require().ErrorIs(err, ErrNoIR)
+					val, ok := ctx.reg.Get(regID(tc.exthdr.DestRegister))
+					sui.Require().True(ok)
+					sui.Require().Contains(val.HumanExpr, tc.expected)
+					sui.Require().Nil(ir)
 				} else {
-					data, _ := json.Marshal(v)
-					json.Unmarshal(data, &hdrVal)
+					sui.Require().NoError(err)
+					sui.Require().Equal(tc.expected, ir.Format())
 				}
-				sui.Require().Equal(float64(tc.expectedBase), hdrVal["base"])
-				sui.Require().Equal(float64(tc.expectedOffset), hdrVal["offset"])
-				sui.Require().Equal(float64(tc.expectedLen), hdrVal["len"])
 			}
 		})
 	}
 }
 
-func Test_ExthdrEncoder(t *testing.T) {
-	suite.Run(t, new(exthdrEncoderTestSuite))
+func Test_ExthdrEncoderIR(t *testing.T) {
+	suite.Run(t, new(exthdrEncoderIRTestSuite))
 }
+
+sudo nft add table ip test
+sudo nft add chain ip test prerouting '{ type nat hook prerouting priority 0; }'
+sudo nft add rule ip test prerouting tcp option 5
+
+sudo nft add rule ip test prerouting ip option @10,1,8 set someval
+
+sudo nft add rule ip test prerouting reset ip option @4,2,1
+
 
 
 
