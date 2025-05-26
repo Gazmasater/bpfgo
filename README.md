@@ -9,45 +9,49 @@ sudo nft list ruleset
 
 
 
-const (
-    IPv6NextHeaderOffset = 6
-)
+func (sui *exthdrEncoderTestSuite) Test_ExthdrAliases() {
+    testData := []struct {
+        name     string
+        op       uint8
+        typ      uint8
+        expected string
+    }{
+        // IPv6
+        {"exthdr dst",     expr.ExthdrOpIpv6, unix.IPPROTO_DSTOPTS,  "exthdr dst exists accept"},
+        {"exthdr hop",     expr.ExthdrOpIpv6, unix.IPPROTO_HOPOPTS,  "exthdr hop exists accept"},
+        {"exthdr routing", expr.ExthdrOpIpv6, unix.IPPROTO_ROUTING,  "exthdr routing exists accept"},
+        {"exthdr frag",    expr.ExthdrOpIpv6, unix.IPPROTO_FRAGMENT, "exthdr frag exists accept"},
+        {"exthdr ah",      expr.ExthdrOpIpv6, unix.IPPROTO_AH,       "exthdr ah exists accept"},
+        {"exthdr esp",     expr.ExthdrOpIpv6, unix.IPPROTO_ESP,      "exthdr esp exists accept"},
 
-
-import (
-    "github.com/google/nftables"
-    "github.com/google/nftables/expr"
-    "golang.org/x/sys/unix"
-)
-
-func (sui *encodersTestSuite) Test_Ip6NexthdrIpv6Opts() {
-    exprs := nftables.Rule{
-        Exprs: []expr.Any{
-            &expr.Payload{
-                DestRegister: 1,
-                Base:         expr.PayloadBaseNetworkHeader, // network header (IPv6)
-                Offset:       6, // nexthdr is at offset 6 in IPv6 header
-                Len:          1,
-            },
-            &expr.Cmp{
-                Register: 1,
-                Op:       expr.CmpOpEq,
-                Data:     []byte{unix.IPPROTO_DSTOPTS}, // use the proper constant for ipv6-opts
-            },
-            &expr.Verdict{Kind: expr.VerdictAccept},
-        },
+        // IPv4
+        {"exthdr rr",      expr.ExthdrOpIpv4, 7,    "exthdr rr exists accept"},
+        {"exthdr ts",      expr.ExthdrOpIpv4, 68,   "exthdr ts exists accept"},
+        {"exthdr ts2",     expr.ExthdrOpIpv4, 148,  "exthdr ts exists accept"}, // Алиас тот же
+        {"exthdr ssrr",    expr.ExthdrOpIpv4, 137,  "exthdr ssrr exists accept"},
+        {"exthdr lsrr",    expr.ExthdrOpIpv4, 131,  "exthdr lsrr exists accept"},
     }
-    expected := "ip6 nexthdr ipv6-opts accept"
-    str, err := NewRuleExprEncoder(&exprs).Format()
-    sui.Require().NoError(err)
-    sui.Require().Equal(expected, str)
+
+    for _, tc := range testData {
+        sui.Run(tc.name, func() {
+            exprs := nftables.Rule{
+                Exprs: []expr.Any{
+                    &expr.Exthdr{
+                        Op:     tc.op,
+                        Type:   tc.typ,
+                        Offset: 0,
+                        Len:    0,
+                        Flags:  unix.NFT_EXTHDR_F_PRESENT,
+                    },
+                    &expr.Verdict{Kind: expr.VerdictAccept},
+                },
+            }
+            str, err := NewRuleExprEncoder(&exprs).Format()
+            sui.Require().NoError(err)
+            sui.Require().Equal(tc.expected, str)
+        })
+    }
 }
-
-
-
-
-
-
 
 
 
