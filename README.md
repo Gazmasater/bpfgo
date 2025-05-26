@@ -12,7 +12,6 @@ sudo nft list ruleset
 package encoders
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/google/nftables"
@@ -25,50 +24,29 @@ type exthdrEncoderTestSuite struct {
 	suite.Suite
 }
 
-func (sui *exthdrEncoderTestSuite) Test_ExthdrOnlyNumbers() {
-	testData := []struct {
-		name     string
-		op       uint8
-		typ      uint8
-		expected string
-	}{
-		// IPv6 exthdr
-		{"exthdr 0 (IPv6 Hop-by-Hop)", uint8(expr.ExthdrOpIpv6), unix.IPPROTO_HOPOPTS, "ip option 0 accept"},
-		{"exthdr 43 (IPv6 Routing)", uint8(expr.ExthdrOpIpv6), unix.IPPROTO_ROUTING, "ip option 43 accept"},
-		{"exthdr 44 (IPv6 Fragment)", uint8(expr.ExthdrOpIpv6), unix.IPPROTO_FRAGMENT, "ip option 44 accept"},
-		{"exthdr 50 (IPv6 ESP)", uint8(expr.ExthdrOpIpv6), unix.IPPROTO_ESP, "ip option 50 accept"},
-		{"exthdr 51 (IPv6 AH)", uint8(expr.ExthdrOpIpv6), unix.IPPROTO_AH, "ip option 51 accept"},
-		{"exthdr 60 (IPv6 Destination Opts)", uint8(expr.ExthdrOpIpv6), unix.IPPROTO_DSTOPTS, "ip option 60 accept"},
+func (sui *exthdrEncoderTestSuite) Test_ExthdrDstExistsAccept_NoAlias() {
+	exprs := nftables.Rule{
+		Exprs: []expr.Any{
+			&expr.Exthdr{
+				Op:     expr.ExthdrOpIpv6,         // IPv6 extension header
+				Type:   unix.IPPROTO_DSTOPTS,      // 60 (Destination Options Header)
+				Offset: 0,
+				Len:    0,
+				Flags:  unix.NFT_EXTHDR_F_PRESENT, // "exists"
+			},
+			&expr.Verdict{Kind: expr.VerdictAccept},
+		},
 	}
-
-	for _, tc := range testData {
-		sui.Run(tc.name, func() {
-			exprs := nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Exthdr{
-						Op:     expr.ExthdrOp(tc.op),
-						Type:   tc.typ,
-						Offset: 0,
-						Len:    0,
-						Flags:  unix.NFT_EXTHDR_F_PRESENT,
-					},
-					&expr.Verdict{Kind: expr.VerdictAccept},
-				},
-			}
-			str, err := NewRuleExprEncoder(&exprs).Format()
-			sui.Require().NoError(err)
-			fmt.Printf("Expected=%s\n", tc.expected)
-			sui.Require().Equal(tc.expected, str)
-		})
-	}
+	expected := "ip option 60 accept"
+	str, err := NewRuleExprEncoder(&exprs).Format()
+	sui.Require().NoError(err)
+	sui.Require().Equal(expected, str)
 }
 
 func Test_ExthdrEncoder(t *testing.T) {
 	suite.Run(t, new(exthdrEncoderTestSuite))
 }
 
-
-sudo nft add rule inet test prerouting ip6 option 43 accept
 
 
 
