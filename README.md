@@ -26,7 +26,13 @@ sudo nft add rule ip6 test prerouting exthdr hopopts exists accept
 sudo nft add rule ip6 test prerouting exthdr frag exists accept
 sudo nft add rule ip6 test prerouting exthdr routing exists accept
 
-
+table ip6 test {
+        chain prerouting {
+                type filter hook prerouting priority filter; policy accept;
+                exthdr dst exists accept
+                exthdr frag exists accept
+        }
+}
 
 
 
