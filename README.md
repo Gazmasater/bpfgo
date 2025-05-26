@@ -161,6 +161,21 @@ func (b *exthdrEncoder) EncodeJSON(ctx *ctx) ([]byte, error) {
 }
 
 
+		{
+			name: "exthdr src exists accept",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Exthdr{
+						Type:  43,                        // 43 = routing (src)
+						Flags: unix.NFT_EXTHDR_F_PRESENT, // exists
+					},
+					&expr.Verdict{
+						Kind: expr.VerdictAccept,
+					},
+				},
+			},
+			expected: "exthdr src exists accept",
+		},
 
 
 
