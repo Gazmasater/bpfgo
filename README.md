@@ -19,7 +19,18 @@ sudo nft add rule ip test prerouting oifname "lo" ip daddr 192.168.1.10 counter 
 		},
 
 
-  nft add rule ip test prerouting ct count 5 accept
+  sudo nft add rule ip test prerouting ct count 5 accept
+
+
+  gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ git checkout -b unit_test
+Switched to a new branch 'unit_test'
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ git push origin unit_test
+git@github.com: Permission denied (publickey).
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+gaz358@gaz358-BOD-WXX9:~/my
 
 
 
