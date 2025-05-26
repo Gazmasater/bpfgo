@@ -38,6 +38,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// ---- IR TEST ----
 type exthdrEncoderIRTestSuite struct {
 	suite.Suite
 }
@@ -130,6 +131,7 @@ func Test_ExthdrEncoderIR(t *testing.T) {
 	suite.Run(t, new(exthdrEncoderIRTestSuite))
 }
 
+// ---- JSON TEST ----
 type exthdrEncoderTestSuite struct {
 	suite.Suite
 }
