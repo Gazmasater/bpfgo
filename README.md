@@ -1,7 +1,6 @@
 sudo nft add table inet test
 sudo nft add chain inet test prerouting '{ type filter hook prerouting priority 0; }'
 sudo nft add rule inet test prerouting exthdr dst exists accept
-sudo nft add rule ip6 test prerouting exthdr routing accept
 
 
 sudo nft list ruleset
@@ -178,7 +177,15 @@ func (b *exthdrEncoder) EncodeJSON(ctx *ctx) ([]byte, error) {
 		},
 
 
-
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip6 test prerouting exthdr routing accept
+Error: syntax error, unexpected string
+add rule ip6 test prerouting exthdr routing accept
+                                    ^^^^^^^
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip6 test prerouting exthdr 43 accept
+Error: syntax error, unexpected number
+add rule ip6 test prerouting exthdr 43 accept
+                                    ^^
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
 
 
 
