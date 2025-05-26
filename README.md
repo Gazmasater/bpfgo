@@ -26,16 +26,24 @@ sudo nft add rule ip6 test prerouting exthdr hopopts exists accept
 sudo nft add rule ip6 test prerouting exthdr frag exists accept
 sudo nft add rule ip6 test prerouting exthdr routing exists accept
 
-sudo nft add rule ip6 test prerouting payload offset 6 length 1 == 43 accept
 
 
-table ip6 test {
-        chain prerouting {
-                type filter hook prerouting priority filter; policy accept;
-                exthdr dst exists accept
-                exthdr frag exists accept
-        }
-}
+		{
+			name: "exthdr frag exists accept",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Exthdr{
+						Type:  44,                        // 44 = frag (Fragment Header)
+						Flags: unix.NFT_EXTHDR_F_PRESENT, // exists
+					},
+					&expr.Verdict{
+						Kind: expr.VerdictAccept,
+					},
+				},
+			},
+			expected: "exthdr frag exists accept",
+		},
+
 
 
 
