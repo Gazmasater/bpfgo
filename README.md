@@ -27,6 +27,8 @@ sudo nft add rule ip test prerouting ip option @10,1,8 set someval
 sudo nft add rule ip test prerouting reset ip option @4,2,1
 
 
+
+
 package encoders
 
 import (
@@ -45,11 +47,10 @@ type exthdrEncoderIRTestSuite struct {
 
 func (sui *exthdrEncoderIRTestSuite) Test_ExthdrExprToIR() {
 	testData := []struct {
-		name        string
-		exthdr      *expr.Exthdr
-		regSetup    func(*ctx)
-		expected    string
-		expectedErr string
+		name     string
+		exthdr   *expr.Exthdr
+		regSetup func(*ctx)
+		expected string
 	}{
 		{
 			name: "DestRegister exthdr",
@@ -87,17 +88,6 @@ func (sui *exthdrEncoderIRTestSuite) Test_ExthdrExprToIR() {
 			},
 			expected: "reset ip option @4,2,1",
 		},
-		{
-			name: "SourceRegister missing in ctx",
-			exthdr: &expr.Exthdr{
-				SourceRegister: 7,
-				Type:           4,
-				Op:             expr.ExthdrOpIpv6,
-				Offset:         1,
-				Len:            2,
-			},
-			expectedErr: "has no expression",
-		},
 	}
 
 	for _, tc := range testData {
@@ -108,20 +98,15 @@ func (sui *exthdrEncoderIRTestSuite) Test_ExthdrExprToIR() {
 			}
 			enc := &exthdrEncoder{extdhdr: tc.exthdr}
 			ir, err := enc.EncodeIR(ctx)
-			if tc.expectedErr != "" {
-				sui.Require().Error(err)
-				sui.Require().Contains(err.Error(), tc.expectedErr)
+			if tc.exthdr.DestRegister != 0 {
+				sui.Require().ErrorIs(err, ErrNoIR)
+				val, ok := ctx.reg.Get(regID(tc.exthdr.DestRegister))
+				sui.Require().True(ok)
+				sui.Require().Contains(val.HumanExpr, tc.expected)
+				sui.Require().Nil(ir)
 			} else {
-				if tc.exthdr.DestRegister != 0 {
-					sui.Require().ErrorIs(err, ErrNoIR)
-					val, ok := ctx.reg.Get(regID(tc.exthdr.DestRegister))
-					sui.Require().True(ok)
-					sui.Require().Contains(val.HumanExpr, tc.expected)
-					sui.Require().Nil(ir)
-				} else {
-					sui.Require().NoError(err)
-					sui.Require().Equal(tc.expected, ir.Format())
-				}
+				sui.Require().NoError(err)
+				sui.Require().Equal(tc.expected, ir.Format())
 			}
 		})
 	}
@@ -145,7 +130,6 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrExprToJSON() {
 		expectedBase   uint8
 		expectedOffset uint32
 		expectedLen    uint32
-		expectedErr    string
 		mangleCheck    bool
 		mangleValue    string
 	}{
@@ -193,17 +177,6 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrExprToJSON() {
 			mangleValue:    "custom",
 		},
 		{
-			name: "SourceRegister missing in ctx",
-			exthdr: &expr.Exthdr{
-				SourceRegister: 5,
-				Type:           2,
-				Offset:         3,
-				Len:            1,
-				Op:             expr.ExthdrOpIpv6,
-			},
-			expectedErr: "has no expression",
-		},
-		{
 			name: "reset exthdr to json",
 			exthdr: &expr.Exthdr{
 				Type:   7,
@@ -224,11 +197,6 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrExprToJSON() {
 			}
 			enc := &exthdrEncoder{extdhdr: tc.exthdr}
 			b, err := enc.EncodeJSON(ctx)
-			if tc.expectedErr != "" {
-				sui.Require().Error(err)
-				sui.Require().Contains(err.Error(), tc.expectedErr)
-				return
-			}
 			if tc.exthdr.DestRegister != 0 {
 				sui.Require().ErrorIs(err, ErrNoJSON)
 				val, ok := ctx.reg.Get(regID(tc.exthdr.DestRegister))
@@ -237,7 +205,6 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrExprToJSON() {
 				sui.Require().True(ok)
 				v := hdr[tc.expectedKey]
 				var hdrVal map[string]interface{}
-				// struct → map через marshal/unmarshal если надо
 				if m, ok := v.(map[string]interface{}); ok {
 					hdrVal = m
 				} else {
@@ -256,7 +223,6 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrExprToJSON() {
 					mval := mangle["mangle"]
 					keyObj := mval["key"]
 					var keyMap map[string]interface{}
-					// ключ может быть struct, маршалим и размаршаливаем
 					if m, ok := keyObj.(map[string]interface{}); ok {
 						keyMap = m[tc.expectedKey].(map[string]interface{})
 					} else {
@@ -294,14 +260,6 @@ func Test_ExthdrEncoder(t *testing.T) {
 	suite.Run(t, new(exthdrEncoderTestSuite))
 }
 
-
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add table ip test
-sudo nft add chain ip test prerouting '{ type nat hook prerouting priority 0; }'
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting tcp option 5
-Error: syntax error, unexpected newline
-add rule ip test prerouting tcp option 5
-                                        ^
-gaz358@gaz358-BOD-WXX9:~/
 
 
 
