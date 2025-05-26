@@ -9,53 +9,68 @@ sudo nft list ruleset
 
 
 
-func (sui *exthdrEncoderTestSuite) Test_ExthdrAliases() {
-    testData := []struct {
-        name     string
-        op       uint8
-        typ      uint8
-        expected string
-    }{
-        // IPv6
-        {"exthdr dst",     expr.ExthdrOpIpv6, unix.IPPROTO_DSTOPTS,  "exthdr dst exists accept"},
-        {"exthdr hop",     expr.ExthdrOpIpv6, unix.IPPROTO_HOPOPTS,  "exthdr hop exists accept"},
-        {"exthdr routing", expr.ExthdrOpIpv6, unix.IPPROTO_ROUTING,  "exthdr routing exists accept"},
-        {"exthdr frag",    expr.ExthdrOpIpv6, unix.IPPROTO_FRAGMENT, "exthdr frag exists accept"},
-        {"exthdr ah",      expr.ExthdrOpIpv6, unix.IPPROTO_AH,       "exthdr ah exists accept"},
-        {"exthdr esp",     expr.ExthdrOpIpv6, unix.IPPROTO_ESP,      "exthdr esp exists accept"},
+package encoders
 
-        // IPv4
-        {"exthdr rr",      expr.ExthdrOpIpv4, 7,    "exthdr rr exists accept"},
-        {"exthdr ts",      expr.ExthdrOpIpv4, 68,   "exthdr ts exists accept"},
-        {"exthdr ts2",     expr.ExthdrOpIpv4, 148,  "exthdr ts exists accept"}, // Алиас тот же
-        {"exthdr ssrr",    expr.ExthdrOpIpv4, 137,  "exthdr ssrr exists accept"},
-        {"exthdr lsrr",    expr.ExthdrOpIpv4, 131,  "exthdr lsrr exists accept"},
-    }
+import (
+	"testing"
 
-    for _, tc := range testData {
-        sui.Run(tc.name, func() {
-            exprs := nftables.Rule{
-                Exprs: []expr.Any{
-                    &expr.Exthdr{
-                        Op:     tc.op,
-                        Type:   tc.typ,
-                        Offset: 0,
-                        Len:    0,
-                        Flags:  unix.NFT_EXTHDR_F_PRESENT,
-                    },
-                    &expr.Verdict{Kind: expr.VerdictAccept},
-                },
-            }
-            str, err := NewRuleExprEncoder(&exprs).Format()
-            sui.Require().NoError(err)
-            sui.Require().Equal(tc.expected, str)
-        })
-    }
+	"github.com/google/nftables"
+	"github.com/google/nftables/expr"
+	"github.com/stretchr/testify/suite"
+	"golang.org/x/sys/unix"
+)
+
+type exthdrEncoderTestSuite struct {
+	suite.Suite
 }
 
+func (sui *exthdrEncoderTestSuite) Test_ExthdrOnlyNumbers() {
+	testData := []struct {
+		name     string
+		op       uint8
+		typ      uint8
+		expected string
+	}{
+		// IPv6 exthdr
+		{"exthdr 0 (IPv6 Hop-by-Hop)",         expr.ExthdrOpIpv6, unix.IPPROTO_HOPOPTS,  "ip option 0 accept"},
+		{"exthdr 43 (IPv6 Routing)",           expr.ExthdrOpIpv6, unix.IPPROTO_ROUTING,  "ip option 43 accept"},
+		{"exthdr 44 (IPv6 Fragment)",          expr.ExthdrOpIpv6, unix.IPPROTO_FRAGMENT, "ip option 44 accept"},
+		{"exthdr 50 (IPv6 ESP)",               expr.ExthdrOpIpv6, unix.IPPROTO_ESP,      "ip option 50 accept"},
+		{"exthdr 51 (IPv6 AH)",                expr.ExthdrOpIpv6, unix.IPPROTO_AH,       "ip option 51 accept"},
+		{"exthdr 60 (IPv6 Destination Opts)",  expr.ExthdrOpIpv6, unix.IPPROTO_DSTOPTS,  "ip option 60 accept"},
 
+		// IPv4 options
+		{"exthdr 7 (IPv4 RR)",     expr.ExthdrOpIpv4, 7,   "ip option 7 accept"},
+		{"exthdr 68 (IPv4 TS)",    expr.ExthdrOpIpv4, 68,  "ip option 68 accept"},
+		{"exthdr 131 (IPv4 LS RR)",expr.ExthdrOpIpv4, 131, "ip option 131 accept"},
+		{"exthdr 137 (IPv4 SS RR)",expr.ExthdrOpIpv4, 137, "ip option 137 accept"},
+		{"exthdr 148 (IPv4 TS2)",  expr.ExthdrOpIpv4, 148, "ip option 148 accept"},
+	}
 
+	for _, tc := range testData {
+		sui.Run(tc.name, func() {
+			exprs := nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Exthdr{
+						Op:     tc.op,
+						Type:   tc.typ,
+						Offset: 0,
+						Len:    0,
+						Flags:  unix.NFT_EXTHDR_F_PRESENT,
+					},
+					&expr.Verdict{Kind: expr.VerdictAccept},
+				},
+			}
+			str, err := NewRuleExprEncoder(&exprs).Format()
+			sui.Require().NoError(err)
+			sui.Require().Equal(tc.expected, str)
+		})
+	}
+}
 
+func Test_ExthdrEncoder(t *testing.T) {
+	suite.Run(t, new(exthdrEncoderTestSuite))
+}
 
 
 
