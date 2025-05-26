@@ -24,12 +24,12 @@ type exthdrEncoderTestSuite struct {
 	suite.Suite
 }
 
-func (sui *exthdrEncoderTestSuite) Test_ExthdrDstExistsAccept_NoAlias() {
+func (sui *exthdrEncoderTestSuite) Test_ExthdrDstExistsAccept_WithAlias() {
 	exprs := nftables.Rule{
 		Exprs: []expr.Any{
 			&expr.Exthdr{
-				Op:     expr.ExthdrOpIpv6,         // IPv6 extension header
-				Type:   unix.IPPROTO_DSTOPTS,      // 60 (Destination Options Header)
+				Op:     expr.ExthdrOpIpv6,        // IPv6 extension header
+				Type:   unix.IPPROTO_DSTOPTS,     // 60 (Destination Options Header, = dst)
 				Offset: 0,
 				Len:    0,
 				Flags:  unix.NFT_EXTHDR_F_PRESENT, // "exists"
@@ -37,7 +37,7 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrDstExistsAccept_NoAlias() {
 			&expr.Verdict{Kind: expr.VerdictAccept},
 		},
 	}
-	expected := "ip option 60 accept"
+	expected := "exthdr dst exists accept" // Алиас, как в nft list ruleset!
 	str, err := NewRuleExprEncoder(&exprs).Format()
 	sui.Require().NoError(err)
 	sui.Require().Equal(expected, str)
@@ -46,6 +46,7 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrDstExistsAccept_NoAlias() {
 func Test_ExthdrEncoder(t *testing.T) {
 	suite.Run(t, new(exthdrEncoderTestSuite))
 }
+
 
 
 
