@@ -61,6 +61,30 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrComplexCases() {
 
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test
+--- FAIL: Test_ExthdrEncoder (0.00s)
+    --- FAIL: Test_ExthdrEncoder/Test_ExthdrDstExistsAccept (0.00s)
+        --- FAIL: Test_ExthdrEncoder/Test_ExthdrDstExistsAccept/exthdr_dst_exists,_with_register_set (0.00s)
+            exthdr_test.go:79: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/exthdr_test.go:79
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Not equal: 
+                                        expected: "reset ip option 60 0x42 accept"
+                                        actual  : "accept"
+                                    
+                                        Diff:
+                                        --- Expected
+                                        +++ Actual
+                                        @@ -1 +1 @@
+                                        -reset ip option 60 0x42 accept
+                                        +accept
+                        Test:           Test_ExthdrEncoder/Test_ExthdrDstExistsAccept/exthdr_dst_exists,_with_register_set
+FAIL
+exit status 1
+FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.007s
+
+
+
 
 
 
