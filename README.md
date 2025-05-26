@@ -45,6 +45,49 @@ sudo nft add rule ip6 test prerouting exthdr routing exists accept
 		},
 
 
+package encoders
+
+import (
+	"fmt"
+	"testing"
+
+	"github.com/google/nftables"
+	"github.com/google/nftables/expr"
+	"github.com/stretchr/testify/suite"
+	"golang.org/x/sys/unix"
+)
+
+type exthdrEncoderTestSuite struct {
+	suite.Suite
+}
+
+func (sui *exthdrEncoderTestSuite) Test_ExthdrDstExistsAccept_WithAlias() {
+	exprs := nftables.Rule{
+		Exprs: []expr.Any{
+			&expr.Exthdr{
+				Op:     expr.ExthdrOpIpv6,    // IPv6 extension header
+				Type:   unix.IPPROTO_DSTOPTS, // 60 (Destination Options Header, = dst)
+				Offset: 0,
+				Len:    0,
+				Flags:  unix.NFT_EXTHDR_F_PRESENT, // "exists"
+			},
+			&expr.Verdict{Kind: expr.VerdictAccept},
+		},
+
+		
+	}
+	expected := "exthdr dst exists accept" // Алиас, как в nft list ruleset!
+	str, err := NewRuleExprEncoder(&exprs).Format()
+	sui.Require().NoError(err)
+	fmt.Printf("Expected=%s\n", expected)
+	fmt.Printf("IR=%s\n", str)
+
+	sui.Require().Equal(expected, str)
+}
+
+func Test_ExthdrEncoder(t *testing.T) {
+	suite.Run(t, new(exthdrEncoderTestSuite))
+}
 
 
 
