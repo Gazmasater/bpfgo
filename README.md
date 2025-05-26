@@ -37,11 +37,8 @@ sudo nft list ruleset
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule inet test prerouting ip6 exthdr hdrlength 60 counter log prefix "dstopt match" accept
-Error: syntax error, unexpected exthdr
-add rule inet test prerouting ip6 exthdr hdrlength 60 counter log prefix dstopt match accept
-                                  ^^^^^^
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+sudo nft add rule inet test prerouting ip6 nexthdr 60 counter log prefix "dstopt match" accept
+
 
 
 
