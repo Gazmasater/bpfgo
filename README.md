@@ -6,6 +6,19 @@ sudo nft add rule ip test prerouting oifname "lo" ip daddr 192.168.1.10 counter 
 
 
 
+sudo nft add table inet test
+sudo nft add chain inet test mychain '{ type filter hook input priority 0; }'
+sudo nft add rule inet test mychain tcp option 5
+
+sudo nft add rule inet test mychain ip option @10,1,8 set someval
+sudo nft add rule inet test mychain reset ip option @4,2,1
+sudo nft add rule inet test mychain tcp option 5
+sudo nft add rule inet test mychain ip option @7,1,2
+sudo nft add rule inet test mychain ip option @4,8,5 set custom
+sudo nft add rule inet test mychain reset tcp option @7,2,4
+
+
+
 
 package encoders
 
@@ -24,10 +37,10 @@ type exthdrEncoderTestSuite struct {
 
 func (sui *exthdrEncoderTestSuite) Test_ExthdrExprToString() {
 	testData := []struct {
-		name       string
-		exthdr     *expr.Exthdr
-		regSetup   func(*ctx)
-		expected   string
+		name        string
+		exthdr      *expr.Exthdr
+		regSetup    func(*ctx)
+		expected    string
 		expectedErr string
 	}{
 		{
@@ -109,15 +122,15 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrExprToString() {
 
 func (sui *exthdrEncoderTestSuite) Test_ExthdrExprToJSON() {
 	testData := []struct {
-		name        string
-		exthdr      *expr.Exthdr
-		regSetup    func(*ctx)
-		expectedKey string
-		expectedBase  uint8
+		name           string
+		exthdr         *expr.Exthdr
+		regSetup       func(*ctx)
+		expectedKey    string
+		expectedBase   uint8
 		expectedOffset uint32
-		expectedLen  uint32
-		expectedErr  string
-		mangleCheck  bool
+		expectedLen    uint32
+		expectedErr    string
+		mangleCheck    bool
 	}{
 		{
 			name: "DestRegister json tcp option",
@@ -155,11 +168,11 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrExprToJSON() {
 			regSetup: func(ctx *ctx) {
 				ctx.reg.Set(regID(2), regVal{Data: "custom"})
 			},
-			expectedKey:   "ip option",
-			expectedBase:  4,
+			expectedKey:    "ip option",
+			expectedBase:   4,
 			expectedOffset: 8,
-			expectedLen:   5,
-			mangleCheck:   true,
+			expectedLen:    5,
+			mangleCheck:    true,
 		},
 		{
 			name: "SourceRegister missing in ctx",
@@ -243,36 +256,21 @@ func Test_ExthdrEncoder(t *testing.T) {
 	suite.Run(t, new(exthdrEncoderTestSuite))
 }
 
-
-sudo nft add table inet test
-sudo nft add chain inet test mychain '{ type filter hook input priority 0; }'
-sudo nft add rule inet test mychain tcp option 5
-
-sudo nft add rule inet test mychain ip option @10,1,8 set someval
-sudo nft add rule inet test mychain reset ip option @4,2,1
-sudo nft add rule inet test mychain tcp option 5
-sudo nft add rule inet test mychain ip option @7,1,2
-sudo nft add rule inet test mychain ip option @4,8,5 set custom
-sudo nft add rule inet test mychain reset tcp option @7,2,4
-
-
-hdr := map[string]interface{}{
-	op: map[string]interface{}{
-		"base":   exthdr.Type,
-		"offset": exthdr.Offset,
-		"len":    exthdr.Len,
-	},
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
+--- FAIL: Test_ExthdrEncoder (0.00s)
+    --- FAIL: Test_ExthdrEncoder/Test_ExthdrExprToJSON (0.00s)
+        --- FAIL: Test_ExthdrEncoder/Test_ExthdrExprToJSON/DestRegister_json_tcp_option (0.00s)
+            exthdr_test.go:199: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/exthdr_test.go:199
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Should be true
+                        Test:           Test_ExthdrEncoder/Test_ExthdrExprToJSON/DestRegister_json_tcp_option
+        --- FAIL: Test_ExthdrEncoder/Test_ExthdrExprToJSON/DestRegister_json_ip_option (0.00s)
+            exthdr_test.go:199: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/exthdr_test.go:199
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Should be true
+                        Test:           Test_ExthdrEncoder/Test_ExthdrExprToJSON/DestRegister_json_ip_option
+FAIL
+exit status 1
+FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.018s
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
