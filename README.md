@@ -19,6 +19,10 @@ sudo nft add rule ip test prerouting oifname "lo" ip daddr 192.168.1.10 counter 
 		},
 
 
+  nft add rule ip test prerouting ct count 5 accept
+
+
+
 
 
 
