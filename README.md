@@ -9,15 +9,40 @@ sudo nft list ruleset
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule inet test prerouting ip6 nexthdr 60 accept
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft list ruleset
-table inet test {
-        chain prerouting {
-                type filter hook prerouting priority filter; policy accept;
-                ip6 nexthdr ipv6-opts accept
-        }
+const (
+    IPv6NextHeaderOffset = 6
+)
+
+
+import (
+    "github.com/google/nftables"
+    "github.com/google/nftables/expr"
+    "golang.org/x/sys/unix"
+)
+
+func (sui *encodersTestSuite) Test_Ip6NexthdrIpv6Opts() {
+    exprs := nftables.Rule{
+        Exprs: []expr.Any{
+            &expr.Payload{
+                DestRegister: 1,
+                Base:         expr.PayloadBaseNetworkHeader, // network header (IPv6)
+                Offset:       6, // nexthdr is at offset 6 in IPv6 header
+                Len:          1,
+            },
+            &expr.Cmp{
+                Register: 1,
+                Op:       expr.CmpOpEq,
+                Data:     []byte{unix.IPPROTO_DSTOPTS}, // use the proper constant for ipv6-opts
+            },
+            &expr.Verdict{Kind: expr.VerdictAccept},
+        },
+    }
+    expected := "ip6 nexthdr ipv6-opts accept"
+    str, err := NewRuleExprEncoder(&exprs).Format()
+    sui.Require().NoError(err)
+    sui.Require().Equal(expected, str)
 }
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+
 
 
 
