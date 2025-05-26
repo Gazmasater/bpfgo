@@ -256,6 +256,26 @@ sudo nft add rule inet test mychain ip option @4,8,5 set custom
 sudo nft add rule inet test mychain reset tcp option @7,2,4
 
 
+--- FAIL: Test_ExthdrEncoder (0.00s)
+    --- FAIL: Test_ExthdrEncoder/Test_ExthdrExprToJSON (0.00s)
+        --- FAIL: Test_ExthdrEncoder/Test_ExthdrExprToJSON/DestRegister_json_tcp_option (0.00s)
+            exthdr_test.go:199: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/exthdr_test.go:199
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Should be true
+                        Test:           Test_ExthdrEncoder/Test_ExthdrExprToJSON/DestRegister_json_tcp_option
+        --- FAIL: Test_ExthdrEncoder/Test_ExthdrExprToJSON/DestRegister_json_ip_option (0.00s)
+            exthdr_test.go:199: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/exthdr_test.go:199
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Should be true
+                        Test:           Test_ExthdrEncoder/Test_ExthdrExprToJSON/DestRegister_json_ip_option
+FAIL
+exit status 1
+FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.020s
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+
+
 
 
 
