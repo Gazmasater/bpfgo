@@ -295,6 +295,15 @@ func Test_ExthdrEncoder(t *testing.T) {
 }
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add table ip test
+sudo nft add chain ip test prerouting '{ type nat hook prerouting priority 0; }'
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting tcp option 5
+Error: syntax error, unexpected newline
+add rule ip test prerouting tcp option 5
+                                        ^
+gaz358@gaz358-BOD-WXX9:~/
+
+
 
 
 
