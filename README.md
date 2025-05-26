@@ -244,6 +244,20 @@ func Test_ExthdrEncoder(t *testing.T) {
 }
 
 
+sudo nft add table inet test
+sudo nft add chain inet test mychain '{ type filter hook input priority 0; }'
+sudo nft add rule inet test mychain tcp option 5
+
+sudo nft add rule inet test mychain ip option @10,1,8 set someval
+sudo nft add rule inet test mychain reset ip option @4,2,1
+sudo nft add rule inet test mychain tcp option 5
+sudo nft add rule inet test mychain ip option @7,1,2
+sudo nft add rule inet test mychain ip option @4,8,5 set custom
+sudo nft add rule inet test mychain reset tcp option @7,2,4
+
+
+
+
 
 
 
