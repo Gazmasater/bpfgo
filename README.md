@@ -24,12 +24,10 @@ package encoders
 
 import (
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/google/nftables/expr"
 	"github.com/stretchr/testify/suite"
-	"golang.org/x/sys/unix"
 )
 
 type exthdrEncoderTestSuite struct {
@@ -193,5 +191,6 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrExprToJSON() {
 func Test_ExthdrEncoder(t *testing.T) {
 	suite.Run(t, new(exthdrEncoderTestSuite))
 }
+
 
 
