@@ -33,6 +33,14 @@ sudo nft list ruleset
 sudo nft add rule inet test prerouting ip6 nexthdr 60 counter log prefix "dstopt match" accept
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule inet test prerouting ip6 nexthdr 60 counter log prefix "dstopt match" accept
+Error: syntax error, unexpected accept
+add rule inet test prerouting ip6 nexthdr 60 counter log prefix dstopt match accept
+                                                                             ^^^^^^
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+
+
+
 
 
 
