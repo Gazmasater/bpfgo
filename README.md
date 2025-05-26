@@ -181,7 +181,7 @@ func (b *exthdrEncoder) EncodeJSON(ctx *ctx) ([]byte, error) {
 
 gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule inet test prerouting exthdr src exists accept
 Error: syntax error, unexpected string
-add rule inet test prerouting exthdr src exists accept
+add rule inet test prerouting exthdr routing exists accept
                                      ^^^
 gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
 
