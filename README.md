@@ -5,42 +5,48 @@ sudo nft add rule inet test prerouting exthdr dst exists accept
 sudo nft list ruleset
 
 
-package encoders
 
-import (
-	"testing"
 
-	"github.com/google/nftables"
-	"github.com/google/nftables/expr"
-	"github.com/stretchr/testify/suite"
-	"golang.org/x/sys/unix"
-)
 
-type exthdrEncoderTestSuite struct {
-	suite.Suite
-}
-
-func (sui *exthdrEncoderTestSuite) Test_ExthdrDstExistsAccept() {
+func (sui *exthdrEncoderTestSuite) Test_ExthdrComplexCases() {
 	testData := []struct {
 		name     string
 		exprs    nftables.Rule
 		expected string
 	}{
 		{
-			name: "exthdr dst exists accept",
+			name: "exthdr with offset/len",
 			exprs: nftables.Rule{
 				Exprs: []expr.Any{
 					&expr.Exthdr{
 						Op:     expr.ExthdrOpIpv6,
-						Type:   60, // 60 — Destination Options Header (dst)
-						Offset: 0,
-						Len:    0,
-						Flags:  unix.NFT_EXTHDR_F_PRESENT,
+						Type:   43, // Routing Header
+						Offset: 4,
+						Len:    2,
+						Flags:  0,
 					},
+					&expr.Verdict{Kind: expr.VerdictDrop},
+				},
+			},
+			expected: "ip option @43,4,2 drop",
+		},
+		{
+			name: "exthdr dst exists, with register set",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Exthdr{
+						Op:           expr.ExthdrOpIpv6,
+						Type:         60,
+						Offset:       0,
+						Len:          0,
+						Flags:        unix.NFT_EXTHDR_F_PRESENT,
+						DestRegister: 2,
+					},
+					&expr.Immediate{Register: 2, Data: []byte{0x42}},
 					&expr.Verdict{Kind: expr.VerdictAccept},
 				},
 			},
-			expected: "ip option 60 accept",
+			expected: "reset ip option 60 0x42 accept",
 		},
 	}
 
@@ -52,13 +58,6 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrDstExistsAccept() {
 		})
 	}
 }
-
-func Test_ExthdrEncoder(t *testing.T) {
-	suite.Run(t, new(exthdrEncoderTestSuite))
-}
-
-
-return simpleIR(exp), nil
 
 
 
