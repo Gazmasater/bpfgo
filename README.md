@@ -47,6 +47,27 @@ func Test_ExthdrEncoder(t *testing.T) {
 	suite.Run(t, new(exthdrEncoderTestSuite))
 }
 
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test
+--- FAIL: Test_ExthdrEncoder (0.00s)
+    --- FAIL: Test_ExthdrEncoder/Test_ExthdrDstExistsAccept_WithAlias (0.00s)
+        exthdr_test.go:32: 
+                Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/exthdr_test.go:32
+                Error:          Not equal: 
+                                expected: "exthdr dst exists accept"
+                                actual  : "ip option 60 accept"
+                            
+                                Diff:
+                                --- Expected
+                                +++ Actual
+                                @@ -1 +1 @@
+                                -exthdr dst exists accept
+                                +ip option 60 accept
+                Test:           Test_ExthdrEncoder/Test_ExthdrDstExistsAccept_WithAlias
+FAIL
+exit status 1
+FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.007s
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+
 
 
 
