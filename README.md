@@ -28,23 +28,44 @@ sudo nft add rule ip6 test prerouting exthdr routing exists accept
 
 
 
-{
-			name: "exthdr mh exists accept (alias)",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Exthdr{
-						Op:     expr.ExthdrOpIpv6,
-						Type:   135, // mh = Mobility Header
-						Offset: 0,
-						Len:    0,
-						Flags:  unix.NFT_EXTHDR_F_PRESENT,
-					},
-					&expr.Verdict{Kind: expr.VerdictAccept},
-				},
-			},
-			expected: "exthdr mh exists accept",
-		},
+func (sui *exthdrEncoderTestSuite) Test_ExthdrDstAndFragExistsAccept() {
+    testData := []struct {
+        name     string
+        exprs    nftables.Rule
+        expected string
+    }{
+        {
+            name: "exthdr dst exists exthdr frag exists accept",
+            exprs: nftables.Rule{
+                Exprs: []expr.Any{
+                    &expr.Exthdr{
+                        Type:  60,                        // dst
+                        Flags: unix.NFT_EXTHDR_F_PRESENT, // exists
+                    },
+                    &expr.Exthdr{
+                        Type:  44,                        // frag
+                        Flags: unix.NFT_EXTHDR_F_PRESENT, // exists
+                    },
+                    &expr.Verdict{
+                        Kind: expr.VerdictAccept,
+                    },
+                },
+            },
+            expected: "exthdr dst exists exthdr frag exists accept",
+        },
+    }
 
+    for _, tc := range testData {
+        sui.Run(tc.name, func() {
+            ir, err := NewRuleExprEncoder(&tc.exprs).Format()
+            sui.Require().NoError(err)
+            sui.Require().Equal(tc.expected, ir)
+        })
+    }
+}
+
+
+sudo nft add rule ip6 test prerouting exthdr dst exists exthdr frag exists accept
 
 
 
