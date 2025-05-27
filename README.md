@@ -88,7 +88,26 @@ func Test_BitwiseEncoder(t *testing.T) {
 	suite.Run(t, new(bitwiseEncoderTestSuite))
 }
 
-
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test
+--- FAIL: Test_BitwiseEncoder (0.00s)
+    --- FAIL: Test_BitwiseEncoder/Test_IpDaddrBitwise24 (0.00s)
+        bitwise_test.go:50: 
+                Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/bitwise_test.go:50
+                Error:          Not equal: 
+                                expected: "ip daddr 192.168.1.0/24 accept"
+                                actual  : "@nh,16,4/0xffffff00 192.168.1.0 accept"
+                            
+                                Diff:
+                                --- Expected
+                                +++ Actual
+                                @@ -1 +1 @@
+                                -ip daddr 192.168.1.0/24 accept
+                                +@nh,16,4/0xffffff00 192.168.1.0 accept
+                Test:           Test_BitwiseEncoder/Test_IpDaddrBitwise24
+FAIL
+exit status 1
+FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.007s
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
 
 
 
