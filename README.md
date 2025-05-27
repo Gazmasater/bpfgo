@@ -100,6 +100,17 @@ func Test_ExthdrEncoder(t *testing.T) {
 }
 
 
-unix.IPPROTO_FRAGMENT
+
+exthdr hop — Hop-by-Hop Options (тип 0)
+
+exthdr mh — Mobility Header (тип 135) (реже встречается, но поддержка есть)
+
+exthdr ah — Authentication Header (тип 51)
+
+exthdr esp — Encapsulating Security Payload (тип 50)
+
+
+
+
 
 
