@@ -2,6 +2,10 @@ sudo nft add table ip6 test
 sudo nft add chain ip6 test prerouting '{ type filter hook prerouting priority 0; }'
 sudo nft add rule ip6 test prerouting exthdr type routing accept
 
+chain prerouting {
+    type nat hook prerouting priority 0;
+}
+sudo nft add rule ip test prerouting ip daddr 192.168.1.0/24 accept
 
 
 
