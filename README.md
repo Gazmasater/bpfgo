@@ -100,6 +100,6 @@ func Test_ExthdrEncoder(t *testing.T) {
 }
 
 
-
+unix.IPPROTO_FRAGMENT
 
 
