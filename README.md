@@ -28,35 +28,13 @@ sudo nft add rule ip6 test prerouting exthdr routing exists accept
 
 
 
-package encoders
-
-import (
-	"fmt"
-	"testing"
-
-	"github.com/google/nftables"
-	"github.com/google/nftables/expr"
-	"github.com/stretchr/testify/suite"
-	"golang.org/x/sys/unix"
-)
-
-type exthdrEncoderTestSuite struct {
-	suite.Suite
-}
-
-func (sui *exthdrEncoderTestSuite) Test_ExthdrExistsAccept_WithAliases() {
-	testData := []struct {
-		name     string
-		exprs    nftables.Rule
-		expected string
-	}{
-		{
-			name: "exthdr dst exists accept (alias)",
+{
+			name: "exthdr mh exists accept (alias)",
 			exprs: nftables.Rule{
 				Exprs: []expr.Any{
 					&expr.Exthdr{
 						Op:     expr.ExthdrOpIpv6,
-						Type:   unix.IPPROTO_DSTOPTS,
+						Type:   135, // mh = Mobility Header
 						Offset: 0,
 						Len:    0,
 						Flags:  unix.NFT_EXTHDR_F_PRESENT,
@@ -64,51 +42,9 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrExistsAccept_WithAliases() {
 					&expr.Verdict{Kind: expr.VerdictAccept},
 				},
 			},
-			expected: "exthdr dst exists accept",
+			expected: "exthdr mh exists accept",
 		},
-		{
-			name: "exthdr frag exists accept (alias)",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Exthdr{
-						Op:     expr.ExthdrOpIpv6,
-						Type:   unix.IPPROTO_FRAGMENT,
-						Offset: 0,
-						Len:    0,
-						Flags:  unix.NFT_EXTHDR_F_PRESENT,
-					},
-					&expr.Verdict{Kind: expr.VerdictAccept},
-				},
-			},
-			expected: "exthdr frag exists accept",
-		},
-	}
 
-	for _, tc := range testData {
-		sui.Run(tc.name, func() {
-			str, err := NewRuleExprEncoder(&tc.exprs).Format()
-			sui.Require().NoError(err)
-			fmt.Printf("Expected=%s\n", tc.expected)
-			fmt.Printf("IR=%s\n", str)
-			sui.Require().Equal(tc.expected, str)
-		})
-	}
-}
-
-func Test_ExthdrEncoder(t *testing.T) {
-	suite.Run(t, new(exthdrEncoderTestSuite))
-}
-
-
-
-
-exthdr hop — Hop-by-Hop Options (тип 0)
-
-exthdr mh — Mobility Header (тип 135) (реже встречается, но поддержка есть)
-
-exthdr ah — Authentication Header (тип 51)
-
-exthdr esp — Encapsulating Security Payload (тип 50)
 
 
 
