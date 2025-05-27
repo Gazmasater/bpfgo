@@ -55,11 +55,11 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrExistsAccept_WithAliases() {
 			exprs: nftables.Rule{
 				Exprs: []expr.Any{
 					&expr.Exthdr{
-						Op:     expr.ExthdrOpIpv6,        // IPv6 extension header
-						Type:   unix.IPPROTO_DSTOPTS,     // 60 = dst
+						Op:     expr.ExthdrOpIpv6,
+						Type:   unix.IPPROTO_DSTOPTS,
 						Offset: 0,
 						Len:    0,
-						Flags:  unix.NFT_EXTHDR_F_PRESENT, // "exists"
+						Flags:  unix.NFT_EXTHDR_F_PRESENT,
 					},
 					&expr.Verdict{Kind: expr.VerdictAccept},
 				},
@@ -71,11 +71,11 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrExistsAccept_WithAliases() {
 			exprs: nftables.Rule{
 				Exprs: []expr.Any{
 					&expr.Exthdr{
-						Op:     expr.ExthdrOpIpv6,        // IPv6 extension header
-						Type:   44,                       // 44 = frag
+						Op:     expr.ExthdrOpIpv6,
+						Type:   unix.IPPROTO_FRAGMENT,
 						Offset: 0,
 						Len:    0,
-						Flags:  unix.NFT_EXTHDR_F_PRESENT, // "exists"
+						Flags:  unix.NFT_EXTHDR_F_PRESENT,
 					},
 					&expr.Verdict{Kind: expr.VerdictAccept},
 				},
@@ -98,6 +98,7 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrExistsAccept_WithAliases() {
 func Test_ExthdrEncoder(t *testing.T) {
 	suite.Run(t, new(exthdrEncoderTestSuite))
 }
+
 
 
 
