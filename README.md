@@ -42,6 +42,18 @@ git rebase -i db77c5b
 git rebase --abort
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git rebase -i db77c5b 
+[detached HEAD b310a4e] tmp
+ Date: Mon Feb 10 20:37:10 2025 +0300
+ 4 files changed, 52 insertions(+), 89 deletions(-)
+Successfully rebased and updated refs/heads/trace_core1.
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git rebase -i db77c5b
+[detached HEAD c3d8ba4] tmp
+ Date: Mon Feb 10 20:37:10 2025 +0300
+ 3 files changed, 53 insertions(+), 87 deletions(-)
+Successfully rebased and updated refs/heads/trace_core1.
+
+
 
 
 
