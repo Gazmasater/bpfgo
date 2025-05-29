@@ -36,7 +36,10 @@ sudo nft add rule ip6 test prerouting exthdr routing exists accept
 
 
 
-__builtin_memcpy(info.srcIP6.in6_u.u6_addr32, ctx->local_ip6, sizeof(info.srcIP6.in6_u.u6_addr32));
+git rebase -i abcdef1
+Первый из них оставляешь как pick, остальные 9 меняешь на squash (или s):
+
+
 
 
 
