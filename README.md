@@ -32,36 +32,7 @@ sudo nft add rule ip6 test prerouting exthdr routing exists accept
 
 
 
-{
-    name: "ip daddr 192.168.1.0/24 accept via bitwise",
-    exprs: nftables.Rule{
-        Table: &nftables.Table{Name: tableName},
-        Exprs: []expr.Any{
-            &expr.Payload{
-                DestRegister: 1,
-                Base:         expr.PayloadBaseNetworkHeader,
-                Offset:       16,
-                Len:          4,
-            },
-            &expr.Bitwise{
-                SourceRegister: 1,
-                DestRegister:   1,
-                Len:            4,
-                Mask:           []byte{255, 255, 255, 0},
-                Xor:            []byte{0, 0, 0, 0},
-            },
-            &expr.Cmp{
-                Register: 1,
-                Op:       expr.CmpOpEq,
-                Data:     []byte{192, 168, 1, 0},
-            },
-            &expr.Verdict{
-                Kind: expr.VerdictAccept,
-            },
-        },
-    },
-    expected: "ip daddr 192.168.1.0/24 accept",
-},
+__builtin_memcpy(info.srcIP6.in6_u.u6_addr32, ctx->local_ip6, sizeof(info.srcIP6.in6_u.u6_addr32));
 
 
 
