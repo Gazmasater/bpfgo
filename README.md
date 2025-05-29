@@ -45,19 +45,22 @@ git rebase --abort
 git push -u origin trace_core1 --force
 
 
-Нажмите Ctrl + \ (это команда Search and Replace, можно запомнить как "find and replace").
-
-Введите tmp и нажмите Enter.
-
-Введите squash и нажмите Enter.
-
-Вас спросят, заменять ли это вхождение:
-
-Нажмите A (All) — чтобы заменить все вхождения.
-
-Если нажимать Y, будет происходить поштучная замена (Yes — да, заменить текущий).
-
-Готово! Чтобы сохранить изменения, нажмите Ctrl + O, затем Enter.
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git push -u origin trace_core1 --force
+Enumerating objects: 62, done.
+Counting objects: 100% (62/62), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (55/55), done.
+Writing objects: 100% (58/58), 158.39 MiB | 7.88 MiB/s, done.
+Total 58 (delta 9), reused 23 (delta 1), pack-reused 0
+remote: Resolving deltas: 100% (9/9), done.
+remote: warning: See https://gh.io/lfs for more information.
+remote: warning: File bpf/ecc is 64.14 MB; this is larger than GitHub's recommended maximum file size of 50.00 MB
+remote: warning: File ebpf-nftrace.zip is 78.38 MB; this is larger than GitHub's recommended maximum file size of 50.00 MB
+remote: warning: GH001: Large files detected. You may want to try Git Large File Storage - https://git-lfs.github.com.
+To https://github.com/Gazmasater/bpfgo
+ + dd97587...e25850b trace_core1 -> trace_core1 (forced update)
+branch 'trace_core1' set up to track 'origin/trace_core1'.
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
 
