@@ -44,6 +44,17 @@ git rebase --abort
 
 git push --force
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git push --force
+fatal: The current branch trace_core1 has no upstream branch.
+To push the current branch and set the remote as upstream, use
+
+    git push --set-upstream origin trace_core1
+
+To have this happen automatically for branches without a tracking
+upstream, see 'push.autoSetupRemote' in 'git help config'.
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
 
 
 
