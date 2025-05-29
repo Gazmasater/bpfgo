@@ -1,3 +1,9 @@
+
+pass: Vkalashnikov00f!
+Просьба не проходить там тесты, просто посмотри видео которое доступно
+
+
+
 bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
 
 
