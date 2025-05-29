@@ -1,3 +1,7 @@
+bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+
+
+
 sudo nft add table ip6 test
 sudo nft add chain ip6 test prerouting '{ type filter hook prerouting priority 0; }'
 sudo nft add rule ip6 test prerouting exthdr type routing accept
