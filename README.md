@@ -40,8 +40,10 @@ git rebase -i db77c5b
 Первый из них оставляешь как pick, остальные 9 меняешь на squash (или s):
 
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git rebase -i db77c5b 
-error: cannot rebase: You have unstaged changes.
-error: Please commit or stash them.
+error: invalid command '2079204'
+error: invalid line 2:  2079204 tmp
+You can fix this with 'git rebase --edit-todo' and then run 'git rebase --continue'.
+Or you can abort the rebase with 'git rebase --abort'.
 gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
