@@ -36,8 +36,14 @@ sudo nft add rule ip6 test prerouting exthdr routing exists accept
 
 
 
-git rebase -i abcdef1
+git rebase -i db77c5b 
 Первый из них оставляешь как pick, остальные 9 меняешь на squash (или s):
+
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git rebase -i db77c5b 
+error: cannot rebase: You have unstaged changes.
+error: Please commit or stash them.
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
 
 
 
