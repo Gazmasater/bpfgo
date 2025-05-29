@@ -1,6 +1,7 @@
 
+https://platform-balun.ru/teach/control/stream/view/id/930914027
+user: mat3x@mail.ru
 pass: Vkalashnikov00f!
-Просьба не проходить там тесты, просто посмотри видео которое доступно
 
 
 
