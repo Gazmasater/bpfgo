@@ -104,7 +104,7 @@ func ProcessEvent(
 
 			data.HasSendmsg = true
 
-			if !data.HasLookup && !data.HasRecvmdg {
+			if data.HasLookup && data.HasRecvmdg {
 				if data.Lookup.Proto == 17 {
 					proto = "UDP"
 				}
@@ -171,7 +171,7 @@ func ProcessEvent(
 
 			data.HasSendmsg = true
 
-			if !data.HasLookup && !data.HasRecvmdg {
+			if data.HasLookup && data.HasRecvmdg {
 				if data.Lookup.Proto == 17 {
 					proto = "UDP"
 				}
@@ -224,7 +224,7 @@ func ProcessEvent(
 
 			data.HasRecvmdg = true
 
-			if !data.HasLookup && data.HasSendmsg {
+			if data.HasLookup && data.HasSendmsg {
 				if data.Lookup.Proto == 17 {
 					proto = "UDP"
 				}
@@ -290,7 +290,7 @@ func ProcessEvent(
 
 			data.HasRecvmdg = true
 
-			if !data.HasLookup && !data.HasSendmsg {
+			if data.HasLookup && data.HasSendmsg {
 				if data.Lookup.Proto == 17 {
 					proto = "UDP"
 				}
@@ -361,7 +361,7 @@ func ProcessEvent(
 
 			data1.HasLookup = true
 
-			if !data.HasRecvmdg && !data.HasSendmsg {
+			if data.HasRecvmdg && data.HasSendmsg {
 				if data.Lookup.Proto == 17 {
 					proto = "UDP"
 				}
