@@ -616,6 +616,93 @@ func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 }
 
 
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "default",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/go/analysis/passes/printf",
+			"scheme": "https",
+			"authority": "pkg.go.dev"
+		}
+	},
+	"severity": 4,
+	"message": "fmt.Sprintf format %s has arg ev.SrcIP.S_addr of wrong type uint32",
+	"source": "printf",
+	"startLineNumber": 539,
+	"startColumn": 13,
+	"endLineNumber": 539,
+	"endColumn": 75
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "default",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/go/analysis/passes/printf",
+			"scheme": "https",
+			"authority": "pkg.go.dev"
+		}
+	},
+	"severity": 4,
+	"message": "fmt.Sprintf format %s has arg ev.DstIP.S_addr of wrong type uint32",
+	"source": "printf",
+	"startLineNumber": 540,
+	"startColumn": 13,
+	"endLineNumber": 540,
+	"endColumn": 75
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "unusedparams",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/gopls/internal/analysis/unusedparams",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "unusedparams"
+		}
+	},
+	"severity": 2,
+	"message": "unused parameter: dstIP",
+	"source": "unusedparams",
+	"startLineNumber": 364,
+	"startColumn": 37,
+	"endLineNumber": 364,
+	"endColumn": 42
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "unusedparams",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/gopls/internal/analysis/unusedparams",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "unusedparams"
+		}
+	},
+	"severity": 2,
+	"message": "unused parameter: srcIP",
+	"source": "unusedparams",
+	"startLineNumber": 364,
+	"startColumn": 44,
+	"endLineNumber": 364,
+	"endColumn": 49
+}]
+
+
 
 
 
