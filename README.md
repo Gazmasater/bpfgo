@@ -75,9 +75,9 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 )
 
-// ─────────────────────────────────────────────────────────────
-//                        Глобальные данные
-// ─────────────────────────────────────────────────────────────
+/* ─────────────────────────────
+           Глобальные данные
+───────────────────────────── */
 
 var objs bpfObjects
 
@@ -85,16 +85,16 @@ var (
 	eventChan_sport = make(chan int, 1)
 	eventChan_pid   = make(chan int, 1)
 
-	mu             sync.Mutex
-	xxx, xxx_pid   int
-	proto          string
-	srchost        string
-	dsthost        string
+	mu           sync.Mutex
+	xxx, xxx_pid int
+	proto        string
+	srchost      string
+	dsthost      string
 )
 
-// ─────────────────────────────────────────────────────────────
-//                          Пользовательские типы
-// ─────────────────────────────────────────────────────────────
+/* ─────────────────────────────
+           Пользовательские типы
+───────────────────────────── */
 
 type Lookup struct {
 	DstIP   net.IP
@@ -120,7 +120,7 @@ type Recvmsg struct {
 	Comm    string
 }
 
-// *** ИЗМЕНЁННАЯ СТРУКТУРА ***
+// изменённая структура
 type EventData struct {
 	Lookup      Lookup
 	Sendmsg     Sendmsg
@@ -130,22 +130,22 @@ type EventData struct {
 	haveRecvmsg bool
 }
 
-// ─────────────────────────────────────────────────────────────
-//                            init()
-// ─────────────────────────────────────────────────────────────
+/* ─────────────────────────────
+               init
+───────────────────────────── */
 
 func init() {
 	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatalf("failed to remove memory limit: %v", err)
+		log.Fatalf("remove memlock: %v", err)
 	}
 	if err := loadBpfObjects(&objs, nil); err != nil {
-		log.Fatalf("failed to load bpf objects: %v", err)
+		log.Fatalf("load bpf objects: %v", err)
 	}
 }
 
-// ─────────────────────────────────────────────────────────────
-//                               main
-// ─────────────────────────────────────────────────────────────
+/* ─────────────────────────────
+               main
+───────────────────────────── */
 
 func main() {
 	eventMap := make(map[int]*EventData)
@@ -158,36 +158,26 @@ func main() {
 		panic(err)
 	}
 	defer netns.Close()
-
 	fmt.Printf("Дескриптор нового namespace: %d\n", netns.Fd())
 
-	// ─ Tracepoints
-	SmsgEnter := mustTP("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter)
-	defer SmsgEnter.Close()
-	SmsgExit := mustTP("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit)
-	defer SmsgExit.Close()
-	SEnter := mustTP("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter)
-	defer SEnter.Close()
-	SExit := mustTP("syscalls", "sys_exit_sendto", objs.TraceSendtoExit)
-	defer SExit.Close()
-	RmsgEnter := mustTP("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter)
-	defer RmsgEnter.Close()
-	RmsgExit := mustTP("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit)
-	defer RmsgExit.Close()
-	REnter := mustTP("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter)
-	defer REnter.Close()
-	RExit := mustTP("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit)
-	defer RExit.Close()
-	InetSock := mustTP("sock", "inet_sock_set_state", objs.TraceTcpEst)
-	defer InetSock.Close()
+	// tracepoints
+	defer mustTP("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter).Close()
+	defer mustTP("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit).Close()
+	defer mustTP("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter).Close()
+	defer mustTP("syscalls", "sys_exit_sendto", objs.TraceSendtoExit).Close()
+	defer mustTP("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter).Close()
+	defer mustTP("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit).Close()
+	defer mustTP("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter).Close()
+	defer mustTP("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit).Close()
+	defer mustTP("sock", "inet_sock_set_state", objs.TraceTcpEst).Close()
 
 	skLookupLink, err := link.AttachNetNs(int(netns.Fd()), objs.LookUp)
 	if err != nil {
-		log.Fatalf("failed to attach sk_lookup: %v", err)
+		log.Fatalf("attach sk_lookup: %v", err)
 	}
 	defer skLookupLink.Close()
 
-	// ─ perf reader goroutine
+	/* perf reader goroutine */
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
@@ -229,7 +219,7 @@ func main() {
 
 			switch ev.Sysexit {
 
-			// ───────────────── SENDTO (exit)
+			// SENDTO exit
 			case 1:
 				if ev.Family != 2 {
 					printSendToIPv6(ev)
@@ -251,7 +241,7 @@ func main() {
 					delete(eventMap, port)
 				}
 
-			// ───────────────── SENDMSG (exit)
+			// SENDMSG exit
 			case 11:
 				if ev.Family != 2 {
 					printSendMsgIPv6(ev)
@@ -273,7 +263,7 @@ func main() {
 					delete(eventMap, port)
 				}
 
-			// ───────────────── RECVFROM (exit)
+			// RECVFROM exit
 			case 2:
 				if ev.Family != 2 {
 					printRecvFromIPv6(ev)
@@ -291,11 +281,11 @@ func main() {
 				data.haveRecvmsg = true
 
 				if data.haveLookup && data.haveSendmsg {
-					printRecvFrom(data, dstIP, srcIP)
+					printRecvFrom(data)
 					delete(eventMap, port)
 				}
 
-			// ───────────────── RECVMSG (exit)
+			// RECVMSG exit
 			case 12:
 				if ev.Family != 2 {
 					printRecvMsgIPv6(ev)
@@ -317,7 +307,7 @@ func main() {
 					delete(eventMap, port)
 				}
 
-			// ───────────────── LOOKUP verdict
+			// LOOKUP verdict
 			case 3:
 				if ev.Family != 2 {
 					printLookupIPv6(ev)
@@ -345,7 +335,7 @@ func main() {
 					delete(eventMap, port)
 				}
 
-			// ───────────────── TCP state changes
+			// TCP state change
 			case 6:
 				handleTCPState(ev, dstIP, srcIP)
 			}
@@ -357,9 +347,9 @@ func main() {
 	fmt.Println("Exiting...")
 }
 
-// ─────────────────────────────────────────────────────────────
-//                       Вспомогательные функции
-// ─────────────────────────────────────────────────────────────
+/* ─────────────────────────────
+          Вспомогательные функции
+───────────────────────────── */
 
 func mustTP(cat, name string, prog *ebpf.Program) link.Link {
 	l, err := link.Tracepoint(cat, name, prog, nil)
@@ -385,7 +375,7 @@ func getEvent(port int, m map[int]*EventData, alt map[int]*EventData) *EventData
 	return e
 }
 
-// ─── Печать/форматирование (оставлены как были, только убраны указатели)
+/* ─────────────  Печать/форматирование  ───────────── */
 
 func printSendTo(data *EventData) {
 	if data.Lookup.Proto == 17 {
@@ -418,7 +408,7 @@ func printSendMsg(data *EventData) {
 	fmt.Println()
 }
 
-func printRecvFrom(data *EventData, dstIP, srcIP net.IP) {
+func printRecvFrom(data *EventData) {
 	if data.Lookup.Proto == 17 {
 		proto = "UDP"
 	}
@@ -479,7 +469,7 @@ func resolveHosts(data *EventData) {
 	}
 }
 
-// IPv6 print helpers (оставлены без изменений логики)
+/* ─────────────  IPv6 print helpers  ───────────── */
 
 func printSendToIPv6(ev bpfTraceInfo) {
 	port := ev.Dport
@@ -521,7 +511,7 @@ func printLookupIPv6(ev bpfTraceInfo) {
 	fmt.Printf("LOOKUP SPORT=%d  DPORT=%d PROTO=%d\n", ev.Sport, ev.Dport, ev.Proto)
 }
 
-// TCP state handling (оставлена прежняя логика)
+/* ─────────────  TCP state  ───────────── */
 
 func handleTCPState(ev bpfTraceInfo, dstIP, srcIP net.IP) {
 	if ev.Family == 10 {
@@ -550,6 +540,7 @@ func handleTCPState(ev bpfTraceInfo, dstIP, srcIP net.IP) {
 		mu.Unlock()
 	}
 
+	/* пара sport/pid */
 	select {
 	case xxx = <-eventChan_sport:
 		setHostsForTCP(dstIP, srcIP)
@@ -593,8 +584,8 @@ func setHostsForTCP(dstIP, srcIP net.IP) {
 }
 
 func printTCPFlow(ev bpfTraceInfo) {
-	srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, ev.SrcIP.S_addr, ev.Sport)
-	dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, ev.DstIP.S_addr, ev.Dport)
+	srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, ip4FromUint32(ev.SrcIP.S_addr).String(), ev.Sport)
+	dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, ip4FromUint32(ev.DstIP.S_addr).String(), ev.Dport)
 	if ev.Proto == 6 {
 		proto = "TCP"
 	}
@@ -602,7 +593,7 @@ func printTCPFlow(ev bpfTraceInfo) {
 	fmt.Printf("PID=%d %s:%s <- %s:%s \n", ev.Pid, proto, srcAddr, proto, dstAddr)
 }
 
-// IPv6 helpers
+/* ─────────────  IPv6 helpers  ───────────── */
 
 func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 	var words [4]uint32
@@ -614,94 +605,6 @@ func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 	}
 	return words
 }
-
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "default",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/go/analysis/passes/printf",
-			"scheme": "https",
-			"authority": "pkg.go.dev"
-		}
-	},
-	"severity": 4,
-	"message": "fmt.Sprintf format %s has arg ev.SrcIP.S_addr of wrong type uint32",
-	"source": "printf",
-	"startLineNumber": 539,
-	"startColumn": 13,
-	"endLineNumber": 539,
-	"endColumn": 75
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "default",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/go/analysis/passes/printf",
-			"scheme": "https",
-			"authority": "pkg.go.dev"
-		}
-	},
-	"severity": 4,
-	"message": "fmt.Sprintf format %s has arg ev.DstIP.S_addr of wrong type uint32",
-	"source": "printf",
-	"startLineNumber": 540,
-	"startColumn": 13,
-	"endLineNumber": 540,
-	"endColumn": 75
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "unusedparams",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/gopls/internal/analysis/unusedparams",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "unusedparams"
-		}
-	},
-	"severity": 2,
-	"message": "unused parameter: dstIP",
-	"source": "unusedparams",
-	"startLineNumber": 364,
-	"startColumn": 37,
-	"endLineNumber": 364,
-	"endColumn": 42
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "unusedparams",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/gopls/internal/analysis/unusedparams",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "unusedparams"
-		}
-	},
-	"severity": 2,
-	"message": "unused parameter: srcIP",
-	"source": "unusedparams",
-	"startLineNumber": 364,
-	"startColumn": 44,
-	"endLineNumber": 364,
-	"endColumn": 49
-}]
-
 
 
 
