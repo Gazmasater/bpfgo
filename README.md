@@ -58,39 +58,33 @@ ________________________________________________________________________________
 
 
 
-var eventMap map[int]EventData
+if data.Lookup != nil && data.Recvmsg != nil {
+				if data.Lookup.Proto == 17 {
+					proto = "UDP"
+				}
 
-// предополагаем, что eventMap объявлен как:
-//    var eventMap map[int]EventData
-//
-// и EventData теперь
-//    type EventData struct {
-//        Lookup  Lookup
-//        Sendmsg Sendmsg
-//        Recvmsg Recvmsg
-//    }
 
-data, ok := eventMap[port]
-if !ok {
-    data = EventData{}          // получаем «пустой» EventData
-}
-
-data.Sendmsg = Sendmsg{         // меняем копию
-    DstIP:   dstIP,
-    DstPort: port,
-    Pid:     event.Pid,
-    Comm:    pkg.Int8ToString(event.Comm),
-}
-
-// записываем изменённую копию обратно в map
-eventMap[port] = data
-
-// далее работаем с data как с value
-if (data.Lookup != Lookup{}) && (data.Recvmsg != Recvmsg{}) {
-    if data.Lookup.Proto == 17 {
-        proto = "UDP"
-    }
-}
+    [{
+	"resource": "/home/gaz358/myprog/bpfgo/prcessevent.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"code": {
+		"value": "MismatchedTypes",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MismatchedTypes"
+		}
+	},
+	"severity": 8,
+	"message": "invalid operation: data.Lookup != nil (mismatched types Lookup and untyped nil)",
+	"source": "compiler",
+	"startLineNumber": 44,
+	"startColumn": 22,
+	"endLineNumber": 44,
+	"endColumn": 25
+}]
 
 
 
