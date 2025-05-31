@@ -58,46 +58,9 @@ ________________________________________________________________________________
 
 
 
-Итоговые правки
-В ветке sys_exit=3 (lookup):
-
-
-port := int(event.Dport)
-data, exists := eventMap[port]
-if !exists {
-    data = &EventData{}
-    eventMap[port] = data
-}
-data.Lookup = …
-data.HasLookup = true
-
-port_1 := int(event.Sport)
-data_1, exists := eventMap_1[port_1]
-if !exists {
-    data_1 = &EventData{}
-
- eventMap_1[port_1] = data
-
- eventMap_1[port_1] = data_1
-}
-data_1.Lookup = …
-data_1.HasLookup = true
-
-В ветках sys_exit=1 и sys_exit=2 (sendto/sendmsg и recvfrom/recvmsg) убедись, что:
-
-Чтение/запись из/в нужную карту идёт последовательно:
-
-В sys_exit=1 ты читаешь из eventMap_1 (по dstPort), значит запись при необходимости — eventMap_1[port] = data.
-
-В sys_exit=2/12 ты читаешь из eventMap (по srcPort), значит запись при необходимости — eventMap[port] = data.
-
-Заменить все srchost := pkg.ResolveIP(srcIP) и dsthost := pkg.ResolveIP(…) в тех местах, где ты хочешь сохранить результат в глобальные переменные, на srchost = pkg.ResolveIP(srcIP) (без двоеточия). Аналогично с dsthost.
-
-При “финальном” выводе (когда оба HasSendmsg + HasRecvmsg + HasLookup истинны) — лучше удалить сразу из обеих карт:
-
-delete(eventMap, port)
-delete(eventMap_1, port_1)  // где port_1 соответствует ключу в eventMap_1
-После этих доработок проблема с “неожиданными” или «зависшими» записями исчезнет, и вывод всегда будет соответствовать фактическому порядку событий.
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git status
+HEAD detached from e25850b
+nothing to commit, working tree clean
 
 
 
