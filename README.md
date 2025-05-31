@@ -57,7 +57,68 @@ git push -u origin trace_core1 --force
 _______________________________________________________________________________________________
 
 
-    fmt.Printf("Go sizeof(traceInfo) = %d\n", unsafe.Sizeof(traceInfo{}))
+		// Задаём batchSize
+		const batchSize = 4
+		records := make([]perf.Record, batchSize)
+
+		// Размер кольца (pageCount) можно оставить таким же или увеличить при необходимости
+		// (buffLen здесь – это pageCount)
+		const buffLen = 4096 * 2
+		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
+		if err != nil {
+			log.Fatalf("failed to create perf reader: %s", err)
+		}
+		defer rd.Close()
+
+		executableName := os.Args[0]
+		if len(executableName) > 2 {
+			executableName = executableName[2:]
+		}
+
+		for {
+			// Читаем сразу до batchSize записей
+			n, err := rd.ReadBatch(records, perf.ReadBatchOptions{})
+			if err != nil {
+				if errors.Is(err, os.ErrDeadlineExceeded) {
+					continue
+				}
+				log.Fatalf("error reading batch from perf reader: %v", err)
+			}
+
+			// Проверяем, не потерялись ли какие-то события
+			if lost := rd.LostSamples(); lost > 0 {
+				log.Printf("WARNING: lost %d samples (ring overflow)", lost)
+			}
+
+			// Обрабатываем каждую из n прочитанных записей
+			for i := 0; i < n; i++ {
+				record := records[i]
+
+				// Если реальный размер RawSample < ожидаемого — пропускаем
+				if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
+					log.Println("!!!!!!!!!!!!!!!!!!!!invalid event size!!!!!!!!!!!!!!!!!!")
+					continue
+				}
+
+				// Распарсим одно событие
+				event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
+
+				srcIP := net.IPv4(
+					byte(event.SrcIP.S_addr),
+					byte(event.SrcIP.S_addr>>8),
+					byte(event.SrcIP.S_addr>>16),
+					byte(event.SrcIP.S_addr>>24),
+				)
+				dstIP := net.IPv4(
+					byte(event.DstIP.S_addr),
+					byte(event.DstIP.S_addr>>8),
+					byte(event.DstIP.S_addr>>16),
+					byte(event.DstIP.S_addr>>24),
+				)
+
+				if pkg.Int8ToString(event.Comm) == executableName {
+					continue
+				}
 
 
 
