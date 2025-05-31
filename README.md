@@ -56,18 +56,12 @@ git push -u origin trace_core1 --force
 
 _______________________________________________________________________________________________
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git commit -m "struct EventData new"
+On branch trace_core1
+Your branch and 'origin/trace_core1' have diverged,
+and have 1 and 1 different commits each, respectively.
 
-
-
-git branch -f trace_core1 HEAD
-git checkout trace_core1
-
-
-
-
-
-
-
+nothing to commit, working tree clean
 
 
 
