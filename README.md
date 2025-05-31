@@ -56,26 +56,11 @@ git push -u origin trace_core1 --force
 
 _______________________________________________________________________________________________
 
-# Находимся в ветке trace_core1
-git checkout trace_core1
-
-# Подтягиваем свежие данные с origin (не меняя содержимое рабочей копии)
-git fetch origin
-
-# Сливаем изменения из origin/trace_core1 в локальную trace_core1
-git merge origin/trace_core1
-
-
-После того как все конфликтные участки поправлены, выполнить:
-
-
-git add <исправленный_файл1> <исправленный_файл2> … 
-git merge --continue
-Это завершит процесс мёрджа и создаст объединяющий коммит.
-
-Когда merge полностью завершён (с конфликтами или без), проверяем историю:
-
-git log --oneline --graph --decorate -n 5
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git checkout e25850b  
+bpfgo: needs merge
+error: you need to resolve your current index first
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+ 
 
 
 
