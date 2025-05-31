@@ -56,12 +56,26 @@ git push -u origin trace_core1 --force
 
 _______________________________________________________________________________________________
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git commit -m "struct EventData new"
-On branch trace_core1
-Your branch and 'origin/trace_core1' have diverged,
-and have 1 and 1 different commits each, respectively.
+# Находимся в ветке trace_core1
+git checkout trace_core1
 
-nothing to commit, working tree clean
+# Подтягиваем свежие данные с origin (не меняя содержимое рабочей копии)
+git fetch origin
+
+# Сливаем изменения из origin/trace_core1 в локальную trace_core1
+git merge origin/trace_core1
+
+
+После того как все конфликтные участки поправлены, выполнить:
+
+
+git add <исправленный_файл1> <исправленный_файл2> … 
+git merge --continue
+Это завершит процесс мёрджа и создаст объединяющий коммит.
+
+Когда merge полностью завершён (с конфликтами или без), проверяем историю:
+
+git log --oneline --graph --decorate -n 5
 
 
 
