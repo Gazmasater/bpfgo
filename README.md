@@ -58,9 +58,10 @@ ________________________________________________________________________________
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git status
-HEAD detached from e25850b
-nothing to commit, working tree clean
+
+git branch -f trace_core1 HEAD
+git checkout trace_core1
+
 
 
 
