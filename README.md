@@ -65,22 +65,10 @@ git branch -f trace_core1 HEAD
 git checkout trace_core1
 git push --force-with-lease origin trace_core1
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git commit -m "struct EventData new"
-On branch trace_core1
-Your branch is behind 'origin/trace_core1' by 1 commit, and can be fast-forwarded.
-  (use "git pull" to update your local branch)
+git add -u
+git commit -m "struct EventData new"
+git push --force-with-lease origin trace_core1
 
-Changes not staged for commit:
-  (use "git add <file>..." to update what will be committed)
-  (use "git restore <file>..." to discard changes in working directory)
-        modified:   bpfgo
-        modified:   main.go
-
-no changes added to commit (use "git add" and/or "git commit -a")
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
-
-
- 
 
 
 
