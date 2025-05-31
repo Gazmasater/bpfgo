@@ -57,34 +57,7 @@ git push -u origin trace_core1 --force
 _______________________________________________________________________________________________
 
 
-struct trace_info {
-    /*  offset=0: */
-    struct in_addr   srcIP;   //  4 байта, выровнено по 4
-    /*  offset=4: */
-    struct in_addr   dstIP;   //  4 байта, выровнено по 4
-    /*  offset=8 (уже кратно 4): */
-    struct in6_addr  srcIP6;  // 16 байт, выровнено по 4
-    /*  offset=24: */
-    struct in6_addr  dstIP6;  // 16 байт, выровнено по 4
-    /*  offset=40: */
-    __u32            pid;     //  4 байта, выровнено по 4
-    /*  offset=44: */
-    __u32            proto;   //  4 байта, выровнено по 4
-    /*  offset=48: */
-    __u16            sport;   //  2 байта, выровнено по 2
-    /*  offset=50: */
-    __u16            dport;   //  2 байта, выровнено по 2
-    /*  offset=52: */
-    __u16            family;  //  2 байта, выровнено по 2
-    /*  offset=54: */
-    __u8             sysexit; //  1 байт, выровнено по 1
-    /*  offset=55: */
-    __u8             state;   //  1 байт, выровнено по 1
-    /*  offset=56 (следующий после 55 + 0 padding, потому что uint8+uint8 = 2 байта, 
-       а общий offset 56 уже кратен 2): */
-    char             comm[32];// 32 байта, выровнено по 1
-    /*  offset=88 -> конец */
-};
+    fmt.Printf("Go sizeof(traceInfo) = %d\n", unsafe.Sizeof(traceInfo{}))
 
 
 
