@@ -58,171 +58,34 @@ ________________________________________________________________________________
 
 
 struct trace_info {
-    struct in_addr  srcIP;     // 4 байта
-    struct in_addr  dstIP;     // 4 байта
-    struct in6_addr srcIP6;    // 16 байт
+    struct in_addr  srcIP;     //  4 байта
+    struct in_addr  dstIP;     //  4 байта
+
+    // Чтобы следующий массив in6_addr начинался на 8-байтной границе,
+    // нужно вставить 0–pad (точное число зависит от текущей структуры).
+    // Допустим, тут уже 8 байт занято, и in6_addr (16 байт) естественно выровнен.
+    struct in6_addr srcIP6;    // 16 байт (выровнено по 4/8 байт)
     struct in6_addr dstIP6;    // 16 байт
-    __u32           pid;       // 4 байта
-    __u32           proto;     // 4 байта
-    __u16           sport;     // 2 байта
-    __u16           dport;     // 2 байта
-    __u16           family;    // 2 байта
-    __u8            sysexit;   // 1 байт
-    __u8            state;     // 1 байт
+
+    __u32           pid;       //  4 байта
+    __u32           proto;     //  4 байта
+
+    __u16           sport;     //  2 байта
+    __u16           dport;     //  2 байта
+
+    __u16           family;    //  2 байта
+    __u8            sysexit;   //  1 байт
+    __u8            state;     //  1 байт
+
+    // Чтобы следующий массив char[32] начинался на 4-байтной границе,
+    // после offset=54 нужно вставить 2 байта паддинга до 56:
+    __u8            __pad0;    //  1 байт паддинга
+    __u8            __pad1;    //  1 байт паддинга
+
     char            comm[32];  // 32 байта
-} __attribute__((packed));
+    // no extra padding в конце, если sizeof == 88
+};
 
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
-/home/gaz358/myprog/bpfgo/trace.c:192:38: warning: taking address of packed member 'dstIP6' of class or structure 'trace_info' may result in an unaligned pointer value [-Waddress-of-packed-member]
-  192 |         if (BPF_CORE_READ_USER_INTO(&info.dstIP6,
-      |                                      ^~~~~~~~~~~
-/usr/include/bpf/bpf_core_read.h:362:8: note: expanded from macro 'BPF_CORE_READ_USER_INTO'
-  362 |                      dst, (src), a, ##__VA_ARGS__)                          \
-      |                      ^~~
-/usr/include/bpf/bpf_core_read.h:342:60: note: expanded from macro '___core_read'
-  342 |         ___apply(___core_read, ___empty(__VA_ARGS__))(fn, fn_ptr, dst,      \
-      |                                                                   ^~~
-/usr/include/bpf/bpf_core_read.h:336:14: note: expanded from macro '___core_read0'
-  336 |         ___read(fn, dst, ___type(src), src, a);
-      |                     ^~~
-/usr/include/bpf/bpf_core_read.h:317:34: note: expanded from macro '___read'
-  317 |         read_fn((void *)(dst), sizeof(*(dst)), &((src_type)(src))->accessor)
-      |                                         ^~~
-/usr/include/bpf/bpf_core_read.h:250:27: note: expanded from macro 'bpf_core_read_user'
-  250 |         bpf_probe_read_user(dst, sz, (const void *)__builtin_preserve_access_index(src))
-      |                                  ^~
-/home/gaz358/myprog/bpfgo/trace.c:302:38: warning: taking address of packed member 'srcIP6' of class or structure 'trace_info' may result in an unaligned pointer value [-Waddress-of-packed-member]
-  302 |         if (BPF_CORE_READ_USER_INTO(&info.srcIP6,
-      |                                      ^~~~~~~~~~~
-/usr/include/bpf/bpf_core_read.h:362:8: note: expanded from macro 'BPF_CORE_READ_USER_INTO'
-  362 |                      dst, (src), a, ##__VA_ARGS__)                          \
-      |                      ^~~
-/usr/include/bpf/bpf_core_read.h:342:60: note: expanded from macro '___core_read'
-  342 |         ___apply(___core_read, ___empty(__VA_ARGS__))(fn, fn_ptr, dst,      \
-      |                                                                   ^~~
-/usr/include/bpf/bpf_core_read.h:336:14: note: expanded from macro '___core_read0'
-  336 |         ___read(fn, dst, ___type(src), src, a);
-      |                     ^~~
-/usr/include/bpf/bpf_core_read.h:317:34: note: expanded from macro '___read'
-  317 |         read_fn((void *)(dst), sizeof(*(dst)), &((src_type)(src))->accessor)
-      |                                         ^~~
-/usr/include/bpf/bpf_core_read.h:250:27: note: expanded from macro 'bpf_core_read_user'
-  250 |         bpf_probe_read_user(dst, sz, (const void *)__builtin_preserve_access_index(src))
-      |                                  ^~
-/home/gaz358/myprog/bpfgo/trace.c:418:33: warning: taking address of packed member 'dstIP6' of class or structure 'trace_info' may result in an unaligned pointer value [-Waddress-of-packed-member]
-  418 |         if (BPF_CORE_READ_INTO(&info.dstIP6, &sa6, sin6_addr.in6_u.u6_addr32) < 0)
-      |                                 ^~~~~~~~~~~
-/usr/include/bpf/bpf_core_read.h:352:8: note: expanded from macro 'BPF_CORE_READ_INTO'
-  352 |                      dst, (src), a, ##__VA_ARGS__)                          \
-      |                      ^~~
-/usr/include/bpf/bpf_core_read.h:342:60: note: expanded from macro '___core_read'
-  342 |         ___apply(___core_read, ___empty(__VA_ARGS__))(fn, fn_ptr, dst,      \
-      |                                                                   ^~~
-/usr/include/bpf/bpf_core_read.h:336:14: note: expanded from macro '___core_read0'
-  336 |         ___read(fn, dst, ___type(src), src, a);
-      |                     ^~~
-/usr/include/bpf/bpf_core_read.h:317:34: note: expanded from macro '___read'
-  317 |         read_fn((void *)(dst), sizeof(*(dst)), &((src_type)(src))->accessor)
-      |                                         ^~~
-/usr/include/bpf/bpf_core_read.h:246:29: note: expanded from macro 'bpf_core_read'
-  246 |         bpf_probe_read_kernel(dst, sz, (const void *)__builtin_preserve_access_index(src))
-      |                                    ^~
-/home/gaz358/myprog/bpfgo/trace.c:534:33: warning: taking address of packed member 'srcIP6' of class or structure 'trace_info' may result in an unaligned pointer value [-Waddress-of-packed-member]
-  534 |         if (BPF_CORE_READ_INTO(&info.srcIP6, &sa6, sin6_addr.in6_u.u6_addr32) < 0)
-      |                                 ^~~~~~~~~~~
-/usr/include/bpf/bpf_core_read.h:352:8: note: expanded from macro 'BPF_CORE_READ_INTO'
-  352 |                      dst, (src), a, ##__VA_ARGS__)                          \
-      |                      ^~~
-/usr/include/bpf/bpf_core_read.h:342:60: note: expanded from macro '___core_read'
-  342 |         ___apply(___core_read, ___empty(__VA_ARGS__))(fn, fn_ptr, dst,      \
-      |                                                                   ^~~
-/usr/include/bpf/bpf_core_read.h:336:14: note: expanded from macro '___core_read0'
-  336 |         ___read(fn, dst, ___type(src), src, a);
-      |                     ^~~
-/usr/include/bpf/bpf_core_read.h:317:34: note: expanded from macro '___read'
-  317 |         read_fn((void *)(dst), sizeof(*(dst)), &((src_type)(src))->accessor)
-      |                                         ^~~
-/usr/include/bpf/bpf_core_read.h:246:29: note: expanded from macro 'bpf_core_read'
-  246 |         bpf_probe_read_kernel(dst, sz, (const void *)__builtin_preserve_access_index(src))
-      |                                    ^~
-/home/gaz358/myprog/bpfgo/trace.c:619:29: warning: taking address of packed member 'srcIP' of class or structure 'trace_info' may result in an unaligned pointer value [-Waddress-of-packed-member]
-  619 |         BPF_CORE_READ_INTO(&info.srcIP.s_addr, ctx, saddr);
-      |                             ^~~~~~~~~~~~~~~~~
-/usr/include/bpf/bpf_core_read.h:352:8: note: expanded from macro 'BPF_CORE_READ_INTO'
-  352 |                      dst, (src), a, ##__VA_ARGS__)                          \
-      |                      ^~~
-/usr/include/bpf/bpf_core_read.h:342:60: note: expanded from macro '___core_read'
-  342 |         ___apply(___core_read, ___empty(__VA_ARGS__))(fn, fn_ptr, dst,      \
-      |                                                                   ^~~
-/usr/include/bpf/bpf_core_read.h:336:14: note: expanded from macro '___core_read0'
-  336 |         ___read(fn, dst, ___type(src), src, a);
-      |                     ^~~
-/usr/include/bpf/bpf_core_read.h:317:34: note: expanded from macro '___read'
-  317 |         read_fn((void *)(dst), sizeof(*(dst)), &((src_type)(src))->accessor)
-      |                                         ^~~
-/usr/include/bpf/bpf_core_read.h:246:29: note: expanded from macro 'bpf_core_read'
-  246 |         bpf_probe_read_kernel(dst, sz, (const void *)__builtin_preserve_access_index(src))
-      |                                    ^~
-/home/gaz358/myprog/bpfgo/trace.c:620:29: warning: taking address of packed member 'dstIP' of class or structure 'trace_info' may result in an unaligned pointer value [-Waddress-of-packed-member]
-  620 |         BPF_CORE_READ_INTO(&info.dstIP.s_addr, ctx, daddr);
-      |                             ^~~~~~~~~~~~~~~~~
-/usr/include/bpf/bpf_core_read.h:352:8: note: expanded from macro 'BPF_CORE_READ_INTO'
-  352 |                      dst, (src), a, ##__VA_ARGS__)                          \
-      |                      ^~~
-/usr/include/bpf/bpf_core_read.h:342:60: note: expanded from macro '___core_read'
-  342 |         ___apply(___core_read, ___empty(__VA_ARGS__))(fn, fn_ptr, dst,      \
-      |                                                                   ^~~
-/usr/include/bpf/bpf_core_read.h:336:14: note: expanded from macro '___core_read0'
-  336 |         ___read(fn, dst, ___type(src), src, a);
-      |                     ^~~
-/usr/include/bpf/bpf_core_read.h:317:34: note: expanded from macro '___read'
-  317 |         read_fn((void *)(dst), sizeof(*(dst)), &((src_type)(src))->accessor)
-      |                                         ^~~
-/usr/include/bpf/bpf_core_read.h:246:29: note: expanded from macro 'bpf_core_read'
-  246 |         bpf_probe_read_kernel(dst, sz, (const void *)__builtin_preserve_access_index(src))
-      |                                    ^~
-/home/gaz358/myprog/bpfgo/trace.c:635:29: warning: taking address of packed member 'dstIP6' of class or structure 'trace_info' may result in an unaligned pointer value [-Waddress-of-packed-member]
-  635 |         BPF_CORE_READ_INTO(&info.dstIP6, ctx, daddr_v6);
-      |                             ^~~~~~~~~~~
-/usr/include/bpf/bpf_core_read.h:352:8: note: expanded from macro 'BPF_CORE_READ_INTO'
-  352 |                      dst, (src), a, ##__VA_ARGS__)                          \
-      |                      ^~~
-/usr/include/bpf/bpf_core_read.h:342:60: note: expanded from macro '___core_read'
-  342 |         ___apply(___core_read, ___empty(__VA_ARGS__))(fn, fn_ptr, dst,      \
-      |                                                                   ^~~
-/usr/include/bpf/bpf_core_read.h:336:14: note: expanded from macro '___core_read0'
-  336 |         ___read(fn, dst, ___type(src), src, a);
-      |                     ^~~
-/usr/include/bpf/bpf_core_read.h:317:34: note: expanded from macro '___read'
-  317 |         read_fn((void *)(dst), sizeof(*(dst)), &((src_type)(src))->accessor)
-      |                                         ^~~
-/usr/include/bpf/bpf_core_read.h:246:29: note: expanded from macro 'bpf_core_read'
-  246 |         bpf_probe_read_kernel(dst, sz, (const void *)__builtin_preserve_access_index(src))
-      |                                    ^~
-/home/gaz358/myprog/bpfgo/trace.c:636:29: warning: taking address of packed member 'srcIP6' of class or structure 'trace_info' may result in an unaligned pointer value [-Waddress-of-packed-member]
-  636 |         BPF_CORE_READ_INTO(&info.srcIP6, ctx, saddr_v6);
-      |                             ^~~~~~~~~~~
-/usr/include/bpf/bpf_core_read.h:352:8: note: expanded from macro 'BPF_CORE_READ_INTO'
-  352 |                      dst, (src), a, ##__VA_ARGS__)                          \
-      |                      ^~~
-/usr/include/bpf/bpf_core_read.h:342:60: note: expanded from macro '___core_read'
-  342 |         ___apply(___core_read, ___empty(__VA_ARGS__))(fn, fn_ptr, dst,      \
-      |                                                                   ^~~
-/usr/include/bpf/bpf_core_read.h:336:14: note: expanded from macro '___core_read0'
-  336 |         ___read(fn, dst, ___type(src), src, a);
-      |                     ^~~
-/usr/include/bpf/bpf_core_read.h:317:34: note: expanded from macro '___read'
-  317 |         read_fn((void *)(dst), sizeof(*(dst)), &((src_type)(src))->accessor)
-      |                                         ^~~
-/usr/include/bpf/bpf_core_read.h:246:29: note: expanded from macro 'bpf_core_read'
-  246 |         bpf_probe_read_kernel(dst, sz, (const void *)__builtin_preserve_access_index(src))
-      |                                    ^~
-8 warnings generated.
-Compiled /home/gaz358/myprog/bpfgo/bpf_x86_bpfel.o
-Stripped /home/gaz358/myprog/bpfgo/bpf_x86_bpfel.o
-Wrote /home/gaz358/myprog/bpfgo/bpf_x86_bpfel.go
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
 
