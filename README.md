@@ -56,10 +56,16 @@ git push -u origin trace_core1 --force
 
 _______________________________________________________________________________________________
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git checkout e25850b  
-bpfgo: needs merge
-error: you need to resolve your current index first
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
+git merge --abort
+git reset --hard HEAD
+git checkout e25850b
+
+git branch -f trace_core1 HEAD
+git checkout trace_core1
+git push --force-with-lease origin trace_core1
+
+
  
 
 
