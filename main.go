@@ -56,9 +56,12 @@ type Recvmsg struct {
 }
 
 type EventData struct {
-	Lookup  *Lookup
-	Sendmsg *Sendmsg
-	Recvmsg *Recvmsg
+	Lookup     Lookup
+	Sendmsg    Sendmsg
+	Recvmsg    Recvmsg
+	HasLookup  bool
+	HasSendmsg bool
+	HasRecvmsg bool
 }
 
 func init() {
@@ -216,14 +219,16 @@ func main() {
 						eventMap[port] = data
 					}
 
-					data.Sendmsg = &Sendmsg{
+					data.Sendmsg = Sendmsg{
 						DstIP:   dstIP,
 						DstPort: port,
 						Pid:     event.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
 					}
 
-					if data.Lookup != nil && data.Recvmsg != nil {
+					data.HasSendmsg = true
+
+					if data.HasLookup && data.HasRecvmsg {
 
 						if data.Lookup.Proto == 17 {
 
@@ -299,14 +304,16 @@ func main() {
 						data = &EventData{}
 						eventMap[port] = data
 					}
-					data.Sendmsg = &Sendmsg{
+					data.Sendmsg = Sendmsg{
 						DstIP:   dstIP,
 						DstPort: port,
 						Pid:     event.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
 					}
 
-					if data.Lookup != nil && data.Recvmsg != nil {
+					data.HasSendmsg = true
+
+					if data.HasLookup && data.HasRecvmsg {
 
 						if data.Lookup.Proto == 17 {
 
@@ -365,14 +372,16 @@ func main() {
 						data = &EventData{}
 						eventMap[port] = data
 					}
-					data.Recvmsg = &Recvmsg{
+					data.Recvmsg = Recvmsg{
 						SrcIP:   srcIP,
 						SrcPort: port,
 						Pid:     event.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
 					}
 
-					if data.Lookup != nil && data.Sendmsg != nil {
+					data.HasRecvmsg = true
+
+					if data.HasLookup && data.HasSendmsg {
 
 						if data.Lookup.Proto == 17 {
 
@@ -449,13 +458,16 @@ func main() {
 						data = &EventData{}
 						eventMap[port] = data
 					}
-					data.Recvmsg = &Recvmsg{
+					data.Recvmsg = Recvmsg{
 						SrcIP:   srcIP,
 						SrcPort: port,
 						Pid:     event.Pid,
 						Comm:    pkg.Int8ToString(event.Comm),
 					}
-					if data.Lookup != nil && data.Sendmsg != nil {
+
+					data.HasRecvmsg = true
+
+					if data.HasLookup && data.HasSendmsg {
 
 						if data.Lookup.Proto == 17 {
 
@@ -520,13 +532,14 @@ func main() {
 						eventMap[port] = data
 					}
 
-					data.Lookup = &Lookup{
+					data.Lookup = Lookup{
 						SrcIP:   srcIP,
 						SrcPort: int(event.Sport),
 						DstIP:   dstIP,
 						DstPort: int(event.Dport),
 						Proto:   int(event.Proto),
 					}
+					data.HasLookup = true
 
 					port_1 := int(event.Sport)
 
@@ -536,7 +549,7 @@ func main() {
 						eventMap_1[port_1] = data
 					}
 
-					data_1.Lookup = &Lookup{
+					data_1.Lookup = Lookup{
 						SrcIP:   srcIP,
 						SrcPort: int(event.Sport),
 						DstIP:   dstIP,
@@ -544,7 +557,7 @@ func main() {
 						Proto:   int(event.Proto),
 					}
 
-					if data.Recvmsg != nil && data.Sendmsg != nil {
+					if data.HasRecvmsg && data.HasSendmsg {
 
 						if data.Lookup.Proto == 17 {
 
