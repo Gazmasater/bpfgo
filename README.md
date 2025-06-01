@@ -76,46 +76,25 @@ go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
 
 
 
-	go func() {
-		log.Println("Starting pprof HTTP server on :6060")
-		if err := http.ListenAndServe(":6060", nil); err != nil {
-			log.Fatalf("pprof ListenAndServe error: %v", err)
-		}
-	}()
-
- go func() {
-    log.Println("Starting pprof HTTP server on :6060")
-    if err := http.ListenAndServe(":6060", nil); err != nil {
-        log.Fatalf("pprof ListenAndServe error: %v", err)
-    }
-}()
-
-
-
-curl http://localhost:6060/debug/pprof/
-
-
-
 package main
 
 import (
+	"bpfgo/pkg"
+	"errors"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
-	"time"
 	"unsafe"
 
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/perf"
 	"github.com/cilium/ebpf/rlimit"
-	"github.com/miekg/dns"
-	"bpfgo/pkg"
 )
 
 // Глобальные объекты BPF
@@ -134,14 +113,6 @@ var eventDataPool = sync.Pool{
 	},
 }
 
-// Кэш для DNS (IP → hostname)
-var (
-	dnsCache  sync.Map // map[string]string
-	dnsClient *dns.Client
-	dnsServer = "8.8.8.8:53"
-)
-
-// Типы данных для отслеживания событий
 type Lookup struct {
 	DstIP   net.IP
 	DstPort int
@@ -184,10 +155,6 @@ func init() {
 	if err := loadBpfObjects(&objs, nil); err != nil {
 		log.Fatalf("failed to load bpf objects: %v", err)
 	}
-	// Инициализируем DNS-клиент
-	dnsClient = &dns.Client{
-		Timeout: 2 * time.Second,
-	}
 }
 
 func main() {
@@ -199,6 +166,7 @@ func main() {
 		}
 	}()
 
+	// Основные структуры
 	eventMap := make(map[int]*EventData)
 	eventMap_1 := make(map[int]*EventData)
 	defer objs.Close()
@@ -212,6 +180,7 @@ func main() {
 	fmt.Printf("Дескриптор нового namespace: %d\n", netns.Fd())
 	fmt.Printf("Go sizeof(traceInfo) = %d\n", unsafe.Sizeof(bpfTraceInfo{}))
 
+	// Привязка tracepoint-ов
 	SmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter, nil)
 	if err != nil {
 		log.Fatalf("opening tracepoint sys_enter_sendmsg: %s", err)
@@ -277,7 +246,7 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		const buffLen = 4096 * 2 // если кольцо мелкое — увеличить до 4096*16 и т.д.
+		const buffLen = 4096 * 2
 		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
 		if err != nil {
 			log.Fatalf("failed to create perf reader: %s", err)
@@ -292,33 +261,26 @@ func main() {
 		const batchSize = 4
 
 		for {
-			// Собираем до batchSize записей в слайс
 			var batch []perf.Record
 			for i := 0; i < batchSize; i++ {
 				record, err := rd.Read()
 				if err != nil {
-					// Когда таймаут (никаких новых записей в кольце) — выходим из внутреннего цикла
 					if errors.Is(err, os.ErrDeadlineExceeded) {
 						break
 					}
-					// Любая другая ошибка — завершили работу
 					log.Fatalf("error reading from perf reader: %v", err)
 				}
 				batch = append(batch, record)
-				// Если мы получили batchSize записей, выходим досрочно
 				if len(batch) >= batchSize {
 					break
 				}
 			}
 
-			// Если batch пустой — просто перейти на следующий цикл (ждем новые события)
 			if len(batch) == 0 {
 				continue
 			}
 
-			// Обрабатываем каждую запись из batch
 			for _, record := range batch {
-				// Если меньше, чем ожидается — кольцо переполнилось, пропускаем
 				if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
 					log.Println("!!!!!!!!!!!!!!!!!!!!!!!invalid event size!!!!!!!!!!!!!!!!!!")
 					continue
@@ -339,18 +301,19 @@ func main() {
 					byte(event.DstIP.S_addr>>24),
 				)
 
-				// Пропускаем события от нашего демона, чтобы не заваливать логи
+				// Пропускаем собственные события
 				if pkg.Int8ToString(event.Comm) == executableName {
 					continue
 				}
 
-				// Обработка Sysexit == 1 (sys_exit_sendto или sendmsg)
+				// Sysexit == 1: sys_exit_sendto или sendmsg
 				if event.Sysexit == 1 {
 					family := event.Family
 					if family == 2 {
 						port := int(event.Dport)
 						data, exists := eventMap_1[port]
 						if !exists {
+							// Берем EventData из пула и обнуляем
 							data = eventDataPool.Get().(*EventData)
 							*data = EventData{}
 							eventMap_1[port] = data
@@ -367,9 +330,16 @@ func main() {
 							if data.Lookup.Proto == 17 {
 								proto = "UDP"
 							}
-							// Используем кешированный DNS
-							dsthost = ResolveIP_cached(data.Lookup.DstIP)
-							srchost = ResolveIP_cached(data.Lookup.SrcIP)
+							if data.Lookup.DstIP.IsLoopback() {
+								dsthost = "localhost"
+							} else {
+								dsthost = pkg.ResolveIP(data.Lookup.DstIP)
+							}
+							if data.Lookup.SrcIP.IsLoopback() {
+								srchost = "localhost"
+							} else {
+								srchost = pkg.ResolveIP(data.Lookup.SrcIP)
+							}
 							fmt.Printf("SENDTO PID=%d NAME=%s %s/%s[%s]:%d -> %s[%s]:%d\n",
 								data.Sendmsg.Pid,
 								data.Sendmsg.Comm,
@@ -392,6 +362,7 @@ func main() {
 								data.Lookup.SrcIP,
 								data.Lookup.SrcPort,
 							)
+							// Возвращаем в пул и удаляем из map
 							delete(eventMap_1, port)
 							eventDataPool.Put(data)
 						}
@@ -408,7 +379,7 @@ func main() {
 					}
 				}
 
-				// Обработка Sysexit == 11 (sys_exit_sendmsg)
+				// Sysexit == 11: sys_exit_sendmsg
 				if event.Sysexit == 11 {
 					if event.Family == 2 {
 						port := int(event.Dport)
@@ -466,7 +437,7 @@ func main() {
 					}
 				}
 
-				// Обработка Sysexit == 2 (sys_exit_recvfrom)
+				// Sysexit == 2: sys_exit_recvfrom
 				if event.Sysexit == 2 {
 					if event.Family == 2 {
 						port := int(event.Sport)
@@ -488,8 +459,16 @@ func main() {
 							if data.Lookup.Proto == 17 {
 								proto = "UDP"
 							}
-							dsthost = ResolveIP_cached(dstIP)
-							srchost = ResolveIP_cached(srcIP)
+							if data.Lookup.DstIP.IsLoopback() {
+								dsthost = "localhost"
+							} else {
+								dsthost = pkg.ResolveIP(dstIP)
+							}
+							if data.Lookup.SrcIP.IsLoopback() {
+								srchost = "localhost"
+							} else {
+								srchost = pkg.ResolveIP(srcIP)
+							}
 							fmt.Printf("RECVFROM PID=%d NAME=%s %s/%s[%s]:%d -> %s[%s]:%d\n",
 								data.Sendmsg.Pid,
 								data.Sendmsg.Comm,
@@ -528,7 +507,7 @@ func main() {
 					}
 				}
 
-				// Обработка Sysexit == 12 (sys_exit_recvmsg)
+				// Sysexit == 12: sys_exit_recvmsg
 				if event.Sysexit == 12 {
 					if event.Family == 2 {
 						port := int(event.Sport)
@@ -582,7 +561,7 @@ func main() {
 					}
 				}
 
-				// Обработка Sysexit == 3 (sk_lookup)
+				// Sysexit == 3: sk_lookup
 				if event.Sysexit == 3 {
 					family := event.Family
 					if family == 2 {
@@ -625,12 +604,12 @@ func main() {
 							if data.Lookup.DstIP.IsLoopback() {
 								dsthost = "localhost"
 							} else {
-								dsthost = ResolveIP_cached(data.Lookup.DstIP)
+								dsthost = pkg.ResolveIP(data.Lookup.DstIP)
 							}
 							if data.Lookup.SrcIP.IsLoopback() {
 								srchost = "localhost"
 							} else {
-								srchost = ResolveIP_cached(data.Lookup.SrcIP)
+								srchost = pkg.ResolveIP(data.Lookup.SrcIP)
 							}
 							fmt.Printf("LOOKUP PID=%d NAME=%s %s/%s[%s]:%d<-%s[%s]:%d\n",
 								data.Sendmsg.Pid,
@@ -663,11 +642,11 @@ func main() {
 						fmt.Printf("LOOKUP SRC IPv6=%s\n", ip6)
 						ip6_d := pkg.IPv6FromLEWords(IPv6BytesToWords(event.DstIP6.In6U.U6Addr8))
 						fmt.Printf("LOOKUP DST IPv6=%s\n", ip6_d)
-						fmt.Printf("LOOKUP SPORT=%d  DPORT=%d PROТО=%d\n", event.Sport, event.Dport, event.Proto)
+						fmt.Printf("LOOKUP SPORT=%d  DPORT=%d PROTO=%d\n", event.Sport, event.Dport, event.Proto)
 					}
 				}
 
-				// Обработка Sysexit == 6 (inet_sock_set_state)
+				// Sysexit == 6: inet_sock_set_state
 				if event.Sysexit == 6 {
 					if event.Family == 10 {
 						sport := event.Sport
@@ -704,17 +683,15 @@ func main() {
 						mu.Unlock()
 
 						if dstIP.IsLoopback() {
-							dsthost = "localhost"
+							dsthost = pkg.ResolveIP(dstIP)
 						} else {
-							// Используем кэшированный DNS
-							var lookupErr error
-							dsthost, lookupErr = ResolveIP_n_cached(dstIP)
-							if lookupErr != nil {
+							dsthost, err = pkg.ResolveIP_n(dstIP)
+							if err != nil {
 								dsthost = "unknown"
 							}
 						}
 
-						srchost = ResolveIP_cached(srcIP)
+						srchost := pkg.ResolveIP(srcIP)
 						srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
 						dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
 
@@ -753,16 +730,15 @@ func main() {
 					select {
 					case xxx = <-eventChan_sport:
 						if dstIP.IsLoopback() {
-							dsthost = "localhost"
+							dsthost = pkg.ResolveIP(dstIP)
 						} else {
-							var lookupErr error
-							dsthost, lookupErr = ResolveIP_n_cached(dstIP)
-							if lookupErr != nil {
+							dsthost, err = pkg.ResolveIP_n(dstIP)
+							if err != nil {
 								dsthost = "unknown"
 							}
 						}
 
-						srchost = ResolveIP_cached(srcIP)
+						srchost := pkg.ResolveIP(srcIP)
 						srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), xxx)
 						dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
 
@@ -798,72 +774,6 @@ func main() {
 	fmt.Println("Exiting...")
 }
 
-// Caching DNS lookup using net.LookupAddr
-func ResolveIP_cached(ip net.IP) string {
-	ipStr := ip.String()
-	if cached, ok := dnsCache.Load(ipStr); ok {
-		return cached.(string)
-	}
-
-	if ip.IsLoopback() {
-		dnsCache.Store(ipStr, "localhost")
-		return "localhost"
-	}
-	if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
-		dnsCache.Store(ipStr, ipStr)
-		return ipStr
-	}
-
-	names, err := net.LookupAddr(ipStr)
-	var result string
-	if err != nil || len(names) == 0 {
-		result = "Unknown"
-	} else {
-		result = strings.TrimSuffix(names[0], ".")
-	}
-	dnsCache.Store(ipStr, result)
-	return result
-}
-
-// Caching DNS PTR query using miekg/dns
-func ResolveIP_n_cached(ip net.IP) (string, error) {
-	ipStr := ip.String()
-	if cached, ok := dnsCache.Load(ipStr); ok {
-		return cached.(string), nil
-	}
-
-	if ip.IsLoopback() {
-		dnsCache.Store(ipStr, "localhost")
-		return "localhost", nil
-	}
-
-	ptrName, err := dns.ReverseAddr(ipStr)
-	if err != nil {
-		dnsCache.Store(ipStr, ipStr)
-		return "", fmt.Errorf("не удалось сформировать PTR-запрос: %v", err)
-	}
-
-	msg := new(dns.Msg)
-	msg.SetQuestion(ptrName, dns.TypePTR)
-
-	resp, _, err := dnsClient.Exchange(msg, dnsServer)
-	if err != nil {
-		dnsCache.Store(ipStr, ipStr)
-		return "", fmt.Errorf("ошибка DNS-запроса: %v", err)
-	}
-
-	for _, ans := range resp.Answer {
-		if ptr, ok := ans.(*dns.PTR); ok {
-			hostname := strings.TrimSuffix(ptr.Ptr, ".")
-			dnsCache.Store(ipStr, hostname)
-			return hostname, nil
-		}
-	}
-
-	dnsCache.Store(ipStr, ipStr)
-	return "", fmt.Errorf("доменное имя для IP %s не найдено", ipStr)
-}
-
 // Вспомогательная функция для IPv6
 func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 	var words [4]uint32
@@ -875,9 +785,6 @@ func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 	}
 	return words
 }
-
-
-
 
 
 
