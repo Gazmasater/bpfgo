@@ -76,8 +76,24 @@ go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
 
 
 
-
-
+Time: 2025-06-01 18:44:04 MSK
+Duration: 30.01s, Total samples = 80ms ( 0.27%)
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 80ms, 100% of 80ms total
+Showing top 10 nodes out of 79
+      flat  flat%   sum%        cum   cum%
+      20ms 25.00% 25.00%       20ms 25.00%  internal/runtime/syscall.Syscall6
+      20ms 25.00% 50.00%       20ms 25.00%  runtime.cgocall
+      10ms 12.50% 62.50%       10ms 12.50%  fmt.(*buffer).write (inline)
+      10ms 12.50% 75.00%       10ms 12.50%  runtime.futex
+      10ms 12.50% 87.50%       10ms 12.50%  runtime.memmove
+      10ms 12.50%   100%       10ms 12.50%  runtime.pcdatavalue1
+         0     0%   100%       20ms 25.00%  bpfgo/pkg.ResolveIP
+         0     0%   100%       40ms 50.00%  bpfgo/pkg.ResolveIP_n
+         0     0%   100%       10ms 12.50%  fmt.(*buffer).writeString
+         0     0%   100%       10ms 12.50%  fmt.(*fmt).fmtInteger
+(pprof) 
 
 
 package main
@@ -160,6 +176,41 @@ func putEventData(ed *EventData) {
 	eventDataPool.Put(ed)
 }
 
+// ------ Начало добавленного кода для кэша резолвинга ------
+var (
+	// resolveCache хранит результат резолва ip -> hostname
+	resolveCache = make(map[string]string)
+	cacheMu      sync.RWMutex
+)
+
+// resolveHost пытается получить hostname из кэша, а если нет — вызывать pkg.ResolveIP_n и сохранять результат.
+func resolveHost(ip net.IP) string {
+	key := ip.String()
+	// Сначала читающий доступ к кэшу
+	cacheMu.RLock()
+	if host, ok := resolveCache[key]; ok {
+		cacheMu.RUnlock()
+		return host
+	}
+	cacheMu.RUnlock()
+
+	// Дальше под мьютексом записываем
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	// Проверили ещё раз на предмет обращения конкурентных горутин
+	if host, ok := resolveCache[key]; ok {
+		return host
+	}
+	// Выполняем реальный резолв
+	host, err := pkg.ResolveIP_n(ip)
+	if err != nil {
+		host = "unknown"
+	}
+	resolveCache[key] = host
+	return host
+}
+// ------ Конец добавленного кода для кэша резолвинга ------
+
 func init() {
 	// Снимаем ограничение на память
 	if err := rlimit.RemoveMemlock(); err != nil {
@@ -193,32 +244,58 @@ func main() {
 	fmt.Printf("Дескриптор нового namespace: %d\n", netns.Fd())
 	fmt.Printf("Go sizeof(traceInfo) = %d\n", unsafe.Sizeof(bpfTraceInfo{}))
 
-	// Привязка tracepoint'ов
-	bind := func(category, name string, prog *ebpfProgram) link.Link {
-		lp, err := link.Tracepoint(category, name, prog, nil)
-		if err != nil {
-			log.Fatalf("opening tracepoint %s %s: %s", category, name, err)
-		}
-		return lp
+	SmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_sendmsg: %s", err)
 	}
-
-	SmsgEnter := bind("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter)
 	defer SmsgEnter.Close()
-	SmsgExit := bind("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit)
+
+	SmsgExit, err := link.Tracepoint("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_sendmsg: %s", err)
+	}
 	defer SmsgExit.Close()
-	SEnter := bind("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter)
+
+	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
+	}
 	defer SEnter.Close()
-	SExit := bind("syscalls", "sys_exit_sendto", objs.TraceSendtoExit)
+
+	SExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_sendto: %s", err)
+	}
 	defer SExit.Close()
-	RmsgEnter := bind("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter)
+
+	RmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_recvmsg: %s", err)
+	}
 	defer RmsgEnter.Close()
-	RmsgExit := bind("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit)
+
+	RmsgExit, err := link.Tracepoint("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_recvmsg: %s", err)
+	}
 	defer RmsgExit.Close()
-	REnter := bind("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter)
+
+	REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
+	}
 	defer REnter.Close()
-	RExit := bind("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit)
+
+	RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
+	}
 	defer RExit.Close()
-	InetSock := bind("sock", "inet_sock_set_state", objs.TraceTcpEst)
+
+	InetSock, err := link.Tracepoint("sock", "inet_sock_set_state", objs.TraceTcpEst, nil)
+	if err != nil {
+		log.Fatalf("opening tracepoint inet_sock_set_state: %s", err)
+	}
 	defer InetSock.Close()
 
 	skLookupLink, err := link.AttachNetNs(int(netns.Fd()), objs.LookUp)
@@ -226,7 +303,6 @@ func main() {
 		log.Fatalf("failed to attach sk_lookup program: %v", err)
 	}
 	defer skLookupLink.Close()
-
 	// Канал для graceful shutdown
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -244,7 +320,7 @@ func main() {
 			executableName = executableName[2:]
 		}
 
-		const batchSize = 4
+		const batchSize = 8
 
 		for {
 			// Собираем до batchSize записей в слайс
@@ -315,12 +391,12 @@ func main() {
 							if data.Lookup.DstIP.IsLoopback() {
 								dstHost = "localhost"
 							} else {
-								dstHost = pkg.ResolveIP(data.Lookup.DstIP)
+								dstHost = resolveHost(data.Lookup.DstIP)
 							}
 							if data.Lookup.SrcIP.IsLoopback() {
 								srcHost = "localhost"
 							} else {
-								srcHost = pkg.ResolveIP(data.Lookup.SrcIP)
+								srcHost = resolveHost(data.Lookup.SrcIP)
 							}
 							fmt.Printf("SENDTO PID=%d NAME=%s %s/%s[%s]:%d -> %s[%s]:%d\n",
 								data.Sendmsg.Pid,
@@ -441,12 +517,12 @@ func main() {
 							if data.Lookup.DstIP.IsLoopback() {
 								dstHost = "localhost"
 							} else {
-								dstHost = pkg.ResolveIP(dstIP)
+								dstHost = resolveHost(dstIP)
 							}
 							if data.Lookup.SrcIP.IsLoopback() {
 								srcHost = "localhost"
 							} else {
-								srcHost = pkg.ResolveIP(srcIP)
+								srcHost = resolveHost(srcIP)
 							}
 							fmt.Printf("RECVFROM PID=%d NAME=%s %s/%s[%s]:%d -> %s[%s]:%d\n",
 								data.Sendmsg.Pid,
@@ -574,12 +650,12 @@ func main() {
 							if data.Lookup.DstIP.IsLoopback() {
 								dstHost = "localhost"
 							} else {
-								dstHost = pkg.ResolveIP(data.Lookup.DstIP)
+								dstHost = resolveHost(data.Lookup.DstIP)
 							}
 							if data.Lookup.SrcIP.IsLoopback() {
 								srcHost = "localhost"
 							} else {
-								srcHost = pkg.ResolveIP(data.Lookup.SrcIP)
+								srcHost = resolveHost(data.Lookup.SrcIP)
 							}
 							fmt.Printf("LOOKUP PID=%d NAME=%s %s/%s[%s]:%d<-%s[%s]:%d\n",
 								data.Sendmsg.Pid,
@@ -653,16 +729,13 @@ func main() {
 						mu.Unlock()
 
 						if dstIP.IsLoopback() {
-							dstHost = pkg.ResolveIP(dstIP)
+							dstHost = resolveHost(dstIP)
 						} else {
-							dstHost, err = pkg.ResolveIP_n(dstIP)
-							if err != nil {
-								dstHost = "unknown"
-							}
+							dstHost = resolveHost(dstIP)
 						}
 
-						srcHost := pkg.ResolveIP(srcIP)
-						srcAddr := fmt.Sprintf("//%s[%s]:%d", srcHost, srcIP.String(), event.Sport)
+						srcHostResolved := resolveHost(srcIP)
+						srcAddr := fmt.Sprintf("//%s[%s]:%d", srcHostResolved, srcIP.String(), event.Sport)
 						dstAddr := fmt.Sprintf("//%s[%s]:%d", dstHost, dstIP.String(), event.Dport)
 
 						if event.Proto == 6 {
@@ -700,16 +773,13 @@ func main() {
 					select {
 					case lastSport = <-eventChanSport:
 						if dstIP.IsLoopback() {
-							dstHost = pkg.ResolveIP(dstIP)
+							dstHost = resolveHost(dstIP)
 						} else {
-							dstHost, err = pkg.ResolveIP_n(dstIP)
-							if err != nil {
-								dstHost = "unknown"
-							}
+							dstHost = resolveHost(dstIP)
 						}
 
-						srcHost := pkg.ResolveIP(srcIP)
-						srcAddr := fmt.Sprintf("//%s[%s]:%d", srcHost, srcIP.String(), lastSport)
+						srcHostResolved2 := resolveHost(srcIP)
+						srcAddr := fmt.Sprintf("//%s[%s]:%d", srcHostResolved2, srcIP.String(), lastSport)
 						dstAddr := fmt.Sprintf("//%s[%s]:%d", dstHost, dstIP.String(), event.Dport)
 
 						select {
@@ -756,24 +826,6 @@ func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 	return words
 }
 
-Time: 2025-06-01 18:44:04 MSK
-Duration: 30.01s, Total samples = 80ms ( 0.27%)
-Entering interactive mode (type "help" for commands, "o" for options)
-(pprof) top
-Showing nodes accounting for 80ms, 100% of 80ms total
-Showing top 10 nodes out of 79
-      flat  flat%   sum%        cum   cum%
-      20ms 25.00% 25.00%       20ms 25.00%  internal/runtime/syscall.Syscall6
-      20ms 25.00% 50.00%       20ms 25.00%  runtime.cgocall
-      10ms 12.50% 62.50%       10ms 12.50%  fmt.(*buffer).write (inline)
-      10ms 12.50% 75.00%       10ms 12.50%  runtime.futex
-      10ms 12.50% 87.50%       10ms 12.50%  runtime.memmove
-      10ms 12.50%   100%       10ms 12.50%  runtime.pcdatavalue1
-         0     0%   100%       20ms 25.00%  bpfgo/pkg.ResolveIP
-         0     0%   100%       40ms 50.00%  bpfgo/pkg.ResolveIP_n
-         0     0%   100%       10ms 12.50%  fmt.(*buffer).writeString
-         0     0%   100%       10ms 12.50%  fmt.(*fmt).fmtInteger
-(pprof) 
 
 
 
