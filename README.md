@@ -124,3 +124,28 @@ for {
     }
 }
 
+
+az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go tool pprof http://localhost:6060/debug/pprof/heap
+Fetching profile over HTTP from http://localhost:6060/debug/pprof/heap
+Saved profile in /home/gaz358/pprof/pprof.bpfgo.alloc_objects.alloc_space.inuse_objects.inuse_space.004.pb.gz
+File: bpfgo
+Build ID: 6a9bbe59327e8bfde36cf53a4755eb7f471aefae
+Type: inuse_space
+Time: 2025-06-01 22:32:09 MSK
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 22090.34kB, 100% of 22090.34kB total
+Showing top 10 nodes out of 30
+      flat  flat%   sum%        cum   cum%
+ 6945.99kB 31.44% 31.44% 12073.43kB 54.65%  github.com/cilium/ebpf/btf.readAndInflateTypes
+ 5127.44kB 23.21% 54.65%  5127.44kB 23.21%  github.com/cilium/ebpf/btf.readAndInflateTypes.func2
+ 4096.09kB 18.54% 73.20%  4096.09kB 18.54%  bufio.(*Scanner).Text (inline)
+ 3356.76kB 15.20% 88.39%  7452.85kB 33.74%  github.com/cilium/ebpf/btf.readStringTable
+    2052kB  9.29% 97.68%     2052kB  9.29%  runtime.allocm
+  512.05kB  2.32%   100% 20038.34kB 90.71%  runtime.main
+         0     0%   100% 19526.28kB 88.39%  github.com/cilium/ebpf.(*CollectionSpec).LoadAndAssign
+         0     0%   100% 19526.28kB 88.39%  github.com/cilium/ebpf.(*CollectionSpec).LoadAndAssign.func1
+         0     0%   100% 19526.28kB 88.39%  github.com/cilium/ebpf.(*collectionLoader).loadProgram
+         0     0%   100% 19526.28kB 88.39%  github.com/cilium/ebpf.applyRelocations
+(pprof) 
+
