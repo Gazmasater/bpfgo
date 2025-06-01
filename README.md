@@ -807,6 +807,21 @@ func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 
 
 
+Showing top 10 nodes out of 81
+      flat  flat%   sum%        cum   cum%
+      50ms 33.33% 33.33%       50ms 33.33%  internal/runtime/syscall.Syscall6
+      10ms  6.67% 40.00%       10ms  6.67%  github.com/cilium/ebpf/perf.(*forwardReader).writeTail
+      10ms  6.67% 46.67%       70ms 46.67%  github.com/miekg/dns.(*Client).ExchangeWithConnContext
+      10ms  6.67% 53.33%       10ms  6.67%  internal/runtime/atomic.(*Uint32).CompareAndSwap (inline)
+      10ms  6.67% 60.00%       10ms  6.67%  net.filterAddrList
+      10ms  6.67% 66.67%       20ms 13.33%  os.(*File).Write
+      10ms  6.67% 73.33%       10ms  6.67%  runtime.cgocall
+      10ms  6.67% 80.00%       10ms  6.67%  runtime.checkTimersNoP
+      10ms  6.67% 86.67%       10ms  6.67%  runtime.mallocgcSmallNoscan
+      10ms  6.67% 93.33%       10ms  6.67%  runtime.memhash16
+(pprof) 
+
+
 
 
 
