@@ -1,6 +1,0 @@
-./ecc trace.c
-sudo ./ecli run package.json
-sudo cat /sys/kernel/debug/tracing/trace_pipe|grep "sys_exit_recvmsg IP6"
-
-gcc udp_server.c -o udp_server
-gcc udp_client.c -o udp_client

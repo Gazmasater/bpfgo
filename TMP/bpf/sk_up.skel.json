@@ -1,1 +1,0 @@
-{"bpf_skel":{"data_sections":[],"maps":null,"obj_name":"sk_up_bpf","progs":[{"attach":"sk_lookup/echo_dispatch","link":true,"name":"echo_dispatch"}]},"eunomia_version":"0.3.4"}
