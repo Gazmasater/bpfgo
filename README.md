@@ -79,6 +79,7 @@ go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
 package main
 
 import (
+	"bpfgo/pkg"
 	"errors"
 	"fmt"
 	"log"
@@ -90,318 +91,288 @@ import (
 	"sync"
 	"syscall"
 	"unsafe"
-	"time"
-
-	"bpfgo/pkg"
 
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/perf"
 	"github.com/cilium/ebpf/rlimit"
 )
 
-// bpfObjects содержит загруженные eBPF-объекты
-var bpfObjects bpfObjects
+// Глобальные объекты BPF
+var objs bpfObjects
 
-// Создаем два канала для передачи портов и PID между состояниями
-var portStateChannel = make(chan int, 1)
-var processIDChannel = make(chan int, 1)
+var eventChan_sport = make(chan int, 1)
+var eventChan_pid = make(chan int, 1)
+var mu sync.Mutex
+var xxx, xxx_pid int
+var proto, srchost, dsthost string
 
-// Мьютекс для синхронизации доступа к каналам
-var channelMutex sync.Mutex
-
-// Хранит последнюю прочитанную ступень протокола и соответствующие хосты
-var protocolString, destinationHost, sourceHost string
-
-// Синх-пул для переиспользования структур EventData
+// sync.Pool для повторного использования EventData
 var eventDataPool = sync.Pool{
 	New: func() interface{} {
 		return new(EventData)
 	},
 }
 
-// Кэш для DNS: хранит соответствие IP → имя хоста и время последнего обновления
-var dnsCache = struct {
-	sync.RWMutex
-	entries map[string]cachedDNSRecord
-}{
-	entries: make(map[string]cachedDNSRecord),
+type Lookup struct {
+	DstIP   net.IP
+	DstPort int
+	SrcIP   net.IP
+	SrcPort int
+	Proto   int
 }
 
-// cachedDNSRecord — запись кэша DNS с данными и временем устаревания
-type cachedDNSRecord struct {
-	hostName    string
-	lastUpdated time.Time
+type Sendmsg struct {
+	DstIP   net.IP
+	DstPort int
+	Pid     uint32
+	Proto   int
+	Comm    string
 }
 
-// Как долго считаем запись кэшированной (например, 5 минут)
-const dnsCacheTTL = 5 * time.Minute
-
-// Структуры для хранения данных сетевых событий
-type LookupEvent struct {
-	DestinationIP   net.IP
-	DestinationPort int
-	SourceIP        net.IP
-	SourcePort      int
-	ProtocolNumber  int
+type Recvmsg struct {
+	SrcIP   net.IP
+	SrcPort int
+	Pid     uint32
+	Proto   int
+	Comm    string
 }
 
-type SendmsgEvent struct {
-	DestinationIP   net.IP
-	DestinationPort int
-	ProcessID       uint32
-	ProtocolNumber  int
-	CommandName     string
-}
-
-type RecvmsgEvent struct {
-	SourceIP        net.IP
-	SourcePort      int
-	ProcessID       uint32
-	ProtocolNumber  int
-	CommandName     string
-}
-
-// EventData группирует все данные, поступившие от BPF-программ для одного потока
 type EventData struct {
-	LookupInfo     LookupEvent
-	SendMessage    SendmsgEvent
-	ReceiveMessage RecvmsgEvent
-	HasLookup      bool
-	HasSendMessage bool
-	HasReceive     bool
+	Lookup     Lookup
+	Sendmsg    Sendmsg
+	Recvmsg    Recvmsg
+	HasLookup  bool
+	HasSendmsg bool
+	HasRecvmsg bool
 }
 
 func init() {
-	// Снимаем ограничение на использование памяти для eBPF
+	// Снимаем ограничение на память
 	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatalf("Не удалось убрать лимит по памяти для eBPF: %v", err)
+		log.Fatalf("failed to remove memory limit for process: %v", err)
 	}
 	// Загружаем eBPF-объекты
-	if err := loadBpfObjects(&bpfObjects, nil); err != nil {
-		log.Fatalf("Не удалось загрузить BPF-объекты: %v", err)
+	if err := loadBpfObjects(&objs, nil); err != nil {
+		log.Fatalf("failed to load bpf objects: %v", err)
 	}
 }
 
 func main() {
-	// Запускаем сервер pprof на порту 6060 для профилирования
+	// Запуск pprof-сервера
 	go func() {
-		log.Println("Запуск pprof-сервера на :6060")
+		log.Println("Starting pprof HTTP server on :6060")
 		if err := http.ListenAndServe(":6060", nil); err != nil {
 			log.Fatalf("pprof ListenAndServe error: %v", err)
 		}
 	}()
 
-	// eventMap хранит промежуточные данные для IPv4-событий
-	eventMapIPv4 := make(map[int]*EventData)
-	// eventMapIPv4Reverse хранит промежуточные данные для обработки «sendto»
-	eventMapIPv4Reverse := make(map[int]*EventData)
+	// Основные структуры
+	eventMap := make(map[int]*EventData)
+	eventMap_1 := make(map[int]*EventData)
+	defer objs.Close()
 
-	// Закрываем eBPF-объекты при выходе
-	defer bpfObjects.Close()
-
-	// Открываем дескриптор сетевого неймспейса
-	networkNamespace, err := os.Open("/proc/self/ns/net")
+	netns, err := os.Open("/proc/self/ns/net")
 	if err != nil {
 		panic(err)
 	}
-	defer networkNamespace.Close()
+	defer netns.Close()
 
-	fmt.Printf("Дескриптор неймспейса: %d\n", networkNamespace.Fd())
-	fmt.Printf("Размер структуры bpfTraceInfo в Go: %d байт\n", unsafe.Sizeof(bpfTraceInfo{}))
+	fmt.Printf("Дескриптор нового namespace: %d\n", netns.Fd())
+	fmt.Printf("Go sizeof(traceInfo) = %d\n", unsafe.Sizeof(bpfTraceInfo{}))
 
-	// Привязываем tracepoint-ы к eBPF-программам
-	sendmsgEnterLink, err := link.Tracepoint("syscalls", "sys_enter_sendmsg", bpfObjects.TraceSendmsgEnter, nil)
+	// Привязка tracepoint-ов
+	SmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter, nil)
 	if err != nil {
-		log.Fatalf("Не удалось открыть tracepoint sys_enter_sendmsg: %s", err)
+		log.Fatalf("opening tracepoint sys_enter_sendmsg: %s", err)
 	}
-	defer sendmsgEnterLink.Close()
+	defer SmsgEnter.Close()
 
-	sendmsgExitLink, err := link.Tracepoint("syscalls", "sys_exit_sendmsg", bpfObjects.TraceSendmsgExit, nil)
+	SmsgExit, err := link.Tracepoint("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit, nil)
 	if err != nil {
-		log.Fatalf("Не удалось открыть tracepoint sys_exit_sendmsg: %s", err)
+		log.Fatalf("opening tracepoint sys_exit_sendmsg: %s", err)
 	}
-	defer sendmsgExitLink.Close()
+	defer SmsgExit.Close()
 
-	sendtoEnterLink, err := link.Tracepoint("syscalls", "sys_enter_sendto", bpfObjects.TraceSendtoEnter, nil)
+	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
 	if err != nil {
-		log.Fatalf("Не удалось открыть tracepoint sys_enter_sendto: %s", err)
+		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
 	}
-	defer sendtoEnterLink.Close()
+	defer SEnter.Close()
 
-	sendtoExitLink, err := link.Tracepoint("syscalls", "sys_exit_sendto", bpfObjects.TraceSendtoExit, nil)
+	SExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
 	if err != nil {
-		log.Fatalf("Не удалось открыть tracepoint sys_exit_sendto: %s", err)
+		log.Fatalf("opening tracepoint sys_exit_sendto: %s", err)
 	}
-	defer sendtoExitLink.Close()
+	defer SExit.Close()
 
-	recvmsgEnterLink, err := link.Tracepoint("syscalls", "sys_enter_recvmsg", bpfObjects.TraceRecvmsgEnter, nil)
+	RmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter, nil)
 	if err != nil {
-		log.Fatalf("Не удалось открыть tracepoint sys_enter_recvmsg: %s", err)
+		log.Fatalf("opening tracepoint sys_enter_recvmsg: %s", err)
 	}
-	defer recvmsgEnterLink.Close()
+	defer RmsgEnter.Close()
 
-	recvmsgExitLink, err := link.Tracepoint("syscalls", "sys_exit_recvmsg", bpfObjects.TraceRecvmsgExit, nil)
+	RmsgExit, err := link.Tracepoint("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit, nil)
 	if err != nil {
-		log.Fatalf("Не удалось открыть tracepoint sys_exit_recvmsg: %s", err)
+		log.Fatalf("opening tracepoint sys_exit_recvmsg: %s", err)
 	}
-	defer recvmsgExitLink.Close()
+	defer RmsgExit.Close()
 
-	recvfromEnterLink, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", bpfObjects.TraceRecvfromEnter, nil)
+	REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
 	if err != nil {
-		log.Fatalf("Не удалось открыть tracepoint sys_enter_recvfrom: %s", err)
+		log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
 	}
-	defer recvfromEnterLink.Close()
+	defer REnter.Close()
 
-	recvfromExitLink, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", bpfObjects.TraceRecvfromExit, nil)
+	RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
 	if err != nil {
-		log.Fatalf("Не удалось открыть tracepoint sys_exit_recvfrom: %s", err)
+		log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
 	}
-	defer recvfromExitLink.Close()
+	defer RExit.Close()
 
-	tcpStateChangeLink, err := link.Tracepoint("sock", "inet_sock_set_state", bpfObjects.TraceTcpEst, nil)
+	InetSock, err := link.Tracepoint("sock", "inet_sock_set_state", objs.TraceTcpEst, nil)
 	if err != nil {
-		log.Fatalf("Не удалось открыть tracepoint inet_sock_set_state: %s", err)
+		log.Fatalf("opening tracepoint inet_sock_set_state: %s", err)
 	}
-	defer tcpStateChangeLink.Close()
+	defer InetSock.Close()
 
-	// Привязываем программу sk_lookup к сетевому неймспейсу
-	skLookupAttachment, err := link.AttachNetNs(int(networkNamespace.Fd()), bpfObjects.LookUp)
+	skLookupLink, err := link.AttachNetNs(int(netns.Fd()), objs.LookUp)
 	if err != nil {
-		log.Fatalf("Не удалось прикрепить программу sk_lookup: %v", err)
+		log.Fatalf("failed to attach sk_lookup program: %v", err)
 	}
-	defer skLookupAttachment.Close()
+	defer skLookupLink.Close()
 
-	// Канал для корректного завершения программы по сигналу
-	stopSignalChannel := make(chan os.Signal, 1)
-	signal.Notify(stopSignalChannel, os.Interrupt, syscall.SIGTERM)
+	// Канал для graceful shutdown
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	// Запускаем горутину для чтения событий из perf-файла
 	go func() {
-		const bufferLength = 4096 * 2
-		perfReader, err := perf.NewReader(bpfObjects.TraceEvents, bufferLength)
+		const buffLen = 4096 * 2
+		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
 		if err != nil {
-			log.Fatalf("Не удалось создать perf-ридер: %s", err)
+			log.Fatalf("failed to create perf reader: %s", err)
 		}
-		defer perfReader.Close()
+		defer rd.Close()
 
-		// Получаем имя исполняемого файла (без «./» при запуске из текущей директории)
 		executableName := os.Args[0]
-		if len(executableName) > 2 && executableName[:2] == "./" {
+		if len(executableName) > 2 {
 			executableName = executableName[2:]
 		}
 
 		const batchSize = 4
 
 		for {
-			var batchRecords []perf.Record
+			var batch []perf.Record
 			for i := 0; i < batchSize; i++ {
-				record, err := perfReader.Read()
+				record, err := rd.Read()
 				if err != nil {
 					if errors.Is(err, os.ErrDeadlineExceeded) {
 						break
 					}
-					log.Fatalf("Ошибка при чтении из perf-ридера: %v", err)
+					log.Fatalf("error reading from perf reader: %v", err)
 				}
-				batchRecords = append(batchRecords, record)
-				if len(batchRecords) >= batchSize {
+				batch = append(batch, record)
+				if len(batch) >= batchSize {
 					break
 				}
 			}
 
-			if len(batchRecords) == 0 {
+			if len(batch) == 0 {
 				continue
 			}
 
-			for _, record := range batchRecords {
-				// Удостоверяемся, что в записи есть полный bpfTraceInfo
+			for _, record := range batch {
 				if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
-					log.Println("Некорректный размер события, пропускаем")
+					log.Println("!!!!!!!!!!!!!!!!!!!!!!!invalid event size!!!!!!!!!!!!!!!!!!")
 					continue
 				}
 
-				// Читаем структуру bpfTraceInfo из сырых байт
 				event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
 
-				// Восстанавливаем адреса IPv4 из «host byte order»
-				sourceIPv4 := net.IPv4(
+				srcIP := net.IPv4(
 					byte(event.SrcIP.S_addr),
 					byte(event.SrcIP.S_addr>>8),
 					byte(event.SrcIP.S_addr>>16),
 					byte(event.SrcIP.S_addr>>24),
 				)
-				destinationIPv4 := net.IPv4(
+				dstIP := net.IPv4(
 					byte(event.DstIP.S_addr),
 					byte(event.DstIP.S_addr>>8),
 					byte(event.DstIP.S_addr>>16),
 					byte(event.DstIP.S_addr>>24),
 				)
 
-				// Если имя процесса совпадает с именем нашего исполняемого файла, пропускаем событие
+				// Пропускаем собственные события
 				if pkg.Int8ToString(event.Comm) == executableName {
 					continue
 				}
 
-				// Обработка IPv4-событий: Sysexit == 1 (sys_exit_sendto или sendmsg)
+				// Sysexit == 1: sys_exit_sendto или sendmsg
 				if event.Sysexit == 1 {
 					family := event.Family
 					if family == 2 {
 						port := int(event.Dport)
-						data, exists := eventMapIPv4Reverse[port]
+						data, exists := eventMap_1[port]
 						if !exists {
-							// Получаем EventData из пула и обнуляем его
+							// Берем EventData из пула и обнуляем
 							data = eventDataPool.Get().(*EventData)
 							*data = EventData{}
-							eventMapIPv4Reverse[port] = data
+							eventMap_1[port] = data
 						}
-						data.SendMessage = SendmsgEvent{
-							DestinationIP:   destinationIPv4,
-							DestinationPort: port,
-							ProcessID:       event.Pid,
-							CommandName:     pkg.Int8ToString(event.Comm),
-							ProtocolNumber:  int(event.Proto),
+						data.Sendmsg = Sendmsg{
+							DstIP:   dstIP,
+							DstPort: port,
+							Pid:     event.Pid,
+							Comm:    pkg.Int8ToString(event.Comm),
 						}
-						data.HasSendMessage = true
+						data.HasSendmsg = true
 
-						// Если у нас есть информация и о Lookup, и о Recvmsg — печатаем
-						if data.HasLookup && data.HasReceive {
-							conversationProtocol := determineProtocolName(data.LookupInfo.ProtocolNumber)
-							sourceHostName := resolveHostnameWithCache(data.LookupInfo.SourceIP)
-							destinationHostName := resolveHostnameWithCache(data.LookupInfo.DestinationIP)
-
+						if data.HasLookup && data.HasRecvmsg {
+							if data.Lookup.Proto == 17 {
+								proto = "UDP"
+							}
+							if data.Lookup.DstIP.IsLoopback() {
+								dsthost = "localhost"
+							} else {
+								dsthost = pkg.ResolveIP(data.Lookup.DstIP)
+							}
+							if data.Lookup.SrcIP.IsLoopback() {
+								srchost = "localhost"
+							} else {
+								srchost = pkg.ResolveIP(data.Lookup.SrcIP)
+							}
 							fmt.Printf("SENDTO PID=%d NAME=%s %s/%s[%s]:%d -> %s[%s]:%d\n",
-								data.SendMessage.ProcessID,
-								data.SendMessage.CommandName,
-								conversationProtocol,
-								destinationHostName,
-								data.LookupInfo.DestinationIP,
-								data.LookupInfo.DestinationPort,
-								sourceHostName,
-								data.LookupInfo.SourceIP,
-								data.LookupInfo.SourcePort,
+								data.Sendmsg.Pid,
+								data.Sendmsg.Comm,
+								proto,
+								dsthost,
+								data.Lookup.DstIP,
+								data.Lookup.DstPort,
+								srchost,
+								data.Lookup.SrcIP,
+								data.Lookup.SrcPort,
 							)
 							fmt.Printf("SENDTO PID=%d NAME=%s %s/%s[%s]:%d <- %s[%s]:%d\n",
-								data.ReceiveMessage.ProcessID,
-								data.ReceiveMessage.CommandName,
-								conversationProtocol,
-								destinationHostName,
-								data.LookupInfo.DestinationIP,
-								data.LookupInfo.DestinationPort,
-								sourceHostName,
-								data.LookupInfo.SourceIP,
-								data.LookupInfo.SourcePort,
+								data.Recvmsg.Pid,
+								data.Recvmsg.Comm,
+								proto,
+								dsthost,
+								data.Lookup.DstIP,
+								data.Lookup.DstPort,
+								srchost,
+								data.Lookup.SrcIP,
+								data.Lookup.SrcPort,
 							)
-							// Освобождаем память и возвращаем EventData в пул
-							delete(eventMapIPv4Reverse, port)
+							// Возвращаем в пул и удаляем из map
+							delete(eventMap_1, port)
 							eventDataPool.Put(data)
 						}
 					} else if family == 10 {
-						// Обработка IPv6-событий (sys_exit_sendto)
 						port := event.Dport
-						processID := event.Pid
-						ipv6Destination := pkg.IPv6FromLEWords(IPv6BytesToWords(event.DstIP6.In6U.U6Addr8))
+						ip6 := pkg.IPv6FromLEWords(IPv6BytesToWords(event.DstIP6.In6U.U6Addr8))
+						pid := event.Pid
 						fmt.Printf("SENDTO IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
-							processID,
-							ipv6Destination.String(),
+							pid,
+							ip6.String(),
 							port,
 							pkg.Int8ToString(event.Comm),
 						)
@@ -412,56 +383,54 @@ func main() {
 				if event.Sysexit == 11 {
 					if event.Family == 2 {
 						port := int(event.Dport)
-						data, exists := eventMapIPv4[port]
+						data, exists := eventMap[port]
 						if !exists {
 							data = eventDataPool.Get().(*EventData)
 							*data = EventData{}
-							eventMapIPv4[port] = data
+							eventMap[port] = data
 						}
-						data.SendMessage = SendmsgEvent{
-							DestinationIP:   destinationIPv4,
-							DestinationPort: port,
-							ProcessID:       event.Pid,
-							CommandName:     pkg.Int8ToString(event.Comm),
-							ProtocolNumber:  int(event.Proto),
+						data.Sendmsg = Sendmsg{
+							DstIP:   dstIP,
+							DstPort: port,
+							Pid:     event.Pid,
+							Comm:    pkg.Int8ToString(event.Comm),
 						}
-						data.HasSendMessage = true
+						data.HasSendmsg = true
 
-						if data.HasLookup && data.HasReceive {
-							conversationProtocol := determineProtocolName(data.LookupInfo.ProtocolNumber)
-							sourceHostName := resolveHostnameWithCache(data.LookupInfo.SourceIP)
-							destinationHostName := resolveHostnameWithCache(data.LookupInfo.DestinationIP)
-
+						if data.HasLookup && data.HasRecvmsg {
+							if data.Lookup.Proto == 17 {
+								proto = "UDP"
+							}
 							fmt.Println("")
 							fmt.Printf("SENDMSG PID=%d NAME=%s %s/%s:%d->%s:%d\n",
-								data.SendMessage.ProcessID,
-								data.SendMessage.CommandName,
-								conversationProtocol,
-								data.LookupInfo.DestinationIP,
-								data.LookupInfo.DestinationPort,
-								data.LookupInfo.SourceIP,
-								data.LookupInfo.SourcePort,
+								data.Sendmsg.Pid,
+								data.Sendmsg.Comm,
+								proto,
+								data.Lookup.DstIP,
+								data.Lookup.DstPort,
+								data.Lookup.SrcIP,
+								data.Lookup.SrcPort,
 							)
 							fmt.Printf("SENDMSG PID=%d NAME=%s %s/%s:%d<-%s:%d\n",
-								data.ReceiveMessage.ProcessID,
-								data.ReceiveMessage.CommandName,
-								conversationProtocol,
-								data.LookupInfo.DestinationIP,
-								data.LookupInfo.DestinationPort,
-								data.LookupInfo.SourceIP,
-								data.LookupInfo.SourcePort,
+								data.Recvmsg.Pid,
+								data.Recvmsg.Comm,
+								proto,
+								data.Lookup.DstIP,
+								data.Lookup.DstPort,
+								data.Lookup.SrcIP,
+								data.Lookup.SrcPort,
 							)
 							fmt.Println("")
-							delete(eventMapIPv4, port)
+							delete(eventMap, port)
 							eventDataPool.Put(data)
 						}
 					} else if event.Family == 10 {
 						port := event.Dport
-						processID := event.Pid
-						ipv6Destination := pkg.IPv6FromLEWords(IPv6BytesToWords(event.DstIP6.In6U.U6Addr8))
+						pid := event.Pid
+						ip6 := pkg.IPv6FromLEWords(IPv6BytesToWords(event.DstIP6.In6U.U6Addr8))
 						fmt.Printf("SENDMSG IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
-							processID,
-							ipv6Destination.String(),
+							pid,
+							ip6.String(),
 							port,
 							pkg.Int8ToString(event.Comm),
 						)
@@ -472,58 +441,66 @@ func main() {
 				if event.Sysexit == 2 {
 					if event.Family == 2 {
 						port := int(event.Sport)
-						data, exists := eventMapIPv4[port]
+						data, exists := eventMap[port]
 						if !exists {
 							data = eventDataPool.Get().(*EventData)
 							*data = EventData{}
-							eventMapIPv4[port] = data
+							eventMap[port] = data
 						}
-						data.ReceiveMessage = RecvmsgEvent{
-							SourceIP:       sourceIPv4,
-							SourcePort:     port,
-							ProcessID:      event.Pid,
-							CommandName:    pkg.Int8ToString(event.Comm),
-							ProtocolNumber: int(event.Proto),
+						data.Recvmsg = Recvmsg{
+							SrcIP:   srcIP,
+							SrcPort: port,
+							Pid:     event.Pid,
+							Comm:    pkg.Int8ToString(event.Comm),
 						}
-						data.HasReceive = true
+						data.HasRecvmsg = true
 
-						if data.HasLookup && data.HasSendMessage {
-							conversationProtocol := determineProtocolName(data.LookupInfo.ProtocolNumber)
-							sourceHostName := resolveHostnameWithCache(data.LookupInfo.SourceIP)
-							destinationHostName := resolveHostnameWithCache(data.LookupInfo.DestinationIP)
-
+						if data.HasLookup && data.HasSendmsg {
+							if data.Lookup.Proto == 17 {
+								proto = "UDP"
+							}
+							if data.Lookup.DstIP.IsLoopback() {
+								dsthost = "localhost"
+							} else {
+								dsthost = pkg.ResolveIP(dstIP)
+							}
+							if data.Lookup.SrcIP.IsLoopback() {
+								srchost = "localhost"
+							} else {
+								srchost = pkg.ResolveIP(srcIP)
+							}
 							fmt.Printf("RECVFROM PID=%d NAME=%s %s/%s[%s]:%d -> %s[%s]:%d\n",
-								data.SendMessage.ProcessID,
-								data.SendMessage.CommandName,
-								conversationProtocol,
-								destinationHostName,
-								data.LookupInfo.DestinationIP,
-								data.LookupInfo.DestinationPort,
-								sourceHostName,
-								data.LookupInfo.SourceIP,
-								data.LookupInfo.SourcePort,
+								data.Sendmsg.Pid,
+								data.Sendmsg.Comm,
+								proto,
+								dsthost,
+								data.Lookup.DstIP,
+								data.Lookup.DstPort,
+								srchost,
+								data.Lookup.SrcIP,
+								data.Lookup.SrcPort,
 							)
 							fmt.Printf("RECVFROM PID=%d NAME=%s %s/%s[%s]:%d <- %s[%s]:%d\n",
-								data.ReceiveMessage.ProcessID,
-								data.ReceiveMessage.CommandName,
-								conversationProtocol,
-								destinationHostName,
-								data.LookupInfo.DestinationIP,
-								data.LookupInfo.DestinationPort,
-								sourceHostName,
-								data.LookupInfo.SourceIP,
-								data.LookupInfo.SourcePort,
+								data.Recvmsg.Pid,
+								data.Recvmsg.Comm,
+								proto,
+								dsthost,
+								data.Lookup.DstIP,
+								data.Lookup.DstPort,
+								srchost,
+								data.Lookup.SrcIP,
+								data.Lookup.SrcPort,
 							)
-							delete(eventMapIPv4, port)
+							delete(eventMap, port)
 							eventDataPool.Put(data)
 						}
 					} else if event.Family == 10 {
 						port := event.Sport
-						processID := event.Pid
-						ipv6Source := pkg.IPv6FromLEWords(IPv6BytesToWords(event.SrcIP6.In6U.U6Addr8))
+						pid := event.Pid
+						ip6 := pkg.IPv6FromLEWords(IPv6BytesToWords(event.SrcIP6.In6U.U6Addr8))
 						fmt.Printf("RECVFROM IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
-							processID,
-							ipv6Source.String(),
+							pid,
+							ip6,
 							port,
 							pkg.Int8ToString(event.Comm),
 						)
@@ -534,52 +511,50 @@ func main() {
 				if event.Sysexit == 12 {
 					if event.Family == 2 {
 						port := int(event.Sport)
-						data, exists := eventMapIPv4[port]
+						data, exists := eventMap[port]
 						if !exists {
 							data = eventDataPool.Get().(*EventData)
 							*data = EventData{}
-							eventMapIPv4[port] = data
+							eventMap[port] = data
 						}
-						data.ReceiveMessage = RecvmsgEvent{
-							SourceIP:       sourceIPv4,
-							SourcePort:     port,
-							ProcessID:      event.Pid,
-							CommandName:    pkg.Int8ToString(event.Comm),
-							ProtocolNumber: int(event.Proto),
+						data.Recvmsg = Recvmsg{
+							SrcIP:   srcIP,
+							SrcPort: port,
+							Pid:     event.Pid,
+							Comm:    pkg.Int8ToString(event.Comm),
 						}
-						data.HasReceive = true
+						data.HasRecvmsg = true
 
-						if data.HasLookup && data.HasSendMessage {
-							conversationProtocol := determineProtocolName(data.LookupInfo.ProtocolNumber)
-							sourceHostName := resolveHostnameWithCache(data.LookupInfo.SourceIP)
-							destinationHostName := resolveHostnameWithCache(data.LookupInfo.DestinationIP)
-
+						if data.HasLookup && data.HasSendmsg {
+							if data.Lookup.Proto == 17 {
+								proto = "UDP"
+							}
 							fmt.Println("")
 							fmt.Printf("%s/%s:%d->%s:%d\n",
-								conversationProtocol,
-								data.LookupInfo.DestinationIP,
-								data.LookupInfo.DestinationPort,
-								data.LookupInfo.SourceIP,
-								data.LookupInfo.SourcePort,
+								proto,
+								data.Lookup.DstIP,
+								data.Lookup.DstPort,
+								data.Lookup.SrcIP,
+								data.Lookup.SrcPort,
 							)
 							fmt.Printf("%s/%s:%d<-%s:%d\n",
-								conversationProtocol,
-								data.LookupInfo.DestinationIP,
-								data.LookupInfo.DestinationPort,
-								data.LookupInfo.SourceIP,
-								data.LookupInfo.SourcePort,
+								proto,
+								data.Lookup.DstIP,
+								data.Lookup.DstPort,
+								data.Lookup.SrcIP,
+								data.Lookup.SrcPort,
 							)
 							fmt.Println("")
-							delete(eventMapIPv4, port)
+							delete(eventMap, port)
 							eventDataPool.Put(data)
 						}
 					} else if event.Family == 10 {
 						port := event.Sport
-						processID := event.Pid
-						ipv6Source := pkg.IPv6FromLEWords(IPv6BytesToWords(event.SrcIP6.In6U.U6Addr8))
+						pid := event.Pid
+						ip6 := pkg.IPv6FromLEWords(IPv6BytesToWords(event.SrcIP6.In6U.U6Addr8))
 						fmt.Printf("RECVMSG IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
-							processID,
-							ipv6Source.String(),
+							pid,
+							ip6.String(),
 							port,
 							pkg.Int8ToString(event.Comm),
 						)
@@ -591,92 +566,104 @@ func main() {
 					family := event.Family
 					if family == 2 {
 						port := int(event.Dport)
-						data, exists := eventMapIPv4[port]
+						data, exists := eventMap[port]
 						if !exists {
 							data = eventDataPool.Get().(*EventData)
 							*data = EventData{}
-							eventMapIPv4[port] = data
+							eventMap[port] = data
 						}
-						data.LookupInfo = LookupEvent{
-							SourceIP:        sourceIPv4,
-							SourcePort:      int(event.Sport),
-							DestinationIP:   destinationIPv4,
-							DestinationPort: int(event.Dport),
-							ProtocolNumber:  int(event.Proto),
+						data.Lookup = Lookup{
+							SrcIP:   srcIP,
+							SrcPort: int(event.Sport),
+							DstIP:   dstIP,
+							DstPort: int(event.Dport),
+							Proto:   int(event.Proto),
 						}
 						data.HasLookup = true
 
-						// Для sendto-обработки нам нужен кэш и для «оборотного» мэппинга
-						reversePort := int(event.Sport)
-						dataReverse, existsReverse := eventMapIPv4Reverse[reversePort]
-						if !existsReverse {
-							dataReverse = eventDataPool.Get().(*EventData)
-							*dataReverse = EventData{}
-							eventMapIPv4Reverse[reversePort] = dataReverse
+						port_1 := int(event.Sport)
+						data_1, exists := eventMap_1[port_1]
+						if !exists {
+							data_1 = eventDataPool.Get().(*EventData)
+							*data_1 = EventData{}
+							eventMap_1[port_1] = data_1
 						}
-						dataReverse.LookupInfo = data.LookupInfo
-						dataReverse.HasLookup = true
+						data_1.Lookup = Lookup{
+							SrcIP:   srcIP,
+							SrcPort: int(event.Sport),
+							DstIP:   dstIP,
+							DstPort: int(event.Dport),
+							Proto:   int(event.Proto),
+						}
 
-						if data.HasReceive && data.HasSendMessage {
-							conversationProtocol := determineProtocolName(data.LookupInfo.ProtocolNumber)
-							sourceHostName := resolveHostnameWithCache(data.LookupInfo.SourceIP)
-							destinationHostName := resolveHostnameWithCache(data.LookupInfo.DestinationIP)
-
+						if data.HasRecvmsg && data.HasSendmsg {
+							if data.Lookup.Proto == 17 {
+								proto = "UDP"
+							}
 							fmt.Println("")
+							if data.Lookup.DstIP.IsLoopback() {
+								dsthost = "localhost"
+							} else {
+								dsthost = pkg.ResolveIP(data.Lookup.DstIP)
+							}
+							if data.Lookup.SrcIP.IsLoopback() {
+								srchost = "localhost"
+							} else {
+								srchost = pkg.ResolveIP(data.Lookup.SrcIP)
+							}
 							fmt.Printf("LOOKUP PID=%d NAME=%s %s/%s[%s]:%d<-%s[%s]:%d\n",
-								data.SendMessage.ProcessID,
-								data.SendMessage.CommandName,
-								conversationProtocol,
-								destinationHostName,
-								data.LookupInfo.DestinationIP,
-								data.LookupInfo.DestinationPort,
-								sourceHostName,
-								data.LookupInfo.SourceIP,
-								data.LookupInfo.SourcePort,
+								data.Sendmsg.Pid,
+								data.Sendmsg.Comm,
+								proto,
+								dsthost,
+								data.Lookup.DstIP,
+								data.Lookup.DstPort,
+								srchost,
+								data.Lookup.SrcIP,
+								data.Lookup.SrcPort,
 							)
 							fmt.Printf("LOOKUP PID=%d NAME=%s %s/%s[%s]:%d->%s[%s]:%d\n",
-								data.ReceiveMessage.ProcessID,
-								data.ReceiveMessage.CommandName,
-								conversationProtocol,
-								destinationHostName,
-								data.LookupInfo.DestinationIP,
-								data.LookupInfo.DestinationPort,
-								sourceHostName,
-								data.LookupInfo.SourceIP,
-								data.LookupInfo.SourcePort,
+								data.Recvmsg.Pid,
+								data.Recvmsg.Comm,
+								proto,
+								dsthost,
+								data.Lookup.DstIP,
+								data.Lookup.DstPort,
+								srchost,
+								data.Lookup.SrcIP,
+								data.Lookup.SrcPort,
 							)
 							fmt.Println("")
-							delete(eventMapIPv4, port)
+							delete(eventMap, port)
 							eventDataPool.Put(data)
 						}
 					} else if family == 10 {
-						ipv6Source := pkg.IPv6FromLEWords(IPv6BytesToWords(event.SrcIP6.In6U.U6Addr8))
-						fmt.Printf("LOOKUP SRC IPv6=%s\n", ipv6Source)
-						ipv6Destination := pkg.IPv6FromLEWords(IPv6BytesToWords(event.DstIP6.In6U.U6Addr8))
-						fmt.Printf("LOOKUP DST IPv6=%s\n", ipv6Destination)
+						ip6 := pkg.IPv6FromLEWords(IPv6BytesToWords(event.SrcIP6.In6U.U6Addr8))
+						fmt.Printf("LOOKUP SRC IPv6=%s\n", ip6)
+						ip6_d := pkg.IPv6FromLEWords(IPv6BytesToWords(event.DstIP6.In6U.U6Addr8))
+						fmt.Printf("LOOKUP DST IPv6=%s\n", ip6_d)
 						fmt.Printf("LOOKUP SPORT=%d  DPORT=%d PROTO=%d\n", event.Sport, event.Dport, event.Proto)
 					}
 				}
 
 				// Sysexit == 6: inet_sock_set_state
 				if event.Sysexit == 6 {
-					// Обработка IPv6 TCP-событий
 					if event.Family == 10 {
-						sourcePort := event.Sport
-						destinationPort := event.Dport
-						processID := event.Pid
-						ipv6Source := pkg.IPv6FromLEWords(IPv6BytesToWords(event.SrcIP6.In6U.U6Addr8))
+						sport := event.Sport
+						dport := event.Dport
+						pid := event.Pid
+						ip6_s := pkg.IPv6FromLEWords(IPv6BytesToWords(event.SrcIP6.In6U.U6Addr8))
 						fmt.Printf("TCP IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
-							processID,
-							ipv6Source.String(),
-							sourcePort,
+							pid,
+							ip6_s.String(),
+							sport,
 							pkg.Int8ToString(event.Comm),
 						)
-						ipv6Destination := pkg.IPv6FromLEWords(IPv6BytesToWords(event.DstIP6.In6U.U6Addr8))
+						ip6_d := pkg.IPv6FromLEWords(IPv6BytesToWords(event.DstIP6.In6U.U6Addr8))
 						fmt.Printf("TCP IPv6 PID=%d IPv6=%s:%d NAME=%s\n",
-							processID,
-							ipv6Destination,
-							destinationPort,
+							pid,
+							ip6_d,
+							dport,
 							pkg.Int8ToString(event.Comm),
 						)
 						fmt.Printf("!!!!!TCP IPv6 !!!!!!PID=%d  NAME=%s\n",
@@ -685,92 +672,91 @@ func main() {
 						)
 					}
 
-					// Обработка состояний TCP (ESTABLISHED, SYN_SENT и т. д.)
 					if event.State == 1 {
-						channelMutex.Lock()
+						mu.Lock()
 						select {
-						case portStateChannel <- int(event.Sport):
+						case eventChan_sport <- int(event.Sport):
 						default:
-							portStateChannel <- int(event.Sport)
-							fmt.Printf("State 1: порт %d был заменен\n", event.Sport)
+							eventChan_sport <- int(event.Sport)
+							fmt.Printf("State 1: заменен порт %d\n", event.Sport)
 						}
-						channelMutex.Unlock()
+						mu.Unlock()
 
-						var resolvedDestinationHost string
-						if event.DstIP.IsLoopback() {
-							resolvedDestinationHost = "localhost"
+						if dstIP.IsLoopback() {
+							dsthost = pkg.ResolveIP(dstIP)
 						} else {
-							dnsName, err := resolveHostnameWithError(event.DstIP)
+							dsthost, err = pkg.ResolveIP_n(dstIP)
 							if err != nil {
-								resolvedDestinationHost = "unknown"
-							} else {
-								resolvedDestinationHost = dnsName
+								dsthost = "unknown"
 							}
 						}
 
-						resolvedSourceHost := resolveHostnameWithCache(event.SrcIP)
-						sourceAddress := fmt.Sprintf("//%s[%s]:%d", resolvedSourceHost, event.SrcIP.String(), event.Sport)
-						destinationAddress := fmt.Sprintf("//%s[%s]:%d", resolvedDestinationHost, event.DstIP.String(), event.Dport)
+						srchost := pkg.ResolveIP(srcIP)
+						srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
+						dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
 
 						if event.Proto == 6 {
-							protocolString = "TCP"
+							proto = "TCP"
 						}
 
 						fmt.Println("")
 						fmt.Printf("PID=%d %s:%s <- %s:%s \n",
 							event.Pid,
-							protocolString,
-							sourceAddress,
-							protocolString,
-							destinationAddress,
+							proto,
+							srcAddr,
+							proto,
+							dstAddr,
 						)
 					}
 
-					// Сигналы о закрытии TCP (FIN, RST)
-					if event.State == 2 || event.State == 10 {
-						channelMutex.Lock()
+					if event.State == 2 {
+						mu.Lock()
 						select {
-						case processIDChannel <- int(event.Pid):
+						case eventChan_pid <- int(event.Pid):
 						default:
 						}
-						channelMutex.Unlock()
+						mu.Unlock()
 					}
 
-					// Пробуем забрать порт из канала portStateChannel
+					if event.State == 10 {
+						mu.Lock()
+						select {
+						case eventChan_pid <- int(event.Pid):
+						default:
+						}
+						mu.Unlock()
+					}
+
 					select {
-					case portValue := <-portStateChannel:
-						var resolvedDestinationHost string
-						if event.DstIP.IsLoopback() {
-							resolvedDestinationHost = resolveHostnameWithCache(event.DstIP)
+					case xxx = <-eventChan_sport:
+						if dstIP.IsLoopback() {
+							dsthost = pkg.ResolveIP(dstIP)
 						} else {
-							dnsName, err := resolveHostnameWithError(event.DstIP)
+							dsthost, err = pkg.ResolveIP_n(dstIP)
 							if err != nil {
-								resolvedDestinationHost = "unknown"
-							} else {
-								resolvedDestinationHost = dnsName
+								dsthost = "unknown"
 							}
 						}
 
-						resolvedSourceHost := resolveHostnameWithCache(event.SrcIP)
-						sourceAddress := fmt.Sprintf("//%s[%s]:%d", resolvedSourceHost, event.SrcIP.String(), portValue)
-						destinationAddress := fmt.Sprintf("//%s[%s]:%d", resolvedDestinationHost, event.DstIP.String(), event.Dport)
+						srchost := pkg.ResolveIP(srcIP)
+						srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), xxx)
+						dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
 
-						var processIDValue int
 						select {
-						case processIDValue = <-processIDChannel:
+						case xxx_pid = <-eventChan_pid:
 						default:
 						}
 
 						if event.Proto == 6 {
-							protocolString = "TCP"
+							proto = "TCP"
 						}
 
 						fmt.Printf("PID=%d %s:%s -> %s:%s \n",
-							processIDValue,
-							protocolString,
-							sourceAddress,
-							protocolString,
-							destinationAddress,
+							xxx_pid,
+							proto,
+							srcAddr,
+							proto,
+							dstAddr,
 						)
 						fmt.Println("")
 
@@ -779,16 +765,16 @@ func main() {
 					}
 				}
 
-			} // конец обработки batchRecords
-		} // конец бесконечного цикла
+			} // конец цикла обработки batch
+		} // конец главного цикла
 	}()
 
-	fmt.Println("Нажмите Ctrl+C для завершения")
-	<-stopSignalChannel
-	fmt.Println("Завершение работы...")
+	fmt.Println("Press Ctrl+C to exit")
+	<-stop
+	fmt.Println("Exiting...")
 }
 
-// IPv6BytesToWords преобразует массив из 16 байтов IPv6 в массив из 4 uint32
+// Вспомогательная функция для IPv6
 func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 	var words [4]uint32
 	for i := 0; i < 4; i++ {
@@ -800,56 +786,6 @@ func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 	return words
 }
 
-// determineProtocolName возвращает читаемую строку для числового кода протокола
-func determineProtocolName(protocolNumber int) string {
-	switch protocolNumber {
-	case 6:
-		return "TCP"
-	case 17:
-		return "UDP"
-	default:
-		return fmt.Sprintf("PROTO%d", protocolNumber)
-	}
-}
-
-// resolveHostnameWithCache возвращает DNS-имя для IP из кэша или делает реальный DNS-запрос
-func resolveHostnameWithCache(ip net.IP) string {
-	ipString := ip.String()
-
-	dnsCache.RLock()
-	if entry, exists := dnsCache.entries[ipString]; exists {
-		if time.Since(entry.lastUpdated) < dnsCacheTTL {
-			dnsCache.RUnlock()
-			return entry.hostName
-		}
-	}
-	dnsCache.RUnlock()
-
-	// Если в кэше нет записи или она устарела — обновляем
-	dnsName, err := resolveHostnameWithError(ip)
-	if err != nil {
-		return "unknown"
-	}
-
-	dnsCache.Lock()
-	dnsCache.entries[ipString] = cachedDNSRecord{
-		hostName:    dnsName,
-		lastUpdated: time.Now(),
-	}
-	dnsCache.Unlock()
-
-	return dnsName
-}
-
-// resolveHostnameWithError делает реальный DNS-запрос и возвращает ошибку, если она произошла
-func resolveHostnameWithError(ip net.IP) (string, error) {
-	names, err := net.LookupAddr(ip.String())
-	if err != nil || len(names) == 0 {
-		return "", err
-	}
-	// net.LookupAddr возвращает список возможных имен, берем первое
-	return names[0], nil
-}
 
 
 
