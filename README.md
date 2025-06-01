@@ -805,6 +805,21 @@ func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 	return words
 }
 
+az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go build . 
+# bpfgo
+./main.go:100:24: cannot use c (variable of type [16]int8) as [32]int8 value in argument to pkg.Int8ToString
+./main.go:287:19: cannot use event.Comm (variable of type [32]int8) as [16]int8 value in argument to cachedComm
+./main.go:304:28: cannot use event.Comm (variable of type [32]int8) as [16]int8 value in argument to cachedComm
+./main.go:346:101: cannot use event.Comm (variable of type [32]int8) as [16]int8 value in argument to cachedComm
+./main.go:362:28: cannot use event.Comm (variable of type [32]int8) as [16]int8 value in argument to cachedComm
+./main.go:393:102: cannot use event.Comm (variable of type [32]int8) as [16]int8 value in argument to cachedComm
+./main.go:410:28: cannot use event.Comm (variable of type [32]int8) as [16]int8 value in argument to cachedComm
+./main.go:451:103: cannot use event.Comm (variable of type [32]int8) as [16]int8 value in argument to cachedComm
+./main.go:468:28: cannot use event.Comm (variable of type [32]int8) as [16]int8 value in argument to cachedComm
+./main.go:495:102: cannot use event.Comm (variable of type [32]int8) as [16]int8 value in argument to cachedComm
+./main.go:495:102: too many errors
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
 
 
 
