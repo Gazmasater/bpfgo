@@ -852,5 +852,22 @@ Showing nodes accounting for 10ms, 100% of 10ms total
          0     0%   100%       10ms   100%  syscall.Syscall6
 
 
+  pprof) top
+Showing nodes accounting for 20160.79kB, 100% of 20160.79kB total
+Showing top 10 nodes out of 38
+      flat  flat%   sum%        cum   cum%
+ 7458.81kB 37.00% 37.00% 12705.92kB 63.02%  github.com/cilium/ebpf/btf.readAndInflateTypes
+ 4100.97kB 20.34% 57.34%  4733.11kB 23.48%  github.com/cilium/ebpf/btf.readAndInflateTypes.func2
+ 3356.76kB 16.65% 73.99%  5916.82kB 29.35%  github.com/cilium/ebpf/btf.readStringTable
+ 2560.06kB 12.70% 86.69%  2560.06kB 12.70%  bufio.(*Scanner).Text (inline)
+    1026kB  5.09% 91.78%     1026kB  5.09%  runtime.allocm
+  632.14kB  3.14% 94.91%   632.14kB  3.14%  github.com/cilium/ebpf/btf.readAndInflateTypes.func1
+     514kB  2.55% 97.46%      514kB  2.55%  slices.Grow[go.shape.[]github.com/cilium/ebpf/btf.btfEnum,go.shape.struct { NameOff uint32; Val uint32 }] (inline)
+  512.05kB  2.54%   100%   512.05kB  2.54%  runtime.acquireSudog
+         0     0%   100% 18110.68kB 89.83%  github.com/cilium/ebpf.(*CollectionSpec).LoadAndAssign
+         0     0%   100% 18110.68kB 89.83%  github.com/cilium/ebpf.(*CollectionSpec).LoadAndAssign.func1
+(pprof) 
+
+
 
 
