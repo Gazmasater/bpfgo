@@ -104,6 +104,21 @@ Showing top 10 nodes out of 26
 (pprof) 
 
 
+howing top 10 nodes out of 28
+      flat  flat%   sum%        cum   cum%
+      20ms 50.00% 50.00%       20ms 50.00%  internal/runtime/syscall.Syscall6
+      10ms 25.00% 75.00%       10ms 25.00%  internal/sync.(*Mutex).Lock (inline)
+      10ms 25.00%   100%       10ms 25.00%  runtime.futex
+         0     0%   100%       20ms 50.00%  fmt.Fprint
+         0     0%   100%       20ms 50.00%  fmt.Print
+         0     0%   100%       10ms 25.00%  github.com/cilium/ebpf/internal/epoll.(*Poller).Wait
+         0     0%   100%       10ms 25.00%  github.com/cilium/ebpf/internal/unix.EpollWait (inline)
+         0     0%   100%       20ms 50.00%  github.com/cilium/ebpf/perf.(*Reader).Read
+         0     0%   100%       20ms 50.00%  github.com/cilium/ebpf/perf.(*Reader).ReadInto
+         0     0%   100%       10ms 25.00%  golang.org/x/sys/unix.EpollWait
+(pprof) 
+
+
 
 
 
