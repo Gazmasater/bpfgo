@@ -73,17 +73,47 @@ func getEventData() *EventData {
 }
 
 func putEventData(ed *EventData) {
-	// Сбрасываем флаги перед возвратом в пул
 	*ed = EventData{}
 	eventDataPool.Put(ed)
 }
 
+var (
+	resolveCache = make(map[string]string)
+	cacheMu      sync.RWMutex
+)
+
+func resolveHost(ip net.IP) string {
+	key := ip.String()
+
+	cacheMu.RLock()
+	if host, ok := resolveCache[key]; ok {
+		cacheMu.RUnlock()
+		return host
+	}
+	cacheMu.RUnlock()
+
+	var host string
+	if ip.To4() != nil {
+		host = pkg.ResolveIP(ip)
+	} else {
+		var err error
+		host, err = pkg.ResolveIP_n(ip)
+		if err != nil {
+			host = "unknown"
+		}
+	}
+
+	cacheMu.Lock()
+	resolveCache[key] = host
+	cacheMu.Unlock()
+
+	return host
+}
+
 func init() {
-	// Снимаем ограничение на память
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.Fatalf("failed to remove memory limit for process: %v", err)
 	}
-	// Загружаем eBPF-объекты
 	if err := loadBpfObjects(&objs, nil); err != nil {
 		log.Fatalf("failed to load bpf objects: %v", err)
 	}
@@ -175,7 +205,7 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		const buffLen = 4096 * 2 // если кольцо мелкое — увеличить до 4096*16 и т.д.
+		const buffLen = 1024
 		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
 		if err != nil {
 			log.Fatalf("failed to create perf reader: %s", err)
@@ -188,10 +218,11 @@ func main() {
 		}
 
 		const batchSize = 8
+		batch := make([]perf.Record, 0, batchSize)
 
 		for {
 			// Собираем до batchSize записей в слайс
-			var batch []perf.Record
+			batch = batch[:0] // обнуляем длину, оставляем capacity = batchSize
 			for i := 0; i < batchSize; i++ {
 				record, err := rd.Read()
 				if err != nil {
@@ -258,12 +289,12 @@ func main() {
 							if data.Lookup.DstIP.IsLoopback() {
 								dstHost = "localhost"
 							} else {
-								dstHost = pkg.ResolveIP(data.Lookup.DstIP)
+								dstHost = resolveHost(data.Lookup.DstIP)
 							}
 							if data.Lookup.SrcIP.IsLoopback() {
 								srcHost = "localhost"
 							} else {
-								srcHost = pkg.ResolveIP(data.Lookup.SrcIP)
+								srcHost = resolveHost(data.Lookup.SrcIP)
 							}
 							fmt.Printf("SENDTO PID=%d NAME=%s %s/%s[%s]:%d -> %s[%s]:%d\n",
 								data.Sendmsg.Pid,
@@ -303,7 +334,6 @@ func main() {
 					}
 				}
 
-				// Обработка Sysexit == 11 (sys_exit_sendmsg)
 				if event.Sysexit == 11 {
 					if event.Family == 2 {
 						port := int(event.Dport)
@@ -384,12 +414,12 @@ func main() {
 							if data.Lookup.DstIP.IsLoopback() {
 								dstHost = "localhost"
 							} else {
-								dstHost = pkg.ResolveIP(dstIP)
+								dstHost = resolveHost(dstIP)
 							}
 							if data.Lookup.SrcIP.IsLoopback() {
 								srcHost = "localhost"
 							} else {
-								srcHost = pkg.ResolveIP(srcIP)
+								srcHost = resolveHost(srcIP)
 							}
 							fmt.Printf("RECVFROM PID=%d NAME=%s %s/%s[%s]:%d -> %s[%s]:%d\n",
 								data.Sendmsg.Pid,
@@ -429,7 +459,6 @@ func main() {
 					}
 				}
 
-				// Обработка Sysexit == 12 (sys_exit_recvmsg)
 				if event.Sysexit == 12 {
 					if event.Family == 2 {
 						port := int(event.Sport)
@@ -482,7 +511,6 @@ func main() {
 					}
 				}
 
-				// Обработка Sysexit == 3 (sk_lookup)
 				if event.Sysexit == 3 {
 					if event.Family == 2 {
 						port := int(event.Dport)
@@ -517,12 +545,12 @@ func main() {
 							if data.Lookup.DstIP.IsLoopback() {
 								dstHost = "localhost"
 							} else {
-								dstHost = pkg.ResolveIP(data.Lookup.DstIP)
+								dstHost = resolveHost(data.Lookup.DstIP)
 							}
 							if data.Lookup.SrcIP.IsLoopback() {
 								srcHost = "localhost"
 							} else {
-								srcHost = pkg.ResolveIP(data.Lookup.SrcIP)
+								srcHost = resolveHost(data.Lookup.SrcIP)
 							}
 							fmt.Printf("LOOKUP PID=%d NAME=%s %s/%s[%s]:%d<-%s[%s]:%d\n",
 								data.Sendmsg.Pid,
@@ -559,7 +587,6 @@ func main() {
 					}
 				}
 
-				// Обработка Sysexit == 6 (inet_sock_set_state)
 				if event.Sysexit == 6 {
 					if event.Family == 10 {
 						sport := event.Sport
@@ -596,16 +623,13 @@ func main() {
 						mu.Unlock()
 
 						if dstIP.IsLoopback() {
-							dstHost = pkg.ResolveIP(dstIP)
+							dstHost = resolveHost(dstIP)
 						} else {
-							dstHost, err = pkg.ResolveIP_n(dstIP)
-							if err != nil {
-								dstHost = "unknown"
-							}
+							dstHost = resolveHost(dstIP)
 						}
 
-						srcHost := pkg.ResolveIP(srcIP)
-						srcAddr := fmt.Sprintf("//%s[%s]:%d", srcHost, srcIP.String(), event.Sport)
+						srcHostResolved := resolveHost(srcIP)
+						srcAddr := fmt.Sprintf("//%s[%s]:%d", srcHostResolved, srcIP.String(), event.Sport)
 						dstAddr := fmt.Sprintf("//%s[%s]:%d", dstHost, dstIP.String(), event.Dport)
 
 						if event.Proto == 6 {
@@ -643,16 +667,13 @@ func main() {
 					select {
 					case lastSport = <-eventChanSport:
 						if dstIP.IsLoopback() {
-							dstHost = pkg.ResolveIP(dstIP)
+							dstHost = resolveHost(dstIP)
 						} else {
-							dstHost, err = pkg.ResolveIP_n(dstIP)
-							if err != nil {
-								dstHost = "unknown"
-							}
+							dstHost = resolveHost(dstIP)
 						}
 
-						srcHost := pkg.ResolveIP(srcIP)
-						srcAddr := fmt.Sprintf("//%s[%s]:%d", srcHost, srcIP.String(), lastSport)
+						srcHostResolved2 := resolveHost(srcIP)
+						srcAddr := fmt.Sprintf("//%s[%s]:%d", srcHostResolved2, srcIP.String(), lastSport)
 						dstAddr := fmt.Sprintf("//%s[%s]:%d", dstHost, dstIP.String(), event.Dport)
 
 						select {
@@ -687,7 +708,6 @@ func main() {
 	fmt.Println("Exiting...")
 }
 
-// Вспомогательная функция для IPv6
 func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 	var words [4]uint32
 	for i := 0; i < 4; i++ {
