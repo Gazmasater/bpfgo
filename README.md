@@ -78,45 +78,9 @@ go tool pprof http://localhost:6060/debug/pprof/heap
 
 
 
-git rm -r --cached TMP
-git commit -m "Ignore папку TMP"
+git branch -m old-branch new-branch
+git push origin -u new-branch
 
-git rm -r --cached .vscode
-git commit -m "Игнорировать папку .vscode"
-
-Time: 2025-06-02 01:19:22 MSK
-Duration: 30.02s, Total samples = 30ms (  0.1%)
-Entering interactive mode (type "help" for commands, "o" for options)
-(pprof) top
-Showing nodes accounting for 30ms, 100% of 30ms total
-Showing top 10 nodes out of 26
-      flat  flat%   sum%        cum   cum%
-      10ms 33.33% 33.33%       10ms 33.33%  github.com/cilium/ebpf/perf.(*forwardReader).Read
-      10ms 33.33% 66.67%       10ms 33.33%  internal/runtime/syscall.Syscall6
-      10ms 33.33%   100%       10ms 33.33%  runtime.cgocall
-         0     0%   100%       10ms 33.33%  bpfgo/pkg.ResolveIP
-         0     0%   100%       10ms 33.33%  github.com/cilium/ebpf/internal/epoll.(*Poller).Wait
-         0     0%   100%       10ms 33.33%  github.com/cilium/ebpf/internal/unix.EpollWait (inline)
-         0     0%   100%       20ms 66.67%  github.com/cilium/ebpf/perf.(*Reader).Read
-         0     0%   100%       20ms 66.67%  github.com/cilium/ebpf/perf.(*Reader).ReadInto
-         0     0%   100%       10ms 33.33%  github.com/cilium/ebpf/perf.(*Reader).readRecordFromRing
-         0     0%   100%       10ms 33.33%  github.com/cilium/ebpf/perf.readRecord
-(pprof) 
-
-
-howing top 10 nodes out of 28
-      flat  flat%   sum%        cum   cum%
-      20ms 50.00% 50.00%       20ms 50.00%  internal/runtime/syscall.Syscall6
-      10ms 25.00% 75.00%       10ms 25.00%  internal/sync.(*Mutex).Lock (inline)
-      10ms 25.00%   100%       10ms 25.00%  runtime.futex
-         0     0%   100%       20ms 50.00%  fmt.Fprint
-         0     0%   100%       20ms 50.00%  fmt.Print
-         0     0%   100%       10ms 25.00%  github.com/cilium/ebpf/internal/epoll.(*Poller).Wait
-         0     0%   100%       10ms 25.00%  github.com/cilium/ebpf/internal/unix.EpollWait (inline)
-         0     0%   100%       20ms 50.00%  github.com/cilium/ebpf/perf.(*Reader).Read
-         0     0%   100%       20ms 50.00%  github.com/cilium/ebpf/perf.(*Reader).ReadInto
-         0     0%   100%       10ms 25.00%  golang.org/x/sys/unix.EpollWait
-(pprof) 
 
 
 
