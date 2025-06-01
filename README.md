@@ -114,16 +114,13 @@ var proto, srchost, dsthost string
 // Добавлен DNS-кэш
 // ---------------------------------------------------------------------------
 
-// cachedDNSRecord хранит хостнейм и время последнего обновления
 type cachedDNSRecord struct {
 	host        string
 	lastUpdated time.Time
 }
 
-// TTL для кэшированных записей DNS (например, 5 минут)
 const dnsCacheTTL = 5 * time.Minute
 
-// dnsCache хранит кэш: ключ — строковое представление IP, значение — cachedDNSRecord
 var dnsCache = struct {
 	sync.RWMutex
 	entries map[string]cachedDNSRecord
@@ -131,12 +128,9 @@ var dnsCache = struct {
 	entries: make(map[string]cachedDNSRecord),
 }
 
-// resolveIPWithCache возвращает хостнейм для заданного IP, используя кэш.
-// Если запись отсутствует или устарела, выполняется реальный DNS-запрос через pkg.ResolveIP или pkg.ResolveIP_n.
 func resolveIPWithCache(ip net.IP) string {
 	ipStr := ip.String()
 
-	// Сначала пробуем получить из кэша
 	dnsCache.RLock()
 	if entry, exists := dnsCache.entries[ipStr]; exists {
 		if time.Since(entry.lastUpdated) < dnsCacheTTL {
@@ -146,13 +140,10 @@ func resolveIPWithCache(ip net.IP) string {
 	}
 	dnsCache.RUnlock()
 
-	// Если в кэше нет или запись устарела — обновляем
 	var host string
 	if ip.To4() != nil {
-		// IPv4: используем pkg.ResolveIP (без ошибки)
 		host = pkg.ResolveIP(ip)
 	} else {
-		// IPv6: используем pkg.ResolveIP_n, которая возвращает (string, error)
 		h, err := pkg.ResolveIP_n(ip)
 		if err != nil {
 			host = "unknown"
@@ -161,19 +152,15 @@ func resolveIPWithCache(ip net.IP) string {
 		}
 	}
 
-	// Сохраняем в кэш
 	dnsCache.Lock()
-	dnsCache.entries[ipStr] = cachedDNSRecord{
-		host:        host,
-		lastUpdated: time.Now(),
-	}
+	dnsCache.entries[ipStr] = cachedDNSRecord{host: host, lastUpdated: time.Now()}
 	dnsCache.Unlock()
 
 	return host
 }
 
 // ---------------------------------------------------------------------------
-// Конец добавленного DNS-кэша
+// Конец DNS-кэша
 // ---------------------------------------------------------------------------
 
 type Lookup struct {
@@ -209,19 +196,23 @@ type EventData struct {
 	HasRecvmsg bool
 }
 
+// sync.Pool для переиспользования EventData
+var eventDataPool = sync.Pool{
+	New: func() interface{} {
+		return new(EventData)
+	},
+}
+
 func init() {
-	// Снимаем ограничение на память
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.Fatalf("failed to remove memory limit for process: %v", err)
 	}
-	// Загружаем eBPF-объекты
 	if err := loadBpfObjects(&objs, nil); err != nil {
 		log.Fatalf("failed to load bpf objects: %v", err)
 	}
 }
 
 func main() {
-	// Запуск pprof-сервера
 	go func() {
 		log.Println("Starting pprof HTTP server on :6060")
 		if err := http.ListenAndServe(":6060", nil); err != nil {
@@ -242,7 +233,6 @@ func main() {
 	fmt.Printf("Дескриптор нового namespace: %d\n", netns.Fd())
 	fmt.Printf("Go sizeof(traceInfo) = %d\n", unsafe.Sizeof(bpfTraceInfo{}))
 
-	// Привязка tracepoint-ов
 	SmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter, nil)
 	if err != nil {
 		log.Fatalf("opening tracepoint sys_enter_sendmsg: %s", err)
@@ -303,7 +293,6 @@ func main() {
 	}
 	defer skLookupLink.Close()
 
-	// Канал для graceful shutdown
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
@@ -363,7 +352,6 @@ func main() {
 					byte(event.DstIP.S_addr>>24),
 				)
 
-				// Пропускаем события от нашего демона, чтобы не заваливать логи
 				if pkg.Int8ToString(event.Comm) == executableName {
 					continue
 				}
@@ -376,8 +364,8 @@ func main() {
 						port := int(event.Sport)
 						data, exists := eventMap[port]
 						if !exists {
-							// Если объекта ещё нет, создаём новый
-							data = &EventData{}
+							data = eventDataPool.Get().(*EventData)
+							*data = EventData{}
 							eventMap[port] = data
 						}
 						data.Recvmsg = Recvmsg{
@@ -389,7 +377,6 @@ func main() {
 						}
 						data.HasRecvmsg = true
 
-						// Если lookup и sendmsg уже есть, печатаем сразу
 						if data.HasLookup && data.HasSendmsg {
 							if data.Lookup.Proto == 17 {
 								proto = "UDP"
@@ -429,6 +416,7 @@ func main() {
 								data.Lookup.SrcPort,
 							)
 							delete(eventMap, port)
+							eventDataPool.Put(data)
 						}
 					} else if event.Family == 10 {
 						port := event.Sport
@@ -453,8 +441,8 @@ func main() {
 						dstPort := int(event.Dport)
 						srcPort := int(event.Sport)
 
-						// Создаём один общий объект для обеих карт
-						data := &EventData{}
+						data := eventDataPool.Get().(*EventData)
+						*data = EventData{}
 						data.Lookup = Lookup{
 							SrcIP:   srcIP,
 							SrcPort: srcPort,
@@ -464,11 +452,9 @@ func main() {
 						}
 						data.HasLookup = true
 
-						// Сохраняем одну и ту же ссылку в двух картах
-						eventMap[dstPort] = data   // затем recvfrom смотрит сюда
-						eventMap_1[srcPort] = data // sendto смотрит сюда
+						eventMap[dstPort] = data
+						eventMap_1[srcPort] = data
 
-						// Если recvfrom и sendmsg уже были, можно сразу распечатать
 						if data.HasRecvmsg && data.HasSendmsg {
 							if data.Lookup.Proto == 17 {
 								proto = "UDP"
@@ -510,6 +496,7 @@ func main() {
 							)
 							fmt.Println("")
 							delete(eventMap, dstPort)
+							eventDataPool.Put(data)
 						}
 					} else if family == 10 {
 						ip6_s := pkg.IPv6FromLEWords(IPv6BytesToWords(event.SrcIP6.In6U.U6Addr8))
@@ -528,7 +515,8 @@ func main() {
 						port := int(event.Dport)
 						data, exists := eventMap_1[port]
 						if !exists {
-							data = &EventData{}
+							data = eventDataPool.Get().(*EventData)
+							*data = EventData{}
 							eventMap_1[port] = data
 						}
 						data.Sendmsg = Sendmsg{
@@ -579,6 +567,7 @@ func main() {
 								data.Lookup.SrcPort,
 							)
 							delete(eventMap_1, port)
+							eventDataPool.Put(data)
 						}
 					} else if event.Family == 10 {
 						port := event.Dport
@@ -602,7 +591,8 @@ func main() {
 						port := int(event.Dport)
 						data, exists := eventMap[port]
 						if !exists {
-							data = &EventData{}
+							data = eventDataPool.Get().(*EventData)
+							*data = EventData{}
 							eventMap[port] = data
 						}
 						data.Sendmsg = Sendmsg{
@@ -641,6 +631,7 @@ func main() {
 							)
 							fmt.Println("")
 							delete(eventMap, port)
+							eventDataPool.Put(data)
 						}
 					} else if event.Family == 10 {
 						port := event.Dport
@@ -664,7 +655,8 @@ func main() {
 						port := int(event.Sport)
 						data, exists := eventMap[port]
 						if !exists {
-							data = &EventData{}
+							data = eventDataPool.Get().(*EventData)
+							*data = EventData{}
 							eventMap[port] = data
 						}
 						data.Recvmsg = Recvmsg{
@@ -699,6 +691,7 @@ func main() {
 							)
 							fmt.Println("")
 							delete(eventMap, port)
+							eventDataPool.Put(data)
 						}
 					} else if event.Family == 10 {
 						port := event.Sport
@@ -853,17 +846,4 @@ func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 	return words
 }
 
-
-
- 10ms 33.33% 33.33%       10ms 33.33%  runtime.(*mcache).prepareForSweep
-      10ms 33.33% 66.67%       10ms 33.33%  runtime.entersyscall
-      10ms 33.33%   100%       10ms 33.33%  runtime.futex
-         0     0%   100%       10ms 33.33%  fmt.Fprintln
-         0     0%   100%       10ms 33.33%  fmt.Println
-         0     0%   100%       20ms 66.67%  github.com/cilium/ebpf/internal/epoll.(*Poller).Wait
-         0     0%   100%       20ms 66.67%  github.com/cilium/ebpf/internal/unix.EpollWait (inline)
-         0     0%   100%       20ms 66.67%  github.com/cilium/ebpf/perf.(*Reader).Read
-         0     0%   100%       20ms 66.67%  github.com/cilium/ebpf/perf.(*Reader).ReadInto
-         0     0%   100%       20ms 66.67%  golang.org/x/sys/unix.EpollWait
-(pprof) 
 
