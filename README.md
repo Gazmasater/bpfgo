@@ -84,19 +84,23 @@ git commit -m "Ignore папку TMP"
 git rm -r --cached .vscode
 git commit -m "Игнорировать папку .vscode"
 
-howing nodes accounting for 160ms, 100% of 160ms total
-Showing top 10 nodes out of 34
+Time: 2025-06-02 01:19:22 MSK
+Duration: 30.02s, Total samples = 30ms (  0.1%)
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 30ms, 100% of 30ms total
+Showing top 10 nodes out of 26
       flat  flat%   sum%        cum   cum%
-      60ms 37.50% 37.50%      140ms 87.50%  runtime.scanobject
-      20ms 12.50% 50.00%       20ms 12.50%  runtime.(*mspan).heapBitsSmallForAddr
-      20ms 12.50% 62.50%       30ms 18.75%  runtime.findObject
-      10ms  6.25% 68.75%       10ms  6.25%  runtime.(*mspan).base (inline)
-      10ms  6.25% 75.00%       10ms  6.25%  runtime.(*mspan).markBitsForIndex (inline)
-      10ms  6.25% 81.25%       10ms  6.25%  runtime.(*spanSet).push
-      10ms  6.25% 87.50%       10ms  6.25%  runtime.cgocall
-      10ms  6.25% 93.75%       30ms 18.75%  runtime.greyobject
-      10ms  6.25%   100%       10ms  6.25%  runtime.spanOf (inline)
-         0     0%   100%       10ms  6.25%  bpfgo/pkg.ResolveIP
+      10ms 33.33% 33.33%       10ms 33.33%  github.com/cilium/ebpf/perf.(*forwardReader).Read
+      10ms 33.33% 66.67%       10ms 33.33%  internal/runtime/syscall.Syscall6
+      10ms 33.33%   100%       10ms 33.33%  runtime.cgocall
+         0     0%   100%       10ms 33.33%  bpfgo/pkg.ResolveIP
+         0     0%   100%       10ms 33.33%  github.com/cilium/ebpf/internal/epoll.(*Poller).Wait
+         0     0%   100%       10ms 33.33%  github.com/cilium/ebpf/internal/unix.EpollWait (inline)
+         0     0%   100%       20ms 66.67%  github.com/cilium/ebpf/perf.(*Reader).Read
+         0     0%   100%       20ms 66.67%  github.com/cilium/ebpf/perf.(*Reader).ReadInto
+         0     0%   100%       10ms 33.33%  github.com/cilium/ebpf/perf.(*Reader).readRecordFromRing
+         0     0%   100%       10ms 33.33%  github.com/cilium/ebpf/perf.readRecord
 (pprof) 
 
 
