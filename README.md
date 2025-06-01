@@ -94,6 +94,17 @@ go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
 
 curl http://localhost:6060/debug/pprof/
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
+Fetching profile over HTTP from http://localhost:6060/debug/pprof/profile?seconds=30
+Saved profile in /home/gaz358/pprof/pprof.bpfgo.samples.cpu.002.pb.gz
+File: bpfgo
+Build ID: be22e3472fc86bd633e4aa81a27b3e4da8c8011a
+Type: cpu
+Time: 2025-06-01 15:37:06 MSK
+Duration: 30s, Total samples = 100ms ( 0.33%)
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) 
+
 
 
 
