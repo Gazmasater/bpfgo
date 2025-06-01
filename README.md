@@ -120,6 +120,8 @@ type Recvmsg struct {
 	Comm string
 }
 
+//Rename
+
 type EventData struct {
 	Lookup     Lookup
 	Sendmsg    Sendmsg
@@ -155,7 +157,6 @@ func main() {
 	defer netns.Close()
 
 	fmt.Printf("Дескриптор нового namespace: %d\n", netns.Fd())
-	fmt.Printf("Go sizeof(traceInfo) = %d\n", unsafe.Sizeof(bpfTraceInfo{}))
 
 	SmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter, nil)
 	if err != nil {
@@ -224,10 +225,6 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-
-		const batchSize = 4
-		records := make([]perf.Record, batchSize)
-
 		const buffLen = 4096 * 2
 		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
 		if err != nil {
@@ -241,49 +238,40 @@ func main() {
 		}
 
 		for {
-			// Читаем сразу до batchSize записей
-			n, err := rd.ReadBatch(records, perf.ReadBatchOptions{})
+			record, err := rd.Read()
 			if err != nil {
 				if errors.Is(err, os.ErrDeadlineExceeded) {
 					continue
 				}
-				log.Fatalf("error reading batch from perf reader: %v", err)
+				log.Printf("error reading from perf reader: %v", err)
+				return
 			}
 
-			// Проверяем, не потерялись ли какие-то события
-			if lost := rd.LostSamples(); lost > 0 {
-				log.Printf("WARNING: lost %d samples (ring overflow)", lost)
+			if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
+				log.Println("!!!!!!!!!!!!!!!!!!!!!!!invalid event size!!!!!!!!!!!!!!!!!!")
+				continue
 			}
 
-			// Обрабатываем каждую из n прочитанных записей
-			for i := 0; i < n; i++ {
-				record := records[i]
+			// Приводим прочитанные данные к структуре bpfTraceInfo
+			event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
 
-				// Если реальный размер RawSample < ожидаемого — пропускаем
-				if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
-					log.Println("!!!!!!!!!!!!!!!!!!!!invalid event size!!!!!!!!!!!!!!!!!!")
-					continue
-				}
+			srcIP := net.IPv4(
+				byte(event.SrcIP.S_addr),
+				byte(event.SrcIP.S_addr>>8),
+				byte(event.SrcIP.S_addr>>16),
+				byte(event.SrcIP.S_addr>>24),
+			)
 
-				// Распарсим одно событие
-				event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
+			dstIP := net.IPv4(
+				byte(event.DstIP.S_addr),
+				byte(event.DstIP.S_addr>>8),
+				byte(event.DstIP.S_addr>>16),
+				byte(event.DstIP.S_addr>>24),
+			)
 
-				srcIP := net.IPv4(
-					byte(event.SrcIP.S_addr),
-					byte(event.SrcIP.S_addr>>8),
-					byte(event.SrcIP.S_addr>>16),
-					byte(event.SrcIP.S_addr>>24),
-				)
-				dstIP := net.IPv4(
-					byte(event.DstIP.S_addr),
-					byte(event.DstIP.S_addr>>8),
-					byte(event.DstIP.S_addr>>16),
-					byte(event.DstIP.S_addr>>24),
-				)
-
-				if pkg.Int8ToString(event.Comm) == executableName {
-					continue
-				}
+			if pkg.Int8ToString(event.Comm) == executableName {
+				continue
+			}
 
 			if event.Sysexit == 1 {
 
@@ -866,29 +854,6 @@ func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 	return words
 }
 
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"severity": 8,
-	"message": "expected ';', found '('",
-	"source": "syntax",
-	"startLineNumber": 786,
-	"startColumn": 3,
-	"endLineNumber": 786,
-	"endColumn": 3
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "go-staticcheck",
-	"severity": 4,
-	"message": "syntax error: unexpected name IPv6BytesToWords, expected ( (compile)",
-	"source": "go-staticcheck",
-	"startLineNumber": 793,
-	"startColumn": 6,
-	"endLineNumber": 793,
-	"endColumn": 50
-}]
 
 
 
