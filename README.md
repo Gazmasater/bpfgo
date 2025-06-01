@@ -869,5 +869,8 @@ Showing top 10 nodes out of 38
 (pprof) 
 
 
+(pprof) list github.com/cilium/ebpf/btf.readAndInflateTypes
+
+
 
 
