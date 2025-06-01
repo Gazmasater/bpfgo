@@ -833,5 +833,22 @@ func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 }
 
 
+Type: cpu
+Time: 2025-06-01 20:48:13 MSK
+Duration: 30.01s, Total samples = 10ms (0.033%)
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 10ms, 100% of 10ms total
+      flat  flat%   sum%        cum   cum%
+      10ms   100%   100%       10ms   100%  syscall.RawSyscall6
+         0     0%   100%       10ms   100%  github.com/cilium/ebpf/internal/epoll.(*Poller).Wait
+         0     0%   100%       10ms   100%  github.com/cilium/ebpf/internal/unix.EpollWait (inline)
+         0     0%   100%       10ms   100%  github.com/cilium/ebpf/perf.(*Reader).Read (inline)
+         0     0%   100%       10ms   100%  github.com/cilium/ebpf/perf.(*Reader).ReadInto
+         0     0%   100%       10ms   100%  golang.org/x/sys/unix.EpollWait
+         0     0%   100%       10ms   100%  main.main.func2
+         0     0%   100%       10ms   100%  syscall.Syscall6
+
+
 
 
