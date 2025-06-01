@@ -93,7 +93,22 @@ git push --force-with-lease origin ProcNet_monitor
 
 
 
-
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git pull origin main
+remote: Enumerating objects: 187, done.
+remote: Counting objects: 100% (46/46), done.
+remote: Compressing objects: 100% (3/3), done.
+remote: Total 187 (delta 43), reused 43 (delta 43), pack-reused 141 (from 2)
+Receiving objects: 100% (187/187), 94.19 KiB | 588.00 KiB/s, done.
+Resolving deltas: 100% (118/118), completed with 5 local objects.
+From https://github.com/Gazmasater/bpfgo
+ * branch            main       -> FETCH_HEAD
+   5b1d30e..84e9d83  main       -> origin/main
+Updating 2578969..84e9d83
+Fast-forward
+ README.md | 66 +++++++++++++++++++-----------------------------------------------
+ 1 file changed, 19 insertions(+), 47 deletions(-)
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git push --force-with-lease origin ProcNet_monitor
+Everything up-to-date
 
 
 
