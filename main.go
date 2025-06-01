@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
@@ -71,6 +72,14 @@ func init() {
 }
 
 func main() {
+
+	go func() {
+		log.Println("Starting pprof HTTP server on :6060")
+		if err := http.ListenAndServe(":6060", nil); err != nil {
+			log.Fatalf("pprof ListenAndServe error: %v", err)
+		}
+	}()
+
 	eventMap := make(map[int]*EventData)
 	eventMap_1 := make(map[int]*EventData)
 	defer objs.Close()
