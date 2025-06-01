@@ -3,6 +3,12 @@ https://platform-balun.ru/teach/control/stream/view/id/930914027
 user: mat3x@mail.ru
 pass: Vkalashnikov00f!
 
+__________________________________________________
+GIT
+
+git reset --hard HEAD
+____________________________________________________
+
 
 
 bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
