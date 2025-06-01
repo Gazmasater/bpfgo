@@ -82,6 +82,17 @@ git branch -m old-branch new-branch
 git push origin -u new-branch
 
 
+git checkout main
+git pull origin main
+
+
+git checkout ProcNet_monitor
+git merge main
+
+git push --force-with-lease origin ProcNet_monitor
+
+
+
 
 
 
