@@ -752,6 +752,48 @@ func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 	return words
 }
 
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "default",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/go/analysis/passes/printf",
+			"scheme": "https",
+			"authority": "pkg.go.dev"
+		}
+	},
+	"severity": 4,
+	"message": "fmt.Printf format %s has arg data.Lookup.DstPort of wrong type int",
+	"source": "printf",
+	"startLineNumber": 434,
+	"startColumn": 8,
+	"endLineNumber": 442,
+	"endColumn": 9
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "default",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/go/analysis/passes/printf",
+			"scheme": "https",
+			"authority": "pkg.go.dev"
+		}
+	},
+	"severity": 4,
+	"message": "fmt.Printf format %s has arg data.Lookup.DstPort of wrong type int",
+	"source": "printf",
+	"startLineNumber": 443,
+	"startColumn": 8,
+	"endLineNumber": 451,
+	"endColumn": 9
+}]
+
 
 
 
