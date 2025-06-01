@@ -81,6 +81,13 @@ go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
 	}()
 
 
+ gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
+Fetching profile over HTTP from http://localhost:6060/debug/pprof/profile?seconds=30
+http://localhost:6060/debug/pprof/profile?seconds=30: server response: 404 Not Found
+failed to fetch any source profiles
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
+
 
 
 
