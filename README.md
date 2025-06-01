@@ -806,5 +806,27 @@ func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 }
 
 
+File: bpfgo
+Build ID: 2ecd6d247dae4443341d493c067e019a4436f3fb
+Type: inuse_space
+Time: 2025-06-01 22:57:38 MSK
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 19523.35kB, 100% of 19523.35kB total
+Showing top 10 nodes out of 34
+      flat  flat%   sum%        cum   cum%
+ 7970.11kB 40.82% 40.82% 11044.49kB 56.57%  github.com/cilium/ebpf/btf.readAndInflateTypes
+ 3356.76kB 17.19% 58.02%  6428.84kB 32.93%  github.com/cilium/ebpf/btf.readStringTable
+ 3074.38kB 15.75% 73.76%  3074.38kB 15.75%  github.com/cilium/ebpf/btf.readAndInflateTypes.func2
+ 3072.07kB 15.74% 89.50%  3072.07kB 15.74%  bufio.(*Scanner).Text (inline)
+    1026kB  5.26% 94.75%     1026kB  5.26%  runtime.allocm
+  512.02kB  2.62% 97.38%   512.02kB  2.62%  runtime.gcBgMarkWorker
+  512.01kB  2.62%   100%   512.01kB  2.62%  unique.addUniqueMap[go.shape.struct { net/netip.isV6 bool; net/netip.zoneV6 string }].func1
+         0     0%   100% 17473.32kB 89.50%  github.com/cilium/ebpf.(*CollectionSpec).LoadAndAssign
+         0     0%   100% 17473.32kB 89.50%  github.com/cilium/ebpf.(*CollectionSpec).LoadAndAssign.func1
+         0     0%   100% 17473.32kB 89.50%  github.com/cilium/ebpf.(*collectionLoader).loadProgram
+(pprof) 
+
+
 
 
