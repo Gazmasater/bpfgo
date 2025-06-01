@@ -78,10 +78,8 @@ go tool pprof http://localhost:6060/debug/pprof/heap
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git push origin ProcNet_monitor
-error: src refspec ProcNet_monitor does not match any
-error: failed to push some refs to 'https://github.com/Gazmasater/bpfgo'
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+git rm -r --cached TMP
+git commit -m "Ignore папку TMP"
 
 
 
