@@ -72,6 +72,9 @@ go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
 "net/http"      // добавлено для pprof
 	_ "net/http/pprof" // регистрирует pprof-эндпоинты
 
+     _ "net/http/pprof" // blank-import: регистрирует pprof-хэндлеры в DefaultServeMux
+
+
 
 	go func() {
 		log.Println("Starting pprof HTTP server on :6060")
@@ -80,20 +83,16 @@ go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
 		}
 	}()
 
+ go func() {
+    log.Println("Starting pprof HTTP server on :6060")
+    if err := http.ListenAndServe(":6060", nil); err != nil {
+        log.Fatalf("pprof ListenAndServe error: %v", err)
+    }
+}()
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go build . 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ sudo ./bpfgo
-[sudo] password for gaz358: 
-Дескриптор нового namespace: 6
-Go sizeof(traceInfo) = 88
-2025/06/01 15:17:55 Starting pprof HTTP server on :6060
-Press Ctrl+C to exit
 
-az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
-Fetching profile over HTTP from http://localhost:6060/debug/pprof/profile?seconds=30
-http://localhost:6060/debug/pprof/profile?seconds=30: server response: 404 Not Found
-failed to fetch any source profiles
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+
+curl http://localhost:6060/debug/pprof/
 
 
 
