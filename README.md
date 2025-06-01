@@ -163,13 +163,13 @@ var (
 	resolveCache = make(map[string]string)
 	cacheMu      sync.RWMutex
 
-	// Кеш для конвертации [16]int8 в string
-	commCache = make(map[[16]int8]string)
+	// Кеш для конвертации [32]int8 в string
+	commCache = make(map[[32]int8]string)
 	commMu    sync.RWMutex
 )
 
 // cachedComm возвращает имя процесса из кеша или конвертирует и сохраняет
-func cachedComm(c [16]int8) string {
+func cachedComm(c [32]int8) string {
 	commMu.RLock()
 	if s, ok := commCache[c]; ok {
 		commMu.RUnlock()
@@ -648,7 +648,7 @@ func main() {
 							ip6Buf2[i*4+3] = byte(words2[i] >> 24)
 						}
 						fmt.Print("LOOKUP DST IPv6=", ip6Buf2.String(), "\n")
-						fmt.Print("LOOKUP SPORT=", event.Sport, "  DPORT=", event.Dport, " PROTO=", event.Proto, "\n")
+						fmt.Print("LOOKUP SPORT=", event.Sport, "  DPORT=", event.Dport, " PROТО=", event.Proto, "\n")
 					}
 				}
 
@@ -695,7 +695,7 @@ func main() {
 						dstHost = resolveHost(dstIP)
 						srcHostResolved := resolveHost(srcIP)
 
-						// Пример замены fmt.Sprintf на конкатенацию
+						// Пример замены fmt.Sprintf на Builder
 						var sb strings.Builder
 						sb.Grow(2 + len(srcHostResolved) + len(srcIP.String()) + 20)
 						sb.WriteString("//")
@@ -747,7 +747,7 @@ func main() {
 						dstHost = resolveHost(dstIP)
 						srcHostResolved2 := resolveHost(srcIP)
 
-						// Снова строим строки через Builder
+						// Строим строки через Builder
 						var sb1 strings.Builder
 						sb1.Grow(2 + len(srcHostResolved2) + len(srcIP.String()) + 20)
 						sb1.WriteString("//")
@@ -804,21 +804,6 @@ func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 	}
 	return words
 }
-
-az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go build . 
-# bpfgo
-./main.go:100:24: cannot use c (variable of type [16]int8) as [32]int8 value in argument to pkg.Int8ToString
-./main.go:287:19: cannot use event.Comm (variable of type [32]int8) as [16]int8 value in argument to cachedComm
-./main.go:304:28: cannot use event.Comm (variable of type [32]int8) as [16]int8 value in argument to cachedComm
-./main.go:346:101: cannot use event.Comm (variable of type [32]int8) as [16]int8 value in argument to cachedComm
-./main.go:362:28: cannot use event.Comm (variable of type [32]int8) as [16]int8 value in argument to cachedComm
-./main.go:393:102: cannot use event.Comm (variable of type [32]int8) as [16]int8 value in argument to cachedComm
-./main.go:410:28: cannot use event.Comm (variable of type [32]int8) as [16]int8 value in argument to cachedComm
-./main.go:451:103: cannot use event.Comm (variable of type [32]int8) as [16]int8 value in argument to cachedComm
-./main.go:468:28: cannot use event.Comm (variable of type [32]int8) as [16]int8 value in argument to cachedComm
-./main.go:495:102: cannot use event.Comm (variable of type [32]int8) as [16]int8 value in argument to cachedComm
-./main.go:495:102: too many errors
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
 
