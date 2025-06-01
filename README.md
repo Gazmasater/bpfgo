@@ -853,3 +853,17 @@ func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 	return words
 }
 
+
+
+ 10ms 33.33% 33.33%       10ms 33.33%  runtime.(*mcache).prepareForSweep
+      10ms 33.33% 66.67%       10ms 33.33%  runtime.entersyscall
+      10ms 33.33%   100%       10ms 33.33%  runtime.futex
+         0     0%   100%       10ms 33.33%  fmt.Fprintln
+         0     0%   100%       10ms 33.33%  fmt.Println
+         0     0%   100%       20ms 66.67%  github.com/cilium/ebpf/internal/epoll.(*Poller).Wait
+         0     0%   100%       20ms 66.67%  github.com/cilium/ebpf/internal/unix.EpollWait (inline)
+         0     0%   100%       20ms 66.67%  github.com/cilium/ebpf/perf.(*Reader).Read
+         0     0%   100%       20ms 66.67%  github.com/cilium/ebpf/perf.(*Reader).ReadInto
+         0     0%   100%       20ms 66.67%  golang.org/x/sys/unix.EpollWait
+(pprof) 
+
