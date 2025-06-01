@@ -21,7 +21,6 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 )
 
-// Глобальные объекты BPF
 var objs bpfObjects
 
 var eventChanSport = make(chan int, 1)
@@ -30,7 +29,6 @@ var mu sync.Mutex
 var lastSport, lastPID int
 var proto, srcHost, dstHost string
 
-// Пул для переиспользования структур EventData
 var eventDataPool = sync.Pool{
 	New: func() interface{} {
 		return &EventData{}
@@ -83,12 +81,10 @@ var (
 	resolveCache = make(map[string]string)
 	cacheMu      sync.RWMutex
 
-	// Кеш для конвертации [32]int8 в string
 	commCache = make(map[[32]int8]string)
 	commMu    sync.RWMutex
 )
 
-// cachedComm возвращает имя процесса из кеша или конвертирует и сохраняет
 func cachedComm(c [32]int8) string {
 	commMu.RLock()
 	if s, ok := commCache[c]; ok {
@@ -228,7 +224,7 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		const buffLen = 1024
+		const buffLen = 256
 		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
 		if err != nil {
 			log.Fatalf("failed to create perf reader: %s", err)
@@ -283,12 +279,10 @@ func main() {
 					byte(event.DstIP.S_addr>>24),
 				)
 
-				// Пропускаем события от нашего демона
 				if cachedComm(event.Comm) == executableName {
 					continue
 				}
 
-				// Обработка Sysexit == 1 (sys_exit_sendto или sendmsg)
 				if event.Sysexit == 1 {
 					if event.Family == 2 {
 						port := int(event.Dport)
@@ -698,8 +692,8 @@ func main() {
 					}
 				}
 
-			} // конец цикла обработки batch
-		} // конец главного цикла
+			}
+		}
 	}()
 
 	fmt.Println("Press Ctrl+C to exit")

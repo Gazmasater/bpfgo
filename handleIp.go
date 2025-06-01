@@ -7,7 +7,6 @@ import (
 	"sync"
 )
 
-// Глобальная мапа соединений и мьютекс
 var (
 	connections = make(map[string]bool)
 	muConn      sync.Mutex
@@ -26,20 +25,10 @@ func HandleIPEvent(
 		err     error
 	)
 
-	//fmt.Printf("FAMIY FUNC =%d STATE=%d\n", event.Family, event.State)
-	// fmt.Printf("PID=%d SPORT=%d DPORT=%d STATE=%d NAME=%s\n",
-	// 	event.Pid,
-	// 	event.Sport,
-	// 	event.Dport,
-	// 	event.State,
-	// 	pkg.Int8ToString(event.Comm))
-
-	// Определяем протокол
 	if event.Family == 6 {
 		proto = "TCP"
 	}
 
-	// Определяем имена хостов
 	if dstIP.IsLoopback() {
 		dsthost = pkg.ResolveIP(dstIP)
 	} else {
@@ -50,14 +39,11 @@ func HandleIPEvent(
 	}
 	srchost := pkg.ResolveIP(srcIP)
 
-	// Формируем адреса
 	srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
 	dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
 
-	// Формируем ключ соединения
 	key := makeConnectionKey(srcIP, uint16(event.Sport), dstIP, event.Dport)
 
-	// Обработка состояния 1 (новое соединение)
 	if event.State == 1 {
 		muConn.Lock()
 		if _, exists := connections[key]; !exists {
@@ -86,9 +72,7 @@ func HandleIPEvent(
 		}
 	}
 
-	// Обработка состояний 2 и 10
 	if event.State == 2 || event.State == 10 {
-		//fmt.Printf("POSLE IF STATE=%d PID=%d\n", event.State, event.Pid)
 		mu.Lock()
 		select {
 		case eventChan_pid <- int(event.Pid):
@@ -97,7 +81,6 @@ func HandleIPEvent(
 		mu.Unlock()
 	}
 
-	// Чтение данных из каналов (если есть)
 	select {
 	case sport := <-eventChan_sport:
 		select {
