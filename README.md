@@ -76,6 +76,8 @@ go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
 
 
 
+
+
 package main
 
 import (
@@ -89,6 +91,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/cilium/ebpf/link"
@@ -104,6 +107,72 @@ var eventChan_pid = make(chan int, 1)
 var mu sync.Mutex
 var xxx, xxx_pid int
 var proto, srchost, dsthost string
+
+// ---------------------------------------------------------------------------
+// Добавлен DNS-кэш
+// ---------------------------------------------------------------------------
+
+// cachedDNSRecord хранит хостнейм и время последнего обновления
+type cachedDNSRecord struct {
+	host        string
+	lastUpdated time.Time
+}
+
+// TTL для кэшированных записей DNS (например, 5 минут)
+const dnsCacheTTL = 5 * time.Minute
+
+// dnsCache хранит кэш: ключ — строковое представление IP, значение — cachedDNSRecord
+var dnsCache = struct {
+	sync.RWMutex
+	entries map[string]cachedDNSRecord
+}{
+	entries: make(map[string]cachedDNSRecord),
+}
+
+// resolveIPWithCache возвращает хостнейм для заданного IP, используя кэш.
+// Если запись отсутствует или устарела, выполняется реальный DNS-запрос через pkg.ResolveIP или pkg.ResolveIP_n.
+func resolveIPWithCache(ip net.IP) string {
+	ipStr := ip.String()
+
+	// Сначала пробуем получить из кэша
+	dnsCache.RLock()
+	if entry, exists := dnsCache.entries[ipStr]; exists {
+		if time.Since(entry.lastUpdated) < dnsCacheTTL {
+			dnsCache.RUnlock()
+			return entry.host
+		}
+	}
+	dnsCache.RUnlock()
+
+	// Если в кэше нет или запись устарела — обновляем
+	var host string
+	if ip.To4() != nil {
+		// IPv4: используем pkg.ResolveIP (без ошибки)
+		host = pkg.ResolveIP(ip)
+	} else {
+		// IPv6: используем pkg.ResolveIP_n, которая возвращает (string, error)
+		h, err := pkg.ResolveIP_n(ip)
+		if err != nil {
+			host = "unknown"
+		} else {
+			host = h
+		}
+	}
+
+	// Сохраняем в кэш
+	dnsCache.Lock()
+	dnsCache.entries[ipStr] = cachedDNSRecord{
+		host:        host,
+		lastUpdated: time.Now(),
+	}
+	dnsCache.Unlock()
+
+	return host
+}
+
+// ---------------------------------------------------------------------------
+// Конец добавленного DNS-кэша
+// ---------------------------------------------------------------------------
 
 type Lookup struct {
 	DstIP   net.IP
@@ -317,6 +386,7 @@ func main() {
 							DstIP:   dstIP,
 							DstPort: port,
 							Pid:     event.Pid,
+							Proto:   int(event.Proto),
 							Comm:    pkg.Int8ToString(event.Comm),
 						}
 						data.HasSendmsg = true
@@ -328,12 +398,12 @@ func main() {
 							if data.Lookup.DstIP.IsLoopback() {
 								dsthost = "localhost"
 							} else {
-								dsthost = pkg.ResolveIP(data.Lookup.DstIP)
+								dsthost = resolveIPWithCache(data.Lookup.DstIP)
 							}
 							if data.Lookup.SrcIP.IsLoopback() {
 								srchost = "localhost"
 							} else {
-								srchost = pkg.ResolveIP(data.Lookup.SrcIP)
+								srchost = resolveIPWithCache(data.Lookup.SrcIP)
 							}
 							fmt.Printf("SENDTO PID=%d NAME=%s %s/%s[%s]:%d -> %s[%s]:%d\n",
 								data.Sendmsg.Pid,
@@ -357,7 +427,7 @@ func main() {
 								data.Lookup.SrcIP,
 								data.Lookup.SrcPort,
 							)
-							delete(eventMap, port)
+							delete(eventMap_1, port)
 						}
 					} else if family == 10 {
 						port := event.Dport
@@ -385,6 +455,7 @@ func main() {
 							DstIP:   dstIP,
 							DstPort: port,
 							Pid:     event.Pid,
+							Proto:   int(event.Proto),
 							Comm:    pkg.Int8ToString(event.Comm),
 						}
 						data.HasSendmsg = true
@@ -441,6 +512,7 @@ func main() {
 							SrcIP:   srcIP,
 							SrcPort: port,
 							Pid:     event.Pid,
+							Proto:   int(event.Proto),
 							Comm:    pkg.Int8ToString(event.Comm),
 						}
 						data.HasRecvmsg = true
@@ -452,12 +524,12 @@ func main() {
 							if data.Lookup.DstIP.IsLoopback() {
 								dsthost = "localhost"
 							} else {
-								dsthost = pkg.ResolveIP(dstIP)
+								dsthost = resolveIPWithCache(dstIP)
 							}
 							if data.Lookup.SrcIP.IsLoopback() {
 								srchost = "localhost"
 							} else {
-								srchost = pkg.ResolveIP(srcIP)
+								srchost = resolveIPWithCache(srcIP)
 							}
 							fmt.Printf("RECVFROM PID=%d NAME=%s %s/%s[%s]:%d -> %s[%s]:%d\n",
 								data.Sendmsg.Pid,
@@ -509,6 +581,7 @@ func main() {
 							SrcIP:   srcIP,
 							SrcPort: port,
 							Pid:     event.Pid,
+							Proto:   int(event.Proto),
 							Comm:    pkg.Int8ToString(event.Comm),
 						}
 						data.HasRecvmsg = true
@@ -572,7 +645,7 @@ func main() {
 						data_1, exists := eventMap_1[port_1]
 						if !exists {
 							data_1 = &EventData{}
-							eventMap_1[port_1] = data
+							eventMap_1[port_1] = data_1
 						}
 						data_1.Lookup = Lookup{
 							SrcIP:   srcIP,
@@ -590,12 +663,12 @@ func main() {
 							if data.Lookup.DstIP.IsLoopback() {
 								dsthost = "localhost"
 							} else {
-								dsthost = pkg.ResolveIP(data.Lookup.DstIP)
+								dsthost = resolveIPWithCache(data.Lookup.DstIP)
 							}
 							if data.Lookup.SrcIP.IsLoopback() {
 								srchost = "localhost"
 							} else {
-								srchost = pkg.ResolveIP(data.Lookup.SrcIP)
+								srchost = resolveIPWithCache(data.Lookup.SrcIP)
 							}
 							fmt.Printf("LOOKUP PID=%d NAME=%s %s/%s[%s]:%d<-%s[%s]:%d\n",
 								data.Sendmsg.Pid,
@@ -668,15 +741,12 @@ func main() {
 						mu.Unlock()
 
 						if dstIP.IsLoopback() {
-							dsthost = pkg.ResolveIP(dstIP)
+							dsthost = "localhost"
 						} else {
-							dsthost, err = pkg.ResolveIP_n(dstIP)
-							if err != nil {
-								dsthost = "unknown"
-							}
+							dsthost = resolveIPWithCache(dstIP)
 						}
 
-						srchost := pkg.ResolveIP(srcIP)
+						srchost := resolveIPWithCache(srcIP)
 						srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
 						dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
 
@@ -715,15 +785,12 @@ func main() {
 					select {
 					case xxx = <-eventChan_sport:
 						if dstIP.IsLoopback() {
-							dsthost = pkg.ResolveIP(dstIP)
+							dsthost = resolveIPWithCache(dstIP)
 						} else {
-							dsthost, err = pkg.ResolveIP_n(dstIP)
-							if err != nil {
-								dsthost = "unknown"
-							}
+							dsthost = resolveIPWithCache(dstIP)
 						}
 
-						srchost := pkg.ResolveIP(srcIP)
+						srchost := resolveIPWithCache(srcIP)
 						srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), xxx)
 						dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
 
