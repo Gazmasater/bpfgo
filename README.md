@@ -81,6 +81,10 @@ go tool pprof http://localhost:6060/debug/pprof/heap
 git rm -r --cached TMP
 git commit -m "Ignore папку TMP"
 
+git rm -r --cached .vscode
+git commit -m "Игнорировать папку .vscode"
+
+
 
 
 
