@@ -219,12 +219,11 @@ func main() {
 	}
 	defer skLookupLink.Close()
 
-	// Канал для graceful shutdown
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		const buffLen = 256
+		const buffLen = 4096
 		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
 		if err != nil {
 			log.Fatalf("failed to create perf reader: %s", err)
@@ -240,8 +239,7 @@ func main() {
 		batch := make([]perf.Record, 0, batchSize)
 
 		for {
-			// Собираем до batchSize записей в слайс
-			batch = batch[:0] // обнуляем длину, оставляем capacity = batchSize
+			batch = batch[:0]
 			for i := 0; i < batchSize; i++ {
 				record, err := rd.Read()
 				if err != nil {

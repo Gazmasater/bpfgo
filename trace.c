@@ -84,7 +84,7 @@ struct trace_info {
 
 
 
-// Размещение переменной с атрибутом unused
+
 const struct trace_info *unused __attribute__((unused));
 #define AF_INET 2
 #define AF_INET6 10
@@ -355,7 +355,6 @@ if (ret < 0)
 
     }
 
-    // Получаем указатель на msghdr
     struct msghdr **addr_ptr = bpf_map_lookup_elem(&addrSend_map, &pid);
     if (!addr_ptr) {
         bpf_printk("No addr_ptr for pid=%d", pid);
