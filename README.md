@@ -86,9 +86,9 @@ import (
 var objs bpfObjects
 
 var eventChan_sport = make(chan int, 1)
-var eventChan_pid = make(chan int, 1)
-var mu sync.Mutex
-var xxx, xxx_pid int
+var eventChan_pid   = make(chan int, 1)
+var mu              sync.Mutex
+var xxx, xxx_pid    int
 var proto, srchost, dsthost string
 
 type Lookup struct {
@@ -129,7 +129,6 @@ func init() {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.Fatalf("failed to remove memory limit for process: %v", err)
 	}
-
 	// Загружаем eBPF-объекты
 	if err := loadBpfObjects(&objs, nil); err != nil {
 		log.Fatalf("failed to load bpf objects: %v", err)
@@ -137,9 +136,9 @@ func init() {
 }
 
 func main() {
-	eventMap := make(map[int]*EventData)
+	eventMap   := make(map[int]*EventData)
 	eventMap_1 := make(map[int]*EventData)
-	defer objs.Close() // Закроем объекты при выходе
+	defer objs.Close()
 
 	netns, err := os.Open("/proc/self/ns/net")
 	if err != nil {
@@ -210,15 +209,12 @@ func main() {
 	}
 	defer skLookupLink.Close()
 
-	// Канал для завершения работы
+	// Канал для graceful shutdown
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		const batchSize = 4
-		records := make([]perf.Record, batchSize)
-
-		const buffLen = 4096 * 2
+		const buffLen = 4096 * 8 // если кольцо мелкое — увеличить до 4096*16 и т.д.
 		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
 		if err != nil {
 			log.Fatalf("failed to create perf reader: %s", err)
@@ -230,32 +226,41 @@ func main() {
 			executableName = executableName[2:]
 		}
 
+		const batchSize = 4
+
 		for {
-			// Читаем сразу до batchSize записей
-			n, err := rd.ReadBatch(records, perf.ReadBatchOptions{})
-			if err != nil {
-				if errors.Is(err, os.ErrDeadlineExceeded) {
-					continue
+			// Собираем до batchSize записей в слайс
+			var batch []perf.Record
+			for i := 0; i < batchSize; i++ {
+				record, err := rd.Read()
+				if err != nil {
+					// Когда таймаут (никаких новых записей в кольце) — выходим из внутреннего цикла
+					if errors.Is(err, os.ErrDeadlineExceeded) {
+						break
+					}
+					// Любая другая ошибка — завершили работу
+					log.Fatalf("error reading from perf reader: %v", err)
 				}
-				log.Fatalf("error reading batch from perf reader: %v", err)
+				batch = append(batch, record)
+				// Если мы получили batchSize записей, выходим досрочно
+				if len(batch) >= batchSize {
+					break
+				}
 			}
 
-			// Проверяем, не потерялись ли какие-то события
-			if lost := rd.LostSamples(); lost > 0 {
-				log.Printf("WARNING: lost %d samples (ring overflow)", lost)
+			// Если batch пустой — просто перейти на следующий цикл (ждем новые события)
+			if len(batch) == 0 {
+				continue
 			}
 
-			// Обрабатываем каждую из n прочитанных записей
-			for i := 0; i < n; i++ {
-				record := records[i]
-
-				// Если реальный размер RawSample < ожидаемого — пропускаем
+			// Обрабатываем каждую запись из batch
+			for _, record := range batch {
+				// Если меньше, чем ожидается — кольцо переполнилось, пропускаем
 				if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
 					log.Println("!!!!!!!!!!!!!!!!!!!!!!!invalid event size!!!!!!!!!!!!!!!!!!")
 					continue
 				}
 
-				// Распарсим одно событие
 				event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
 
 				srcIP := net.IPv4(
@@ -271,10 +276,12 @@ func main() {
 					byte(event.DstIP.S_addr>>24),
 				)
 
+				// Пропускаем события от нашего демона, чтобы не заваливать логи
 				if pkg.Int8ToString(event.Comm) == executableName {
 					continue
 				}
 
+				// Обработка Sysexit == 1 (sys_exit_sendto или sendmsg)
 				if event.Sysexit == 1 {
 					family := event.Family
 					if family == 2 {
@@ -282,7 +289,7 @@ func main() {
 						data, exists := eventMap_1[port]
 						if !exists {
 							data = &EventData{}
-							eventMap[port] = data
+							eventMap_1[port] = data
 						}
 						data.Sendmsg = Sendmsg{
 							DstIP:   dstIP,
@@ -291,6 +298,7 @@ func main() {
 							Comm:    pkg.Int8ToString(event.Comm),
 						}
 						data.HasSendmsg = true
+
 						if data.HasLookup && data.HasRecvmsg {
 							if data.Lookup.Proto == 17 {
 								proto = "UDP"
@@ -342,6 +350,7 @@ func main() {
 					}
 				}
 
+				// Обработка Sysexit == 11 (sys_exit_sendmsg)
 				if event.Sysexit == 11 {
 					if event.Family == 2 {
 						port := int(event.Dport)
@@ -357,6 +366,7 @@ func main() {
 							Comm:    pkg.Int8ToString(event.Comm),
 						}
 						data.HasSendmsg = true
+
 						if data.HasLookup && data.HasRecvmsg {
 							if data.Lookup.Proto == 17 {
 								proto = "UDP"
@@ -396,6 +406,7 @@ func main() {
 					}
 				}
 
+				// Обработка Sysexit == 2 (sys_exit_recvfrom)
 				if event.Sysexit == 2 {
 					if event.Family == 2 {
 						port := int(event.Sport)
@@ -411,6 +422,7 @@ func main() {
 							Comm:    pkg.Int8ToString(event.Comm),
 						}
 						data.HasRecvmsg = true
+
 						if data.HasLookup && data.HasSendmsg {
 							if data.Lookup.Proto == 17 {
 								proto = "UDP"
@@ -462,6 +474,7 @@ func main() {
 					}
 				}
 
+				// Обработка Sysexit == 12 (sys_exit_recvmsg)
 				if event.Sysexit == 12 {
 					if event.Family == 2 {
 						port := int(event.Sport)
@@ -477,12 +490,13 @@ func main() {
 							Comm:    pkg.Int8ToString(event.Comm),
 						}
 						data.HasRecvmsg = true
+
 						if data.HasLookup && data.HasSendmsg {
 							if data.Lookup.Proto == 17 {
 								proto = "UDP"
 							}
 							fmt.Println("")
-							fmt.Printf("RECVMSG PID=%d NAME=%s %s/%s:%d->%s:%d\n",
+							fmt.Printf("RECVMSG PID=%d NAME=%s %s/%s[%s]:%d->%s:%d\n",
 								data.Sendmsg.Pid,
 								data.Sendmsg.Comm,
 								proto,
@@ -491,7 +505,7 @@ func main() {
 								data.Lookup.SrcIP,
 								data.Lookup.SrcPort,
 							)
-							fmt.Printf("RECVMSG PID=%d NAME=%s %s/%s:%d<-%s:%d\n",
+							fmt.Printf("RECVMSG PID=%d NAME=%s %s/%s[%s]:%d<-%s:%d\n",
 								data.Recvmsg.Pid,
 								data.Recvmsg.Comm,
 								proto,
@@ -516,6 +530,7 @@ func main() {
 					}
 				}
 
+				// Обработка Sysexit == 3 (sk_lookup)
 				if event.Sysexit == 3 {
 					family := event.Family
 					if family == 2 {
@@ -593,10 +608,11 @@ func main() {
 						fmt.Printf("LOOKUP SRC IPv6=%s\n", ip6)
 						ip6_d := pkg.IPv6FromLEWords(IPv6BytesToWords(event.DstIP6.In6U.U6Addr8))
 						fmt.Printf("LOOKUP DST IPv6=%s\n", ip6_d)
-						fmt.Printf("LOOKUP SPORT=%d  DPORT=%d PROTO=%d\n", event.Sport, event.Dport, event.Proto)
+						fmt.Printf("LOOKUP SPORT=%d  DPORT=%d PROТО=%d\n", event.Sport, event.Dport, event.Proto)
 					}
 				}
 
+				// Обработка Sysexit == 6 (inet_sock_set_state)
 				if event.Sysexit == 6 {
 					if event.Family == 10 {
 						sport := event.Sport
@@ -702,7 +718,11 @@ func main() {
 						}
 
 						fmt.Printf("PID=%d %s:%s -> %s:%s \n",
-							xxx_pid, proto, srcAddr, proto, dstAddr,
+							xxx_pid,
+							proto,
+							srcAddr,
+							proto,
+							dstAddr,
 						)
 						fmt.Println("")
 
@@ -711,15 +731,16 @@ func main() {
 					}
 				}
 
-			} // конец for i < n
-		} // конец for
-	}() // конец go func
+			} // конец цикла обработки batch
+		} // конец главного цикла
+	}()
 
 	fmt.Println("Press Ctrl+C to exit")
 	<-stop
 	fmt.Println("Exiting...")
 }
 
+// Вспомогательная функция для IPv6
 func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 	var words [4]uint32
 	for i := 0; i < 4; i++ {
@@ -730,72 +751,6 @@ func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 	}
 	return words
 }
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingFieldOrMethod",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingFieldOrMethod"
-		}
-	},
-	"severity": 8,
-	"message": "rd.ReadBatch undefined (type *perf.Reader has no field or method ReadBatch)",
-	"source": "compiler",
-	"startLineNumber": 170,
-	"startColumn": 17,
-	"endLineNumber": 170,
-	"endColumn": 26
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "UndeclaredImportedName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredImportedName"
-		}
-	},
-	"severity": 8,
-	"message": "undefined: perf.ReadBatchOptions",
-	"source": "compiler",
-	"startLineNumber": 170,
-	"startColumn": 41,
-	"endLineNumber": 170,
-	"endColumn": 57
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingFieldOrMethod",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingFieldOrMethod"
-		}
-	},
-	"severity": 8,
-	"message": "rd.LostSamples undefined (type *perf.Reader has no field or method LostSamples)",
-	"source": "compiler",
-	"startLineNumber": 179,
-	"startColumn": 18,
-	"endLineNumber": 179,
-	"endColumn": 29
-}]
 
 
 
