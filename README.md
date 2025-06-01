@@ -847,3 +847,21 @@ func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 }
 
 
+
+(pprof) top
+Showing nodes accounting for 30ms, 100% of 30ms total
+Showing top 10 nodes out of 19
+      flat  flat%   sum%        cum   cum%
+      10ms 33.33% 33.33%       10ms 33.33%  gogo
+      10ms 33.33% 66.67%       10ms 33.33%  runtime.futex
+      10ms 33.33%   100%       10ms 33.33%  runtime.memmove
+         0     0%   100%       10ms 33.33%  github.com/cilium/ebpf/perf.(*Reader).Read
+         0     0%   100%       10ms 33.33%  github.com/cilium/ebpf/perf.(*Reader).ReadInto
+         0     0%   100%       10ms 33.33%  github.com/cilium/ebpf/perf.(*Reader).readRecordFromRing
+         0     0%   100%       10ms 33.33%  github.com/cilium/ebpf/perf.(*forwardReader).Read
+         0     0%   100%       10ms 33.33%  github.com/cilium/ebpf/perf.readRecord
+         0     0%   100%       10ms 33.33%  io.ReadAtLeast
+         0     0%   100%       10ms 33.33%  io.ReadFull (inline)
+(pprof) 
+
+
