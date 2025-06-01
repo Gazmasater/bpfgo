@@ -94,17 +94,27 @@ go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
 
 curl http://localhost:6060/debug/pprof/
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
-Fetching profile over HTTP from http://localhost:6060/debug/pprof/profile?seconds=30
-Saved profile in /home/gaz358/pprof/pprof.bpfgo.samples.cpu.002.pb.gz
 File: bpfgo
 Build ID: be22e3472fc86bd633e4aa81a27b3e4da8c8011a
 Type: cpu
-Time: 2025-06-01 15:37:06 MSK
-Duration: 30s, Total samples = 100ms ( 0.33%)
+Time: 2025-06-01 15:42:44 MSK
+Duration: 30.01s, Total samples = 70ms ( 0.23%)
 Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 70ms, 100% of 70ms total
+Showing top 10 nodes out of 54
+      flat  flat%   sum%        cum   cum%
+      20ms 28.57% 28.57%       20ms 28.57%  internal/runtime/syscall.Syscall6
+      10ms 14.29% 42.86%       40ms 57.14%  github.com/miekg/dns.(*Client).Exchange
+      10ms 14.29% 57.14%       10ms 14.29%  internal/poll.(*FD).Write
+      10ms 14.29% 71.43%       10ms 14.29%  runtime.(*timer).stop
+      10ms 14.29% 85.71%       10ms 14.29%  runtime.futex
+      10ms 14.29%   100%       10ms 14.29%  runtime.memclrNoHeapPointers
+         0     0%   100%       10ms 14.29%  bpfgo/pkg.ResolveIP
+         0     0%   100%       40ms 57.14%  bpfgo/pkg.ResolveIP_n
+         0     0%   100%       10ms 14.29%  fmt.Fprintf
+         0     0%   100%       10ms 14.29%  fmt.Printf
 (pprof) 
-
 
 
 
