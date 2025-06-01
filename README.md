@@ -98,4 +98,11 @@ git merge main
 git add README.md
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git merge main
+Auto-merging README.md
+CONFLICT (add/add): Merge conflict in README.md
+Automatic merge failed; fix conflicts and then commit the result.
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfg
+
+
 
