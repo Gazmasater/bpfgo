@@ -871,6 +871,331 @@ Showing top 10 nodes out of 38
 
 (pprof) list github.com/cilium/ebpf/btf.readAndInflateTypes
 
-
+File: bpfgo
+Build ID: 691a8045ad0b7b61b208865d6487496b0de466bf
+Type: inuse_space
+Time: 2025-06-01 21:53:46 MSK
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) list github.com/cilium/ebpf/btf.readAndInflateTypes
+Total: 20.09MB
+ROUTINE ======================== github.com/cilium/ebpf/btf.readAndInflateTypes in /home/gaz358/go/pkg/mod/github.com/cilium/ebpf@v0.18.0/btf/types.go
+    8.28MB    11.29MB (flat, cum) 56.19% of Total
+         .          .    761:func readAndInflateTypes(r io.Reader, bo binary.ByteOrder, typeLen uint32, rawStrings *stringTable, base *Spec) ([]Type, error) {
+         .          .    762:   // because of the interleaving between types and struct members it is difficult to
+         .          .    763:   // precompute the numbers of raw types this will parse
+         .          .    764:   // this "guess" is a good first estimation
+         .          .    765:   sizeOfbtfType := uintptr(btfTypeLen)
+         .          .    766:   tyMaxCount := uintptr(typeLen) / sizeOfbtfType / 2
+    2.28MB     2.28MB    767:   types := make([]Type, 0, tyMaxCount)
+         .          .    768:
+         .          .    769:   // Void is defined to always be type ID 0, and is thus omitted from BTF.
+         .          .    770:   types = append(types, (*Void)(nil))
+         .          .    771:
+         .          .    772:   firstTypeID := TypeID(0)
+         .          .    773:   if base != nil {
+         .          .    774:           var err error
+         .          .    775:           firstTypeID, err = base.nextTypeID()
+         .          .    776:           if err != nil {
+         .          .    777:                   return nil, err
+         .          .    778:           }
+         .          .    779:
+         .          .    780:           // Split BTF doesn't contain Void.
+         .          .    781:           types = types[:0]
+         .          .    782:   }
+         .          .    783:
+         .          .    784:   type fixupDef struct {
+         .          .    785:           id  TypeID
+         .          .    786:           typ *Type
+         .          .    787:   }
+         .          .    788:
+         .          .    789:   var fixups []fixupDef
+         .          .    790:   fixup := func(id TypeID, typ *Type) {
+         .          .    791:           if id < firstTypeID {
+         .          .    792:                   if baseType, err := base.TypeByID(id); err == nil {
+         .          .    793:                           *typ = baseType
+         .          .    794:                           return
+         .          .    795:                   }
+         .          .    796:           }
+         .          .    797:
+         .          .    798:           idx := int(id - firstTypeID)
+         .          .    799:           if idx < len(types) {
+         .          .    800:                   // We've already inflated this type, fix it up immediately.
+         .          .    801:                   *typ = types[idx]
+         .          .    802:                   return
+         .          .    803:           }
+         .          .    804:
+         .          .    805:           fixups = append(fixups, fixupDef{id, typ})
+         .          .    806:   }
+         .          .    807:
+         .          .    808:   type bitfieldFixupDef struct {
+         .          .    809:           id TypeID
+         .          .    810:           m  *Member
+         .          .    811:   }
+         .          .    812:
+         .          .    813:   var (
+         .          .    814:           legacyBitfields = make(map[TypeID][2]Bits) // offset, size
+         .          .    815:           bitfieldFixups  []bitfieldFixupDef
+         .          .    816:   )
+         .          .    817:   convertMembers := func(raw []btfMember, kindFlag bool) ([]Member, error) {
+         .          .    818:           // NB: The fixup below relies on pre-allocating this array to
+         .          .    819:           // work, since otherwise append might re-allocate members.
+         .          .    820:           members := make([]Member, 0, len(raw))
+         .          .    821:           for i, btfMember := range raw {
+         .          .    822:                   name, err := rawStrings.Lookup(btfMember.NameOff)
+         .          .    823:                   if err != nil {
+         .          .    824:                           return nil, fmt.Errorf("can't get name for member %d: %w", i, err)
+         .          .    825:                   }
+         .          .    826:
+         .          .    827:                   members = append(members, Member{
+         .          .    828:                           Name:   name,
+         .          .    829:                           Offset: Bits(btfMember.Offset),
+         .          .    830:                   })
+         .          .    831:
+         .          .    832:                   m := &members[i]
+         .          .    833:                   fixup(raw[i].Type, &m.Type)
+         .          .    834:
+         .          .    835:                   if kindFlag {
+         .          .    836:                           m.BitfieldSize = Bits(btfMember.Offset >> 24)
+         .          .    837:                           m.Offset &= 0xffffff
+         .          .    838:                           // We ignore legacy bitfield definitions if the current composite
+         .          .    839:                           // is a new-style bitfield. This is kind of safe since offset and
+         .          .    840:                           // size on the type of the member must be zero if kindFlat is set
+         .          .    841:                           // according to spec.
+         .          .    842:                           continue
+         .          .    843:                   }
+         .          .    844:
+         .          .    845:                   // This may be a legacy bitfield, try to fix it up.
+         .          .    846:                   data, ok := legacyBitfields[raw[i].Type]
+         .          .    847:                   if ok {
+         .          .    848:                           // Bingo!
+         .          .    849:                           m.Offset += data[0]
+         .          .    850:                           m.BitfieldSize = data[1]
+         .          .    851:                           continue
+         .          .    852:                   }
+         .          .    853:
+         .          .    854:                   if m.Type != nil {
+         .          .    855:                           // We couldn't find a legacy bitfield, but we know that the member's
+         .          .    856:                           // type has already been inflated. Hence we know that it can't be
+         .          .    857:                           // a legacy bitfield and there is nothing left to do.
+         .          .    858:                           continue
+         .          .    859:                   }
+         .          .    860:
+         .          .    861:                   // We don't have fixup data, and the type we're pointing
+         .          .    862:                   // at hasn't been inflated yet. No choice but to defer
+         .          .    863:                   // the fixup.
+         .          .    864:                   bitfieldFixups = append(bitfieldFixups, bitfieldFixupDef{
+         .          .    865:                           raw[i].Type,
+         .          .    866:                           m,
+         .          .    867:                   })
+         .          .    868:           }
+         .          .    869:           return members, nil
+         .          .    870:   }
+         .          .    871:
+         .          .    872:   var (
+         .          .    873:           buf       = make([]byte, 1024)
+         .          .    874:           header    btfType
+         .          .    875:           bInt      btfInt
+         .          .    876:           bArr      btfArray
+         .          .    877:           bMembers  []btfMember
+         .          .    878:           bEnums    []btfEnum
+         .          .    879:           bParams   []btfParam
+         .          .    880:           bVariable btfVariable
+         .          .    881:           bSecInfos []btfVarSecinfo
+         .          .    882:           bDeclTag  btfDeclTag
+         .          .    883:           bEnums64  []btfEnum64
+         .          .    884:   )
+         .          .    885:
+         .          .    886:   var declTags []*declTag
+         .          .    887:   for {
+         .          .    888:           var (
+         .          .    889:                   id  = firstTypeID + TypeID(len(types))
+         .          .    890:                   typ Type
+         .          .    891:           )
+         .          .    892:
+         .          .    893:           if _, err := io.ReadFull(r, buf[:btfTypeLen]); err == io.EOF {
+         .          .    894:                   break
+         .          .    895:           } else if err != nil {
+         .          .    896:                   return nil, fmt.Errorf("can't read type info for id %v: %v", id, err)
+         .          .    897:           }
+         .          .    898:
+         .          .    899:           if _, err := unmarshalBtfType(&header, buf[:btfTypeLen], bo); err != nil {
+         .          .    900:                   return nil, fmt.Errorf("can't unmarshal type info for id %v: %v", id, err)
+         .          .    901:           }
+         .          .    902:
+         .          .    903:           if id < firstTypeID {
+         .          .    904:                   return nil, fmt.Errorf("no more type IDs")
+         .          .    905:           }
+         .          .    906:
+         .          .    907:           name, err := rawStrings.Lookup(header.NameOff)
+         .          .    908:           if err != nil {
+         .          .    909:                   return nil, fmt.Errorf("get name for type id %d: %w", id, err)
+         .          .    910:           }
+         .          .    911:
+         .          .    912:           switch header.Kind() {
+         .          .    913:           case kindInt:
+         .          .    914:                   size := header.Size()
+         .          .    915:                   buf = buf[:btfIntLen]
+         .          .    916:                   if _, err := io.ReadFull(r, buf); err != nil {
+         .          .    917:                           return nil, fmt.Errorf("can't read btfInt, id: %d: %w", id, err)
+         .          .    918:                   }
+         .          .    919:                   if _, err := unmarshalBtfInt(&bInt, buf, bo); err != nil {
+         .          .    920:                           return nil, fmt.Errorf("can't unmarshal btfInt, id: %d: %w", id, err)
+         .          .    921:                   }
+         .          .    922:                   if bInt.Offset() > 0 || bInt.Bits().Bytes() != size {
+         .          .    923:                           legacyBitfields[id] = [2]Bits{bInt.Offset(), bInt.Bits()}
+         .          .    924:                   }
+         .          .    925:                   typ = &Int{name, header.Size(), bInt.Encoding()}
+         .          .    926:
+         .          .    927:           case kindPointer:
+  512.01kB   512.01kB    928:                   ptr := &Pointer{nil}
+         .          .    929:                   fixup(header.Type(), &ptr.Target)
+         .          .    930:                   typ = ptr
+         .          .    931:
+         .          .    932:           case kindArray:
+         .          .    933:                   buf = buf[:btfArrayLen]
+         .          .    934:                   if _, err := io.ReadFull(r, buf); err != nil {
+         .          .    935:                           return nil, fmt.Errorf("can't read btfArray, id: %d: %w", id, err)
+         .          .    936:                   }
+         .          .    937:                   if _, err := unmarshalBtfArray(&bArr, buf, bo); err != nil {
+         .          .    938:                           return nil, fmt.Errorf("can't unmarshal btfArray, id: %d: %w", id, err)
+         .          .    939:                   }
+         .          .    940:
+         .          .    941:                   arr := &Array{nil, nil, bArr.Nelems}
+         .          .    942:                   fixup(bArr.IndexType, &arr.Index)
+         .          .    943:                   fixup(bArr.Type, &arr.Type)
+         .          .    944:                   typ = arr
+         .          .    945:
+         .          .    946:           case kindStruct:
+         .          .    947:                   vlen := header.Vlen()
+         .          .    948:                   bMembers = slices.Grow(bMembers[:0], vlen)[:vlen]
+         .          .    949:                   buf = slices.Grow(buf[:0], vlen*btfMemberLen)[:vlen*btfMemberLen]
+         .          .    950:                   if _, err := io.ReadFull(r, buf); err != nil {
+         .          .    951:                           return nil, fmt.Errorf("can't read btfMembers, id: %d: %w", id, err)
+         .          .    952:                   }
+         .          .    953:                   if _, err := unmarshalBtfMembers(bMembers, buf, bo); err != nil {
+         .          .    954:                           return nil, fmt.Errorf("can't unmarshal btfMembers, id: %d: %w", id, err)
+         .          .    955:                   }
+         .          .    956:
+         .        2MB    957:                   members, err := convertMembers(bMembers, header.Bitfield())
+         .          .    958:                   if err != nil {
+         .          .    959:                           return nil, fmt.Errorf("struct %s (id %d): %w", name, id, err)
+         .          .    960:                   }
+       1MB        1MB    961:                   typ = &Struct{name, header.Size(), members, nil}
+         .          .    962:
+         .          .    963:           case kindUnion:
+         .          .    964:                   vlen := header.Vlen()
+         .          .    965:                   bMembers = slices.Grow(bMembers[:0], vlen)[:vlen]
+         .          .    966:                   buf = slices.Grow(buf[:0], vlen*btfMemberLen)[:vlen*btfMemberLen]
+         .          .    967:                   if _, err := io.ReadFull(r, buf); err != nil {
+         .          .    968:                           return nil, fmt.Errorf("can't read btfMembers, id: %d: %w", id, err)
+         .          .    969:                   }
+         .          .    970:                   if _, err := unmarshalBtfMembers(bMembers, buf, bo); err != nil {
+         .          .    971:                           return nil, fmt.Errorf("can't unmarshal btfMembers, id: %d: %w", id, err)
+         .          .    972:                   }
+         .          .    973:
+         .        1MB    974:                   members, err := convertMembers(bMembers, header.Bitfield())
+         .          .    975:                   if err != nil {
+         .          .    976:                           return nil, fmt.Errorf("union %s (id %d): %w", name, id, err)
+         .          .    977:                   }
+  512.04kB   512.04kB    978:                   typ = &Union{name, header.Size(), members, nil}
+         .          .    979:
+         .          .    980:           case kindEnum:
+         .          .    981:                   vlen := header.Vlen()
+         .          .    982:                   bEnums = slices.Grow(bEnums[:0], vlen)[:vlen]
+         .          .    983:                   buf = slices.Grow(buf[:0], vlen*btfEnumLen)[:vlen*btfEnumLen]
+         .          .    984:                   if _, err := io.ReadFull(r, buf); err != nil {
+         .          .    985:                           return nil, fmt.Errorf("can't read btfEnums, id: %d: %w", id, err)
+         .          .    986:                   }
+         .          .    987:                   if _, err := unmarshalBtfEnums(bEnums, buf, bo); err != nil {
+         .          .    988:                           return nil, fmt.Errorf("can't unmarshal btfEnums, id: %d: %w", id, err)
+         .          .    989:                   }
+         .          .    990:
+       1MB        1MB    991:                   vals := make([]EnumValue, 0, vlen)
+         .          .    992:                   signed := header.Signed()
+         .          .    993:                   for i, btfVal := range bEnums {
+         .          .    994:                           name, err := rawStrings.Lookup(btfVal.NameOff)
+         .          .    995:                           if err != nil {
+         .          .    996:                                   return nil, fmt.Errorf("get name for enum value %d: %s", i, err)
+         .          .    997:                           }
+         .          .    998:                           value := uint64(btfVal.Val)
+         .          .    999:                           if signed {
+         .          .   1000:                                   // Sign extend values to 64 bit.
+         .          .   1001:                                   value = uint64(int32(btfVal.Val))
+         .          .   1002:                           }
+         .          .   1003:                           vals = append(vals, EnumValue{name, value})
+         .          .   1004:                   }
+  512.02kB   512.02kB   1005:                   typ = &Enum{name, header.Size(), signed, vals}
+         .          .   1006:
+         .          .   1007:           case kindForward:
+         .          .   1008:                   typ = &Fwd{name, header.FwdKind()}
+         .          .   1009:
+         .          .   1010:           case kindTypedef:
+         .          .   1011:                   typedef := &Typedef{name, nil, nil}
+         .          .   1012:                   fixup(header.Type(), &typedef.Type)
+         .          .   1013:                   typ = typedef
+         .          .   1014:
+         .          .   1015:           case kindVolatile:
+         .          .   1016:                   volatile := &Volatile{nil}
+         .          .   1017:                   fixup(header.Type(), &volatile.Type)
+         .          .   1018:                   typ = volatile
+         .          .   1019:
+         .          .   1020:           case kindConst:
+         .          .   1021:                   cnst := &Const{nil}
+         .          .   1022:                   fixup(header.Type(), &cnst.Type)
+         .          .   1023:                   typ = cnst
+         .          .   1024:
+         .          .   1025:           case kindRestrict:
+         .          .   1026:                   restrict := &Restrict{nil}
+         .          .   1027:                   fixup(header.Type(), &restrict.Type)
+         .          .   1028:                   typ = restrict
+         .          .   1029:
+         .          .   1030:           case kindFunc:
+  512.05kB   512.05kB   1031:                   fn := &Func{name, nil, header.Linkage(), nil, nil}
+         .          .   1032:                   fixup(header.Type(), &fn.Type)
+         .          .   1033:                   typ = fn
+         .          .   1034:
+         .          .   1035:           case kindFuncProto:
+         .          .   1036:                   vlen := header.Vlen()
+         .          .   1037:                   bParams = slices.Grow(bParams[:0], vlen)[:vlen]
+         .          .   1038:                   buf = slices.Grow(buf[:0], vlen*btfParamLen)[:vlen*btfParamLen]
+         .          .   1039:                   if _, err := io.ReadFull(r, buf); err != nil {
+         .          .   1040:                           return nil, fmt.Errorf("can't read btfParams, id: %d: %w", id, err)
+         .          .   1041:                   }
+         .          .   1042:                   if _, err := unmarshalBtfParams(bParams, buf, bo); err != nil {
+         .          .   1043:                           return nil, fmt.Errorf("can't unmarshal btfParams, id: %d: %w", id, err)
+         .          .   1044:                   }
+         .          .   1045:
+       1MB        1MB   1046:                   params := make([]FuncParam, 0, vlen)
+         .          .   1047:                   for i, param := range bParams {
+         .          .   1048:                           name, err := rawStrings.Lookup(param.NameOff)
+         .          .   1049:                           if err != nil {
+         .          .   1050:                                   return nil, fmt.Errorf("get name for func proto parameter %d: %s", i, err)
+         .          .   1051:                           }
+         .          .   1052:                           params = append(params, FuncParam{
+         .          .   1053:                                   Name: name,
+         .          .   1054:                           })
+         .          .   1055:                   }
+         .          .   1056:                   for i := range params {
+         .          .   1057:                           fixup(bParams[i].Type, &params[i].Type)
+         .          .   1058:                   }
+         .          .   1059:
+       1MB        1MB   1060:                   fp := &FuncProto{nil, params}
+         .          .   1061:                   fixup(header.Type(), &fp.Return)
+         .          .   1062:                   typ = fp
+         .          .   1063:
+         .          .   1064:           case kindVar:
+         .          .   1065:                   buf = buf[:btfVariableLen]
+ROUTINE ======================== github.com/cilium/ebpf/btf.readAndInflateTypes.func2 in /home/gaz358/go/pkg/mod/github.com/cilium/ebpf@v0.18.0/btf/types.go
+       3MB        3MB (flat, cum) 14.95% of Total
+         .          .    817:   convertMembers := func(raw []btfMember, kindFlag bool) ([]Member, error) {
+         .          .    818:           // NB: The fixup below relies on pre-allocating this array to
+         .          .    819:           // work, since otherwise append might re-allocate members.
+       3MB        3MB    820:           members := make([]Member, 0, len(raw))
+         .          .    821:           for i, btfMember := range raw {
+         .          .    822:                   name, err := rawStrings.Lookup(btfMember.NameOff)
+         .          .    823:                   if err != nil {
+         .          .    824:                           return nil, fmt.Errorf("can't get name for member %d: %w", i, err)
+         .          .    825:                   }
+(pprof) 
 
 
