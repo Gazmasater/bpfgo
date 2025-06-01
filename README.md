@@ -84,6 +84,21 @@ git commit -m "Ignore папку TMP"
 git rm -r --cached .vscode
 git commit -m "Игнорировать папку .vscode"
 
+howing nodes accounting for 160ms, 100% of 160ms total
+Showing top 10 nodes out of 34
+      flat  flat%   sum%        cum   cum%
+      60ms 37.50% 37.50%      140ms 87.50%  runtime.scanobject
+      20ms 12.50% 50.00%       20ms 12.50%  runtime.(*mspan).heapBitsSmallForAddr
+      20ms 12.50% 62.50%       30ms 18.75%  runtime.findObject
+      10ms  6.25% 68.75%       10ms  6.25%  runtime.(*mspan).base (inline)
+      10ms  6.25% 75.00%       10ms  6.25%  runtime.(*mspan).markBitsForIndex (inline)
+      10ms  6.25% 81.25%       10ms  6.25%  runtime.(*spanSet).push
+      10ms  6.25% 87.50%       10ms  6.25%  runtime.cgocall
+      10ms  6.25% 93.75%       30ms 18.75%  runtime.greyobject
+      10ms  6.25%   100%       10ms  6.25%  runtime.spanOf (inline)
+         0     0%   100%       10ms  6.25%  bpfgo/pkg.ResolveIP
+(pprof) 
+
 
 
 
