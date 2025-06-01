@@ -176,17 +176,18 @@ func putEventData(ed *EventData) {
 	eventDataPool.Put(ed)
 }
 
-// ------ Начало добавленного кода для кэша резолвинга ------
+// ------ Начало исправленного кода для кэша резолвинга ------
 var (
 	// resolveCache хранит результат резолва ip -> hostname
 	resolveCache = make(map[string]string)
 	cacheMu      sync.RWMutex
 )
 
-// resolveHost пытается получить hostname из кэша, а если нет — вызывать pkg.ResolveIP_n и сохранять результат.
+// resolveHost сначала проверяет кэш, а затем вызывает pkg.ResolveIP (для IPv4) или pkg.ResolveIP_n (для IPv6)
 func resolveHost(ip net.IP) string {
 	key := ip.String()
-	// Сначала читающий доступ к кэшу
+
+	// Чтение из кэша
 	cacheMu.RLock()
 	if host, ok := resolveCache[key]; ok {
 		cacheMu.RUnlock()
@@ -194,22 +195,27 @@ func resolveHost(ip net.IP) string {
 	}
 	cacheMu.RUnlock()
 
-	// Дальше под мьютексом записываем
+	// Вычисляем хост и записываем в кэш
+	var host string
+	if ip.To4() != nil {
+		// IPv4: используем pkg.ResolveIP, он никогда не возвращает ошибку, а в случае отсутствия PTR просто отдаст строку IP
+		host = pkg.ResolveIP(ip)
+	} else {
+		// IPv6: используем pkg.ResolveIP_n, который возвращает (string, error)
+		var err error
+		host, err = pkg.ResolveIP_n(ip)
+		if err != nil {
+			host = "unknown"
+		}
+	}
+
 	cacheMu.Lock()
-	defer cacheMu.Unlock()
-	// Проверили ещё раз на предмет обращения конкурентных горутин
-	if host, ok := resolveCache[key]; ok {
-		return host
-	}
-	// Выполняем реальный резолв
-	host, err := pkg.ResolveIP_n(ip)
-	if err != nil {
-		host = "unknown"
-	}
 	resolveCache[key] = host
+	cacheMu.Unlock()
+
 	return host
 }
-// ------ Конец добавленного кода для кэша резолвинга ------
+// ------ Конец исправленного кода для кэша резолвинга ------
 
 func init() {
 	// Снимаем ограничение на память
