@@ -731,6 +731,73 @@ func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
 	return words
 }
 
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "rd.ReadBatch undefined (type *perf.Reader has no field or method ReadBatch)",
+	"source": "compiler",
+	"startLineNumber": 170,
+	"startColumn": 17,
+	"endLineNumber": 170,
+	"endColumn": 26
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "UndeclaredImportedName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredImportedName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: perf.ReadBatchOptions",
+	"source": "compiler",
+	"startLineNumber": 170,
+	"startColumn": 41,
+	"endLineNumber": 170,
+	"endColumn": 57
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "rd.LostSamples undefined (type *perf.Reader has no field or method LostSamples)",
+	"source": "compiler",
+	"startLineNumber": 179,
+	"startColumn": 18,
+	"endLineNumber": 179,
+	"endColumn": 29
+}]
+
+
 
 
 
