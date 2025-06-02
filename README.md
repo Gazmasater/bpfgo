@@ -119,68 +119,65 @@ git push --force origin ProcNet_monitor
 
 
 func resolveHost(ip net.IP) string {
-	// Если это IPv4-мэппед IPv6 (например ::ffff:127.0.0.1), приведём к «чистому» IPv4
-	if v4 := ip.To4(); v4 != nil {
-		ip = v4
-	}
+    // 1) Если ip == nil, сразу возвращаем «unknown»
+    if ip == nil {
+        return "unknown"
+    }
 
-	// Теперь IsLoopback() вернёт true для 127.0.0.1 и ::1
-	if ip.IsLoopback() {
-		return "localhost"
-	}
+    // 2) Убираем возможную зону (%lo0, %eth0 и т.п.)
+    if s := ip.String(); strings.Contains(s, "%") {
+        // если, например, ip.String() == "127.0.0.1%lo0", обрезаем «%lo0»
+        noZone := s[:strings.LastIndex(s, "%")]
+        ip = net.ParseIP(noZone)
+        if ip == nil {
+            return "unknown"
+        }
+    }
 
-	key := ip.String()
-
-	cacheMu.RLock()
-	if host, ok := resolveCache[key]; ok {
-		cacheMu.RUnlock()
-		return host
-	}
-	cacheMu.RUnlock()
-
-	var host string
-	if ip.To4() != nil {
-		host = pkg.ResolveIP(ip)
-	} else {
-		var err error
-		host, err = pkg.ResolveIP_n(ip)
-		if err != nil {
-			host = "unknown"
-		}
-	}
-
-	cacheMu.Lock()
-	resolveCache[key] = host
-	cacheMu.Unlock()
-
-	return host
-}
-
-
-
-func resolveHost(ip net.IP) string {
-    fmt.Printf("→ resolveHost: raw ip=%#v, String()=%q, To4()=%#v, IsLoopback=%v\n",
-        ip, ip.String(), ip.To4(), ip.IsLoopback(),
-    )
-
+    // 3) Нормализуем «IPv4-mapped IPv6» (например ::ffff:127.0.0.1) в чистое 4-байтовое presentation
     if v4 := ip.To4(); v4 != nil {
         ip = v4
-        fmt.Printf("   after To4() → ip=%#v, String()=%q, IsLoopback=%v\n",
-            ip, ip.String(), ip.IsLoopback(),
-        )
     }
 
+    // 4) Сразу проверяем loopback (127.0.0.1 или ::1)
+    //    после To4() IsLoopback() вернёт true и для «::ffff:127.0.0.1»
     if ip.IsLoopback() {
-        fmt.Println("   → detected loopback, returning \"localhost\"")
         return "localhost"
     }
-    // …далее ваш код
-    …
+
+    // 5) Больше не loopback-адрес, используем строковое представление IP как ключ кеша
+    key := ip.String()
+
+    cacheMu.RLock()
+    if host, ok := resolveCache[key]; ok {
+        cacheMu.RUnlock()
+        return host
+    }
+    cacheMu.RUnlock()
+
+    // 6) Если в кеше нет, зовём pkg.ResolveIP(...) или pkg.ResolveIP_n(...)
+    var host string
+    if ip4 := ip.To4(); ip4 != nil {
+        host = pkg.ResolveIP(ip4)
+    } else {
+        var err error
+        host, err = pkg.ResolveIP_n(ip)
+        if err != nil {
+            host = "unknown"
+        }
+    }
+
+    // 7) Записываем в кеш и возвращаем
+    cacheMu.Lock()
+    resolveCache[key] = host
+    cacheMu.Unlock()
+
+    return host
 }
 
 
-→ resolveHost: raw ip=net.IP{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0xff, 0xff, 0x1, 0x0, 0x0, 0x7f}, String()="1.0.0.127", To4()=net.IP{0x1, 0x0, 0x0, 0x7f}, IsLoopback=false
-   after To4() → ip=net.IP{0x1, 0x0, 0x0, 0x7f}, String()="1.0.0.127", IsLoopback=false
+
+
 
 
 
