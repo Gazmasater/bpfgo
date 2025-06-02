@@ -81,114 +81,42 @@ go tool pprof http://localhost:6060/debug/pprof/heap
 git checkout ProcNet_monitor
 git push --force origin ProcNet_monitor
 
-____________________________________________________________________________________________________
-myprog
+func resolveHost(ip net.IP) string {
+	if ip.IsLoopback() {
 
-// file: int8string_bench_test.go
-package main
+		key := "localhost"
 
-import "testing"
+	} else {
+		key := ip.String()
 
-// makeTestArray создаёт [32]int8], где первые байты содержат ASCII-символы,
-// а оставшиеся — нули.
-func makeTestArray() [32]int8 {
-	var arr [32]int8
-	s := "Hello, Benchmark!"
-	for i := 0; i < len(s) && i < len(arr); i++ {
-		arr[i] = int8(s[i])
 	}
-	return arr
-}
 
-func BenchmarkInt8ToString(b *testing.B) {
-	arr := makeTestArray()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = Int8ToString(arr)
+	cacheMu.RLock()
+	if host, ok := resolveCache[key]; ok {
+		cacheMu.RUnlock()
+		return host
 	}
-}
+	cacheMu.RUnlock()
 
-_______________________________________________________________________________________--
-
-newprogr
-
-package main
-
-import "unsafe"
-
-// Int8ToStringOptimized — оптимизированная версия:
-// один проход для поиска первого нулевого байта и zero-copy конверсия.
-func Int8ToStringOptimized(arr [32]int8) string {
-    // 1) Найти индекс первого нулевого байта (или 32, если его нет).
-    var length int
-    for length = 0; length < len(arr); length++ {
-        if arr[length] == 0 {
-            break
-        }
-    }
-    // 2) Если строка пустая (первый байт нулевой), вернуть "".
-    if length == 0 {
-        return ""
-    }
-    // 3) Превратить [32]int8 ↦ [32]byte и сделать zero-copy через unsafe.String.
-    slice := (*[32]byte)(unsafe.Pointer(&arr[0]))
-    return unsafe.String(&slice[0], length)
-}
-
-
-
-
-// file: int8string_bench_test.go
-package main
-
-import "testing"
-
-// makeTestArray создаёт [32]int8], где первые байты содержат
-// ASCII-символы строки "Hello, Benchmark!", а остальные — нули.
-func makeTestArray() [32]int8 {
-	var arr [32]int8
-	s := "Hello, Benchmark!"
-	for i := 0; i < len(s) && i < len(arr); i++ {
-		arr[i] = int8(s[i])
+	var host string
+	if ip.To4() != nil {
+		host = pkg.ResolveIP(ip)
+	} else {
+		var err error
+		host, err = pkg.ResolveIP_n(ip)
+		if err != nil {
+			host = "unknown"
+		}
 	}
-	return arr
-}
 
-// BenchmarkOriginalInt8ToString измеряет вашу (оригинальную) версию Int8ToString.
-// Предполагается, что функция называется именно Int8ToString.
-func BenchmarkOriginalInt8ToString(b *testing.B) {
-	arr := makeTestArray()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = Int8ToString(arr)
-	}
-}
+	cacheMu.Lock()
+	resolveCache[key] = host
+	cacheMu.Unlock()
 
-// BenchmarkOptimizedInt8ToString измеряет оптимизированную версию.
-// Переименуйте вашу оптимизированную функцию в Int8ToStringOptimized,
-// чтобы оба бенчмарка вызывали разные реализации.
-func BenchmarkOptimizedInt8ToString(b *testing.B) {
-	arr := makeTestArray()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = Int8ToStringOptimized(arr)
-	}
+	return host
 }
 
 
-
-go test -bench=. -benchmem
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/pkg$ go test -bench=. -benchmem
-goos: linux
-goarch: amd64
-pkg: bpfgo/pkg
-cpu: 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz
-BenchmarkOriginalInt8ToString-8         20684474                61.02 ns/op           32 B/op          1 allocs/op
-BenchmarkOptimizedInt8ToString-8        73889950                17.41 ns/op            0 B/op          0 allocs/op
-PASS
-ok      bpfgo/pkg       3.565s
 
 
 
