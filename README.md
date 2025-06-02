@@ -119,18 +119,14 @@ git push --force origin ProcNet_monitor
 
 
 func resolveHost(ip net.IP) string {
-	// Сначала приведём IPv4-адреса в «чистый» 4-байтовый формат,
-	// чтобы IsLoopback() корректно распознал все варианты loopback
-	if v4 := ip.To4(); v4 != nil {
-		ip = v4
+
+	if ip.IsLoopback() {
+
+		host := "localhost"
+		return host
 	}
 
-	var key string
-	if ip.IsLoopback() {
-		key = "localhost"
-	} else {
-		key = ip.String()
-	}
+	key := ip.String()
 
 	cacheMu.RLock()
 	if host, ok := resolveCache[key]; ok {
@@ -156,6 +152,7 @@ func resolveHost(ip net.IP) string {
 
 	return host
 }
+
 
 
 
