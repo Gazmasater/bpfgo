@@ -98,11 +98,14 @@ git merge main
 git add README.md
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git merge main
-Auto-merging README.md
-CONFLICT (add/add): Merge conflict in README.md
-Automatic merge failed; fix conflicts and then commit the result.
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfg
+az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git add .
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git commit -m "readme"
+[trace_core1 d4c7fc0] readme
+ 1 file changed, 3 insertions(+), 5 deletions(-)
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git push -u origin ProcNet_monitor
+branch 'ProcNet_monitor' set up to track 'origin/ProcNet_monitor'.
+Everything up-to-date
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
 
 
 
