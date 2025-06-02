@@ -98,14 +98,16 @@ git merge main
 git add README.md
 
 
-az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git add .
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git commit -m "readme"
-[trace_core1 d4c7fc0] readme
- 1 file changed, 3 insertions(+), 5 deletions(-)
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ git push -u origin ProcNet_monitor
-branch 'ProcNet_monitor' set up to track 'origin/ProcNet_monitor'.
-Everything up-to-date
-gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ 
+# 1. Переключиться на ветку ProcNet_monitor
+git checkout ProcNet_monitor
+
+# 2. Перенести (cherry-pick) нужный коммит из trace_core1:
+git cherry-pick d4c7fc0
+# (Если нужно подтянуть все изменения из trace_core1, можно сделать merge:
+# git merge trace_core1)
+
+# 3. Запушить обновлённую ветку ProcNet_monitor
+git push -u origin ProcNet_monitor
 
 
 
