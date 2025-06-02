@@ -116,16 +116,20 @@ go tool pprof http://localhost:6060/debug/pprof/heap
 git checkout ProcNet_monitor
 git push --force origin ProcNet_monitor
 
+
+
 func resolveHost(ip net.IP) string {
+	// Сначала приведём IPv4-адреса в «чистый» 4-байтовый формат,
+	// чтобы IsLoopback() корректно распознал все варианты loopback
+	if v4 := ip.To4(); v4 != nil {
+		ip = v4
+	}
 
 	var key string
 	if ip.IsLoopback() {
-
 		key = "localhost"
-
 	} else {
 		key = ip.String()
-
 	}
 
 	cacheMu.RLock()
@@ -152,6 +156,7 @@ func resolveHost(ip net.IP) string {
 
 	return host
 }
+
 
 
 
