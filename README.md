@@ -78,36 +78,9 @@ go tool pprof http://localhost:6060/debug/pprof/heap
 
 
 
-git branch -m old-branch new-branch
-git push origin -u new-branch
-
-
-git checkout main
-git pull origin main
-
-
 git checkout ProcNet_monitor
-git merge main
+git push --force origin ProcNet_monitor
 
-git push --force-with-lease origin ProcNet_monitor
-
-
-
-git checkout ProcNet_monitor
-git merge main
-git add README.md
-
-
-# 1. Переключиться на ветку ProcNet_monitor
-git checkout ProcNet_monitor
-
-# 2. Перенести (cherry-pick) нужный коммит из trace_core1:
-git cherry-pick d4c7fc0
-# (Если нужно подтянуть все изменения из trace_core1, можно сделать merge:
-# git merge trace_core1)
-
-# 3. Запушить обновлённую ветку ProcNet_monitor
-git push -u origin ProcNet_monitor
 
 
 
