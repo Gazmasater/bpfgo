@@ -180,5 +180,16 @@ func BenchmarkOptimizedInt8ToString(b *testing.B) {
 go test -bench=. -benchmem
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo/pkg$ go test -bench=. -benchmem
+goos: linux
+goarch: amd64
+pkg: bpfgo/pkg
+cpu: 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz
+BenchmarkOriginalInt8ToString-8         20684474                61.02 ns/op           32 B/op          1 allocs/op
+BenchmarkOptimizedInt8ToString-8        73889950                17.41 ns/op            0 B/op          0 allocs/op
+PASS
+ok      bpfgo/pkg       3.565s
+
+
 
 
