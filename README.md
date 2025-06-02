@@ -158,6 +158,29 @@ func resolveHost(ip net.IP) string {
 
 
 
+func resolveHost(ip net.IP) string {
+    fmt.Printf("→ resolveHost: raw ip=%#v, String()=%q, To4()=%#v, IsLoopback=%v\n",
+        ip, ip.String(), ip.To4(), ip.IsLoopback(),
+    )
+
+    if v4 := ip.To4(); v4 != nil {
+        ip = v4
+        fmt.Printf("   after To4() → ip=%#v, String()=%q, IsLoopback=%v\n",
+            ip, ip.String(), ip.IsLoopback(),
+        )
+    }
+
+    if ip.IsLoopback() {
+        fmt.Println("   → detected loopback, returning \"localhost\"")
+        return "localhost"
+    }
+    // …далее ваш код
+    …
+}
+
+
+
+
 
 
 
