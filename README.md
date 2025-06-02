@@ -119,11 +119,14 @@ git push --force origin ProcNet_monitor
 
 
 func resolveHost(ip net.IP) string {
+	// Если это IPv4-мэппед IPv6 (например ::ffff:127.0.0.1), приведём к «чистому» IPv4
+	if v4 := ip.To4(); v4 != nil {
+		ip = v4
+	}
 
+	// Теперь IsLoopback() вернёт true для 127.0.0.1 и ::1
 	if ip.IsLoopback() {
-
-		host := "localhost"
-		return host
+		return "localhost"
 	}
 
 	key := ip.String()
