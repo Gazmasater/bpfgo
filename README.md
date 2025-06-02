@@ -117,12 +117,14 @@ git checkout ProcNet_monitor
 git push --force origin ProcNet_monitor
 
 func resolveHost(ip net.IP) string {
+
+	var key string
 	if ip.IsLoopback() {
 
-		key := "localhost"
+		key = "localhost"
 
 	} else {
-		key := ip.String()
+		key = ip.String()
 
 	}
 
@@ -150,7 +152,6 @@ func resolveHost(ip net.IP) string {
 
 	return host
 }
-
 
 
 
