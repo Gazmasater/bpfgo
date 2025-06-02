@@ -58,6 +58,41 @@ git rebase --abort
 git push -u origin trace_core1 --force
 
 
+func resolveHost(ip net.IP) string {
+
+	key := ip.String()
+
+	cacheMu.RLock()
+	if host, ok := resolveCache[key]; ok {
+		cacheMu.RUnlock()
+		return host
+	}
+	cacheMu.RUnlock()
+
+	var host string
+	if ip.To4() != nil {
+		if ip.IsLoopback() {
+			host = "localhost"
+		} else {
+			host = pkg.ResolveIP(ip)
+
+		}
+	} else {
+		var err error
+		host, err = pkg.ResolveIP_n(ip)
+		if err != nil {
+			host = "unknown"
+		}
+	}
+
+	cacheMu.Lock()
+	resolveCache[key] = host
+	cacheMu.Unlock()
+
+	return host
+}
+
+
 
 
 
