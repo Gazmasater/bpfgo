@@ -235,6 +235,28 @@ func editHouseDetails(bot *tgbotapi.BotAPI, chatID int64, messageID int, house m
 	bot.Send(replyMarkup)
 }
 
+[{
+	"resource": "/home/gaz358/myprog/TG/bot/handlers.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "MissingLitField",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingLitField"
+		}
+	},
+	"severity": 8,
+	"message": "unknown field Media in struct literal of type tgbotapi.InputMediaPhoto",
+	"source": "compiler",
+	"startLineNumber": 67,
+	"startColumn": 4,
+	"endLineNumber": 67,
+	"endColumn": 9
+}]
+
 
 
 
