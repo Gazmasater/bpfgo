@@ -123,7 +123,11 @@ git push --force origin ProcNet_monitor
 ______________________________________________________________________________________________
 TG
 
-
+https://terem-dom.ru/d/cimg6172.jpg
+https://terem-dom.ru/d/cimg6177.jpg
+https://terem-dom.ru/d/cimg6169.jpg
+https://terem-dom.ru/d/cimg6170.jpg
+https://terem-dom.ru/d/cimg6173.jpg
 
 
 
