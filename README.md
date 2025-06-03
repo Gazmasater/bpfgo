@@ -264,6 +264,29 @@ func main() {
 }
 
 
+[{
+	"resource": "/home/gaz358/myprog/TG/bot/handlers.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "UndeclaredImportedName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredImportedName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: tgbotapi.NewEditMessageMedia",
+	"source": "compiler",
+	"startLineNumber": 65,
+	"startColumn": 20,
+	"endLineNumber": 65,
+	"endColumn": 39
+}]
+
+
 
 
 
