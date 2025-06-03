@@ -120,128 +120,21 @@ git push --force origin ProcNet_monitor
 ______________________________________________________________________________________________
 TG
 
-package models
+✅ Чеклист — пройди всё:
+1. Inline Mode включён в BotFather?
+Перейди в @BotFather
 
-type House struct {
-	ID          int
-	Name        string
-	Description string
-	PhotoURL    string // Прямой URL до изображения
-}
+Введи: /mybots → выбери своего бота
 
+Bot Settings → Inline Mode → должно быть Enabled
 
-package bot
+📌 Если не включён — @Dom_Mechty48_Bot в чатах не будет работать вообще.
 
-import (
-	"fmt"
-	"log"
-	"strconv"
-	"telegram-house-bot/models"
+2. У бота установлено публичное имя?
+Если бот приватный (не имеет @username) — инлайн работать не будет.
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-)
+У тебя он называется @Dom_Mechty48_Bot, значит — ✅ OK.
 
-var Houses = []models.House{
-	{ID: 1, Name: "🏡 Дом 120 м²", Description: "2 этажа, участок 6 соток", PhotoURL: "https://i.imgur.com/B6hgk1r.jpg"},
-	{ID: 2, Name: "🏠 Дом 95 м²", Description: "Компактный и тёплый", PhotoURL: "https://i.imgur.com/B6hgk1r.jpg"},
-	{ID: 3, Name: "🏘 Дом с террасой", Description: "С видом на реку", PhotoURL: "https://i.imgur.com/B6hgk1r.jpg"},
-	{ID: 4, Name: "🏕 Коттедж", Description: "Для семьи и отдыха", PhotoURL: "https://i.imgur.com/B6hgk1r.jpg"},
-}
-
-func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
-	if update.InlineQuery != nil {
-		handleInlineQuery(bot, update.InlineQuery)
-	}
-}
-
-func handleInlineQuery(bot *tgbotapi.BotAPI, query *tgbotapi.InlineQuery) {
-	var results []interface{}
-
-	for _, house := range Houses {
-		result := tgbotapi.NewInlineQueryResultPhoto(
-			fmt.Sprintf("house_%d", house.ID),
-			house.PhotoURL,
-		)
-		result.Title = house.Name
-		result.Description = house.Description
-		result.Caption = fmt.Sprintf("*%s*\n%s", house.Name, house.Description)
-		result.ParseMode = "Markdown"
-		result.ThumbURL = house.PhotoURL
-
-		result.ReplyMarkup = &tgbotapi.InlineKeyboardMarkup{
-			InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{
-				{
-					tgbotapi.NewInlineKeyboardButtonURL("📄 Подробнее", "https://example.com/house?id="+strconv.Itoa(house.ID)),
-				},
-			},
-		}
-
-		results = append(results, result)
-	}
-
-	inlineConf := tgbotapi.InlineConfig{
-		InlineQueryID: query.ID,
-		IsPersonal:    true,
-		CacheTime:     0,
-		Results:       results,
-	}
-
-	if err := bot.Request(inlineConf); err != nil {
-		log.Println("inline send error:", err)
-	}
-}
-
-
-package main
-
-import (
-	"log"
-	"os"
-	"telegram-house-bot/bot"
-
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-)
-
-package main
-
-import (
-	"log"
-	"os"
-	"telegram-house-bot/bot"
-
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/joho/godotenv"
-)
-
-func main() {
-	// Загружаем .env
-	err := godotenv.Load()
-	if err != nil {
-		log.Println("Нет .env файла, продолжаем...")
-	}
-
-	token := os.Getenv("TELEGRAM_TOKEN")
-	if token == "" {
-		log.Fatal("TELEGRAM_TOKEN не задан")
-	}
-
-	botAPI, err := tgbotapi.NewBotAPI(token)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-
-	updates := botAPI.GetUpdatesChan(u)
-
-	for update := range updates {
-		bot.HandleUpdate(botAPI, update)
-	}
-}
-
-
-TELEGRAM_TOKEN=your_bot_token_here
 
 
 
