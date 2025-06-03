@@ -131,150 +131,73 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-var House = models.House{
-	ID:          1,
-	Name:        "🏡 Коттедж 120 м²",
-	Description: "2 этажа, участок 6 соток, коммуникации подведены.",
-	PhotoPath:   "data/1.jpg",
-	PlanPath:    "data/2.jpg",
+var Houses = []models.House{
+	{ID: 1, Name: "🏡 Дом 120 м²", Description: "Уютный дом, 2 этажа, 6 соток.", PhotoPath: "data/1.jpg", PlanPath: "data/2.jpg"},
+	{ID: 2, Name: "🏠 Дом 95 м²", Description: "Компактный и тёплый, всё включено.", PhotoPath: "data/1.jpg", PlanPath: "data/2.jpg"},
+	{ID: 3, Name: "🏘 Дом с террасой", Description: "С видом на лес и реку.", PhotoPath: "data/1.jpg", PlanPath: "data/2.jpg"},
+	{ID: 4, Name: "🏕 Коттедж", Description: "Для отдыха и семьи.", PhotoPath: "data/1.jpg", PlanPath: "data/2.jpg"},
 }
 
 func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	if update.Message != nil && update.Message.Text == "/start" {
-		sendHouseCard(bot, update.Message.Chat.ID)
+		sendHouseShowcase(bot, update.Message.Chat.ID)
 		return
 	}
 
 	if update.CallbackQuery != nil {
-		data := update.CallbackQuery.Data
 		chatID := update.CallbackQuery.Message.Chat.ID
-		messageID := update.CallbackQuery.Message.MessageID
+		data := update.CallbackQuery.Data
 
 		switch {
-		case data == "back_to_list":
-			editToHouseCard(bot, chatID, messageID)
-
+		case data == "catalog":
+			sendHouseShowcase(bot, chatID)
 		case strings.HasPrefix(data, "house_"):
 			idStr := strings.TrimPrefix(data, "house_")
 			id, _ := strconv.Atoi(idStr)
-			if id == House.ID {
-				editToHouseDetails(bot, chatID, messageID)
-			}
+			sendHouseDetails(bot, chatID, id)
 		}
 	}
 }
 
-func sendHouseCard(bot *tgbotapi.BotAPI, chatID int64) {
-	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(House.PhotoPath))
-	photo.Caption = fmt.Sprintf("*%s*\n%s", House.Name, House.Description)
+func sendHouseShowcase(bot *tgbotapi.BotAPI, chatID int64) {
+	// Фото-шапка
+	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath("data/3.jpg"))
+	photo.Caption = "*Каталог домов*\nВыберите один из вариантов ниже 👇"
 	photo.ParseMode = "Markdown"
-	photo.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("📄 Подробнее", fmt.Sprintf("house_%d", House.ID)),
-		),
-	)
 	bot.Send(photo)
+
+	// Кнопки 2x2
+	var rows [][]tgbotapi.InlineKeyboardButton
+	for i := 0; i < len(Houses); i += 2 {
+		row := []tgbotapi.InlineKeyboardButton{
+			tgbotapi.NewInlineKeyboardButtonData(Houses[i].Name, fmt.Sprintf("house_%d", Houses[i].ID)),
+		}
+		if i+1 < len(Houses) {
+			row = append(row, tgbotapi.NewInlineKeyboardButtonData(Houses[i+1].Name, fmt.Sprintf("house_%d", Houses[i+1].ID)))
+		}
+		rows = append(rows, row)
+	}
+
+	msg := tgbotapi.NewMessage(chatID, "👇 Нажмите на дом, чтобы посмотреть подробнее:")
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
+	bot.Send(msg)
 }
 
-func editToHouseDetails(bot *tgbotapi.BotAPI, chatID int64, messageID int) {
-	media := tgbotapi.NewInputMediaPhoto(tgbotapi.FilePath(House.PlanPath))
-	media.Caption = fmt.Sprintf("*📐 Планировка*\n%s", House.Description)
-	media.ParseMode = "Markdown"
-
-	edit := tgbotapi.EditMessageMediaConfig{
-		BaseEdit: tgbotapi.BaseEdit{
-			ChatID:    chatID,
-			MessageID: messageID,
-		},
-		Media: media,
-	}
-	bot.Send(edit)
-
-	replyMarkup := tgbotapi.NewEditMessageReplyMarkup(chatID, messageID,
-		tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад к списку", "back_to_list"),
-			),
-		),
-	)
-	bot.Send(replyMarkup)
-}
-
-func editToHouseCard(bot *tgbotapi.BotAPI, chatID int64, messageID int) {
-	media := tgbotapi.NewInputMediaPhoto(tgbotapi.FilePath(House.PhotoPath))
-	media.Caption = fmt.Sprintf("*%s*\n%s", House.Name, House.Description)
-	media.ParseMode = "Markdown"
-
-	edit := tgbotapi.EditMessageMediaConfig{
-		BaseEdit: tgbotapi.BaseEdit{
-			ChatID:    chatID,
-			MessageID: messageID,
-		},
-		Media: media,
-	}
-	bot.Send(edit)
-
-	replyMarkup := tgbotapi.NewEditMessageReplyMarkup(chatID, messageID,
-		tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("📄 Подробнее", fmt.Sprintf("house_%d", House.ID)),
-			),
-		),
-	)
-	bot.Send(replyMarkup)
-}
-
-
-
-package main
-
-import (
-	"log"
-	"os"
-	"telegram-house-bot/bot"
-
-	"github.com/joho/godotenv"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-)
-
-func main() {
-	_ = godotenv.Load()
-
-	botToken := os.Getenv("BOT_TOKEN")
-	if botToken == "" {
-		log.Fatal("BOT_TOKEN не задан в .env")
+func sendHouseDetails(bot *tgbotapi.BotAPI, chatID int64, houseID int) {
+	var selected models.House
+	for _, h := range Houses {
+		if h.ID == houseID {
+			selected = h
+			break
+		}
 	}
 
-	api, err := tgbotapi.NewBotAPI(botToken)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-
-	updates := api.GetUpdatesChan(u)
-
-	for update := range updates {
-		bot.HandleUpdate(api, update)
-	}
-}
-
-
-
-func sendHouseCard(bot *tgbotapi.BotAPI, chatID int64) {
-	msgText := `Добро пожаловать в каталог *Дом мечты*!
-
-Это демонстрационная витрина. Здесь вы можете просматривать дома, изучать планировки и фото комнат.
-
-*Создано на базе Telegram-бота на Go.*`
-
-	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(House.PhotoPath))
-	photo.Caption = msgText
+	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(selected.PhotoPath))
+	photo.Caption = fmt.Sprintf("*%s*\n%s", selected.Name, selected.Description)
 	photo.ParseMode = "Markdown"
 	photo.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🏠 Витрина с домами", fmt.Sprintf("house_%d", House.ID)),
+			tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад", "catalog"),
 		),
 	)
 	bot.Send(photo)
