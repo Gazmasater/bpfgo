@@ -1,4 +1,7 @@
 
+
+
+
 https://platform-balun.ru/teach/control/stream/view/id/930914027
 user: mat3x@mail.ru
 pass: Vkalashnikov00f!
@@ -134,6 +137,13 @@ Bot Settings → Inline Mode → должно быть Enabled
 Если бот приватный (не имеет @username) — инлайн работать не будет.
 
 У тебя он называется @Dom_Mechty48_Bot, значит — ✅ OK.
+
+
+
+Inline mode is currently enabled for dom_mechty @Dom_Mechty48_Bot.
+
+Current placeholder is: Search...
+Please send me the placeholder message for queries to your bot. People will see this placeholder whenever they type @Dom_Mechty48_Bot in the message field – in any chat. Tell them what they can get from your bot (e.g., Search GIFs...).
 
 
 
