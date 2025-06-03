@@ -117,68 +117,157 @@ git checkout ProcNet_monitor
 git push --force origin ProcNet_monitor
 
 
+______________________________________________________________________________________________
+TG
 
-func resolveHost(ip net.IP) string {
-    // 1) Если ip == nil, сразу возвращаем «unknown»
-    if ip == nil {
-        return "unknown"
-    }
+📁 Структура проекта
 
-    // 2) Убираем возможную зону (%lo0, %eth0 и т.п.)
-    if s := ip.String(); strings.Contains(s, "%") {
-        // если, например, ip.String() == "127.0.0.1%lo0", обрезаем «%lo0»
-        noZone := s[:strings.LastIndex(s, "%")]
-        ip = net.ParseIP(noZone)
-        if ip == nil {
-            return "unknown"
-        }
-    }
+telegram-house-bot/
+├── main.go
+├── go.mod
+├── models/
+│   └── house.go
+├── bot/
+│   └── handlers.go
+├── data/
+│   ├── house.jpg
+│   ├── plan.pdf
+│   ├── room1.jpg
+│   └── room2.jpg
+🔧 go.mod
 
-    // 3) Нормализуем «IPv4-mapped IPv6» (например ::ffff:127.0.0.1) в чистое 4-байтовое presentation
-    if v4 := ip.To4(); v4 != nil {
-        ip = v4
-    }
+module telegram-house-bot
 
-    // 4) Сразу проверяем loopback (127.0.0.1 или ::1)
-    //    после To4() IsLoopback() вернёт true и для «::ffff:127.0.0.1»
-    if ip.IsLoopback() {
-        return "localhost"
-    }
+go 1.20
 
-    // 5) Больше не loopback-адрес, используем строковое представление IP как ключ кеша
-    key := ip.String()
+require github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
+🧱 models/house.go
 
-    cacheMu.RLock()
-    if host, ok := resolveCache[key]; ok {
-        cacheMu.RUnlock()
-        return host
-    }
-    cacheMu.RUnlock()
 
-    // 6) Если в кеше нет, зовём pkg.ResolveIP(...) или pkg.ResolveIP_n(...)
-    var host string
-    if ip4 := ip.To4(); ip4 != nil {
-        host = pkg.ResolveIP(ip4)
-    } else {
-        var err error
-        host, err = pkg.ResolveIP_n(ip)
-        if err != nil {
-            host = "unknown"
-        }
-    }
+type House struct {
+	ID          int
+	Name        string
+	Description string
+	PhotoPath   string
+	PlanPath    string
+	RoomPhotos  []string
+}
+🤖 bot/handlers.go
 
-    // 7) Записываем в кеш и возвращаем
-    cacheMu.Lock()
-    resolveCache[key] = host
-    cacheMu.Unlock()
+package bot
 
-    return host
+import (
+	"fmt"
+	"strconv"
+	"strings"
+	"telegram-house-bot/models"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+)
+
+var House = models.House{
+	ID:          1,
+	Name:        "🏡 Коттедж 120 м²",
+	Description: "2 этажа, участок 6 соток, коммуникации подведены.",
+	PhotoPath:   "data/house.jpg",
+	PlanPath:    "data/plan.pdf",
+	RoomPhotos: []string{
+		"data/room1.jpg",
+		"data/room2.jpg",
+	},
 }
 
+func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+	if update.Message != nil && update.Message.Text == "/start" {
+		msg := tgbotapi.NewPhoto(update.Message.Chat.ID, tgbotapi.FilePath(House.PhotoPath))
+		msg.Caption = fmt.Sprintf("*%s*\n%s", House.Name, House.Description)
+		msg.ParseMode = "Markdown"
+		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("📄 Подробнее", "house_1"),
+			),
+		)
+		bot.Send(msg)
+	}
+
+	if update.CallbackQuery != nil && strings.HasPrefix(update.CallbackQuery.Data, "house_") {
+		idStr := strings.TrimPrefix(update.CallbackQuery.Data, "house_")
+		id, _ := strconv.Atoi(idStr)
+		if id == House.ID {
+			sendHouseDetails(bot, update.CallbackQuery.Message.Chat.ID)
+		}
+	}
+}
+
+func sendHouseDetails(bot *tgbotapi.BotAPI, chatID int64) {
+	// Планировка
+	plan := tgbotapi.NewDocument(chatID, tgbotapi.FilePath(House.PlanPath))
+	plan.Caption = "📐 Планировка"
+	bot.Send(plan)
+
+	// Фото комнат
+	for _, photoPath := range House.RoomPhotos {
+		photo := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(photoPath))
+		bot.Send(photo)
+	}
+}
+🚀 main.go
+go
+Копировать
+Редактировать
+package main
+
+import (
+	"log"
+	"os"
+	"telegram-house-bot/bot"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+)
+
+func main() {
+	botToken := os.Getenv("BOT_TOKEN")
+	if botToken == "" {
+		log.Fatal("Установи переменную окружения BOT_TOKEN")
+	}
+
+	botAPI, err := tgbotapi.NewBotAPI(botToken)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	u := tgbotapi.NewUpdate(0)
+	u.Timeout = 60
+	updates := botAPI.GetUpdatesChan(u)
+
+	for update := range updates {
+		bot.HandleUpdate(botAPI, update)
+	}
+}
+🧪 Как запустить
+Установи зависимости:
 
 
+go mod tidy
+Положи картинки и PDF:
 
 
+data/
+├── house.jpg
+├── plan.pdf
+├── room1.jpg
+└── room2.jpg
+Установи токен:
+
+
+export BOT_TOKEN=твой_токен_от_BotFather
+Запусти:
+
+
+go run main.go
+Если хочешь, я могу подготовить архив .zip со всеми файлами и заглушками, или помочь подключить S3/CDN, когда будешь готов.
+
+Хочешь, чтобы я сгенерировал zip-архив этого проекта и дал тебе ссылку?
 
 
 
