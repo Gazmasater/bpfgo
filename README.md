@@ -140,33 +140,58 @@ var Houses = []models.House{
 
 func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	if update.Message != nil && update.Message.Text == "/start" {
-		sendHouseShowcase(bot, update.Message.Chat.ID)
+		sendInitialShowcase(bot, update.Message.Chat.ID)
 		return
 	}
 
 	if update.CallbackQuery != nil {
 		chatID := update.CallbackQuery.Message.Chat.ID
+		messageID := update.CallbackQuery.Message.MessageID
 		data := update.CallbackQuery.Data
 
 		switch {
 		case data == "catalog":
-			sendHouseShowcase(bot, chatID)
+			editHouseShowcase(bot, chatID, messageID)
 		case strings.HasPrefix(data, "house_"):
 			idStr := strings.TrimPrefix(data, "house_")
 			id, _ := strconv.Atoi(idStr)
-			sendHouseDetails(bot, chatID, id)
+			for _, h := range Houses {
+				if h.ID == id {
+					editHouseDetails(bot, chatID, messageID, h)
+					break
+				}
+			}
 		}
 	}
 }
 
-func sendHouseShowcase(bot *tgbotapi.BotAPI, chatID int64) {
-	// Фото-шапка
-	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath("data/3.jpg"))
-	photo.Caption = "*Каталог домов*\nВыберите один из вариантов ниже 👇"
-	photo.ParseMode = "Markdown"
-	bot.Send(photo)
 
-	// Кнопки 2x2
+func sendInitialShowcase(bot *tgbotapi.BotAPI, chatID int64) {
+	msg := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath("data/3.jpg"))
+	msg.Caption = "*Каталог домов*\nВыберите один из вариантов ниже 👇"
+	msg.ParseMode = "Markdown"
+
+	// заглушка 1 кнопка, будет отредактирована потом
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Загрузка...", "loading"),
+		),
+	)
+
+	sent, _ := bot.Send(msg)
+
+	// сразу редактируем на нормальную витрину
+	editHouseShowcase(bot, sent.Chat.ID, sent.MessageID)
+}
+
+func editHouseShowcase(bot *tgbotapi.BotAPI, chatID int64, messageID int) {
+	media := tgbotapi.NewEditMessageMedia(chatID, messageID, tgbotapi.InputMediaPhoto{
+		Media:     tgbotapi.FilePath("data/3.jpg"),
+		Caption:   "*Каталог домов*\nВыберите один из вариантов ниже 👇",
+		ParseMode: "Markdown",
+	})
+	bot.Send(media)
+
 	var rows [][]tgbotapi.InlineKeyboardButton
 	for i := 0; i < len(Houses); i += 2 {
 		row := []tgbotapi.InlineKeyboardButton{
@@ -178,30 +203,66 @@ func sendHouseShowcase(bot *tgbotapi.BotAPI, chatID int64) {
 		rows = append(rows, row)
 	}
 
-	msg := tgbotapi.NewMessage(chatID, "👇 Нажмите на дом, чтобы посмотреть подробнее:")
-	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
-	bot.Send(msg)
+	replyMarkup := tgbotapi.NewEditMessageReplyMarkup(chatID, messageID,
+		tgbotapi.NewInlineKeyboardMarkup(rows...),
+	)
+	bot.Send(replyMarkup)
 }
 
-func sendHouseDetails(bot *tgbotapi.BotAPI, chatID int64, houseID int) {
-	var selected models.House
-	for _, h := range Houses {
-		if h.ID == houseID {
-			selected = h
-			break
-		}
-	}
+func editHouseDetails(bot *tgbotapi.BotAPI, chatID int64, messageID int, house models.House) {
+	media := tgbotapi.NewEditMessageMedia(chatID, messageID, tgbotapi.InputMediaPhoto{
+		Media:     tgbotapi.FilePath(house.PhotoPath),
+		Caption:   fmt.Sprintf("*%s*\n%s", house.Name, house.Description),
+		ParseMode: "Markdown",
+	})
+	bot.Send(media)
 
-	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(selected.PhotoPath))
-	photo.Caption = fmt.Sprintf("*%s*\n%s", selected.Name, selected.Description)
-	photo.ParseMode = "Markdown"
-	photo.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад", "catalog"),
+	replyMarkup := tgbotapi.NewEditMessageReplyMarkup(chatID, messageID,
+		tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад", "catalog"),
+			),
 		),
 	)
-	bot.Send(photo)
+	bot.Send(replyMarkup)
 }
+
+
+
+
+
+package main
+
+import (
+	"log"
+	"os"
+	"telegram-house-bot/bot"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+)
+
+func main() {
+	token := os.Getenv("TELEGRAM_BOT_TOKEN")
+	if token == "" {
+		log.Fatal("TELEGRAM_BOT_TOKEN not set")
+	}
+
+	botAPI, err := tgbotapi.NewBotAPI(token)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	u := tgbotapi.NewUpdate(0)
+	u.Timeout = 60
+
+	updates := botAPI.GetUpdatesChan(u)
+	log.Println("Bot started...")
+
+	for update := range updates {
+		bot.HandleUpdate(botAPI, update)
+	}
+}
+
 
 
 
