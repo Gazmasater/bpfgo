@@ -142,13 +142,24 @@ var Houses = []models.House{
 }
 
 func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+	log.Println("Received update")
+
 	if update.InlineQuery != nil {
+		log.Printf("Inline query detected: %+v", update.InlineQuery)
 		handleInlineQuery(bot, update.InlineQuery)
+	} else {
+		log.Println("No inline query in update")
+	}
+
+	if update.Message != nil {
+		log.Printf("Received message: %s", update.Message.Text)
 	}
 }
 
 func handleInlineQuery(bot *tgbotapi.BotAPI, query *tgbotapi.InlineQuery) {
 	var results []interface{}
+
+	log.Printf("Handling inline query from user ID %d: %q", query.From.ID, query.Query)
 
 	for _, house := range Houses {
 		id := fmt.Sprintf("house_%d", house.ID)
@@ -157,7 +168,7 @@ func handleInlineQuery(bot *tgbotapi.BotAPI, query *tgbotapi.InlineQuery) {
 		result.Title = house.Name
 		result.Description = house.Description
 		result.Caption = fmt.Sprintf("%s\n%s", house.Name, house.Description)
-		result.ThumbURL = house.PhotoURL // Важно: миниатюра (можно та же ссылка)
+		result.ThumbURL = house.PhotoURL
 
 		result.ReplyMarkup = &tgbotapi.InlineKeyboardMarkup{
 			InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{
@@ -170,17 +181,23 @@ func handleInlineQuery(bot *tgbotapi.BotAPI, query *tgbotapi.InlineQuery) {
 		results = append(results, result)
 	}
 
+	log.Printf("Prepared %d results", len(results))
+
 	inlineConf := tgbotapi.InlineConfig{
 		InlineQueryID: query.ID,
 		IsPersonal:    true,
-		CacheTime:     0,
+		CacheTime:     1,
 		Results:       results,
 	}
 
-	if _, err := bot.Request(inlineConf); err != nil {
-		log.Println("inline send error:", err)
+	_, err := bot.Request(inlineConf)
+	if err != nil {
+		log.Println("Failed to send inline query results:", err)
+	} else {
+		log.Println("Inline results sent successfully")
 	}
 }
+
 
 
 
