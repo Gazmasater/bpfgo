@@ -270,6 +270,10 @@ go run main.go
 Хочешь, чтобы я сгенерировал zip-архив этого проекта и дал тебе ссылку?
 
 
+BOT_TOKEN=7848415216:AAE4pym6PRDMRFtI9JwpmGU-Rv5obyH-bmo
+
+
+
 
 
 
