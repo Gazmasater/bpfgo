@@ -120,78 +120,100 @@ git push --force origin ProcNet_monitor
 ______________________________________________________________________________________________
 TG
 
-🔧 Шаги реализации
-1. 🔁 Добавь в sendHouseDetails() кнопку "Назад"
-go
-Копировать
-Редактировать
+package bot
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+	"tg/models"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+)
+
+var House = models.House{
+	ID:          1,
+	Name:        "🏡 Коттедж 120 м²",
+	Description: "2 этажа, участок 6 соток, коммуникации подведены.",
+	PhotoPath:   "data/1.jpg",
+	PlanPath:    "data/2.jpg",
+	RoomPhotos: []string{
+		"data/3.jpg",
+		"data/4.jpg",
+	},
+}
+
+func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+	if update.Message != nil && update.Message.Text == "/start" {
+		msg := tgbotapi.NewPhoto(update.Message.Chat.ID, tgbotapi.FilePath(House.PhotoPath))
+		msg.Caption = fmt.Sprintf("*%s*\n%s", House.Name, House.Description)
+		msg.ParseMode = "Markdown"
+		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("📄 Подробнее", "house_1"),
+			),
+		)
+		bot.Send(msg)
+	}
+
+	if update.CallbackQuery != nil {
+		data := update.CallbackQuery.Data
+
+		switch {
+		case data == "back_to_list":
+			sendHouseList(bot, update.CallbackQuery.Message.Chat.ID)
+
+		case strings.HasPrefix(data, "house_"):
+			idStr := strings.TrimPrefix(data, "house_")
+			id, _ := strconv.Atoi(idStr)
+			if id == House.ID {
+				sendHouseDetails(bot, update.CallbackQuery.Message.Chat.ID)
+			}
+		}
+	}
+
+	if update.CallbackQuery != nil && strings.HasPrefix(update.CallbackQuery.Data, "house_") {
+		idStr := strings.TrimPrefix(update.CallbackQuery.Data, "house_")
+		id, _ := strconv.Atoi(idStr)
+		if id == House.ID {
+			sendHouseDetails(bot, update.CallbackQuery.Message.Chat.ID)
+		}
+	}
+}
+
 func sendHouseDetails(bot *tgbotapi.BotAPI, chatID int64) {
-    // Планировка
-    plan := tgbotapi.NewDocument(chatID, tgbotapi.FilePath(House.PlanPath))
-    plan.Caption = "📐 Планировка"
-    bot.Send(plan)
+	// Планировка
+	plan := tgbotapi.NewDocument(chatID, tgbotapi.FilePath(House.PlanPath))
+	plan.Caption = "📐 Планировка"
+	bot.Send(plan)
 
-    // Фото комнат
-    for _, roomPath := range House.RoomPhotos {
-        roomPhoto := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(roomPath))
-        bot.Send(roomPhoto)
-    }
+	// Фото комнат
+	for _, roomPath := range House.RoomPhotos {
+		roomPhoto := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(roomPath))
+		bot.Send(roomPhoto)
+	}
 
-    // Кнопка "Назад"
-    msg := tgbotapi.NewMessage(chatID, "⬅️ Вернуться к списку домов")
-    msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-        tgbotapi.NewInlineKeyboardRow(
-            tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад к списку", "back_to_list"),
-        ),
-    )
-    bot.Send(msg)
+	// Кнопка "Назад"
+	msg := tgbotapi.NewMessage(chatID, "⬅️ Вернуться к списку домов")
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад к списку", "back_to_list"),
+		),
+	)
+	bot.Send(msg)
 }
-2. 🏘 Функция sendHouseList() — отправка карточек всех домов
-Добавь её (можно вызывать и из /start, и из back_to_list):
 
-go
-Копировать
-Редактировать
 func sendHouseList(bot *tgbotapi.BotAPI, chatID int64) {
-    msg := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(House.PhotoPath))
-    msg.Caption = fmt.Sprintf("*%s*\n%s", House.Name, House.Description)
-    msg.ParseMode = "Markdown"
-    msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-        tgbotapi.NewInlineKeyboardRow(
-            tgbotapi.NewInlineKeyboardButtonData("📄 Подробнее", fmt.Sprintf("house_%d", House.ID)),
-        ),
-    )
-    bot.Send(msg)
+	msg := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(House.PhotoPath))
+	msg.Caption = fmt.Sprintf("*%s*\n%s", House.Name, House.Description)
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📄 Подробнее", fmt.Sprintf("house_%d", House.ID)),
+		),
+	)
+	bot.Send(msg)
 }
-3. 🎯 Обработка callback back_to_list в HandleUpdate
-В HandleUpdate, добавь:
-
-go
-Копировать
-Редактировать
-if update.CallbackQuery != nil {
-    data := update.CallbackQuery.Data
-
-    switch {
-    case data == "back_to_list":
-        sendHouseList(bot, update.CallbackQuery.Message.Chat.ID)
-
-    case strings.HasPrefix(data, "house_"):
-        idStr := strings.TrimPrefix(data, "house_")
-        id, _ := strconv.Atoi(idStr)
-        if id == House.ID {
-            sendHouseDetails(bot, update.CallbackQuery.Message.Chat.ID)
-        }
-    }
-}
-✅ Готово!
-Теперь:
-
-/start → список домов (фото + кнопка "Подробнее")
-
-"Подробнее" → планировка + комнаты + кнопка "Назад к списку"
-
-"Назад к списку" → повторно показывает карточку дома
 
 
 
