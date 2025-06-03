@@ -120,120 +120,34 @@ git push --force origin ProcNet_monitor
 ______________________________________________________________________________________________
 TG
 
-package bot
-
-import (
-	"fmt"
-	"strconv"
-	"strings"
-	"telegram-house-bot/models"
-
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-)
-
-var Houses = []models.House{
-	{ID: 1, Name: "🏡 Дом 120 м²", Description: "Уютный дом, 2 этажа, 6 соток.", PhotoPath: "data/1.jpg", PlanPath: "data/2.jpg"},
-	{ID: 2, Name: "🏠 Дом 95 м²", Description: "Компактный и тёплый, всё включено.", PhotoPath: "data/1.jpg", PlanPath: "data/2.jpg"},
-	{ID: 3, Name: "🏘 Дом с террасой", Description: "С видом на лес и реку.", PhotoPath: "data/1.jpg", PlanPath: "data/2.jpg"},
-	{ID: 4, Name: "🏕 Коттедж", Description: "Для отдыха и семьи.", PhotoPath: "data/1.jpg", PlanPath: "data/2.jpg"},
-}
-
-func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
-	if update.Message != nil && update.Message.Text == "/start" {
-		sendInitialShowcase(bot, update.Message.Chat.ID)
-		return
-	}
-
-	if update.CallbackQuery != nil {
-		chatID := update.CallbackQuery.Message.Chat.ID
-		messageID := update.CallbackQuery.Message.MessageID
-		data := update.CallbackQuery.Data
-
-		switch {
-		case data == "catalog":
-			editHouseShowcase(bot, chatID, messageID)
-		case strings.HasPrefix(data, "house_"):
-			idStr := strings.TrimPrefix(data, "house_")
-			id, _ := strconv.Atoi(idStr)
-			for _, h := range Houses {
-				if h.ID == id {
-					editHouseDetails(bot, chatID, messageID, h)
-					break
-				}
-			}
-		}
-	}
-}
-
-func sendInitialShowcase(bot *tgbotapi.BotAPI, chatID int64) {
-	msg := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath("data/3.jpg"))
-	msg.Caption = "*Каталог домов*\nВыберите один из вариантов ниже 👇"
-	msg.ParseMode = "Markdown"
-	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Загрузка...", "loading"),
-		),
-	)
-
-	sent, _ := bot.Send(msg)
-	editHouseShowcase(bot, sent.Chat.ID, sent.MessageID)
-}
-
 func editHouseShowcase(bot *tgbotapi.BotAPI, chatID int64, messageID int) {
 	media := tgbotapi.NewInputMediaPhoto(tgbotapi.FilePath("data/3.jpg"))
-	media.Caption = "*Каталог домов*\nВыберите один из вариантов ниже 👇"
+	media.Caption = "🏡 *Каталог домов*\nВыберите один из вариантов:"
 	media.ParseMode = "Markdown"
 
-	edit := tgbotapi.EditMessageMediaConfig{
+	editMedia := tgbotapi.EditMessageMediaConfig{
 		BaseEdit: tgbotapi.BaseEdit{
 			ChatID:    chatID,
 			MessageID: messageID,
 		},
 		Media: media,
 	}
-	bot.Send(edit)
+	bot.Send(editMedia)
 
-	var rows [][]tgbotapi.InlineKeyboardButton
-	for i := 0; i < len(Houses); i += 2 {
-		row := []tgbotapi.InlineKeyboardButton{
-			tgbotapi.NewInlineKeyboardButtonData(Houses[i].Name, fmt.Sprintf("house_%d", Houses[i].ID)),
-		}
-		if i+1 < len(Houses) {
-			row = append(row, tgbotapi.NewInlineKeyboardButtonData(Houses[i+1].Name, fmt.Sprintf("house_%d", Houses[i+1].ID)))
-		}
-		rows = append(rows, row)
-	}
-
-	replyMarkup := tgbotapi.NewEditMessageReplyMarkup(chatID, messageID,
-		tgbotapi.NewInlineKeyboardMarkup(rows...),
-	)
-	bot.Send(replyMarkup)
-}
-
-func editHouseDetails(bot *tgbotapi.BotAPI, chatID int64, messageID int, house models.House) {
-	media := tgbotapi.NewInputMediaPhoto(tgbotapi.FilePath(house.PhotoPath))
-	media.Caption = fmt.Sprintf("*%s*\n%s", house.Name, house.Description)
-	media.ParseMode = "Markdown"
-
-	edit := tgbotapi.EditMessageMediaConfig{
-		BaseEdit: tgbotapi.BaseEdit{
-			ChatID:    chatID,
-			MessageID: messageID,
-		},
-		Media: media,
-	}
-	bot.Send(edit)
-
-	replyMarkup := tgbotapi.NewEditMessageReplyMarkup(chatID, messageID,
-		tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад", "catalog"),
-			),
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(Houses[0].Name, "house_1"),
+			tgbotapi.NewInlineKeyboardButtonData(Houses[1].Name, "house_2"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(Houses[2].Name, "house_3"),
+			tgbotapi.NewInlineKeyboardButtonData(Houses[3].Name, "house_4"),
 		),
 	)
-	bot.Send(replyMarkup)
-}
 
+	editMarkup := tgbotapi.NewEditMessageReplyMarkup(chatID, messageID, keyboard)
+	bot.Send(editMarkup)
+}
 
 
 
