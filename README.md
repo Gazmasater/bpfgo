@@ -120,83 +120,129 @@ git push --force origin ProcNet_monitor
 ______________________________________________________________________________________________
 TG
 
+package models
+
+type House struct {
+	ID          int
+	Name        string
+	Description string
+	PhotoURL    string // Прямой URL до изображения
+}
+
+
 package bot
 
 import (
 	"fmt"
+	"log"
 	"strconv"
-	"strings"
 	"telegram-house-bot/models"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 var Houses = []models.House{
-	{ID: 1, Name: "🏡 Дом 120 м²", Description: "Уютный дом, 2 этажа, 6 соток.", PhotoPath: "data/1.jpg", PlanPath: "data/2.jpg"},
-	{ID: 2, Name: "🏠 Дом 95 м²", Description: "Компактный и тёплый, всё включено.", PhotoPath: "data/1.jpg", PlanPath: "data/2.jpg"},
-	{ID: 3, Name: "🏘 Дом с террасой", Description: "С видом на лес и реку.", PhotoPath: "data/1.jpg", PlanPath: "data/2.jpg"},
-	{ID: 4, Name: "🏕 Коттедж", Description: "Для отдыха и семьи.", PhotoPath: "data/1.jpg", PlanPath: "data/2.jpg"},
+	{ID: 1, Name: "🏡 Дом 120 м²", Description: "2 этажа, участок 6 соток", PhotoURL: "https://i.imgur.com/B6hgk1r.jpg"},
+	{ID: 2, Name: "🏠 Дом 95 м²", Description: "Компактный и тёплый", PhotoURL: "https://i.imgur.com/B6hgk1r.jpg"},
+	{ID: 3, Name: "🏘 Дом с террасой", Description: "С видом на реку", PhotoURL: "https://i.imgur.com/B6hgk1r.jpg"},
+	{ID: 4, Name: "🏕 Коттедж", Description: "Для семьи и отдыха", PhotoURL: "https://i.imgur.com/B6hgk1r.jpg"},
 }
 
 func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
-	if update.Message != nil && update.Message.Text == "/start" {
-		sendShowcase(bot, update.Message.Chat.ID)
-		return
-	}
-
-	if update.CallbackQuery != nil {
-		chatID := update.CallbackQuery.Message.Chat.ID
-		data := update.CallbackQuery.Data
-
-		switch {
-		case data == "back_to_catalog":
-			sendShowcase(bot, chatID)
-		case strings.HasPrefix(data, "house_"):
-			idStr := strings.TrimPrefix(data, "house_")
-			id, _ := strconv.Atoi(idStr)
-			for _, h := range Houses {
-				if h.ID == id {
-					showHouseDetails(bot, chatID, h)
-					break
-				}
-			}
-		}
+	if update.InlineQuery != nil {
+		handleInlineQuery(bot, update.InlineQuery)
 	}
 }
 
-func sendShowcase(bot *tgbotapi.BotAPI, chatID int64) {
-	// Шапка
-	header := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath("data/3.jpg"))
-	header.Caption = "*🏘 Каталог домов*\nВыберите интересующий вариант:"
-	header.ParseMode = "Markdown"
-	bot.Send(header)
+func handleInlineQuery(bot *tgbotapi.BotAPI, query *tgbotapi.InlineQuery) {
+	var results []interface{}
 
-	// Карточки домов
 	for _, house := range Houses {
-		msg := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(house.PhotoPath))
-		msg.Caption = fmt.Sprintf("*%s*\n%s", house.Name, house.Description)
-		msg.ParseMode = "Markdown"
-		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("📄 Подробнее", fmt.Sprintf("house_%d", house.ID)),
-			),
+		result := tgbotapi.NewInlineQueryResultPhoto(
+			fmt.Sprintf("house_%d", house.ID),
+			house.PhotoURL,
 		)
-		bot.Send(msg)
+		result.Title = house.Name
+		result.Description = house.Description
+		result.Caption = fmt.Sprintf("*%s*\n%s", house.Name, house.Description)
+		result.ParseMode = "Markdown"
+		result.ThumbURL = house.PhotoURL
+
+		result.ReplyMarkup = &tgbotapi.InlineKeyboardMarkup{
+			InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{
+				{
+					tgbotapi.NewInlineKeyboardButtonURL("📄 Подробнее", "https://example.com/house?id="+strconv.Itoa(house.ID)),
+				},
+			},
+		}
+
+		results = append(results, result)
+	}
+
+	inlineConf := tgbotapi.InlineConfig{
+		InlineQueryID: query.ID,
+		IsPersonal:    true,
+		CacheTime:     0,
+		Results:       results,
+	}
+
+	if err := bot.Request(inlineConf); err != nil {
+		log.Println("inline send error:", err)
 	}
 }
 
-func showHouseDetails(bot *tgbotapi.BotAPI, chatID int64, house models.House) {
-	// План
-	plan := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(house.PlanPath))
-	plan.Caption = fmt.Sprintf("*📐 Планировка*\n%s", house.Description)
-	plan.ParseMode = "Markdown"
-	plan.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад к списку", "back_to_catalog"),
-		),
-	)
-	bot.Send(plan)
+
+package main
+
+import (
+	"log"
+	"os"
+	"telegram-house-bot/bot"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+)
+
+package main
+
+import (
+	"log"
+	"os"
+	"telegram-house-bot/bot"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/joho/godotenv"
+)
+
+func main() {
+	// Загружаем .env
+	err := godotenv.Load()
+	if err != nil {
+		log.Println("Нет .env файла, продолжаем...")
+	}
+
+	token := os.Getenv("TELEGRAM_TOKEN")
+	if token == "" {
+		log.Fatal("TELEGRAM_TOKEN не задан")
+	}
+
+	botAPI, err := tgbotapi.NewBotAPI(token)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	u := tgbotapi.NewUpdate(0)
+	u.Timeout = 60
+
+	updates := botAPI.GetUpdatesChan(u)
+
+	for update := range updates {
+		bot.HandleUpdate(botAPI, update)
+	}
 }
+
+
+TELEGRAM_TOKEN=your_bot_token_here
+
 
 
 
