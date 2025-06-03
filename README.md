@@ -126,7 +126,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"tg/models"
+	"telegram-house-bot/models"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -137,67 +137,81 @@ var House = models.House{
 	Description: "2 этажа, участок 6 соток, коммуникации подведены.",
 	PhotoPath:   "data/1.jpg",
 	PlanPath:    "data/2.jpg",
-	RoomPhotos: []string{
-		"data/3.jpg",
-		"data/4.jpg",
-	},
 }
 
 func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	if update.Message != nil && update.Message.Text == "/start" {
-		sendHouseList(bot, update.Message.Chat.ID)
+		sendHouseCard(bot, update.Message.Chat.ID)
 		return
 	}
 
 	if update.CallbackQuery != nil {
 		data := update.CallbackQuery.Data
+		chatID := update.CallbackQuery.Message.Chat.ID
+		messageID := update.CallbackQuery.Message.MessageID
 
 		switch {
 		case data == "back_to_list":
-			sendHouseList(bot, update.CallbackQuery.Message.Chat.ID)
+			editToHouseCard(bot, chatID, messageID)
 
 		case strings.HasPrefix(data, "house_"):
 			idStr := strings.TrimPrefix(data, "house_")
 			id, _ := strconv.Atoi(idStr)
 			if id == House.ID {
-				sendHouseDetails(bot, update.CallbackQuery.Message.Chat.ID)
+				editToHouseDetails(bot, chatID, messageID)
 			}
 		}
 	}
 }
 
-func sendHouseDetails(bot *tgbotapi.BotAPI, chatID int64) {
-	// Планировка
-	plan := tgbotapi.NewDocument(chatID, tgbotapi.FilePath(House.PlanPath))
-	plan.Caption = "📐 Планировка"
-	bot.Send(plan)
-
-	// Фото комнат
-	for _, roomPath := range House.RoomPhotos {
-		roomPhoto := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(roomPath))
-		bot.Send(roomPhoto)
-	}
-
-	// Кнопка "Назад"
-	msg := tgbotapi.NewMessage(chatID, "⬅️ Вернуться к списку домов")
-	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад к списку", "back_to_list"),
-		),
-	)
-	bot.Send(msg)
-}
-
-func sendHouseList(bot *tgbotapi.BotAPI, chatID int64) {
-	msg := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(House.PhotoPath))
-	msg.Caption = fmt.Sprintf("*%s*\n%s", House.Name, House.Description)
-	msg.ParseMode = "Markdown"
-	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+func sendHouseCard(bot *tgbotapi.BotAPI, chatID int64) {
+	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(House.PhotoPath))
+	photo.Caption = fmt.Sprintf("*%s*\n%s", House.Name, House.Description)
+	photo.ParseMode = "Markdown"
+	photo.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("📄 Подробнее", fmt.Sprintf("house_%d", House.ID)),
 		),
 	)
-	bot.Send(msg)
+	bot.Send(photo)
+}
+
+func editToHouseDetails(bot *tgbotapi.BotAPI, chatID int64, messageID int) {
+	media := tgbotapi.NewEditMessageMedia(chatID, messageID, tgbotapi.InputMediaPhoto{
+		Type:    "photo",
+		Media:   House.PlanPath,
+		Caption: fmt.Sprintf("*📐 Планировка*\n%s", House.Description),
+		ParseMode: "Markdown",
+	})
+	bot.Send(media)
+
+	replyMarkup := tgbotapi.NewEditMessageReplyMarkup(chatID, messageID,
+		tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад к списку", "back_to_list"),
+			),
+		),
+	)
+	bot.Send(replyMarkup)
+}
+
+func editToHouseCard(bot *tgbotapi.BotAPI, chatID int64, messageID int) {
+	media := tgbotapi.NewEditMessageMedia(chatID, messageID, tgbotapi.InputMediaPhoto{
+		Type:    "photo",
+		Media:   House.PhotoPath,
+		Caption: fmt.Sprintf("*%s*\n%s", House.Name, House.Description),
+		ParseMode: "Markdown",
+	})
+	bot.Send(media)
+
+	replyMarkup := tgbotapi.NewEditMessageReplyMarkup(chatID, messageID,
+		tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("📄 Подробнее", fmt.Sprintf("house_%d", House.ID)),
+			),
+		),
+	)
+	bot.Send(replyMarkup)
 }
 
 
