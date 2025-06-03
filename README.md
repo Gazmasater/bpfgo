@@ -123,15 +123,6 @@ git push --force origin ProcNet_monitor
 ______________________________________________________________________________________________
 TG
 
-package models
-
-type House struct {
-	ID          int
-	Name        string
-	Description string
-	PhotoURL    string // Прямой URL до изображения
-}
-
 package bot
 
 import (
@@ -158,6 +149,8 @@ func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 
 func handleInlineQuery(bot *tgbotapi.BotAPI, query *tgbotapi.InlineQuery) {
 	var results []interface{}
+
+	log.Printf("InlineQuery received: %+v", query)
 
 	for _, house := range Houses {
 		result := tgbotapi.NewInlineQueryResultPhoto(
@@ -192,50 +185,6 @@ func handleInlineQuery(bot *tgbotapi.BotAPI, query *tgbotapi.InlineQuery) {
 		log.Println("inline send error:", err)
 	}
 }
-
-
-package main
-
-import (
-	"log"
-	"os"
-	"tg/bot"
-
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/joho/godotenv"
-)
-
-func main() {
-	// Загружаем .env
-	err := godotenv.Load()
-	if err != nil {
-		log.Println("Нет .env файла, продолжаем...")
-	}
-
-	token := os.Getenv("TELEGRAM_TOKEN")
-	if token == "" {
-		log.Fatal("TELEGRAM_TOKEN не задан")
-	}
-
-	botAPI, err := tgbotapi.NewBotAPI(token)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-
-	updates := botAPI.GetUpdatesChan(u)
-
-	for update := range updates {
-		bot.HandleUpdate(botAPI, update)
-	}
-}
-
-
-log.Printf("InlineQuery received: %+v", query)
-
-
 
 
 
