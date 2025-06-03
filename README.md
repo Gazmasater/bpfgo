@@ -272,6 +272,11 @@ go run main.go
 
 BOT_TOKEN=7848415216:AAE4pym6PRDMRFtI9JwpmGU-Rv5obyH-bmo
 
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Ошибка загрузки .env файла")
+}
+
 
 
 
