@@ -150,18 +150,14 @@ func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 func handleInlineQuery(bot *tgbotapi.BotAPI, query *tgbotapi.InlineQuery) {
 	var results []interface{}
 
-	log.Printf("InlineQuery received: %+v", query)
-
 	for _, house := range Houses {
-		result := tgbotapi.NewInlineQueryResultPhoto(
-			fmt.Sprintf("house_%d", house.ID),
-			house.PhotoURL,
-		)
+		id := fmt.Sprintf("house_%d", house.ID)
+
+		result := tgbotapi.NewInlineQueryResultPhoto(id, house.PhotoURL)
 		result.Title = house.Name
 		result.Description = house.Description
-		result.Caption = fmt.Sprintf("*%s*\n%s", house.Name, house.Description)
-		result.ParseMode = "Markdown"
-		result.ThumbURL = house.PhotoURL
+		result.Caption = fmt.Sprintf("%s\n%s", house.Name, house.Description)
+		result.ThumbURL = house.PhotoURL // Важно: миниатюра (можно та же ссылка)
 
 		result.ReplyMarkup = &tgbotapi.InlineKeyboardMarkup{
 			InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{
@@ -185,7 +181,6 @@ func handleInlineQuery(bot *tgbotapi.BotAPI, query *tgbotapi.InlineQuery) {
 		log.Println("inline send error:", err)
 	}
 }
-
 
 
 
