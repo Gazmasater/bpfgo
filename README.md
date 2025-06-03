@@ -233,6 +233,10 @@ func main() {
 }
 
 
+log.Printf("InlineQuery received: %+v", query)
+
+
+
 
 
 
