@@ -165,13 +165,10 @@ func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	}
 }
 
-
 func sendInitialShowcase(bot *tgbotapi.BotAPI, chatID int64) {
 	msg := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath("data/3.jpg"))
 	msg.Caption = "*Каталог домов*\nВыберите один из вариантов ниже 👇"
 	msg.ParseMode = "Markdown"
-
-	// заглушка 1 кнопка, будет отредактирована потом
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("Загрузка...", "loading"),
@@ -179,19 +176,24 @@ func sendInitialShowcase(bot *tgbotapi.BotAPI, chatID int64) {
 	)
 
 	sent, _ := bot.Send(msg)
-
-	// сразу редактируем на нормальную витрину
 	editHouseShowcase(bot, sent.Chat.ID, sent.MessageID)
 }
 
 func editHouseShowcase(bot *tgbotapi.BotAPI, chatID int64, messageID int) {
-	media := tgbotapi.NewEditMessageMedia(chatID, messageID, tgbotapi.InputMediaPhoto{
-		Media:     tgbotapi.FilePath("data/3.jpg"),
-		Caption:   "*Каталог домов*\nВыберите один из вариантов ниже 👇",
-		ParseMode: "Markdown",
-	})
-	bot.Send(media)
+	edit := tgbotapi.EditMessageMediaConfig{
+		BaseEdit: tgbotapi.BaseEdit{
+			ChatID:    chatID,
+			MessageID: messageID,
+		},
+		Media: tgbotapi.InputMediaPhoto{
+			Media:     tgbotapi.FilePath("data/3.jpg"),
+			Caption:   "*Каталог домов*\nВыберите один из вариантов ниже 👇",
+			ParseMode: "Markdown",
+		},
+	}
+	bot.Send(edit)
 
+	// Кнопки 2х2
 	var rows [][]tgbotapi.InlineKeyboardButton
 	for i := 0; i < len(Houses); i += 2 {
 		row := []tgbotapi.InlineKeyboardButton{
@@ -210,12 +212,18 @@ func editHouseShowcase(bot *tgbotapi.BotAPI, chatID int64, messageID int) {
 }
 
 func editHouseDetails(bot *tgbotapi.BotAPI, chatID int64, messageID int, house models.House) {
-	media := tgbotapi.NewEditMessageMedia(chatID, messageID, tgbotapi.InputMediaPhoto{
-		Media:     tgbotapi.FilePath(house.PhotoPath),
-		Caption:   fmt.Sprintf("*%s*\n%s", house.Name, house.Description),
-		ParseMode: "Markdown",
-	})
-	bot.Send(media)
+	edit := tgbotapi.EditMessageMediaConfig{
+		BaseEdit: tgbotapi.BaseEdit{
+			ChatID:    chatID,
+			MessageID: messageID,
+		},
+		Media: tgbotapi.InputMediaPhoto{
+			Media:     tgbotapi.FilePath(house.PhotoPath),
+			Caption:   fmt.Sprintf("*%s*\n%s", house.Name, house.Description),
+			ParseMode: "Markdown",
+		},
+	}
+	bot.Send(edit)
 
 	replyMarkup := tgbotapi.NewEditMessageReplyMarkup(chatID, messageID,
 		tgbotapi.NewInlineKeyboardMarkup(
@@ -226,68 +234,6 @@ func editHouseDetails(bot *tgbotapi.BotAPI, chatID int64, messageID int, house m
 	)
 	bot.Send(replyMarkup)
 }
-
-
-
-
-
-package main
-
-import (
-	"log"
-	"os"
-	"telegram-house-bot/bot"
-
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-)
-
-func main() {
-	token := os.Getenv("TELEGRAM_BOT_TOKEN")
-	if token == "" {
-		log.Fatal("TELEGRAM_BOT_TOKEN not set")
-	}
-
-	botAPI, err := tgbotapi.NewBotAPI(token)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-
-	updates := botAPI.GetUpdatesChan(u)
-	log.Println("Bot started...")
-
-	for update := range updates {
-		bot.HandleUpdate(botAPI, update)
-	}
-}
-
-
-[{
-	"resource": "/home/gaz358/myprog/TG/bot/handlers.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "UndeclaredImportedName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredImportedName"
-		}
-	},
-	"severity": 8,
-	"message": "undefined: tgbotapi.NewEditMessageMedia",
-	"source": "compiler",
-	"startLineNumber": 65,
-	"startColumn": 20,
-	"endLineNumber": 65,
-	"endColumn": 39
-}]
-
-
-
 
 
 
