@@ -145,15 +145,8 @@ var House = models.House{
 
 func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	if update.Message != nil && update.Message.Text == "/start" {
-		msg := tgbotapi.NewPhoto(update.Message.Chat.ID, tgbotapi.FilePath(House.PhotoPath))
-		msg.Caption = fmt.Sprintf("*%s*\n%s", House.Name, House.Description)
-		msg.ParseMode = "Markdown"
-		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("📄 Подробнее", "house_1"),
-			),
-		)
-		bot.Send(msg)
+		sendHouseList(bot, update.Message.Chat.ID)
+		return
 	}
 
 	if update.CallbackQuery != nil {
@@ -169,14 +162,6 @@ func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			if id == House.ID {
 				sendHouseDetails(bot, update.CallbackQuery.Message.Chat.ID)
 			}
-		}
-	}
-
-	if update.CallbackQuery != nil && strings.HasPrefix(update.CallbackQuery.Data, "house_") {
-		idStr := strings.TrimPrefix(update.CallbackQuery.Data, "house_")
-		id, _ := strconv.Atoi(idStr)
-		if id == House.ID {
-			sendHouseDetails(bot, update.CallbackQuery.Message.Chat.ID)
 		}
 	}
 }
@@ -214,6 +199,7 @@ func sendHouseList(bot *tgbotapi.BotAPI, chatID int64) {
 	)
 	bot.Send(msg)
 }
+
 
 
 
