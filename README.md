@@ -146,6 +146,17 @@ Current placeholder is: Search...
 Please send me the placeholder message for queries to your bot. People will see this placeholder whenever they type @Dom_Mechty48_Bot in the message field – in any chat. Tell them what they can get from your bot (e.g., Search GIFs...).
 
 
+https://afystatic.ru/files/vpbb/full/0/07/07ef43605f8c8d24f63705001396103200.webp
+
+https://avatars.mds.yandex.net/get-verba/3587101/2a0000017ff4c8092f5b4087c32235c40ef4/realty_large
+
+https://57.img.avito.st/image/1/1.zLhjera5yFDXWXbT2nvOsVWPYlfT3eJHVdZiVd_balM.hhlWwMfPR-IIWYI6aTO7kCqIYB375RjQAowhu8vJyrs
+
+https://www.lipetskmedia.ru/images/news_/135/005_big2.png
+
+https://github.com/user-attachments/assets/4b68cdab-acff-4cf4-adb5-d363dc48f630
+
+
 
 
 
