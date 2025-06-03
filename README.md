@@ -120,27 +120,115 @@ git push --force origin ProcNet_monitor
 ______________________________________________________________________________________________
 TG
 
-[{
-	"resource": "/home/gaz358/myprog/TG/bot/handlers.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "UndeclaredImportedName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredImportedName"
+package bot
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+	"telegram-house-bot/models"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+)
+
+var House = models.House{
+	ID:          1,
+	Name:        "🏡 Коттедж 120 м²",
+	Description: "2 этажа, участок 6 соток, коммуникации подведены.",
+	PhotoPath:   "data/1.jpg",
+	PlanPath:    "data/2.jpg",
+}
+
+func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+	if update.Message != nil && update.Message.Text == "/start" {
+		sendHouseCard(bot, update.Message.Chat.ID)
+		return
+	}
+
+	if update.CallbackQuery != nil {
+		data := update.CallbackQuery.Data
+		chatID := update.CallbackQuery.Message.Chat.ID
+		messageID := update.CallbackQuery.Message.MessageID
+
+		switch {
+		case data == "back_to_list":
+			editToHouseCard(bot, chatID, messageID)
+
+		case strings.HasPrefix(data, "house_"):
+			idStr := strings.TrimPrefix(data, "house_")
+			id, _ := strconv.Atoi(idStr)
+			if id == House.ID {
+				editToHouseDetails(bot, chatID, messageID)
+			}
 		}
-	},
-	"severity": 8,
-	"message": "undefined: tgbotapi.NewEditMessageMedia",
-	"source": "compiler",
-	"startLineNumber": 62,
-	"startColumn": 24,
-	"endLineNumber": 62,
-	"endColumn": 43
-}]
+	}
+}
+
+func sendHouseCard(bot *tgbotapi.BotAPI, chatID int64) {
+	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(House.PhotoPath))
+	photo.Caption = fmt.Sprintf("*%s*\n%s", House.Name, House.Description)
+	photo.ParseMode = "Markdown"
+	photo.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📄 Подробнее", fmt.Sprintf("house_%d", House.ID)),
+		),
+	)
+	bot.Send(photo)
+}
+
+func editToHouseDetails(bot *tgbotapi.BotAPI, chatID int64, messageID int) {
+	media := tgbotapi.InputMediaPhoto{
+		Type:      "photo",
+		Media:     tgbotapi.FilePath(House.PlanPath),
+		Caption:   fmt.Sprintf("*📐 Планировка*\n%s", House.Description),
+		ParseMode: "Markdown",
+	}
+
+	edit := tgbotapi.EditMessageMediaConfig{
+		BaseEdit: tgbotapi.BaseEdit{
+			ChatID:    chatID,
+			MessageID: messageID,
+		},
+		Media: media,
+	}
+	bot.Send(edit)
+
+	replyMarkup := tgbotapi.NewEditMessageReplyMarkup(chatID, messageID,
+		tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад к списку", "back_to_list"),
+			),
+		),
+	)
+	bot.Send(replyMarkup)
+}
+
+func editToHouseCard(bot *tgbotapi.BotAPI, chatID int64, messageID int) {
+	media := tgbotapi.InputMediaPhoto{
+		Type:      "photo",
+		Media:     tgbotapi.FilePath(House.PhotoPath),
+		Caption:   fmt.Sprintf("*%s*\n%s", House.Name, House.Description),
+		ParseMode: "Markdown",
+	}
+
+	edit := tgbotapi.EditMessageMediaConfig{
+		BaseEdit: tgbotapi.BaseEdit{
+			ChatID:    chatID,
+			MessageID: messageID,
+		},
+		Media: media,
+	}
+	bot.Send(edit)
+
+	replyMarkup := tgbotapi.NewEditMessageReplyMarkup(chatID, messageID,
+		tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("📄 Подробнее", fmt.Sprintf("house_%d", House.ID)),
+			),
+		),
+	)
+	bot.Send(replyMarkup)
+}
 
 
 
