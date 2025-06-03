@@ -199,28 +199,13 @@ func handleInlineQuery(bot *tgbotapi.BotAPI, query *tgbotapi.InlineQuery) {
 }
 
 gaz358@gaz358-BOD-WXX9:~/myprog/TG$ go run .
-2025/06/04 02:18:27 Received update
-2025/06/04 02:18:27 No inline query in update
-2025/06/04 02:18:27 Received message: /start
-2025/06/04 02:18:41 Received update
-2025/06/04 02:18:41 No inline query in update
-2025/06/04 02:22:33 Received update
-2025/06/04 02:22:33 No inline query in update
-2025/06/04 02:22:33 Received update
-2025/06/04 02:22:33 No inline query in update
-2025/06/04 02:22:33 Received message: /start
-2025/06/04 02:22:36 Received update
-2025/06/04 02:22:36 No inline query in update
-2025/06/04 02:22:36 Received message: /start
-2025/06/04 02:23:05 Received update
-2025/06/04 02:23:05 No inline query in update
-2025/06/04 02:23:05 Received message: /start
-2025/06/04 02:24:05 Received update
-2025/06/04 02:24:05 No inline query in update
-2025/06/04 02:24:05 Received message: /start
-2025/06/04 02:24:40 Received update
-2025/06/04 02:24:40 No inline query in update
-2025/06/04 02:24:40 Received message: /start
+2025/06/04 02:29:44 Received update
+2025/06/04 02:29:44 No inline query in update
+2025/06/04 02:29:44 Received message: @Dom_Mechty48_Bot
+2025/06/04 02:32:56 Received update
+2025/06/04 02:32:56 No inline query in update
+2025/06/04 02:32:56 Received message: /start
+
 
 
 
