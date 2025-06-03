@@ -177,11 +177,9 @@ func sendHouseCard(bot *tgbotapi.BotAPI, chatID int64) {
 }
 
 func editToHouseDetails(bot *tgbotapi.BotAPI, chatID int64, messageID int) {
-	media := tgbotapi.InputMediaPhoto{
-		Media:     tgbotapi.FilePath(House.PlanPath),
-		Caption:   fmt.Sprintf("*📐 Планировка*\n%s", House.Description),
-		ParseMode: "Markdown",
-	}
+	media := tgbotapi.NewInputMediaPhoto(tgbotapi.FilePath(House.PlanPath))
+	media.Caption = fmt.Sprintf("*📐 Планировка*\n%s", House.Description)
+	media.ParseMode = "Markdown"
 
 	edit := tgbotapi.EditMessageMediaConfig{
 		BaseEdit: tgbotapi.BaseEdit{
@@ -203,11 +201,9 @@ func editToHouseDetails(bot *tgbotapi.BotAPI, chatID int64, messageID int) {
 }
 
 func editToHouseCard(bot *tgbotapi.BotAPI, chatID int64, messageID int) {
-	media := tgbotapi.InputMediaPhoto{
-		Media:     tgbotapi.FilePath(House.PhotoPath),
-		Caption:   fmt.Sprintf("*%s*\n%s", House.Name, House.Description),
-		ParseMode: "Markdown",
-	}
+	media := tgbotapi.NewInputMediaPhoto(tgbotapi.FilePath(House.PhotoPath))
+	media.Caption = fmt.Sprintf("*%s*\n%s", House.Name, House.Description)
+	media.ParseMode = "Markdown"
 
 	edit := tgbotapi.EditMessageMediaConfig{
 		BaseEdit: tgbotapi.BaseEdit{
@@ -228,27 +224,41 @@ func editToHouseCard(bot *tgbotapi.BotAPI, chatID int64, messageID int) {
 	bot.Send(replyMarkup)
 }
 
-[{
-	"resource": "/home/gaz358/myprog/TG/bot/handlers.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingLitField",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingLitField"
-		}
-	},
-	"severity": 8,
-	"message": "unknown field Media in struct literal of type tgbotapi.InputMediaPhoto",
-	"source": "compiler",
-	"startLineNumber": 59,
-	"startColumn": 3,
-	"endLineNumber": 59,
-	"endColumn": 8
-}]
+
+
+package main
+
+import (
+	"log"
+	"os"
+	"telegram-house-bot/bot"
+
+	"github.com/joho/godotenv"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+)
+
+func main() {
+	_ = godotenv.Load()
+
+	botToken := os.Getenv("BOT_TOKEN")
+	if botToken == "" {
+		log.Fatal("BOT_TOKEN не задан в .env")
+	}
+
+	api, err := tgbotapi.NewBotAPI(botToken)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	u := tgbotapi.NewUpdate(0)
+	u.Timeout = 60
+
+	updates := api.GetUpdatesChan(u)
+
+	for update := range updates {
+		bot.HandleUpdate(api, update)
+	}
+}
 
 
 
