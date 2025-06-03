@@ -262,6 +262,27 @@ func main() {
 
 
 
+func sendHouseCard(bot *tgbotapi.BotAPI, chatID int64) {
+	msgText := `Добро пожаловать в каталог *Дом мечты*!
+
+Это демонстрационная витрина. Здесь вы можете просматривать дома, изучать планировки и фото комнат.
+
+*Создано на базе Telegram-бота на Go.*`
+
+	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(House.PhotoPath))
+	photo.Caption = msgText
+	photo.ParseMode = "Markdown"
+	photo.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("🏠 Витрина с домами", fmt.Sprintf("house_%d", House.ID)),
+		),
+	)
+	bot.Send(photo)
+}
+
+
+
+
 
 
 
