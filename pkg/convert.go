@@ -54,6 +54,20 @@ func Int8ToString(arr [32]int8) string {
 	return unsafe.String(unsafe.SliceData(b), len(b))
 }
 
+func Int8ToStringOptimized(arr [32]int8) string {
+	var length int
+	for length = 0; length < len(arr); length++ {
+		if arr[length] == 0 {
+			break
+		}
+	}
+	if length == 0 {
+		return ""
+	}
+	slice := (*[32]byte)(unsafe.Pointer(&arr[0]))
+	return unsafe.String(&slice[0], length)
+}
+
 func IPv6FromLEWords(words [4]uint32) net.IP {
 	ip := make(net.IP, 16)
 	for i := 0; i < 4; i++ {

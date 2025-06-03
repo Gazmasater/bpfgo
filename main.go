@@ -112,6 +112,14 @@ func resolveHost(ip net.IP) string {
 	cacheMu.RUnlock()
 
 	var host string
+
+	if ip.IsLoopback() {
+
+		host = "localhost"
+
+		return host
+	}
+
 	if ip.To4() != nil {
 		host = pkg.ResolveIP(ip)
 	} else {
@@ -270,11 +278,26 @@ func main() {
 					byte(event.SrcIP.S_addr>>16),
 					byte(event.SrcIP.S_addr>>24),
 				)
+
+				srcIP_r := net.IPv4(
+					byte(event.SrcIP.S_addr>>24),
+					byte(event.SrcIP.S_addr>>16),
+					byte(event.SrcIP.S_addr>>8),
+					byte(event.SrcIP.S_addr),
+				)
+
 				dstIP := net.IPv4(
 					byte(event.DstIP.S_addr),
 					byte(event.DstIP.S_addr>>8),
 					byte(event.DstIP.S_addr>>16),
 					byte(event.DstIP.S_addr>>24),
+				)
+
+				dstIP_r := net.IPv4(
+					byte(event.DstIP.S_addr>>24),
+					byte(event.DstIP.S_addr>>16),
+					byte(event.DstIP.S_addr>>8),
+					byte(event.DstIP.S_addr),
 				)
 
 				if cachedComm(event.Comm) == executableName {
@@ -347,7 +370,7 @@ func main() {
 							eventMap[port] = data
 						}
 						data.Sendmsg = Sendmsg{
-							DstIP:   dstIP,
+							DstIP:   dstIP_r,
 							DstPort: port,
 							Pid:     event.Pid,
 							Comm:    cachedComm(event.Comm),
@@ -359,11 +382,31 @@ func main() {
 								proto = "UDP"
 							}
 							fmt.Print("\n")
-							fmt.Print("SENDMSG PID=", data.Sendmsg.Pid, " NAME=", data.Sendmsg.Comm, " ", proto, "/",
-								data.Lookup.DstIP.String(), ":", data.Lookup.DstPort, "->", data.Lookup.SrcIP.String(), ":", data.Lookup.SrcPort, "\n")
 
-							fmt.Print("SENDMSG PID=", data.Recvmsg.Pid, " NAME=", data.Recvmsg.Comm, " ", proto, "/",
-								data.Lookup.DstIP.String(), ":", data.Lookup.DstPort, "<-", data.Lookup.SrcIP.String(), ":", data.Lookup.SrcPort, "\n")
+							fmt.Printf("SENDMSG PID=%d NAME=%s   %s://%s[%s:%d]->%s[%s:%d]\n",
+								data.Sendmsg.Pid,
+								data.Sendmsg.Comm,
+								proto,
+								resolveHost(dstIP_r),
+								data.Sendmsg.DstIP,
+								data.Sendmsg.DstPort,
+								resolveHost(data.Lookup.SrcIP),
+								data.Lookup.SrcIP.String(),
+								data.Lookup.SrcPort,
+							)
+
+							fmt.Printf("SENDMSG	PID=%d  NAME=%s   %s://%s[%s:%d]<-%s[%s:%d]\n",
+								data.Recvmsg.Pid,
+								data.Sendmsg.Comm,
+								proto,
+								resolveHost(dstIP_r),
+								data.Sendmsg.DstIP,
+								data.Sendmsg.DstPort,
+								resolveHost(data.Lookup.SrcIP),
+								data.Lookup.SrcIP.String(),
+								data.Lookup.SrcPort,
+							)
+
 							fmt.Print("\n")
 
 							delete(eventMap, port)
@@ -451,7 +494,7 @@ func main() {
 							eventMap[port] = data
 						}
 						data.Recvmsg = Recvmsg{
-							SrcIP:   srcIP,
+							SrcIP:   srcIP_r,
 							SrcPort: port,
 							Pid:     event.Pid,
 							Comm:    cachedComm(event.Comm),
@@ -463,8 +506,31 @@ func main() {
 								proto = "UDP"
 							}
 							fmt.Print("\n")
-							fmt.Print(proto, "/", data.Lookup.DstIP.String(), ":", data.Lookup.DstPort, "->", data.Lookup.SrcIP.String(), ":", data.Lookup.SrcPort, "\n")
-							fmt.Print(proto, "/", data.Lookup.DstIP.String(), ":", data.Lookup.DstPort, "<-", data.Lookup.SrcIP.String(), ":", data.Lookup.SrcPort, "\n")
+
+							fmt.Printf("RECVMSG PID=%d NAME=%s   %s://%s[%s:%d]->%s[%s:%d]\n",
+								data.Recvmsg.Pid,
+								data.Recvmsg.Comm,
+								proto,
+								resolveHost(srcIP_r),
+								data.Recvmsg.SrcIP,
+								data.Recvmsg.SrcPort,
+								resolveHost(data.Lookup.SrcIP),
+								data.Lookup.SrcIP.String(),
+								data.Lookup.SrcPort,
+							)
+
+							fmt.Printf("RECVMSG	PID=%d  NAME=%s   %s://%s[%s:%d]<-%s[%s:%d]\n",
+								data.Sendmsg.Pid,
+								data.Recvmsg.Comm,
+								proto,
+								resolveHost(srcIP_r),
+								data.Recvmsg.SrcIP,
+								data.Recvmsg.SrcPort,
+								resolveHost(data.Lookup.SrcIP),
+								data.Lookup.SrcIP.String(),
+								data.Lookup.SrcPort,
+							)
+
 							fmt.Print("\n")
 							delete(eventMap, port)
 							putEventData(data)
