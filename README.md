@@ -120,165 +120,79 @@ git push --force origin ProcNet_monitor
 ______________________________________________________________________________________________
 TG
 
-📁 Структура проекта
-
-telegram-house-bot/
-├── main.go
-├── go.mod
-├── models/
-│   └── house.go
-├── bot/
-│   └── handlers.go
-├── data/
-│   ├── house.jpg
-│   ├── plan.pdf
-│   ├── room1.jpg
-│   └── room2.jpg
-🔧 go.mod
-
-module telegram-house-bot
-
-go 1.20
-
-require github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
-🧱 models/house.go
-
-
-type House struct {
-	ID          int
-	Name        string
-	Description string
-	PhotoPath   string
-	PlanPath    string
-	RoomPhotos  []string
-}
-🤖 bot/handlers.go
-
-package bot
-
-import (
-	"fmt"
-	"strconv"
-	"strings"
-	"telegram-house-bot/models"
-
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-)
-
-var House = models.House{
-	ID:          1,
-	Name:        "🏡 Коттедж 120 м²",
-	Description: "2 этажа, участок 6 соток, коммуникации подведены.",
-	PhotoPath:   "data/house.jpg",
-	PlanPath:    "data/plan.pdf",
-	RoomPhotos: []string{
-		"data/room1.jpg",
-		"data/room2.jpg",
-	},
-}
-
-func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
-	if update.Message != nil && update.Message.Text == "/start" {
-		msg := tgbotapi.NewPhoto(update.Message.Chat.ID, tgbotapi.FilePath(House.PhotoPath))
-		msg.Caption = fmt.Sprintf("*%s*\n%s", House.Name, House.Description)
-		msg.ParseMode = "Markdown"
-		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("📄 Подробнее", "house_1"),
-			),
-		)
-		bot.Send(msg)
-	}
-
-	if update.CallbackQuery != nil && strings.HasPrefix(update.CallbackQuery.Data, "house_") {
-		idStr := strings.TrimPrefix(update.CallbackQuery.Data, "house_")
-		id, _ := strconv.Atoi(idStr)
-		if id == House.ID {
-			sendHouseDetails(bot, update.CallbackQuery.Message.Chat.ID)
-		}
-	}
-}
-
-func sendHouseDetails(bot *tgbotapi.BotAPI, chatID int64) {
-	// Планировка
-	plan := tgbotapi.NewDocument(chatID, tgbotapi.FilePath(House.PlanPath))
-	plan.Caption = "📐 Планировка"
-	bot.Send(plan)
-
-	// Фото комнат
-	for _, photoPath := range House.RoomPhotos {
-		photo := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(photoPath))
-		bot.Send(photo)
-	}
-}
-🚀 main.go
+🔧 Шаги реализации
+1. 🔁 Добавь в sendHouseDetails() кнопку "Назад"
 go
 Копировать
 Редактировать
-package main
+func sendHouseDetails(bot *tgbotapi.BotAPI, chatID int64) {
+    // Планировка
+    plan := tgbotapi.NewDocument(chatID, tgbotapi.FilePath(House.PlanPath))
+    plan.Caption = "📐 Планировка"
+    bot.Send(plan)
 
-import (
-	"log"
-	"os"
-	"telegram-house-bot/bot"
+    // Фото комнат
+    for _, roomPath := range House.RoomPhotos {
+        roomPhoto := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(roomPath))
+        bot.Send(roomPhoto)
+    }
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-)
-
-func main() {
-	botToken := os.Getenv("BOT_TOKEN")
-	if botToken == "" {
-		log.Fatal("Установи переменную окружения BOT_TOKEN")
-	}
-
-	botAPI, err := tgbotapi.NewBotAPI(botToken)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-	updates := botAPI.GetUpdatesChan(u)
-
-	for update := range updates {
-		bot.HandleUpdate(botAPI, update)
-	}
+    // Кнопка "Назад"
+    msg := tgbotapi.NewMessage(chatID, "⬅️ Вернуться к списку домов")
+    msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+        tgbotapi.NewInlineKeyboardRow(
+            tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад к списку", "back_to_list"),
+        ),
+    )
+    bot.Send(msg)
 }
-🧪 Как запустить
-Установи зависимости:
+2. 🏘 Функция sendHouseList() — отправка карточек всех домов
+Добавь её (можно вызывать и из /start, и из back_to_list):
 
-
-go mod tidy
-Положи картинки и PDF:
-
-
-data/
-├── house.jpg
-├── plan.pdf
-├── room1.jpg
-└── room2.jpg
-Установи токен:
-
-
-export BOT_TOKEN=твой_токен_от_BotFather
-Запусти:
-
-
-go run main.go
-Если хочешь, я могу подготовить архив .zip со всеми файлами и заглушками, или помочь подключить S3/CDN, когда будешь готов.
-
-Хочешь, чтобы я сгенерировал zip-архив этого проекта и дал тебе ссылку?
-
-
-BOT_TOKEN=7848415216:AAE4pym6PRDMRFtI9JwpmGU-Rv5obyH-bmo
-
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Ошибка загрузки .env файла")
+go
+Копировать
+Редактировать
+func sendHouseList(bot *tgbotapi.BotAPI, chatID int64) {
+    msg := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(House.PhotoPath))
+    msg.Caption = fmt.Sprintf("*%s*\n%s", House.Name, House.Description)
+    msg.ParseMode = "Markdown"
+    msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+        tgbotapi.NewInlineKeyboardRow(
+            tgbotapi.NewInlineKeyboardButtonData("📄 Подробнее", fmt.Sprintf("house_%d", House.ID)),
+        ),
+    )
+    bot.Send(msg)
 }
+3. 🎯 Обработка callback back_to_list в HandleUpdate
+В HandleUpdate, добавь:
 
+go
+Копировать
+Редактировать
+if update.CallbackQuery != nil {
+    data := update.CallbackQuery.Data
 
-@Dom_Mechty48_Bot
+    switch {
+    case data == "back_to_list":
+        sendHouseList(bot, update.CallbackQuery.Message.Chat.ID)
+
+    case strings.HasPrefix(data, "house_"):
+        idStr := strings.TrimPrefix(data, "house_")
+        id, _ := strconv.Atoi(idStr)
+        if id == House.ID {
+            sendHouseDetails(bot, update.CallbackQuery.Message.Chat.ID)
+        }
+    }
+}
+✅ Готово!
+Теперь:
+
+/start → список домов (фото + кнопка "Подробнее")
+
+"Подробнее" → планировка + комнаты + кнопка "Назад к списку"
+
+"Назад к списку" → повторно показывает карточку дома
+
 
 
 
