@@ -123,6 +123,17 @@ git push --force origin ProcNet_monitor
 ______________________________________________________________________________________________
 TG
 
+package models
+
+type House struct {
+	ID          int
+	Name        string
+	Description string
+	PhotoURL    string
+	Floors      int
+	LandSize    string
+}
+
 package bot
 
 import (
@@ -135,39 +146,51 @@ import (
 )
 
 var Houses = []models.House{
-	{ID: 1, Name: "🏡 Дом 120 м²", Description: "2 этажа, участок 6 соток", PhotoURL: "https://terem-dom.ru/d/cimg6172.jpg"},
-	{ID: 2, Name: "🏠 Дом 95 м²", Description: "Компактный и тёплый", PhotoURL: "https://terem-dom.ru/d/cimg6177.jpg"},
-	{ID: 3, Name: "🏘 Дом с террасой", Description: "С видом на реку", PhotoURL: "https://terem-dom.ru/d/cimg6169.jpg"},
-	{ID: 4, Name: "🏕 Коттедж", Description: "Для семьи и отдыха", PhotoURL: "https://terem-dom.ru/d/cimg6170.jpg"},
+	{
+		ID: 1, Name: "🏡 Дом 120 м²", Description: "Утеплён, готов к заселению",
+		PhotoURL: "https://terem-dom.ru/d/cimg6172.jpg", Floors: 2, LandSize: "6 соток",
+	},
+	{
+		ID: 2, Name: "🏠 Дом 95 м²", Description: "Компактный и тёплый",
+		PhotoURL: "https://terem-dom.ru/d/cimg6177.jpg", Floors: 1, LandSize: "4 сотки",
+	},
+	{
+		ID: 3, Name: "🏘 Дом с террасой", Description: "С видом на реку",
+		PhotoURL: "https://terem-dom.ru/d/cimg6169.jpg", Floors: 2, LandSize: "5 соток",
+	},
+	{
+		ID: 4, Name: "🏕 Коттедж", Description: "Для семьи и отдыха",
+		PhotoURL: "https://terem-dom.ru/d/cimg6170.jpg", Floors: 2, LandSize: "7 соток",
+	},
 }
 
 func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
-	log.Println("Received update")
-
 	if update.InlineQuery != nil {
-		log.Printf("Inline query detected: %+v", update.InlineQuery)
 		handleInlineQuery(bot, update.InlineQuery)
-	} else {
-		log.Println("No inline query in update")
-	}
-
-	if update.Message != nil {
-		log.Printf("Received message: %s", update.Message.Text)
 	}
 }
 
 func handleInlineQuery(bot *tgbotapi.BotAPI, query *tgbotapi.InlineQuery) {
 	var results []interface{}
 
-	log.Printf("Handling inline query from user ID %d: %q", query.From.ID, query.Query)
+	log.Printf("InlineQuery received: %+v", query)
 
 	for _, house := range Houses {
-		id := fmt.Sprintf("house_%d", house.ID)
+		result := tgbotapi.NewInlineQueryResultPhoto(
+			fmt.Sprintf("house_%d", house.ID),
+			house.PhotoURL,
+		)
 
-		result := tgbotapi.NewInlineQueryResultPhoto(id, house.PhotoURL)
 		result.Title = house.Name
 		result.Description = house.Description
-		result.Caption = fmt.Sprintf("%s\n%s", house.Name, house.Description)
+		result.Caption = fmt.Sprintf(
+			"*%s*\n"+
+				"📐 Этажей: %d\n"+
+				"🌿 Участок: %s\n"+
+				"🏷 %s",
+			house.Name, house.Floors, house.LandSize, house.Description,
+		)
+		result.ParseMode = "Markdown"
 		result.ThumbURL = house.PhotoURL
 
 		result.ReplyMarkup = &tgbotapi.InlineKeyboardMarkup{
@@ -181,30 +204,19 @@ func handleInlineQuery(bot *tgbotapi.BotAPI, query *tgbotapi.InlineQuery) {
 		results = append(results, result)
 	}
 
-	log.Printf("Prepared %d results", len(results))
-
 	inlineConf := tgbotapi.InlineConfig{
 		InlineQueryID: query.ID,
 		IsPersonal:    true,
-		CacheTime:     1,
+		CacheTime:     0,
 		Results:       results,
 	}
 
-	_, err := bot.Request(inlineConf)
-	if err != nil {
-		log.Println("Failed to send inline query results:", err)
-	} else {
-		log.Println("Inline results sent successfully")
+	if _, err := bot.Request(inlineConf); err != nil {
+		log.Println("inline send error:", err)
 	}
 }
 
-gaz358@gaz358-BOD-WXX9:~/myprog/TG$ go run .
-2025/06/04 02:29:44 Received update
-2025/06/04 02:29:44 No inline query in update
-2025/06/04 02:29:44 Received message: @Dom_Mechty48_Bot
-2025/06/04 02:32:56 Received update
-2025/06/04 02:32:56 No inline query in update
-2025/06/04 02:32:56 Received message: /start
+
 
 
 
