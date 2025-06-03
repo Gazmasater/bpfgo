@@ -177,64 +177,58 @@ func sendHouseCard(bot *tgbotapi.BotAPI, chatID int64) {
 }
 
 func editToHouseDetails(bot *tgbotapi.BotAPI, chatID int64, messageID int) {
-	media := tgbotapi.NewEditMessageMedia(chatID, messageID, tgbotapi.InputMediaPhoto{
-		Type:    "photo",
-		Media:   House.PlanPath,
-		Caption: fmt.Sprintf("*📐 Планировка*\n%s", House.Description),
-		ParseMode: "Markdown",
-	})
+	media := tgbotapi.EditMessageMediaConfig{
+		ChatID:    chatID,
+		MessageID: messageID,
+		Media: tgbotapi.InputMediaPhoto{
+			Type:      "photo",
+			Media:     House.PlanPath,
+			Caption:   fmt.Sprintf("*📐 Планировка*\n%s", House.Description),
+			ParseMode: "Markdown",
+		},
+	}
 	bot.Send(media)
 
-	replyMarkup := tgbotapi.NewEditMessageReplyMarkup(chatID, messageID,
-		tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад к списку", "back_to_list"),
-			),
-		),
-	)
+	replyMarkup := tgbotapi.EditMessageReplyMarkupConfig{
+		ChatID:    chatID,
+		MessageID: messageID,
+		ReplyMarkup: &tgbotapi.InlineKeyboardMarkup{
+			InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{
+				{
+					tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад к списку", "back_to_list"),
+				},
+			},
+		},
+	}
 	bot.Send(replyMarkup)
 }
 
 func editToHouseCard(bot *tgbotapi.BotAPI, chatID int64, messageID int) {
-	media := tgbotapi.NewEditMessageMedia(chatID, messageID, tgbotapi.InputMediaPhoto{
-		Type:    "photo",
-		Media:   House.PhotoPath,
-		Caption: fmt.Sprintf("*%s*\n%s", House.Name, House.Description),
-		ParseMode: "Markdown",
-	})
+	media := tgbotapi.EditMessageMediaConfig{
+		ChatID:    chatID,
+		MessageID: messageID,
+		Media: tgbotapi.InputMediaPhoto{
+			Type:      "photo",
+			Media:     House.PhotoPath,
+			Caption:   fmt.Sprintf("*%s*\n%s", House.Name, House.Description),
+			ParseMode: "Markdown",
+		},
+	}
 	bot.Send(media)
 
-	replyMarkup := tgbotapi.NewEditMessageReplyMarkup(chatID, messageID,
-		tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("📄 Подробнее", fmt.Sprintf("house_%d", House.ID)),
-			),
-		),
-	)
+	replyMarkup := tgbotapi.EditMessageReplyMarkupConfig{
+		ChatID:    chatID,
+		MessageID: messageID,
+		ReplyMarkup: &tgbotapi.InlineKeyboardMarkup{
+			InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{
+				{
+					tgbotapi.NewInlineKeyboardButtonData("📄 Подробнее", fmt.Sprintf("house_%d", House.ID)),
+				},
+			},
+		},
+	}
 	bot.Send(replyMarkup)
 }
-
-[{
-	"resource": "/home/gaz358/myprog/TG/bot/handlers.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "UndeclaredImportedName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredImportedName"
-		}
-	},
-	"severity": 8,
-	"message": "undefined: tgbotapi.NewEditMessageMedia",
-	"source": "compiler",
-	"startLineNumber": 58,
-	"startColumn": 20,
-	"endLineNumber": 58,
-	"endColumn": 39
-}]
 
 
 
