@@ -290,6 +290,51 @@ func main() {
 }
 
 
+[{
+	"resource": "/home/gaz358/myprog/dommechty/main.go",
+	"owner": "_generated_diagnostic_collection_name_#3",
+	"code": {
+		"value": "UndeclaredImportedName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredImportedName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: tgbotapi.NewInlineKeyboardButtonWebApp",
+	"source": "compiler",
+	"startLineNumber": 38,
+	"startColumn": 15,
+	"endLineNumber": 38,
+	"endColumn": 44
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/dommechty/main.go",
+	"owner": "_generated_diagnostic_collection_name_#3",
+	"code": {
+		"value": "UndeclaredImportedName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredImportedName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: tgbotapi.WebAppInfo",
+	"source": "compiler",
+	"startLineNumber": 38,
+	"startColumn": 77,
+	"endLineNumber": 38,
+	"endColumn": 87
+}]
+
+
 
 
 
