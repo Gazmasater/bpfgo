@@ -348,6 +348,12 @@ func (sui *encodersTestSuite) Test_DupExprToString() {
 	}
 }
 
+sudo nft add rule ip6 test prerouting ip6 saddr ::1 dup to 10.1.2.3
+sudo nft add rule ip6 test prerouting ip6 saddr ::1 dup to 192.168.1.10 device lo
+sudo nft add rule ip6 test prerouting ip6 saddr ::1 dup
+sudo nft add rule ip6 test prerouting ip6 saddr ::1 dup
+
+
 
 
 
