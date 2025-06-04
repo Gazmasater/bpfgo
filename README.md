@@ -235,6 +235,17 @@ mitmproxy --version
 Хочешь, я после установки сразу покажу, как настроить браузер и запустить перехват трафика к Ozon?
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog$ mitmproxy --version
+Mitmproxy: 8.1.1
+Python:    3.12.3
+OpenSSL:   OpenSSL 3.0.13 30 Jan 2024
+Platform:  Linux-6.8.0-47-generic-x86_64-with-glibc2.39
+gaz358@gaz358-BOD-WXX9:~/myprog$ 
+
+az358@gaz358-BOD-WXX9:~/myprog$ mitmweb
+Web server listening at http://127.0.0.1:8081/
+Gtk-Message: 22:43:44.350: Not loading module "atk-bridge": The functionality is provided by GTK natively. Please try to not load it.
+Proxy server listening at *:8080
 
 
 
