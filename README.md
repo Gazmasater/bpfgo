@@ -356,6 +356,16 @@ sudo nft add rule ip test prerouting dup to 192.168.1.10 device lo
 sudo nft add rule ip test prerouting dup
 sudo nft add rule ip test prerouting dup
 
+
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting dup
+Error: syntax error, unexpected newline, expecting to
+add rule ip test prerouting dup
+                               ^
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting dup
+Error: syntax error, unexpected newline, expecting to
+add rule ip test prerouting dup
+                               ^
+
                                            
 
 
