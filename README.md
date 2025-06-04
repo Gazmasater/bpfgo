@@ -121,169 +121,86 @@ git push --force origin ProcNet_monitor
 
 
 ______________________________________________________________________________________________
-TG
 
-🚀 Пример по шагам
-1. Зарегистрируйся на github.com
-2. Создай репозиторий, например house-bot-webapp
-3. Клонируй к себе:
-bash
-Копировать
-Редактировать
-git clone https://github.com/<твоё_имя>/house-bot-webapp.git
-cd house-bot-webapp
-4. Добавь туда index.html (из предыдущего ответа)
-5. Закоммить и запушь:
-bash
-Копировать
-Редактировать
-git add .
-git commit -m "init webapp"
-git push origin main
-6. Включи GitHub Pages:
-Зайди в настройки репозитория → "Pages"
+sudo apt install mitmproxy
 
-Выбери ветку main и папку /root
-
-Сохрани
-
-🟢 Через 30 секунд появится ссылка на сайт.
-
-________________________________________________________________________________-
+mitmproxy
+http://mitm.it
 
 
 
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Витрина домов</title>
-  <style>
-    body {
-      margin: 0;
-      font-family: sans-serif;
-      background: #f5f5f5;
-    }
-    .header {
-      background: #ffffff;
-      padding: 16px;
-      text-align: center;
-      font-size: 1.2em;
-      font-weight: bold;
-      border-bottom: 1px solid #ddd;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 12px;
-      padding: 16px;
-    }
-    .card {
-      background: white;
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-      text-align: center;
-    }
-    .card img {
-      width: 100%;
-      height: 120px;
-      object-fit: cover;
-    }
-    .card p {
-      margin: 0;
-      padding: 8px;
-      font-weight: 500;
-    }
-  </style>
-</head>
-<body>
-  <div class="header">Выберите дом</div>
-  <div class="grid">
-    <div class="card">
-      <img src="https://terem-dom.ru/d/cimg6172.jpg" alt="Дом 1">
-      <p>🏡 Дом 120 м²</p>
-    </div>
-    <div class="card">
-      <img src="https://terem-dom.ru/d/cimg6177.jpg" alt="Дом 2">
-      <p>🏠 Дом 95 м²</p>
-    </div>
-    <div class="card">
-      <img src="https://terem-dom.ru/d/cimg6169.jpg" alt="Дом 3">
-      <p>🏘 Дом с террасой</p>
-    </div>
-    <div class="card">
-      <img src="https://terem-dom.ru/d/cimg6170.jpg" alt="Дом 4">
-      <p>🏕 Коттедж</p>
-    </div>
-  </div>
-</body>
-</html>
 
-___________________________________________________________________________________________
+✅ Цель:
+Зайти на https://ozon.ru в браузере.
 
-package main
+Перехватить и увидеть все отправленные запросы и то, что отправилось сайту: заголовки, cookies, IP и прочее.
 
-import (
-	"log"
-	"os"
+🧰 Что нужно:
+mitmproxy (или mitmweb)
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/joho/godotenv"
-)
+Сертификат установлен в систему или браузер
 
-func main() {
-	_ = godotenv.Load()
+Браузер настроен на использование прокси
 
-	token := os.Getenv("TELEGRAM_TOKEN")
-	if token == "" {
-		log.Fatal("TELEGRAM_TOKEN не задан в .env")
-	}
+🔧 Шаг 1: Запусти mitmproxy (или mitmweb)
+В терминале:
 
-	botAPI, err := tgbotapi.NewBotAPI(token)
-	if err != nil {
-		log.Fatal(err)
-	}
+mitmweb
+Это откроет веб-интерфейс: http://127.0.0.1:8081
 
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-	updates := botAPI.GetUpdatesChan(u)
+Прокси работает на 127.0.0.1:8080
 
-	for update := range updates {
-		if update.Message == nil || update.Message.Text != "/start" {
-			continue
-		}
+🔧 Шаг 2: Настрой браузер на использование прокси
+В Firefox:
+Настройки → Сеть → Настроить соединение
 
-		user := update.Message.From
-		log.Printf("[START] ID: %d, Username: @%s, Name: %s %s, Lang: %s",
-			user.ID,
-			user.UserName,
-			user.FirstName,
-			user.LastName,
-			user.LanguageCode,
-		)
+Прокси-сервер:
 
-		// 1. Шапка (фото + подпись)
-		header := tgbotapi.NewPhoto(update.Message.Chat.ID, tgbotapi.FileURL("https://ibb.co/dsDWgMMv"))
-		header.Caption = "🏡 Добро пожаловать в каталог домов"
-		if _, err := botAPI.Send(header); err != nil {
-			log.Println("Ошибка отправки шапки:", err)
-		}
+HTTP Proxy: 127.0.0.1
 
-		// 2. Кнопка для перехода на Web App
-		button := tgbotapi.NewMessage(update.Message.Chat.ID, "Нажмите кнопку ниже, чтобы открыть витрину:")
-		button.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonURL("🌐 Открыть витрину", "https://gazmasater.github.io/dommechty/"),
-			),
-		)
+Port: 8080
 
-		if _, err := botAPI.Send(button); err != nil {
-			log.Println("Ошибка отправки кнопки:", err)
-		}
-	}
-}
+Также использовать для HTTPS
+
+В Chrome (через системные настройки):
+Linux/macOS:
+
+google-chrome --proxy-server="http=127.0.0.1:8080;https=127.0.0.1:8080"
+🔧 Шаг 3: Установи сертификат mitmproxy, если не установил
+Перейди в браузере на:
+
+http://mitm.it
+Выбери Linux/macOS → скачай и установи сертификат (инструкции выше).
+
+🔎 Шаг 4: Зайди вручную на https://www.ozon.ru
+Открой в браузере Ozon, полазай по сайту (главная, авторизация, каталог и т.д.)
+
+Все запросы будут автоматически видны в mitmproxy / mitmweb.
+
+👁 Что смотреть в mitmweb
+Перейди на http://127.0.0.1:8081:
+
+Нажми на нужный запрос → справа:
+
+Request → заголовки (User-Agent, Cookie, и т.д.)
+
+Response → тело ответа
+
+Также можно экспортировать запрос или сохранить лог.
+
+🧠 Что это даёт
+Теперь ты точно видишь, что получает сайт:
+
+Твои cookies и ID сессии
+
+Что отправляется при входе, поиске, фильтрации и т.д.
+
+Можно сохранить User-Agent, Cookie и использовать их в автоматических скриптах позже
+
+
+
+
+
 
 
 
