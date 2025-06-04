@@ -223,58 +223,71 @@ ________________________________________________________________________________
 
 ___________________________________________________________________________________________
 
-module dommechty
+package main
 
-go 1.24.0
+import (
+	"log"
+	"os"
 
-require (
-	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
-	github.com/joho/godotenv v1.5.1
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/joho/godotenv"
 )
 
-[{
-	"resource": "/home/gaz358/myprog/dommechty/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "UndeclaredImportedName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredImportedName"
-		}
-	},
-	"severity": 8,
-	"message": "undefined: tgbotapi.NewInlineKeyboardButtonWebApp",
-	"source": "compiler",
-	"startLineNumber": 38,
-	"startColumn": 15,
-	"endLineNumber": 38,
-	"endColumn": 44
-}]
+func main() {
+	_ = godotenv.Load()
+	token := os.Getenv("TELEGRAM_TOKEN")
+	if token == "" {
+		log.Fatal("TELEGRAM_TOKEN не задан в .env")
+	}
 
-[{
-	"resource": "/home/gaz358/myprog/dommechty/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "UndeclaredImportedName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredImportedName"
+	botAPI, err := tgbotapi.NewBotAPI(token)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	u := tgbotapi.NewUpdate(0)
+	u.Timeout = 60
+	updates := botAPI.GetUpdatesChan(u)
+
+	for update := range updates {
+		if update.Message != nil && update.Message.Text == "/start" {
+			// Шапка
+			headerPhoto := tgbotapi.NewPhoto(update.Message.Chat.ID, tgbotapi.FileURL("https://gazmasater.github.io/dommechty/header.jpg"))
+			headerPhoto.Caption = "Добро пожаловать в каталог домов"
+			botAPI.Send(headerPhoto)
+
+			// Кнопка Web App
+			webAppButton := tgbotapi.NewMessage(update.Message.Chat.ID, "Откройте витрину с домами")
+			webAppButton.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+				tgbotapi.NewInlineKeyboardRow(
+					tgbotapi.InlineKeyboardButton{
+						Text: "🌐 Открыть витрину",
+						WebApp: &tgbotapi.WebAppInfo{
+							URL: "https://gazmasater.github.io/dommechty/",
+						},
+					},
+				),
+			)
+			botAPI.Send(webAppButton)
+
+			// Дома (опционально, если хочешь показать превью)
+			houses := []struct {
+				Name, Description, PhotoURL string
+			}{
+				{"🏡 Дом 120 м²", "2 этажа, участок 6 соток", "https://terem-dom.ru/d/cimg6172.jpg"},
+				{"🏠 Дом 95 м²", "Компактный и тёплый", "https://terem-dom.ru/d/cimg6177.jpg"},
+				{"🏘 Дом с террасой", "С видом на реку", "https://terem-dom.ru/d/cimg6169.jpg"},
+				{"🏕 Коттедж", "Для семьи и отдыха", "https://terem-dom.ru/d/cimg6170.jpg"},
+			}
+
+			for _, h := range houses {
+				photo := tgbotapi.NewPhoto(update.Message.Chat.ID, tgbotapi.FileURL(h.PhotoURL))
+				photo.Caption = h.Name + "\n" + h.Description
+				botAPI.Send(photo)
+			}
 		}
-	},
-	"severity": 8,
-	"message": "undefined: tgbotapi.WebAppInfo",
-	"source": "compiler",
-	"startLineNumber": 38,
-	"startColumn": 77,
-	"endLineNumber": 38,
-	"endColumn": 87
-}]
+	}
+}
 
 
 
