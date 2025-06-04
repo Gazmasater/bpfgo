@@ -353,6 +353,11 @@ sudo nft add rule ip6 test prerouting ip6 saddr ::1 dup to 192.168.1.10 device l
 sudo nft add rule ip6 test prerouting ip6 saddr ::1 dup
 sudo nft add rule ip6 test prerouting ip6 saddr ::1 dup
 
+az358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip6 test prerouting ip6 saddr ::1 dup to 10.1.2.3
+Error: Could not resolve hostname: Address family for hostname not supported
+add rule ip6 test prerouting ip6 saddr ::1 dup to 10.1.2.3
+                                           
+
 
 
 
