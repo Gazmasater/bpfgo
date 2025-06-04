@@ -276,6 +276,10 @@ func main() {
 	}
 }
 
+az358@gaz358-BOD-WXX9:~/myprog/dommechty$ go run .
+2025/06/04 14:19:40 Ошибка отправки шапки: Bad Request: wrong type of the web page content
+
+
 
 
 
