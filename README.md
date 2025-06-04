@@ -289,7 +289,49 @@ func main() {
 	}
 }
 
+[{
+	"resource": "/home/gaz358/myprog/dommechty/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "MissingLitField",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingLitField"
+		}
+	},
+	"severity": 8,
+	"message": "unknown field WebApp in struct literal of type tgbotapi.InlineKeyboardButton",
+	"source": "compiler",
+	"startLineNumber": 40,
+	"startColumn": 7,
+	"endLineNumber": 40,
+	"endColumn": 13
+}]
 
+[{
+	"resource": "/home/gaz358/myprog/dommechty/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "UndeclaredImportedName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredImportedName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: tgbotapi.WebAppInfo",
+	"source": "compiler",
+	"startLineNumber": 40,
+	"startColumn": 25,
+	"endLineNumber": 40,
+	"endColumn": 35
+}]
 
 
 
