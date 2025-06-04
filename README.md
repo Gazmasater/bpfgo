@@ -223,52 +223,58 @@ ________________________________________________________________________________
 
 ___________________________________________________________________________________________
 
-✅ Используй Web App кнопку правильно
-Заменяй вот это (оно НЕ работает в старых версиях):
+module dommechty
 
-go
-Копировать
-Редактировать
-tgbotapi.NewInlineKeyboardButtonWebApp("🌐 Открыть витрину", &tgbotapi.WebAppInfo{
-	URL: "https://gazmasater.github.io/dommechty/",
-})
-на это (работает даже в старых версиях):
+go 1.24.0
 
-go
-Копировать
-Редактировать
-tgbotapi.InlineKeyboardButton{
-	Text: "🌐 Открыть витрину",
-	WebApp: &tgbotapi.WebAppInfo{
-		URL: "https://gazmasater.github.io/dommechty/",
-	},
-}
-Пример целиком:
-
-go
-Копировать
-Редактировать
-webAppButton := tgbotapi.NewMessage(chatID, "Откройте витрину с домами")
-webAppButton.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-	tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.InlineKeyboardButton{
-			Text: "🌐 Открыть витрину",
-			WebApp: &tgbotapi.WebAppInfo{
-				URL: "https://gazmasater.github.io/dommechty/",
-			},
-		},
-	),
+require (
+	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
+	github.com/joho/godotenv v1.5.1
 )
-botAPI.Send(webAppButton)
-Если после этого всё ещё ошибка "undefined: WebAppInfo" — значит Go использует кэш старой версии. В этом случае сделай:
 
-bash
-Копировать
-Редактировать
-go clean -modcache
-go get github.com/go-telegram-bot-api/telegram-bot-api/v5@latest
-go mod tidy
-Затем снова go run ..
+[{
+	"resource": "/home/gaz358/myprog/dommechty/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "UndeclaredImportedName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredImportedName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: tgbotapi.NewInlineKeyboardButtonWebApp",
+	"source": "compiler",
+	"startLineNumber": 38,
+	"startColumn": 15,
+	"endLineNumber": 38,
+	"endColumn": 44
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/dommechty/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "UndeclaredImportedName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredImportedName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: tgbotapi.WebAppInfo",
+	"source": "compiler",
+	"startLineNumber": 38,
+	"startColumn": 77,
+	"endLineNumber": 38,
+	"endColumn": 87
+}]
 
 
 
