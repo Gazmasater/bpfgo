@@ -223,35 +223,7 @@ ________________________________________________________________________________
 
 ___________________________________________________________________________________________
 
-curl -I https://gazmasater.github.io/dommechty/header.jpg
-
-gaz358@gaz358-BOD-WXX9:~/myprog/dommechty$ curl -I https://gazmasater.github.io/dommechty/header.jpg
-HTTP/2 200 
-server: GitHub.com
-content-type: image/jpeg
-last-modified: Wed, 04 Jun 2025 11:19:55 GMT
-access-control-allow-origin: *
-strict-transport-security: max-age=31556952
-etag: "68402bdb-50712"
-expires: Wed, 04 Jun 2025 11:37:56 GMT
-cache-control: max-age=600
-x-proxy-cache: MISS
-x-github-request-id: 636A:3B9492:A3012:A4914:68402DBC
-accept-ranges: bytes
-age: 0
-date: Wed, 04 Jun 2025 11:27:56 GMT
-via: 1.1 varnish
-x-served-by: cache-fra-eddf8230066-FRA
-x-cache: MISS
-x-cache-hits: 0
-x-timer: S1749036477.780038,VS0,VE120
-vary: Accept-Encoding
-x-fastly-request-id: 7977591ad7c75406c1995927f1441287d9efd31e
-content-length: 329490
-
-gaz358@gaz358-BOD-WXX9:~/myprog/dommechty$ 
-
-
+https://ibb.co/dsDWgMMv
 
 
 
