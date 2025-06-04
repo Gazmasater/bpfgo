@@ -123,102 +123,105 @@ git push --force origin ProcNet_monitor
 ______________________________________________________________________________________________
 TG
 
-package models
+🚀 Пример по шагам
+1. Зарегистрируйся на github.com
+2. Создай репозиторий, например house-bot-webapp
+3. Клонируй к себе:
+bash
+Копировать
+Редактировать
+git clone https://github.com/<твоё_имя>/house-bot-webapp.git
+cd house-bot-webapp
+4. Добавь туда index.html (из предыдущего ответа)
+5. Закоммить и запушь:
+bash
+Копировать
+Редактировать
+git add .
+git commit -m "init webapp"
+git push origin main
+6. Включи GitHub Pages:
+Зайди в настройки репозитория → "Pages"
 
-type House struct {
-	ID          int
-	Name        string
-	Description string
-	PhotoURL    string
-	Floors      int
-	LandSize    string
-}
+Выбери ветку main и папку /root
 
-package bot
+Сохрани
 
-import (
-	"fmt"
-	"log"
-	"strconv"
-	"tg/models"
+🟢 Через 30 секунд появится ссылка на сайт.
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-)
-
-var Houses = []models.House{
-	{
-		ID: 1, Name: "🏡 Дом 120 м²", Description: "Утеплён, готов к заселению",
-		PhotoURL: "https://terem-dom.ru/d/cimg6172.jpg", Floors: 2, LandSize: "6 соток",
-	},
-	{
-		ID: 2, Name: "🏠 Дом 95 м²", Description: "Компактный и тёплый",
-		PhotoURL: "https://terem-dom.ru/d/cimg6177.jpg", Floors: 1, LandSize: "4 сотки",
-	},
-	{
-		ID: 3, Name: "🏘 Дом с террасой", Description: "С видом на реку",
-		PhotoURL: "https://terem-dom.ru/d/cimg6169.jpg", Floors: 2, LandSize: "5 соток",
-	},
-	{
-		ID: 4, Name: "🏕 Коттедж", Description: "Для семьи и отдыха",
-		PhotoURL: "https://terem-dom.ru/d/cimg6170.jpg", Floors: 2, LandSize: "7 соток",
-	},
-}
-
-func HandleUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
-	if update.InlineQuery != nil {
-		handleInlineQuery(bot, update.InlineQuery)
-	}
-}
-
-func handleInlineQuery(bot *tgbotapi.BotAPI, query *tgbotapi.InlineQuery) {
-	var results []interface{}
-
-	log.Printf("InlineQuery received: %+v", query)
-
-	for _, house := range Houses {
-		result := tgbotapi.NewInlineQueryResultPhoto(
-			fmt.Sprintf("house_%d", house.ID),
-			house.PhotoURL,
-		)
-
-		result.Title = house.Name
-		result.Description = house.Description
-		result.Caption = fmt.Sprintf(
-			"*%s*\n"+
-				"📐 Этажей: %d\n"+
-				"🌿 Участок: %s\n"+
-				"🏷 %s",
-			house.Name, house.Floors, house.LandSize, house.Description,
-		)
-		result.ParseMode = "Markdown"
-		result.ThumbURL = house.PhotoURL
-
-		result.ReplyMarkup = &tgbotapi.InlineKeyboardMarkup{
-			InlineKeyboard: [][]tgbotapi.InlineKeyboardButton{
-				{
-					tgbotapi.NewInlineKeyboardButtonURL("📄 Подробнее", "https://example.com/house?id="+strconv.Itoa(house.ID)),
-				},
-			},
-		}
-
-		results = append(results, result)
-	}
-
-	inlineConf := tgbotapi.InlineConfig{
-		InlineQueryID: query.ID,
-		IsPersonal:    true,
-		CacheTime:     0,
-		Results:       results,
-	}
-
-	if _, err := bot.Request(inlineConf); err != nil {
-		log.Println("inline send error:", err)
-	}
-}
+________________________________________________________________________________-
 
 
 
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Витрина домов</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background: #f5f5f5;
+    }
+    .header {
+      background: #ffffff;
+      padding: 16px;
+      text-align: center;
+      font-size: 1.2em;
+      font-weight: bold;
+      border-bottom: 1px solid #ddd;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      padding: 16px;
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+      text-align: center;
+    }
+    .card img {
+      width: 100%;
+      height: 120px;
+      object-fit: cover;
+    }
+    .card p {
+      margin: 0;
+      padding: 8px;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">Выберите дом</div>
+  <div class="grid">
+    <div class="card">
+      <img src="https://terem-dom.ru/d/cimg6172.jpg" alt="Дом 1">
+      <p>🏡 Дом 120 м²</p>
+    </div>
+    <div class="card">
+      <img src="https://terem-dom.ru/d/cimg6177.jpg" alt="Дом 2">
+      <p>🏠 Дом 95 м²</p>
+    </div>
+    <div class="card">
+      <img src="https://terem-dom.ru/d/cimg6169.jpg" alt="Дом 3">
+      <p>🏘 Дом с террасой</p>
+    </div>
+    <div class="card">
+      <img src="https://terem-dom.ru/d/cimg6170.jpg" alt="Дом 4">
+      <p>🏕 Коттедж</p>
+    </div>
+  </div>
+</body>
+</html>
 
+___________________________________________________________________________________________
 
 
 
