@@ -235,6 +235,7 @@ import (
 
 func main() {
 	_ = godotenv.Load()
+
 	token := os.Getenv("TELEGRAM_TOKEN")
 	if token == "" {
 		log.Fatal("TELEGRAM_TOKEN не задан в .env")
@@ -254,23 +255,17 @@ func main() {
 			// Шапка
 			headerPhoto := tgbotapi.NewPhoto(update.Message.Chat.ID, tgbotapi.FileURL("https://gazmasater.github.io/dommechty/header.jpg"))
 			headerPhoto.Caption = "Добро пожаловать в каталог домов"
-			botAPI.Send(headerPhoto)
+			if _, err := botAPI.Send(headerPhoto); err != nil {
+				log.Println("Ошибка отправки шапки:", err)
+			}
 
-			// Кнопка Web App
-			webAppButton := tgbotapi.NewMessage(update.Message.Chat.ID, "Откройте витрину с домами")
-			webAppButton.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-				tgbotapi.NewInlineKeyboardRow(
-					tgbotapi.InlineKeyboardButton{
-						Text: "🌐 Открыть витрину",
-						WebApp: &tgbotapi.WebAppInfo{
-							URL: "https://gazmasater.github.io/dommechty/",
-						},
-					},
-				),
-			)
-			botAPI.Send(webAppButton)
+			// Простая ссылка вместо WebApp-кнопки
+			webAppLink := tgbotapi.NewMessage(update.Message.Chat.ID, "🌐 Витрина домов: https://gazmasater.github.io/dommechty/")
+			if _, err := botAPI.Send(webAppLink); err != nil {
+				log.Println("Ошибка отправки ссылки:", err)
+			}
 
-			// Дома (опционально, если хочешь показать превью)
+			// Список домов
 			houses := []struct {
 				Name, Description, PhotoURL string
 			}{
@@ -281,57 +276,18 @@ func main() {
 			}
 
 			for _, h := range houses {
-				photo := tgbotapi.NewPhoto(update.Message.Chat.ID, tgbotapi.FileURL(h.PhotoURL))
-				photo.Caption = h.Name + "\n" + h.Description
-				botAPI.Send(photo)
+				msg := tgbotapi.NewPhoto(update.Message.Chat.ID, tgbotapi.FileURL(h.PhotoURL))
+				msg.Caption = h.Name + "\n" + h.Description
+				if _, err := botAPI.Send(msg); err != nil {
+					log.Println("Ошибка отправки дома:", err)
+				}
 			}
 		}
 	}
 }
 
-[{
-	"resource": "/home/gaz358/myprog/dommechty/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingLitField",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingLitField"
-		}
-	},
-	"severity": 8,
-	"message": "unknown field WebApp in struct literal of type tgbotapi.InlineKeyboardButton",
-	"source": "compiler",
-	"startLineNumber": 40,
-	"startColumn": 7,
-	"endLineNumber": 40,
-	"endColumn": 13
-}]
 
-[{
-	"resource": "/home/gaz358/myprog/dommechty/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "UndeclaredImportedName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredImportedName"
-		}
-	},
-	"severity": 8,
-	"message": "undefined: tgbotapi.WebAppInfo",
-	"source": "compiler",
-	"startLineNumber": 40,
-	"startColumn": 25,
-	"endLineNumber": 40,
-	"endColumn": 35
-}]
+go get github.com/go-telegram-bot-api/telegram-bot-api/v5@v5.6.1
 
 
 
