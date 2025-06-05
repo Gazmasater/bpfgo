@@ -273,29 +273,112 @@ go test -run Test_DupExprToString
 
 ____________________________________________________________________
 
-{
-	name: "meta cpu == 3",
-	setup: func(ctx *ctx) *expr.Cmp {
-		meta := &expr.Meta{Key: expr.MetaKeyCPU, Register: 1}
-		ctx.reg.Set(1, regVal{
-			HumanExpr: "meta cpu",
-			Expr:      meta,
+package encoders
+
+import (
+	"testing"
+
+	"github.com/google/nftables/expr"
+	"github.com/stretchr/testify/suite"
+	"golang.org/x/sys/unix"
+)
+
+type exthdrEncoderTestSuite struct {
+	suite.Suite
+}
+
+func (sui *exthdrEncoderTestSuite) Test_ExthdrEncodeIR() {
+	testCases := []struct {
+		name     string
+		exthdr   *expr.Exthdr
+		regSetup func(ctx *ctx)
+		expected string
+	}{
+		{
+			name: "tcp option present",
+			exthdr: &expr.Exthdr{
+				Op:    expr.ExthdrOpTcpopt,
+				Type:  2,
+				Flags: unix.NFT_EXTHDR_F_PRESENT,
+			},
+			expected: "tcp option 2",
+		},
+		{
+			name: "ip option @3,10,4",
+			exthdr: &expr.Exthdr{
+				Op:    expr.ExthdrOpIpv6,
+				Type:  3,
+				Offset: 10,
+				Len:    4,
+			},
+			expected: "ip option @3,10,4",
+		},
+		{
+			name: "exthdr @1,5,2 set tcp option 1",
+			exthdr: &expr.Exthdr{
+				Op:             expr.ExthdrOpTcpopt,
+				Type:           1,
+				Offset:         5,
+				Len:            2,
+				SourceRegister: 1,
+			},
+			regSetup: func(ctx *ctx) {
+				ctx.reg.Set(1, regVal{HumanExpr: "tcp option 1"})
+			},
+			expected: "tcp option @1,5,2 set tcp option 1",
+		},
+		{
+			name: "reset exthdr @4,8,1",
+			exthdr: &expr.Exthdr{
+				Type: 4, Offset: 8, Len: 1,
+			},
+			expected: "reset exthdr @4,8,1",
+		},
+	}
+
+	for _, tc := range testCases {
+		sui.Run(tc.name, func() {
+			ctx := &ctx{}
+			if tc.regSetup != nil {
+				tc.regSetup(ctx)
+			}
+			enc := &exthdrEncoder{extdhdr: tc.exthdr}
+			ir, err := enc.EncodeIR(ctx)
+			sui.Require().NoError(err)
+			sui.Require().Equal(tc.expected, ir.Format())
 		})
-		return &expr.Cmp{
-			Op:       expr.CmpOpEq,
-			Register: 1,
-			Data:     []byte{3},
-		}
-	},
-	expected: "meta cpu 3",
+	}
+}
+
+func Test_ExthdrEncoder(t *testing.T) {
+	suite.Run(t, new(exthdrEncoderTestSuite))
 }
 
 
-sudo nft add rule ip test prerouting meta cpu 3
+sudo nft add table ip6 test
+sudo nft add chain ip6 test prerouting '{ type filter hook prerouting priority 0; }'
 
-sudo nft add table ip test
 
-sudo nft add chain ip test prerouting { type filter hook prerouting priority 0\; }
+1. tcp option 2
+
+sudo nft add rule ip6 test prerouting tcp option 2
+2. ip option @3,10,4
+
+sudo nft add rule ip6 test prerouting ip option @3,10,4
+3. tcp option @1,5,2 set tcp option 1
+Такое правило невозможно напрямую в nft CLI. Однако эквивалент — чтение и установка значения — может быть выражено в форме:
+
+
+# Устанавливаем значение tcp option 1 (пример, не всегда поддерживается напрямую)
+sudo nft add rule ip6 test prerouting tcp option @1,5,2 set 0x01
+⚠️ В реальности set к tcp option используется крайне редко и часто требует кастомной логики.
+
+4. reset exthdr @4,8,1
+reset — это внутреннее поведение в EncodeIR. В nft CLI ты просто обращаешься к заголовку:
+
+
+sudo nft add rule ip6 test prerouting exthdr @4,8,1
+⚠️ В зависимости от ядра/версии nftables это может не поддерживаться напрямую, особенно reset.
 
 
 
