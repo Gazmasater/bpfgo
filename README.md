@@ -478,6 +478,14 @@ sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0;
 sudo nft add rule ip test prerouting ct mark set 42
 
 
+table ip test {
+        chain prerouting {
+                type filter hook prerouting priority filter; policy accept;
+                ct mark set 0x0000002a
+        }
+}
+
+
 
 
 
