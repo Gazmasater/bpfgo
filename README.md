@@ -301,6 +301,13 @@ ____________________________________________________________________
 sudo nft add rule ip test prerouting ip tos == 46
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting ip tos == 46
+Error: syntax error, unexpected string
+add rule ip test prerouting ip tos == 46
+                               ^^^
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/inters
+
+
 
 
 
