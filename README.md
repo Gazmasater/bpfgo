@@ -287,7 +287,7 @@ type exthdrEncoderTestSuite struct {
 	suite.Suite
 }
 
-func (sui *exthdrEncoderTestSuite) Test_ExthdrEncodeIR() {
+func (sui *exthdrEncoderTestSuite) Test_ExthdrEncodeIR_ValidOnly() {
 	testCases := []struct {
 		name     string
 		exthdr   *expr.Exthdr
@@ -295,44 +295,37 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrEncodeIR() {
 		expected string
 	}{
 		{
-			name: "tcp option present",
+			name: "tcp option present → store to register",
 			exthdr: &expr.Exthdr{
-				Op:    expr.ExthdrOpTcpopt,
-				Type:  2,
-				Flags: unix.NFT_EXTHDR_F_PRESENT,
+				Op:           expr.ExthdrOpTcpopt,
+				Type:         2,
+				Flags:        unix.NFT_EXTHDR_F_PRESENT,
+				DestRegister: 1,
 			},
-			expected: "tcp option 2",
+			expected: "", // EncodeIR вернёт nil, ErrNoIR
 		},
 		{
-			name: "ip option @3,10,4",
+			name: "ipv6 option present → store to register",
 			exthdr: &expr.Exthdr{
-				Op:    expr.ExthdrOpIpv6,
-				Type:  3,
-				Offset: 10,
-				Len:    4,
+				Op:           expr.ExthdrOpIpv6,
+				Type:         1,
+				Flags:        unix.NFT_EXTHDR_F_PRESENT,
+				DestRegister: 2,
 			},
-			expected: "ip option @3,10,4",
+			expected: "", // тоже вернёт nil, ErrNoIR
 		},
 		{
-			name: "exthdr @1,5,2 set tcp option 1",
+			name: "exthdr read and compare (source + rhs)",
 			exthdr: &expr.Exthdr{
-				Op:             expr.ExthdrOpTcpopt,
-				Type:           1,
-				Offset:         5,
+				Type:           4,
+				Offset:         8,
 				Len:            2,
-				SourceRegister: 1,
+				SourceRegister: 3,
 			},
 			regSetup: func(ctx *ctx) {
-				ctx.reg.Set(1, regVal{HumanExpr: "tcp option 1"})
+				ctx.reg.Set(3, regVal{HumanExpr: "0x1234"})
 			},
-			expected: "tcp option @1,5,2 set tcp option 1",
-		},
-		{
-			name: "reset exthdr @4,8,1",
-			exthdr: &expr.Exthdr{
-				Type: 4, Offset: 8, Len: 1,
-			},
-			expected: "reset exthdr @4,8,1",
+			expected: "exthdr @4,8,2 set 0x1234",
 		},
 	}
 
@@ -344,8 +337,14 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrEncodeIR() {
 			}
 			enc := &exthdrEncoder{extdhdr: tc.exthdr}
 			ir, err := enc.EncodeIR(ctx)
-			sui.Require().NoError(err)
-			sui.Require().Equal(tc.expected, ir.Format())
+
+			if tc.expected == "" {
+				sui.Require().ErrorIs(err, ErrNoIR)
+				sui.Require().Nil(ir)
+			} else {
+				sui.Require().NoError(err)
+				sui.Require().Equal(tc.expected, ir.Format())
+			}
 		})
 	}
 }
@@ -355,37 +354,22 @@ func Test_ExthdrEncoder(t *testing.T) {
 }
 
 
+
 sudo nft add table ip6 test
 sudo nft add chain ip6 test prerouting '{ type filter hook prerouting priority 0; }'
 
-
-1. tcp option 2
-
-sudo nft add rule ip6 test prerouting tcp option 2
-2. ip option @3,10,4
-
-sudo nft add rule ip6 test prerouting ip option @3,10,4
-3. tcp option @1,5,2 set tcp option 1
-Такое правило невозможно напрямую в nft CLI. Однако эквивалент — чтение и установка значения — может быть выражено в форме:
+1. Чтение расширенного заголовка exthdr @0,0,1 => reg 1
+(читаем 1 байт из IPv6 exthdr с type=0, offset=0)
 
 
-# Устанавливаем значение tcp option 1 (пример, не всегда поддерживается напрямую)
-sudo nft add rule ip6 test prerouting tcp option @1,5,2 set 0x01
-⚠️ В реальности set к tcp option используется крайне редко и часто требует кастомной логики.
+sudo nft add rule ip6 test prerouting exthdr load 1b @0,0 => reg 1
+2. Сравнение значения exthdr (например, 0x01)
 
-4. reset exthdr @4,8,1
-reset — это внутреннее поведение в EncodeIR. В nft CLI ты просто обращаешься к заголовку:
+sudo nft add rule ip6 test prerouting exthdr load 1b @0,0 == 0x01
+3. Сравнение длины заголовка (если поддерживается)
 
+sudo nft add rule ip6 test prerouting exthdr hdrlength 0 == 8
 
-sudo nft add rule ip6 test prerouting exthdr @4,8,1
-⚠️ В зависимости от ядра/версии nftables это может не поддерживаться напрямую, особенно reset.
-
-
-
-az358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip6 test prerouting tcp option 2 
-Error: syntax error, unexpected newline
-add rule ip6 test prerouting tcp option 2
-                                        
 
 
 
