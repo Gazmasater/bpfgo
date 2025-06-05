@@ -376,25 +376,23 @@ sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0;
 
 
 🧪 1. ct state != established
-bash
-Копировать
-Редактировать
+
 sudo nft add rule ip test prerouting ct state != established
 🧪 2. payload ip version != 5
 (проверка версии IP — полезна для отладки нестандартных заголовков)
 
-bash
-Копировать
-Редактировать
+
 sudo nft add rule ip test prerouting ip version != 5
 🧪 3. bitwise masked ip tos == 46 (EF DSCP = 0x2e)
 DSCP 46 соответствует Expedited Forwarding (EF) в QoS.
 
-bash
-Копировать
-Редактировать
 sudo nft add rule ip test prerouting ip tos 46
 ⚠️ Если хочешь указать это точно как ip tos & 0xfc == 0x2e, nft сам упростит это до ip tos 46, если маска совпадает с классом DSCP.
+
+
+az358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting ip tos 46
+Error: syntax error, unexpected string
+add rule ip test prerouting ip tos 46
 
 
 
