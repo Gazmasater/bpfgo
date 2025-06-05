@@ -473,6 +473,11 @@ sudo nft add rule ip test prerouting ct status { snat, dnat, confirmed }
 		},
 
 
+sudo nft add table ip test
+sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0; }'
+sudo nft add rule ip test prerouting ct mark set 42
+
+
 
 
 
