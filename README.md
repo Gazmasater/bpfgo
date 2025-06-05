@@ -198,74 +198,7 @@ Response → тело ответа
 Можно сохранить User-Agent, Cookie и использовать их в автоматических скриптах позже
 ________________________________________________________________________________
 
-func (sui *encodersTestSuite) Test_MultipleExprToString() {
-	const tableName = "test"
 
-	testData := []struct {
-		name     string
-		exprs    nftables.Rule
-		preRun   func()
-		expected string
-	}{
-		// ... (твои предыдущие тесты)
-
-		{
-			name: "dup to address",
-			exprs: nftables.Rule{
-				Table: &nftables.Table{Name: tableName},
-				Exprs: []expr.Any{
-					&expr.Immediate{Register: 1, Data: []byte("10.1.2.3")},
-					&expr.Dup{RegAddr: 1},
-				},
-			},
-			expected: "dup to 10.1.2.3",
-		},
-		{
-			name: "dup to address and device",
-			exprs: nftables.Rule{
-				Table: &nftables.Table{Name: tableName},
-				Exprs: []expr.Any{
-					&expr.Immediate{Register: 1, Data: []byte("192.168.1.10")},
-					&expr.Immediate{Register: 2, Data: []byte("lo")},
-					&expr.Dup{RegAddr: 1, RegDev: 2},
-				},
-			},
-			expected: "dup to 192.168.1.10 device lo",
-		},
-		{
-			name: "dup only device",
-			exprs: nftables.Rule{
-				Table: &nftables.Table{Name: tableName},
-				Exprs: []expr.Any{
-					&expr.Immediate{Register: 2, Data: []byte("br-lan")},
-					&expr.Dup{RegDev: 2},
-				},
-			},
-			expected: "dup",
-		},
-		{
-			name: "dup no params",
-			exprs: nftables.Rule{
-				Table: &nftables.Table{Name: tableName},
-				Exprs: []expr.Any{
-					&expr.Dup{},
-				},
-			},
-			expected: "dup",
-		},
-	}
-
-	for _, t := range testData {
-		sui.Run(t.name, func() {
-			if t.preRun != nil {
-				t.preRun()
-			}
-			str, err := NewRuleExprEncoder(&t.exprs).Format()
-			sui.Require().NoError(err)
-			sui.Require().Equal(t.expected, str)
-		})
-	}
-}
 
 
 package encoders
@@ -370,7 +303,6 @@ sudo nft add chain ip test prerouting '{ type nat hook prerouting priority 0; }'
 
 sudo nft add rule ip test prerouting tcp dport 8080 dnat to 192.168.0.1:8080
 
-sudo nft add rule ip test postrouting snat to 10.0.0.1-10.0.0.5
 
 sudo nft add rule ip test prerouting tcp dport 443 redirect to :443
 
