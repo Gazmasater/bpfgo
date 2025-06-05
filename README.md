@@ -268,164 +268,120 @@ func (sui *encodersTestSuite) Test_MultipleExprToString() {
 }
 
 
-
-go test -run Test_DupExprToString
-
-____________________________________________________________________
-
 package encoders
 
 import (
-	"testing"
-
 	"github.com/google/nftables/expr"
+	"github.com/stretchr/testify/suite"
 	"golang.org/x/sys/unix"
+	"testing"
 )
 
-func TestNatEncodeIR(t *testing.T) {
-	tests := []struct {
-		name    string
-		nat     *expr.NAT
-		regVals map[regID]regVal
-		want    string
+type natEncoderAdvancedTestSuite struct {
+	suite.Suite
+}
+
+func (sui *natEncoderAdvancedTestSuite) Test_NatEncodeIR() {
+	testCases := []struct {
+		name     string
+		setup    func(ctx *ctx) *expr.NAT
+		expected string
 	}{
 		{
-			name: "simple dnat",
-			nat: &expr.NAT{
-				Type:        expr.NATTypeDestNAT,
-				Family:      unix.NFPROTO_IPV4,
-				RegAddrMin:  1,
-				RegProtoMin: 2,
+			name: "dnat with ip and port",
+			setup: func(ctx *ctx) *expr.NAT {
+				ctx.reg.Set(1, regVal{HumanExpr: "192.168.0.1"})
+				ctx.reg.Set(2, regVal{HumanExpr: "8080"})
+				return &expr.NAT{
+					Type:        expr.NATTypeDestNAT,
+					Family:      unix.NFPROTO_IPV4,
+					RegAddrMin:  1,
+					RegProtoMin: 2,
+				}
 			},
-			regVals: map[regID]regVal{
-				1: {HumanExpr: "192.168.0.1"},
-				2: {HumanExpr: "8080"},
-			},
-			want: "dnat ip to 192.168.0.1:8080",
-		},
-		{
-			name: "masquerade with port range",
-			nat: &expr.NAT{
-				Type:        NATTypeMASQ,
-				Family:      unix.NFPROTO_IPV4,
-				RegProtoMin: 3,
-				RegProtoMax: 4,
-			},
-			regVals: map[regID]regVal{
-				3: {HumanExpr: "1000"},
-				4: {HumanExpr: "2000"},
-			},
-			want: "masquerade to :1000-2000",
+			expected: "dnat ip to 192.168.0.1:8080",
 		},
 		{
 			name: "snat with addr range",
-			nat: &expr.NAT{
-				Type:       expr.NATTypeSourceNAT,
-				Family:     unix.NFPROTO_IPV4,
-				RegAddrMin: 1,
-				RegAddrMax: 2,
+			setup: func(ctx *ctx) *expr.NAT {
+				ctx.reg.Set(1, regVal{HumanExpr: "10.0.0.1"})
+				ctx.reg.Set(2, regVal{HumanExpr: "10.0.0.5"})
+				return &expr.NAT{
+					Type:       expr.NATTypeSourceNAT,
+					Family:     unix.NFPROTO_IPV4,
+					RegAddrMin: 1,
+					RegAddrMax: 2,
+				}
 			},
-			regVals: map[regID]regVal{
-				1: {HumanExpr: "10.0.0.1"},
-				2: {HumanExpr: "10.0.0.5"},
-			},
-			want: "snat ip to 10.0.0.1-10.0.0.5",
+			expected: "snat ip to 10.0.0.1-10.0.0.5",
 		},
 		{
-			name: "redirect ipv6 single port",
-			nat: &expr.NAT{
-				Type:        NATTypeRedir,
-				Family:      unix.NFPROTO_IPV6,
-				RegProtoMin: 5,
+			name: "redirect with port",
+			setup: func(ctx *ctx) *expr.NAT {
+				ctx.reg.Set(1, regVal{HumanExpr: "443"})
+				return &expr.NAT{
+					Type:        NATTypeRedir,
+					Family:      unix.NFPROTO_IPV4,
+					RegProtoMin: 1,
+				}
 			},
-			regVals: map[regID]regVal{
-				5: {HumanExpr: "443"},
-			},
-			want: "redirect ip6 to :443",
+			expected: "redirect ip to :443",
 		},
 		{
-			name: "dnat with flags",
-			nat: &expr.NAT{
-				Type:        expr.NATTypeDestNAT,
-				Family:      unix.NFPROTO_IPV4,
-				RegAddrMin:  1,
-				RegProtoMin: 2,
-				Random:      true,
-				Persistent:  true,
+			name: "masquerade with flags and port range",
+			setup: func(ctx *ctx) *expr.NAT {
+				ctx.reg.Set(3, regVal{HumanExpr: "1000"})
+				ctx.reg.Set(4, regVal{HumanExpr: "2000"})
+				return &expr.NAT{
+					Type:        NATTypeMASQ,
+					Family:      unix.NFPROTO_IPV4,
+					RegProtoMin: 3,
+					RegProtoMax: 4,
+					Persistent:  true,
+					Random:      true,
+				}
 			},
-			regVals: map[regID]regVal{
-				1: {HumanExpr: "10.1.1.1"},
-				2: {HumanExpr: "8080"},
-			},
-			want: "dnat ip to 10.1.1.1:8080 random persistent",
+			expected: "masquerade to :1000-2000 random persistent",
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := &ctx{reg: regHolder{cache: tt.regVals}}
-			enc := &natEncoder{nat: tt.nat}
+	for _, tc := range testCases {
+		sui.Run(tc.name, func() {
+			ctx := &ctx{}
+			nat := tc.setup(ctx)
+			enc := &natEncoder{nat: nat}
 			ir, err := enc.EncodeIR(ctx)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			got := ir.Format()
-			if got != tt.want {
-				t.Errorf("expected: %q, got: %q", tt.want, got)
-			}
+			sui.Require().NoError(err)
+			sui.Require().Equal(tc.expected, ir.Format())
 		})
 	}
 }
 
+func Test_NatEncoderAdvanced(t *testing.T) {
+	suite.Run(t, new(natEncoderAdvancedTestSuite))
+}
+
+go test -run Test_DupExprToString
 
 
-
-
-
-🧩 Шаг 1: Создать таблицу
 
 sudo nft add table ip test
-🧩 Шаг 2: Создать цепочки NAT
-prerouting (для dnat, redirect)
-
 sudo nft add chain ip test prerouting '{ type nat hook prerouting priority 0; }'
-postrouting (для snat, masquerade)
 
+sudo nft add rule ip test prerouting tcp dport 8080 dnat to 192.168.0.1:8080
 
-sudo nft add chain ip test postrouting '{ type nat hook postrouting priority 100; }'
-🧩 Шаг 3: Добавить правила
-1. DNAT к IP и порту
-
-sudo nft add rule ip test prerouting dnat to 192.168.0.1:8080
-2. MASQUERADE с диапазоном портов
-bash
-Копировать
-Редактировать
-sudo nft add rule ip test postrouting masquerade to :1000-2000
-3. SNAT с диапазоном IP-адресов
-bash
-Копировать
-Редактировать
 sudo nft add rule ip test postrouting snat to 10.0.0.1-10.0.0.5
-4. REDIRECT на порт (IPv6)
-bash
-Копировать
-Редактировать
-sudo nft add table ip6 test
-sudo nft add chain ip6 test prerouting '{ type nat hook prerouting priority 0; }'
-sudo nft add rule ip6 test prerouting redirect to :443
-5. DNAT с флагами random, persistent
-bash
-Копировать
-Редактировать
-sudo nft add rule ip test prerouting dnat to 10.1.1.1:8080 random persistent
+
+sudo nft add rule ip test prerouting tcp dport 443 redirect to :443
 
 
 
 
-az358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting dnat to 192.168.0.1:8080
-Error: transport protocol mapping is only valid after transport protocol match
-add rule ip test prerouting dnat to 192.168.0.1:8080
+
+
+
+
+
 
 
 
