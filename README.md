@@ -204,97 +204,77 @@ ________________________________________________________________________________
 package encoders
 
 import (
+	"testing"
+
 	"github.com/google/nftables/expr"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/sys/unix"
-	"testing"
 )
 
-type natEncoderAdvancedTestSuite struct {
+type natEncoderSpecificTestSuite struct {
 	suite.Suite
 }
 
-func (sui *natEncoderAdvancedTestSuite) Test_NatEncodeIR() {
-	testCases := []struct {
-		name     string
-		setup    func(ctx *ctx) *expr.NAT
-		expected string
-	}{
-		{
-			name: "dnat with ip and port",
-			setup: func(ctx *ctx) *expr.NAT {
-				ctx.reg.Set(1, regVal{HumanExpr: "192.168.0.1"})
-				ctx.reg.Set(2, regVal{HumanExpr: "8080"})
-				return &expr.NAT{
-					Type:        expr.NATTypeDestNAT,
-					Family:      unix.NFPROTO_IPV4,
-					RegAddrMin:  1,
-					RegProtoMin: 2,
-				}
-			},
-			expected: "dnat ip to 192.168.0.1:8080",
-		},
-		{
-			name: "snat with addr range",
-			setup: func(ctx *ctx) *expr.NAT {
-				ctx.reg.Set(1, regVal{HumanExpr: "10.0.0.1"})
-				ctx.reg.Set(2, regVal{HumanExpr: "10.0.0.5"})
-				return &expr.NAT{
-					Type:       expr.NATTypeSourceNAT,
-					Family:     unix.NFPROTO_IPV4,
-					RegAddrMin: 1,
-					RegAddrMax: 2,
-				}
-			},
-			expected: "snat ip to 10.0.0.1-10.0.0.5",
-		},
-		{
-			name: "redirect with port",
-			setup: func(ctx *ctx) *expr.NAT {
-				ctx.reg.Set(1, regVal{HumanExpr: "443"})
-				return &expr.NAT{
-					Type:        NATTypeRedir,
-					Family:      unix.NFPROTO_IPV4,
-					RegProtoMin: 1,
-				}
-			},
-			expected: "redirect ip to :443",
-		},
-		{
-			name: "masquerade with flags and port range",
-			setup: func(ctx *ctx) *expr.NAT {
-				ctx.reg.Set(3, regVal{HumanExpr: "1000"})
-				ctx.reg.Set(4, regVal{HumanExpr: "2000"})
-				return &expr.NAT{
-					Type:        NATTypeMASQ,
-					Family:      unix.NFPROTO_IPV4,
-					RegProtoMin: 3,
-					RegProtoMax: 4,
-					Persistent:  true,
-					Random:      true,
-				}
-			},
-			expected: "masquerade to :1000-2000 random persistent",
-		},
+func (sui *natEncoderSpecificTestSuite) Test_DnatToIPWithPort() {
+	ctx := &ctx{}
+	ctx.reg.Set(1, regVal{HumanExpr: "192.168.0.1"}) // destination IP
+	ctx.reg.Set(2, regVal{HumanExpr: "8080"})        // destination port
+	ctx.reg.Set(3, regVal{HumanExpr: "8080"})        // source match port
+
+	cmp := &expr.Cmp{
+		Register: 3,
+		Op:       expr.CmpOpEq,
+		Data:     []byte{0x1f, 0x90}, // 8080
 	}
 
-	for _, tc := range testCases {
-		sui.Run(tc.name, func() {
-			ctx := &ctx{}
-			nat := tc.setup(ctx)
-			enc := &natEncoder{nat: nat}
-			ir, err := enc.EncodeIR(ctx)
-			sui.Require().NoError(err)
-			sui.Require().Equal(tc.expected, ir.Format())
-		})
+	nat := &expr.NAT{
+		Type:        expr.NATTypeDestNAT,
+		Family:      unix.NFPROTO_IPV4,
+		RegAddrMin:  1,
+		RegProtoMin: 2,
 	}
+
+	cmpIR, err := (&cmpEncoder{cmp: cmp}).EncodeIR(ctx)
+	sui.Require().NoError(err)
+
+	natIR, err := (&natEncoder{nat: nat}).EncodeIR(ctx)
+	sui.Require().NoError(err)
+
+	full := cmpIR.Format() + " " + natIR.Format()
+	sui.Equal("dport 8080 dnat ip to 192.168.0.1:8080", full)
 }
 
-func Test_NatEncoderAdvanced(t *testing.T) {
-	suite.Run(t, new(natEncoderAdvancedTestSuite))
+func (sui *natEncoderSpecificTestSuite) Test_RedirectToPort443() {
+	ctx := &ctx{}
+	ctx.reg.Set(1, regVal{HumanExpr: "443"}) // redirect destination port
+	ctx.reg.Set(2, regVal{HumanExpr: "443"}) // match port
+
+	cmp := &expr.Cmp{
+		Register: 2,
+		Op:       expr.CmpOpEq,
+		Data:     []byte{0x01, 0xbb}, // 443
+	}
+
+	nat := &expr.NAT{
+		Type:        NATTypeRedir,
+		Family:      unix.NFPROTO_IPV4,
+		RegProtoMin: 1,
+	}
+
+	cmpIR, err := (&cmpEncoder{cmp: cmp}).EncodeIR(ctx)
+	sui.Require().NoError(err)
+
+	natIR, err := (&natEncoder{nat: nat}).EncodeIR(ctx)
+	sui.Require().NoError(err)
+
+	full := cmpIR.Format() + " " + natIR.Format()
+	sui.Equal("dport 443 redirect ip to :443", full)
 }
 
-go test -run Test_DupExprToString
+func Test_NatEncoderSpecific(t *testing.T) {
+	suite.Run(t, new(natEncoderSpecificTestSuite))
+}
+
 
 
 
