@@ -274,46 +274,27 @@ go test -run Test_DupExprToString
 ____________________________________________________________________
 
 {
-	name: "meta tos == 46",
+	name: "meta cpu == 3",
 	setup: func(ctx *ctx) *expr.Cmp {
-		meta := &expr.Meta{Key: expr.MetaKeyTOS, Register: 1}
+		meta := &expr.Meta{Key: expr.MetaKeyCPU, Register: 1}
 		ctx.reg.Set(1, regVal{
-			HumanExpr: "meta tos",
+			HumanExpr: "meta cpu",
 			Expr:      meta,
 		})
 		return &expr.Cmp{
 			Op:       expr.CmpOpEq,
 			Register: 1,
-			Data:     []byte{46},
+			Data:     []byte{3},
 		}
 	},
-	expected: "meta tos 46",
+	expected: "meta cpu 3",
 }
 
-sudo nft add rule ip test prerouting meta tos 46
+
+мsudo nft add rule ip test prerouting meta cpu 3
 
 
-[{
-	"resource": "/home/gaz358/myprog/nft-go/internal/expr-encoders/encodersCmp_test.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "UndeclaredImportedName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredImportedName"
-		}
-	},
-	"severity": 8,
-	"message": "undefined: expr.MetaKeyTOS",
-	"source": "compiler",
-	"startLineNumber": 60,
-	"startColumn": 34,
-	"endLineNumber": 60,
-	"endColumn": 44
-}]
+
 
 
 
