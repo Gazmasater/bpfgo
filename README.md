@@ -274,38 +274,24 @@ go test -run Test_DupExprToString
 ____________________________________________________________________
 
 {
-	name: "ip tos == 46",
+	name: "meta tos == 46",
 	setup: func(ctx *ctx) *expr.Cmp {
-		// выражение bitwise создаёт маску (но IR уже показывает "ip tos")
-		bw := &expr.Bitwise{
-			SourceRegister: 1,
-			DestRegister:   1,
-			Len:            1,
-			Mask:           []byte{0xfc},
-			Xor:            []byte{0x00},
-		}
+		meta := &expr.Meta{Key: expr.MetaKeyTOS, Register: 1}
 		ctx.reg.Set(1, regVal{
-			HumanExpr: "ip tos",
-			Expr:      bw,
+			HumanExpr: "meta tos",
+			Expr:      meta,
 		})
 		return &expr.Cmp{
 			Op:       expr.CmpOpEq,
 			Register: 1,
-			Data:     []byte{46}, // 0x2e
+			Data:     []byte{46},
 		}
 	},
-	expected: "ip tos == 46",
+	expected: "meta tos 46",
 }
 
+sudo nft add rule ip test prerouting meta tos 46
 
-sudo nft add rule ip test prerouting ip tos == 46
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting ip tos == 46
-Error: syntax error, unexpected string
-add rule ip test prerouting ip tos == 46
-                               ^^^
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/inters
 
 
 
