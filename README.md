@@ -279,112 +279,153 @@ import (
 	"testing"
 
 	"github.com/google/nftables/expr"
-	"github.com/stretchr/testify/suite"
 	"golang.org/x/sys/unix"
 )
 
-type exthdrEncoderTestSuite struct {
-	suite.Suite
-}
-
-func (sui *exthdrEncoderTestSuite) Test_ExthdrEncodeIR_ValidOnly() {
-	testCases := []struct {
-		name     string
-		exthdr   *expr.Exthdr
-		regSetup func(ctx *ctx)
-		expected string
+func TestNatEncodeIR(t *testing.T) {
+	tests := []struct {
+		name    string
+		nat     *expr.NAT
+		regVals map[regID]regVal
+		want    string
 	}{
 		{
-			name: "tcp option present → store to register",
-			exthdr: &expr.Exthdr{
-				Op:           expr.ExthdrOpTcpopt,
-				Type:         2,
-				Flags:        unix.NFT_EXTHDR_F_PRESENT,
-				DestRegister: 1,
+			name: "simple dnat",
+			nat: &expr.NAT{
+				Type:        expr.NATTypeDestNAT,
+				Family:      unix.NFPROTO_IPV4,
+				RegAddrMin:  1,
+				RegProtoMin: 2,
 			},
-			expected: "", // EncodeIR вернёт nil, ErrNoIR
+			regVals: map[regID]regVal{
+				1: {HumanExpr: "192.168.0.1"},
+				2: {HumanExpr: "8080"},
+			},
+			want: "dnat ip to 192.168.0.1:8080",
 		},
 		{
-			name: "ipv6 option present → store to register",
-			exthdr: &expr.Exthdr{
-				Op:           expr.ExthdrOpIpv6,
-				Type:         1,
-				Flags:        unix.NFT_EXTHDR_F_PRESENT,
-				DestRegister: 2,
+			name: "masquerade with port range",
+			nat: &expr.NAT{
+				Type:        NATTypeMASQ,
+				Family:      unix.NFPROTO_IPV4,
+				RegProtoMin: 3,
+				RegProtoMax: 4,
 			},
-			expected: "", // тоже вернёт nil, ErrNoIR
+			regVals: map[regID]regVal{
+				3: {HumanExpr: "1000"},
+				4: {HumanExpr: "2000"},
+			},
+			want: "masquerade to :1000-2000",
 		},
 		{
-			name: "exthdr read and compare (source + rhs)",
-			exthdr: &expr.Exthdr{
-				Type:           4,
-				Offset:         8,
-				Len:            2,
-				SourceRegister: 3,
+			name: "snat with addr range",
+			nat: &expr.NAT{
+				Type:       expr.NATTypeSourceNAT,
+				Family:     unix.NFPROTO_IPV4,
+				RegAddrMin: 1,
+				RegAddrMax: 2,
 			},
-			regSetup: func(ctx *ctx) {
-				ctx.reg.Set(3, regVal{HumanExpr: "0x1234"})
+			regVals: map[regID]regVal{
+				1: {HumanExpr: "10.0.0.1"},
+				2: {HumanExpr: "10.0.0.5"},
 			},
-			expected: "exthdr @4,8,2 set 0x1234",
+			want: "snat ip to 10.0.0.1-10.0.0.5",
+		},
+		{
+			name: "redirect ipv6 single port",
+			nat: &expr.NAT{
+				Type:        NATTypeRedir,
+				Family:      unix.NFPROTO_IPV6,
+				RegProtoMin: 5,
+			},
+			regVals: map[regID]regVal{
+				5: {HumanExpr: "443"},
+			},
+			want: "redirect ip6 to :443",
+		},
+		{
+			name: "dnat with flags",
+			nat: &expr.NAT{
+				Type:        expr.NATTypeDestNAT,
+				Family:      unix.NFPROTO_IPV4,
+				RegAddrMin:  1,
+				RegProtoMin: 2,
+				Random:      true,
+				Persistent:  true,
+			},
+			regVals: map[regID]regVal{
+				1: {HumanExpr: "10.1.1.1"},
+				2: {HumanExpr: "8080"},
+			},
+			want: "dnat ip to 10.1.1.1:8080 random persistent",
 		},
 	}
 
-	for _, tc := range testCases {
-		sui.Run(tc.name, func() {
-			ctx := &ctx{}
-			if tc.regSetup != nil {
-				tc.regSetup(ctx)
-			}
-			enc := &exthdrEncoder{extdhdr: tc.exthdr}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := &ctx{reg: regHolder{cache: tt.regVals}}
+			enc := &natEncoder{nat: tt.nat}
 			ir, err := enc.EncodeIR(ctx)
-
-			if tc.expected == "" {
-				sui.Require().ErrorIs(err, ErrNoIR)
-				sui.Require().Nil(ir)
-			} else {
-				sui.Require().NoError(err)
-				sui.Require().Equal(tc.expected, ir.Format())
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			got := ir.Format()
+			if got != tt.want {
+				t.Errorf("expected: %q, got: %q", tt.want, got)
 			}
 		})
 	}
 }
 
-func Test_ExthdrEncoder(t *testing.T) {
-	suite.Run(t, new(exthdrEncoderTestSuite))
-}
 
 
 
+
+
+🧩 Шаг 1: Создать таблицу
+bash
+Копировать
+Редактировать
+sudo nft add table ip test
+🧩 Шаг 2: Создать цепочки NAT
+prerouting (для dnat, redirect)
+bash
+Копировать
+Редактировать
+sudo nft add chain ip test prerouting '{ type nat hook prerouting priority 0; }'
+postrouting (для snat, masquerade)
+bash
+Копировать
+Редактировать
+sudo nft add chain ip test postrouting '{ type nat hook postrouting priority 100; }'
+🧩 Шаг 3: Добавить правила
+1. DNAT к IP и порту
+bash
+Копировать
+Редактировать
+sudo nft add rule ip test prerouting dnat to 192.168.0.1:8080
+2. MASQUERADE с диапазоном портов
+bash
+Копировать
+Редактировать
+sudo nft add rule ip test postrouting masquerade to :1000-2000
+3. SNAT с диапазоном IP-адресов
+bash
+Копировать
+Редактировать
+sudo nft add rule ip test postrouting snat to 10.0.0.1-10.0.0.5
+4. REDIRECT на порт (IPv6)
+bash
+Копировать
+Редактировать
 sudo nft add table ip6 test
-sudo nft add chain ip6 test prerouting '{ type filter hook prerouting priority 0; }'
-
-1. Чтение расширенного заголовка exthdr @0,0,1 => reg 1
-(читаем 1 байт из IPv6 exthdr с type=0, offset=0)
-
-
-sudo nft add rule ip6 test prerouting exthdr load 1b @0,0 => reg 1
-2. Сравнение значения exthdr (например, 0x01)
-
-sudo nft add rule ip6 test prerouting exthdr load 1b @0,0 == 0x01
-3. Сравнение длины заголовка (если поддерживается)
-
-sudo nft add rule ip6 test prerouting exthdr hdrlength 0 == 8
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip6 test prerouting exthdr load 1b @0,0 => reg 1
-Error: syntax error, unexpected string
-add rule ip6 test prerouting exthdr load 1b @0,0 = 1
-                                    ^^^^
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip6 test prerouting exthdr load 1b @0,0 == 0x01
-Error: syntax error, unexpected string
-add rule ip6 test prerouting exthdr load 1b @0,0 == 0x01
-                                    ^^^^
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip6 test prerouting exthdr hdrlength 0 == 8
-Error: syntax error, unexpected string
-add rule ip6 test prerouting exthdr hdrlength 0 == 8
-                                    ^^^^^^^^^
-
-
+sudo nft add chain ip6 test prerouting '{ type nat hook prerouting priority 0; }'
+sudo nft add rule ip6 test prerouting redirect to :443
+5. DNAT с флагами random, persistent
+bash
+Копировать
+Редактировать
+sudo nft add rule ip test prerouting dnat to 10.1.1.1:8080 random persistent
 
 
 
