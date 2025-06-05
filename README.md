@@ -303,8 +303,8 @@ func (sui *dynsetIRTestSuite) Test_DynsetEncodeIR() {
 				SetName:    "testset",
 				SrcRegKey:  1,
 			},
-			srcKey:   "192.168.0.10",
-			expected: "add @testset { 192.168.0.10 }",
+			srcKey:   "ip saddr",
+			expected: "add @testset { ip saddr }",
 		},
 		{
 			name: "add to set with timeout",
@@ -314,11 +314,11 @@ func (sui *dynsetIRTestSuite) Test_DynsetEncodeIR() {
 				SrcRegKey:  2,
 				Timeout:    10 * time.Second,
 			},
-			srcKey:   "10.0.0.5",
-			expected: "add @timeoutset { 10.0.0.5 timeout 10s }",
+			srcKey:   "ip saddr",
+			expected: "add @timeoutset { ip saddr timeout 10s }",
 		},
 		{
-			name: "update IPv4 set with counter",
+			name: "update set with counter",
 			dynset: &expr.Dynset{
 				Operation:  uint32(DynSetOPUpdate),
 				SetName:    "updset",
@@ -327,8 +327,8 @@ func (sui *dynsetIRTestSuite) Test_DynsetEncodeIR() {
 					&expr.Counter{},
 				},
 			},
-			srcKey:   "172.16.0.1",
-			expected: "update @updset { 172.16.0.1 counter packets 0 bytes 0 }",
+			srcKey:   "ip saddr",
+			expected: "update @updset { ip saddr counter packets 0 bytes 0 }",
 		},
 		{
 			name: "delete from map with data and counter",
@@ -341,9 +341,9 @@ func (sui *dynsetIRTestSuite) Test_DynsetEncodeIR() {
 					&expr.Counter{},
 				},
 			},
-			srcKey:   "192.0.2.55",
+			srcKey:   "ip saddr",
 			srcData:  "lo",
-			expected: "delete @delset { 192.0.2.55 counter packets 0 bytes 0 : lo }",
+			expected: "delete @delset { ip saddr counter packets 0 bytes 0 : lo }",
 		},
 	}
 
@@ -372,44 +372,26 @@ func Test_DynsetEncodeIR(t *testing.T) {
 }
 
 
+
+# Инициализация
+sudo nft flush ruleset
 sudo nft add table ip test
 sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0; }'
 
-sudo nft add set ip test testset { type ipv4_addr\; }
+sudo nft add set ip test testset { type ipv4_addr\; flags dynamic\; }
+sudo nft add rule ip test prerouting add @testset { ip saddr }
 
-sudo nft add rule ip test prerouting ip saddr add @testset
-
-
-sudo nft add set ip test timeoutset { type ipv4_addr\; timeout 10s\; }
-
-sudo nft add rule ip test prerouting ip saddr add @timeoutset
-
+sudo nft add set ip test timeoutset { type ipv4_addr\; timeout 10s\; flags dynamic\; }
+sudo nft add rule ip test prerouting add @timeoutset { ip saddr timeout 10s }
 
 sudo nft add set ip test updset { type ipv4_addr\; flags dynamic\; }
-
-sudo nft add rule ip test prerouting ip saddr update @updset counter
-
+sudo nft add rule ip test prerouting update @updset { ip saddr counter }
 
 sudo nft add set ip test delset { type ipv4_addr : ifname\; flags dynamic\; }
-
-# Удалим сопоставление 192.0.2.55 : "lo"
-sudo nft add rule ip test prerouting ip saddr delete @delset : "lo" counter
-
+sudo nft add rule ip test prerouting delete @delset { ip saddr counter : "lo" }
 
 sudo nft list table ip test
 
-
-
-az358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add set ip test testset { type ipv4_addr\; }
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting ip saddr add @testset
-Error: syntax error, unexpected add
-add rule ip test prerouting ip saddr add @testset
-                                     ^^^
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add set ip test timeoutset { type ipv4_addr\; timeout 10s\; }
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting ip saddr add @timeoutset
-Error: syntax error, unexpected add
-add rule ip test prerouting ip saddr add @timeoutset
                             
 
 
