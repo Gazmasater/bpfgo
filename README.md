@@ -277,179 +277,193 @@ package encoders
 
 import (
 	"testing"
-	"time"
 
 	"github.com/google/nftables"
 	"github.com/google/nftables/expr"
 	"github.com/stretchr/testify/suite"
 )
 
-type dynsetIRTestSuite struct {
+type ctEncoderAdvancedTestSuite struct {
 	suite.Suite
 }
 
-func (sui *dynsetIRTestSuite) Test_DynsetEncodeIR() {
+func (sui *ctEncoderAdvancedTestSuite) Test_CtEncodeIR_Complex() {
 	testData := []struct {
 		name     string
-		dynset   *expr.Dynset
-		srcKey   string
-		srcData  string
+		exprs    nftables.Rule
 		expected string
 	}{
 		{
-			name: "add to IPv4 set",
-			dynset: &expr.Dynset{
-				Operation:  uint32(DynSetOPAdd),
-				SetName:    "testset",
-				SrcRegKey:  1,
-			},
-			srcKey:   "ip saddr",
-			expected: "add @testset { ip saddr }",
-		},
-		{
-			name: "add to set with timeout",
-			dynset: &expr.Dynset{
-				Operation:  uint32(DynSetOPAdd),
-				SetName:    "timeoutset",
-				SrcRegKey:  2,
-				Timeout:    10 * time.Second,
-			},
-			srcKey:   "ip saddr",
-			expected: "add @timeoutset { ip saddr timeout 10s }",
-		},
-		{
-			name: "update set with counter",
-			dynset: &expr.Dynset{
-				Operation:  uint32(DynSetOPUpdate),
-				SetName:    "updset",
-				SrcRegKey:  3,
+			name: "ct state new,established",
+			exprs: nftables.Rule{
 				Exprs: []expr.Any{
-					&expr.Counter{},
+					&expr.Ct{
+						Key:      expr.CtKeySTATE,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Op:       expr.CmpOpEq,
+						Register: 1,
+						Data:     []byte{byte(CtStateBitNEW | CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0},
+					},
 				},
 			},
-			srcKey:   "ip saddr",
-			expected: "update @updset { ip saddr counter packets 0 bytes 0 }",
+			expected: "ct state new,established",
 		},
 		{
-			name: "delete from map with data and counter",
-			dynset: &expr.Dynset{
-				Operation:  uint32(DynSetOPDelete),
-				SetName:    "delset",
-				SrcRegKey:  4,
-				SrcRegData: 5,
+			name: "ct direction original",
+			exprs: nftables.Rule{
 				Exprs: []expr.Any{
-					&expr.Counter{},
+					&expr.Ct{
+						Key:      expr.CtKeyDIRECTION,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Op:       expr.CmpOpEq,
+						Register: 1,
+						Data:     []byte{0},
+					},
 				},
 			},
-			srcKey:   "ip saddr",
-			srcData:  "lo",
-			expected: "delete @delset { ip saddr counter packets 0 bytes 0 : lo }",
+			expected: "ct direction original",
+		},
+		{
+			name: "ct expiration 5s",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeyEXPIRATION,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Op:       expr.CmpOpEq,
+						Register: 1,
+						Data:     []byte{0x88, 0x13, 0x00, 0x00}, // 5000ms = 5s
+					},
+				},
+			},
+			expected: "ct expiration 5s",
+		},
+		{
+			name: "ct protocol tcp",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeyPROTOCOL,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Op:       expr.CmpOpEq,
+						Register: 1,
+						Data:     []byte{6},
+					},
+				},
+			},
+			expected: "ct protocol tcp",
+		},
+		{
+			name: "ct mark set 42",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Immediate{Register: 1, Data: []byte{42, 0, 0, 0}},
+					&expr.Ct{
+						Key:           expr.CtKeyMARK,
+						Register:      1,
+						SourceRegister: true,
+					},
+				},
+			},
+			expected: "ct mark set 42",
+		},
+		{
+			name: "ct state != established",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeySTATE,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Op:       expr.CmpOpNeq,
+						Register: 1,
+						Data:     []byte{CtStateBitESTABLISHED, 0, 0, 0, 0, 0, 0, 0},
+					},
+				},
+			},
+			expected: "ct state != established",
+		},
+		{
+			name: "ct status snat,dnat,confirmed",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{
+						Key:      expr.CtKeySTATUS,
+						Register: 1,
+					},
+					&expr.Cmp{
+						Op:       expr.CmpOpEq,
+						Register: 1,
+						Data:     []byte{0x3C, 0x00, 0x00, 0x00}, // SNAT + DNAT + confirmed
+					},
+				},
+			},
+			expected: "ct status snat,dnat,confirmed",
 		},
 	}
 
 	for _, tc := range testData {
 		sui.Run(tc.name, func() {
-			reg := regHolder{}
-			reg.Set(regID(tc.dynset.SrcRegKey), regVal{HumanExpr: tc.srcKey})
-			if tc.dynset.SrcRegData != 0 {
-				reg.Set(regID(tc.dynset.SrcRegData), regVal{HumanExpr: tc.srcData})
-			}
-
-			ctx := &ctx{
-				reg:  reg,
-				rule: &nftables.Rule{},
-			}
-			enc := &dynsetEncoder{dynset: tc.dynset}
-			ir, err := enc.EncodeIR(ctx)
+			str, err := NewRuleExprEncoder(&tc.exprs).Format()
 			sui.Require().NoError(err)
-			sui.Require().Equal(tc.expected, ir.Format())
+			sui.Require().Equal(tc.expected, str)
 		})
 	}
 }
 
-func Test_DynsetEncodeIR(t *testing.T) {
-	suite.Run(t, new(dynsetIRTestSuite))
+func Test_CtEncoderAdvanced(t *testing.T) {
+	suite.Run(t, new(ctEncoderAdvancedTestSuite))
 }
 
 
 
-# Инициализация
-sudo nft flush ruleset
 sudo nft add table ip test
-sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0; }'
-
-sudo nft add set ip test testset { type ipv4_addr\; flags dynamic\; }
-sudo nft add rule ip test prerouting add @testset { ip saddr }
-
-sudo nft add set ip test timeoutset { type ipv4_addr\; timeout 10s\; flags dynamic\; }
-sudo nft add rule ip test prerouting add @timeoutset { ip saddr timeout 10s }
-
-sudo nft add set ip test updset { type ipv4_addr\; flags dynamic\; }
-sudo nft add rule ip test prerouting update @updset { ip saddr counter }
-
-sudo nft add set ip test delset { type ipv4_addr : ifname\; flags dynamic\; }
-sudo nft add rule ip test prerouting delete @delset { ip saddr counter : "lo" }
-
-sudo nft list table ip test
+sudo nft add chain ip test prerouting { type filter hook prerouting priority 0\; policy accept\; }
 
 
 
-func (b *dynsetEncoder) EncodeIR(ctx *ctx) (irNode, error) {
-	dyn := b.dynset
-	if ctx.rule == nil {
-		return nil, errors.New("ctx has no rule")
-	}
+🔹 1. ct state new,established
 
-	srcRegKey, ok := ctx.reg.Get(regID(dyn.SrcRegKey))
-	if !ok {
-		return nil, errors.Errorf("%T statement has no key expression", dyn)
-	}
-	exp := srcRegKey.HumanExpr
+sudo nft add rule ip test prerouting ct state { new, established }
+🔹 2. ct direction original
 
-	// Формируем выражение из Exprs (например, counter/log)
-	tmpRule := nftables.Rule{
-		Table: ctx.rule.Table,
-		Exprs: dyn.Exprs,
-	}
-	exprsStr, err := NewRuleExprEncoder(&tmpRule).Format()
-	if err != nil {
-		return nil, err
-	}
-
-	// Добавляем timeout, если есть
-	if dyn.Timeout != 0 {
-		exp = fmt.Sprintf("%s timeout %s", exp, dyn.Timeout)
-	}
-
-	setName := fmt.Sprintf("@%s", dyn.SetName)
-	sb := strings.Builder{}
-
-	sb.WriteString(fmt.Sprintf("%s %s { %s", DynSetOP(dyn.Operation), setName, exp))
-
-	if exprsStr != "" {
-		sb.WriteString(" ")
-		sb.WriteString(exprsStr)
-	}
-
-	// Добавляем ": value", если есть data
-	if srcRegData, ok := ctx.reg.Get(regID(dyn.SrcRegData)); ok {
-		if exprData := srcRegData.HumanExpr; exprData != "" {
-			sb.WriteString(fmt.Sprintf(" : %s", exprData))
-		}
-	}
-
-	sb.WriteString(" }")
-
-	return simpleIR(sb.String()), nil
-}
+sudo nft add rule ip test prerouting ct direction original
+🔹 3. ct expiration 5s
+(Значение TTL неявно проверяется в реальных пакетах — для теста допустим статический пример)
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add set ip test delset { type ipv4_addr : ifname\; flags dynamic\; }
-Error: syntax error, unexpected colon, expecting newline or semicolon or .
-add set ip test delset { type ipv4_addr : ifname; flags dynamic; }
-                                        ^
-Error: set definition does not specify key
-add set ip test delset { type ipv4_addr : ifname; flags dynamic; }
+sudo nft add rule ip test prerouting ct expiration 5s
+⚠️ ct expiration чаще всего используется как часть сравнения или логики — но ты можешь задать его напрямую.
+
+🔹 4. ct protocol tcp
+
+sudo nft add rule ip test prerouting ct protocol tcp
+🔹 5. ct mark set 42
+
+sudo nft add rule ip test prerouting ct mark set 42
+🔹 6. ct state != established
+
+sudo nft add rule ip test prerouting ct state != established
+🔹 7. ct status snat,dnat,confirmed
+
+sudo nft add rule ip test prerouting ct status { snat, dnat, confirmed }
+
+
+
+
+
+
+
+
 
 
 
