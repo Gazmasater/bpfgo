@@ -457,8 +457,20 @@ sudo nft add rule ip test prerouting ct state != established
 
 sudo nft add rule ip test prerouting ct status { snat, dnat, confirmed }
 
-ct mark set 42
-
+{
+			name: "ct mark set 42",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Immediate{Register: 1, Data: []byte{42, 0, 0, 0}},
+					&expr.Ct{
+						Key:            expr.CtKeyMARK,
+						Register:       1,
+						SourceRegister: true,
+					},
+				},
+			},
+			expected: "ct mark set 42",
+		},
 
 
 
