@@ -277,154 +277,84 @@ package encoders
 
 import (
 	"testing"
+	"math"
 
-	"github.com/google/nftables"
 	"github.com/google/nftables/expr"
 	"github.com/stretchr/testify/suite"
+	"golang.org/x/sys/unix"
 )
 
-type ctEncoderAdvancedTestSuite struct {
+type connlimitEncoderTestSuite struct {
 	suite.Suite
 }
 
-func (sui *ctEncoderAdvancedTestSuite) Test_CtEncodeIR_Complex() {
-	testData := []struct {
-		name     string
-		exprs    nftables.Rule
-		expected string
+func (sui *connlimitEncoderTestSuite) Test_ConnlimitEncodeIR() {
+	testCases := []struct {
+		name      string
+		connlimit *expr.Connlimit
+		expected  string
 	}{
 		{
-			name: "ct state new,established",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{Key: expr.CtKeySTATE, Register: 1},
-					&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{byte(CtStateBitNEW | CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0}},
-				},
-			},
-			expected: "ct state new,established",
+			name:      "basic count",
+			connlimit: &expr.Connlimit{Count: 5, Flags: 0},
+			expected:  "ct count 5",
 		},
 		{
-			name: "ct direction original",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{Key: expr.CtKeyDIRECTION, Register: 1},
-					&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{0}},
-				},
-			},
-			expected: "ct direction original",
+			name:      "with inv flag",
+			connlimit: &expr.Connlimit{Count: 10, Flags: unix.NFT_LIMIT_F_INV},
+			expected:  "ct count over 10",
 		},
 		{
-			name: "ct expiration 5s",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{Key: expr.CtKeyEXPIRATION, Register: 1},
-					&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{0x88, 0x13, 0x00, 0x00}}, // 5000 ms
-				},
-			},
-			expected: "ct expiration 5s",
+			name:      "zero count",
+			connlimit: &expr.Connlimit{Count: 0, Flags: 0},
+			expected:  "ct count 0",
 		},
 		{
-			name: "ct protocol tcp",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{Key: expr.CtKeyPROTOCOL, Register: 1},
-					&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{6}},
-				},
-			},
-			expected: "ct protocol tcp",
+			name:      "max uint32 count",
+			connlimit: &expr.Connlimit{Count: math.MaxUint32, Flags: 0},
+			expected:  "ct count 4294967295",
 		},
 		{
-			name: "ct mark set 42",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Immediate{Register: 1, Data: []byte{42, 0, 0, 0}},
-					&expr.Ct{Key: expr.CtKeyMARK, Register: 1, SourceRegister: true},
-				},
-			},
-			expected: "ct mark set 42",
-		},
-		{
-			name: "ct status snat,dnat,confirmed",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{Key: expr.CtKeySTATUS, Register: 1},
-					&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{0x3C, 0x00, 0x00, 0x00}},
-				},
-			},
-			expected: "ct status snat,dnat,confirmed",
-		},
-		{
-			name: "ct helper set ftp",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Immediate{Register: 1, Data: []byte("ftp\x00")},
-					&expr.Ct{Key: expr.CtKeyHELPER, Register: 1, SourceRegister: true},
-				},
-			},
-			expected: "ct helper set ftp",
-		},
-		{
-			name: "ct zone set 42",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Immediate{Register: 1, Data: []byte{42, 0, 0, 0}},
-					&expr.Ct{Key: expr.CtKeyZONE, Register: 1, SourceRegister: true},
-				},
-			},
-			expected: "ct zone set 42",
-		},
-		{
-			name: "ct bytes > 1000",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{Key: expr.CtKeyBYTES, Register: 1},
-					&expr.Cmp{Op: expr.CmpOpGt, Register: 1, Data: []byte{0xE8, 0x03, 0x00, 0x00}}, // 1000
-				},
-			},
-			expected: "ct bytes > 1000",
+			name:      "unknown flags fallback to over",
+			connlimit: &expr.Connlimit{Count: 1, Flags: 123456}, // любые ненулевые
+			expected:  "ct count over 1",
 		},
 	}
 
-	for _, tc := range testData {
+	for _, tc := range testCases {
 		sui.Run(tc.name, func() {
-			str, err := NewRuleExprEncoder(&tc.exprs).Format()
+			ctx := &ctx{}
+			enc := &connlimitEncoder{connlimit: tc.connlimit}
+			ir, err := enc.EncodeIR(ctx)
 			sui.Require().NoError(err)
-			sui.Require().Equal(tc.expected, str)
+			sui.Require().Equal(tc.expected, ir.Format())
 		})
 	}
 }
 
-func Test_CtEncoderAdvanced(t *testing.T) {
-	suite.Run(t, new(ctEncoderAdvancedTestSuite))
+func Test_ConnlimitEncoder(t *testing.T) {
+	suite.Run(t, new(connlimitEncoderTestSuite))
 }
 
 
-# ct state new,established
-sudo nft add rule ip test prerouting ct state new,established
+sudo nft add table ip test
+sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0; }'
 
-# ct direction original
-sudo nft add rule ip test prerouting ct direction original
 
-# ct expiration 5s
-sudo nft add rule ip test prerouting ct expiration 5s
+# basic count
+sudo nft add rule ip test prerouting ct count 5
 
-# ct protocol tcp
-sudo nft add rule ip test prerouting ct protocol tcp
+# with inv flag
+sudo nft add rule ip test prerouting ct count over 10
 
-# ct mark set 42
-sudo nft add rule ip test prerouting ct mark set 42
+# zero count
+sudo nft add rule ip test prerouting ct count 0
 
-# ct status snat,dnat,confirmed
-sudo nft add rule ip test prerouting ct status snat,dnat,confirmed
+# max uint32 count
+sudo nft add rule ip test prerouting ct count 4294967295
 
-# ct helper set "ftp"
-sudo nft add rule ip test prerouting ct helper set "ftp"
-
-# ct zone set 42
-sudo nft add rule ip test prerouting ct zone set 42
-
-# ct bytes > 1000
-sudo nft add rule ip test prerouting ct bytes > 1000
+# unknown flags (любые ненулевые -> трактуются как over)
+sudo nft add rule ip test prerouting ct count over 1
 
 
 
