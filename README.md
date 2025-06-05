@@ -400,6 +400,20 @@ sudo nft list table ip test
 
 
 
+az358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add set ip test testset { type ipv4_addr\; }
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting ip saddr add @testset
+Error: syntax error, unexpected add
+add rule ip test prerouting ip saddr add @testset
+                                     ^^^
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add set ip test timeoutset { type ipv4_addr\; timeout 10s\; }
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting ip saddr add @timeoutset
+Error: syntax error, unexpected add
+add rule ip test prerouting ip saddr add @timeoutset
+                            
+
+
+
 
 
 
