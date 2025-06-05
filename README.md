@@ -297,15 +297,8 @@ func (sui *ctEncoderAdvancedTestSuite) Test_CtEncodeIR_Complex() {
 			name: "ct state new,established",
 			exprs: nftables.Rule{
 				Exprs: []expr.Any{
-					&expr.Ct{
-						Key:      expr.CtKeySTATE,
-						Register: 1,
-					},
-					&expr.Cmp{
-						Op:       expr.CmpOpEq,
-						Register: 1,
-						Data:     []byte{byte(CtStateBitNEW | CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0},
-					},
+					&expr.Ct{Key: expr.CtKeySTATE, Register: 1},
+					&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{byte(CtStateBitNEW | CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0}},
 				},
 			},
 			expected: "ct state new,established",
@@ -314,15 +307,8 @@ func (sui *ctEncoderAdvancedTestSuite) Test_CtEncodeIR_Complex() {
 			name: "ct direction original",
 			exprs: nftables.Rule{
 				Exprs: []expr.Any{
-					&expr.Ct{
-						Key:      expr.CtKeyDIRECTION,
-						Register: 1,
-					},
-					&expr.Cmp{
-						Op:       expr.CmpOpEq,
-						Register: 1,
-						Data:     []byte{0},
-					},
+					&expr.Ct{Key: expr.CtKeyDIRECTION, Register: 1},
+					&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{0}},
 				},
 			},
 			expected: "ct direction original",
@@ -331,15 +317,8 @@ func (sui *ctEncoderAdvancedTestSuite) Test_CtEncodeIR_Complex() {
 			name: "ct expiration 5s",
 			exprs: nftables.Rule{
 				Exprs: []expr.Any{
-					&expr.Ct{
-						Key:      expr.CtKeyEXPIRATION,
-						Register: 1,
-					},
-					&expr.Cmp{
-						Op:       expr.CmpOpEq,
-						Register: 1,
-						Data:     []byte{0x88, 0x13, 0x00, 0x00}, // 5000ms = 5s
-					},
+					&expr.Ct{Key: expr.CtKeyEXPIRATION, Register: 1},
+					&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{0x88, 0x13, 0x00, 0x00}}, // 5000 ms
 				},
 			},
 			expected: "ct expiration 5s",
@@ -348,15 +327,8 @@ func (sui *ctEncoderAdvancedTestSuite) Test_CtEncodeIR_Complex() {
 			name: "ct protocol tcp",
 			exprs: nftables.Rule{
 				Exprs: []expr.Any{
-					&expr.Ct{
-						Key:      expr.CtKeyPROTOCOL,
-						Register: 1,
-					},
-					&expr.Cmp{
-						Op:       expr.CmpOpEq,
-						Register: 1,
-						Data:     []byte{6},
-					},
+					&expr.Ct{Key: expr.CtKeyPROTOCOL, Register: 1},
+					&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{6}},
 				},
 			},
 			expected: "ct protocol tcp",
@@ -366,48 +338,50 @@ func (sui *ctEncoderAdvancedTestSuite) Test_CtEncodeIR_Complex() {
 			exprs: nftables.Rule{
 				Exprs: []expr.Any{
 					&expr.Immediate{Register: 1, Data: []byte{42, 0, 0, 0}},
-					&expr.Ct{
-						Key:           expr.CtKeyMARK,
-						Register:      1,
-						SourceRegister: true,
-					},
+					&expr.Ct{Key: expr.CtKeyMARK, Register: 1, SourceRegister: true},
 				},
 			},
 			expected: "ct mark set 42",
 		},
 		{
-			name: "ct state != established",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{
-						Key:      expr.CtKeySTATE,
-						Register: 1,
-					},
-					&expr.Cmp{
-						Op:       expr.CmpOpNeq,
-						Register: 1,
-						Data:     []byte{CtStateBitESTABLISHED, 0, 0, 0, 0, 0, 0, 0},
-					},
-				},
-			},
-			expected: "ct state != established",
-		},
-		{
 			name: "ct status snat,dnat,confirmed",
 			exprs: nftables.Rule{
 				Exprs: []expr.Any{
-					&expr.Ct{
-						Key:      expr.CtKeySTATUS,
-						Register: 1,
-					},
-					&expr.Cmp{
-						Op:       expr.CmpOpEq,
-						Register: 1,
-						Data:     []byte{0x3C, 0x00, 0x00, 0x00}, // SNAT + DNAT + confirmed
-					},
+					&expr.Ct{Key: expr.CtKeySTATUS, Register: 1},
+					&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{0x3C, 0x00, 0x00, 0x00}},
 				},
 			},
 			expected: "ct status snat,dnat,confirmed",
+		},
+		{
+			name: "ct helper set ftp",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Immediate{Register: 1, Data: []byte("ftp\x00")},
+					&expr.Ct{Key: expr.CtKeyHELPER, Register: 1, SourceRegister: true},
+				},
+			},
+			expected: "ct helper set ftp",
+		},
+		{
+			name: "ct zone set 42",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Immediate{Register: 1, Data: []byte{42, 0, 0, 0}},
+					&expr.Ct{Key: expr.CtKeyZONE, Register: 1, SourceRegister: true},
+				},
+			},
+			expected: "ct zone set 42",
+		},
+		{
+			name: "ct bytes > 1000",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{Key: expr.CtKeyBYTES, Register: 1},
+					&expr.Cmp{Op: expr.CmpOpGt, Register: 1, Data: []byte{0xE8, 0x03, 0x00, 0x00}}, // 1000
+				},
+			},
+			expected: "ct bytes > 1000",
 		},
 	}
 
@@ -425,65 +399,33 @@ func Test_CtEncoderAdvanced(t *testing.T) {
 }
 
 
+# ct state new,established
+sudo nft add rule ip test prerouting ct state new,established
 
-sudo nft add table ip test
-sudo nft add chain ip test prerouting { type filter hook prerouting priority 0\; policy accept\; }
-
-
-
-🔹 1. ct state new,established
-
-sudo nft add rule ip test prerouting ct state { new, established }
-🔹 2. ct direction original
-
+# ct direction original
 sudo nft add rule ip test prerouting ct direction original
-🔹 3. ct expiration 5s
-(Значение TTL неявно проверяется в реальных пакетах — для теста допустим статический пример)
 
-
+# ct expiration 5s
 sudo nft add rule ip test prerouting ct expiration 5s
-⚠️ ct expiration чаще всего используется как часть сравнения или логики — но ты можешь задать его напрямую.
 
-🔹 4. ct protocol tcp
-
+# ct protocol tcp
 sudo nft add rule ip test prerouting ct protocol tcp
-🔹 5. ct mark set 42
 
-sudo nft add rule ip test prerouting ct mark set 42
-🔹 6. ct state != established
-
-sudo nft add rule ip test prerouting ct state != established
-🔹 7. ct status snat,dnat,confirmed
-
-sudo nft add rule ip test prerouting ct status { snat, dnat, confirmed }
-
-{
-			name: "ct mark set 42",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Immediate{Register: 1, Data: []byte{42, 0, 0, 0}},
-					&expr.Ct{
-						Key:            expr.CtKeyMARK,
-						Register:       1,
-						SourceRegister: true,
-					},
-				},
-			},
-			expected: "ct mark set 42",
-		},
-
-
-sudo nft add table ip test
-sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0; }'
+# ct mark set 42
 sudo nft add rule ip test prerouting ct mark set 42
 
+# ct status snat,dnat,confirmed
+sudo nft add rule ip test prerouting ct status snat,dnat,confirmed
 
-table ip test {
-        chain prerouting {
-                type filter hook prerouting priority filter; policy accept;
-                ct mark set 0x0000002a
-        }
-}
+# ct helper set "ftp"
+sudo nft add rule ip test prerouting ct helper set "ftp"
+
+# ct zone set 42
+sudo nft add rule ip test prerouting ct zone set 42
+
+# ct bytes > 1000
+sudo nft add rule ip test prerouting ct bytes > 1000
+
 
 
 
