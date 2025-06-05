@@ -288,6 +288,22 @@ sudo nft add rule ip test prerouting tcp dport 443 redirect to :443
 
 
 
+az358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting tcp dport 8080 dnat to 192.168.0.1:8080
+
+
+sudo nft add rule ip test prerouting tcp dport 443 redirect to :443
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft list ruleset
+table ip test {
+        chain prerouting {
+                type nat hook prerouting priority filter; policy accept;
+                tcp dport 8080 dnat to 192.168.0.1:8080
+                tcp dport 443 redirect to :443
+        }
+}
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+
+
+
 
 
 
