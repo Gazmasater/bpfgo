@@ -273,126 +273,32 @@ go test -run Test_DupExprToString
 
 ____________________________________________________________________
 
-package encoders
-
-import (
-	"testing"
-
-	"github.com/google/nftables/expr"
-	"github.com/stretchr/testify/suite"
-	"golang.org/x/sys/unix"
-)
-
-type cmpEncoderAdvancedTestSuite struct {
-	suite.Suite
-}
-
-func (sui *cmpEncoderAdvancedTestSuite) Test_CmpEncodeIR_Advanced() {
-	testCases := []struct {
-		name     string
-		setup    func(ctx *ctx) (cmp *expr.Cmp)
-		expected string
-	}{
-		{
-			name: "ct state != established",
-			setup: func(ctx *ctx) *expr.Cmp {
-				ct := &expr.Ct{Key: expr.CtKeySTATE, Register: 1}
-				ctx.reg.Set(1, regVal{
-					HumanExpr: "ct state",
-					Expr:      ct,
-				})
-				return &expr.Cmp{
-					Op:       expr.CmpOpNeq,
-					Register: 1,
-					Data:     []byte{byte(CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0},
-				}
-			},
-			expected: "ct state != established",
-		},
-		{
-			name: "payload ip version != 5",
-			setup: func(ctx *ctx) *expr.Cmp {
-				pl := &expr.Payload{
-					Base:         expr.PayloadBaseNetworkHeader,
-					Offset:       0,
-					Len:          1,
-					DestRegister: 1,
-				}
-				ctx.reg.Set(1, regVal{
-					HumanExpr: "ip version",
-					Expr:      pl,
-				})
-				return &expr.Cmp{
-					Op:       expr.CmpOpNeq,
-					Register: 1,
-					Data:     []byte{5},
-				}
-			},
-			expected: "ip version != 5",
-		},
-		{
-			name: "bitwise masked ip dscp == 0x2e",
-			setup: func(ctx *ctx) *expr.Cmp {
-				bw := &expr.Bitwise{
-					SourceRegister: 1,
-					DestRegister:   1,
-					Len:            1,
-					Mask:           []byte{0xfc}, // dscp mask
-					Xor:            []byte{0x00},
-				}
-				ctx.reg.Set(1, regVal{
-					HumanExpr: "ip tos",
-					Expr:      bw,
-				})
-				return &expr.Cmp{
-					Op:       expr.CmpOpEq,
-					Register: 1,
-					Data:     []byte{0x2e}, // EF PHB
-				}
-			},
-			expected: "ip tos == 46",
-		},
-	}
-
-	for _, tc := range testCases {
-		sui.Run(tc.name, func() {
-			ctx := &ctx{}
-			cmp := tc.setup(ctx)
-			enc := &cmpEncoder{cmp: cmp}
-			ir, err := enc.EncodeIR(ctx)
-			sui.Require().NoError(err)
-			sui.Require().Equal(tc.expected, ir.Format())
+{
+	name: "ip tos == 46",
+	setup: func(ctx *ctx) *expr.Cmp {
+		// выражение bitwise создаёт маску (но IR уже показывает "ip tos")
+		bw := &expr.Bitwise{
+			SourceRegister: 1,
+			DestRegister:   1,
+			Len:            1,
+			Mask:           []byte{0xfc},
+			Xor:            []byte{0x00},
+		}
+		ctx.reg.Set(1, regVal{
+			HumanExpr: "ip tos",
+			Expr:      bw,
 		})
-	}
+		return &expr.Cmp{
+			Op:       expr.CmpOpEq,
+			Register: 1,
+			Data:     []byte{46}, // 0x2e
+		}
+	},
+	expected: "ip tos == 46",
 }
 
-func Test_CmpEncoderAdvanced(t *testing.T) {
-	suite.Run(t, new(cmpEncoderAdvancedTestSuite))
-}
 
-
-sudo nft add table ip test
-sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0; }'
-
-
-🧪 1. ct state != established
-
-sudo nft add rule ip test prerouting ct state != established
-🧪 2. payload ip version != 5
-(проверка версии IP — полезна для отладки нестандартных заголовков)
-
-
-sudo nft add rule ip test prerouting ip version != 5
-🧪 3. bitwise masked ip tos == 46 (EF DSCP = 0x2e)
-DSCP 46 соответствует Expedited Forwarding (EF) в QoS.
-
-sudo nft add rule ip test prerouting ip tos 46
-⚠️ Если хочешь указать это точно как ip tos & 0xfc == 0x2e, nft сам упростит это до ip tos 46, если маска совпадает с классом DSCP.
-
-
-az358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting ip tos 46
-Error: syntax error, unexpected string
-add rule ip test prerouting ip tos 46
+sudo nft add rule ip test prerouting ip tos == 46
 
 
 
