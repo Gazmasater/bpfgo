@@ -392,6 +392,46 @@ sudo nft add rule ip test prerouting delete @delset { ip saddr counter : "lo" }
 
 sudo nft list table ip test
 
+
+
+az358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test -run Test_DynsetEncodeIR
+--- FAIL: Test_DynsetEncodeIR (0.00s)
+    --- FAIL: Test_DynsetEncodeIR/Test_DynsetEncodeIR (0.00s)
+        --- FAIL: Test_DynsetEncodeIR/Test_DynsetEncodeIR/update_set_with_counter (0.00s)
+            encdersDynset_test.go:90: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encdersDynset_test.go:90
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Not equal: 
+                                        expected: "update @updset { ip saddr counter packets 0 bytes 0 }"
+                                        actual  : "update @updset { ip saddr counter packets 0 bytes 0 counter packets 0 bytes 0 }"
+                                    
+                                        Diff:
+                                        --- Expected
+                                        +++ Actual
+                                        @@ -1 +1 @@
+                                        -update @updset { ip saddr counter packets 0 bytes 0 }
+                                        +update @updset { ip saddr counter packets 0 bytes 0 counter packets 0 bytes 0 }
+                        Test:           Test_DynsetEncodeIR/Test_DynsetEncodeIR/update_set_with_counter
+        --- FAIL: Test_DynsetEncodeIR/Test_DynsetEncodeIR/delete_from_map_with_data_and_counter (0.00s)
+            encdersDynset_test.go:90: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encdersDynset_test.go:90
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Not equal: 
+                                        expected: "delete @delset { ip saddr counter packets 0 bytes 0 : lo }"
+                                        actual  : "delete @delset { ip saddr counter packets 0 bytes 0 counter packets 0 bytes 0 : lo }"
+                                    
+                                        Diff:
+                                        --- Expected
+                                        +++ Actual
+                                        @@ -1 +1 @@
+                                        -delete @delset { ip saddr counter packets 0 bytes 0 : lo }
+                                        +delete @delset { ip saddr counter packets 0 bytes 0 counter packets 0 bytes 0 : lo }
+                        Test:           Test_DynsetEncodeIR/Test_DynsetEncodeIR/delete_from_map_with_data_and_counter
+FAIL
+exit status 1
+FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.008s
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+
                             
 
 
