@@ -276,97 +276,128 @@ ____________________________________________________________________
 package encoders
 
 import (
+	"testing"
+	"time"
+
 	"github.com/google/nftables"
 	"github.com/google/nftables/expr"
+	"github.com/stretchr/testify/suite"
 )
 
-func (sui *encodersTestSuite) Test_DupExprToString() {
-	const tableName = "test"
+type dynsetIRTestSuite struct {
+	suite.Suite
+}
 
+func (sui *dynsetIRTestSuite) Test_DynsetEncodeIR() {
 	testData := []struct {
 		name     string
-		exprs    nftables.Rule
-		preRun   func()
+		dynset   *expr.Dynset
+		srcKey   string
+		srcData  string
 		expected string
 	}{
-
 		{
-			name: "dup to address",
-			exprs: nftables.Rule{
-				Table: &nftables.Table{Name: tableName},
-				Exprs: []expr.Any{
-					&expr.Immediate{Register: 1, Data: []byte("10.1.2.3")},
-					&expr.Dup{RegAddr: 1},
-				},
+			name: "add to IPv4 set",
+			dynset: &expr.Dynset{
+				Operation:  uint32(DynSetOPAdd),
+				SetName:    "testset",
+				SrcRegKey:  1,
 			},
-			expected: "dup to 10.1.2.3",
+			srcKey:   "192.168.0.10",
+			expected: "add @testset { 192.168.0.10 }",
 		},
 		{
-			name: "dup to address and device",
-			exprs: nftables.Rule{
-				Table: &nftables.Table{Name: tableName},
-				Exprs: []expr.Any{
-					&expr.Immediate{Register: 1, Data: []byte("192.168.1.10")},
-					&expr.Immediate{Register: 2, Data: []byte("lo")},
-					&expr.Dup{RegAddr: 1, RegDev: 2},
-				},
+			name: "add to set with timeout",
+			dynset: &expr.Dynset{
+				Operation:  uint32(DynSetOPAdd),
+				SetName:    "timeoutset",
+				SrcRegKey:  2,
+				Timeout:    10 * time.Second,
 			},
-			expected: "dup to 192.168.1.10 device lo",
+			srcKey:   "10.0.0.5",
+			expected: "add @timeoutset { 10.0.0.5 timeout 10s }",
 		},
 		{
-			name: "dup only device",
-			exprs: nftables.Rule{
-				Table: &nftables.Table{Name: tableName},
+			name: "update IPv4 set with counter",
+			dynset: &expr.Dynset{
+				Operation:  uint32(DynSetOPUpdate),
+				SetName:    "updset",
+				SrcRegKey:  3,
 				Exprs: []expr.Any{
-					&expr.Immediate{Register: 2, Data: []byte("br-lan")},
-					&expr.Dup{RegDev: 2},
+					&expr.Counter{},
 				},
 			},
-			expected: "dup",
+			srcKey:   "172.16.0.1",
+			expected: "update @updset { 172.16.0.1 counter packets 0 bytes 0 }",
 		},
 		{
-			name: "dup no params",
-			exprs: nftables.Rule{
-				Table: &nftables.Table{Name: tableName},
+			name: "delete from map with data and counter",
+			dynset: &expr.Dynset{
+				Operation:  uint32(DynSetOPDelete),
+				SetName:    "delset",
+				SrcRegKey:  4,
+				SrcRegData: 5,
 				Exprs: []expr.Any{
-					&expr.Dup{},
+					&expr.Counter{},
 				},
 			},
-			expected: "dup",
+			srcKey:   "192.0.2.55",
+			srcData:  "lo",
+			expected: "delete @delset { 192.0.2.55 counter packets 0 bytes 0 : lo }",
 		},
 	}
 
-	for _, t := range testData {
-		sui.Run(t.name, func() {
-			if t.preRun != nil {
-				t.preRun()
+	for _, tc := range testData {
+		sui.Run(tc.name, func() {
+			reg := regHolder{}
+			reg.Set(regID(tc.dynset.SrcRegKey), regVal{HumanExpr: tc.srcKey})
+			if tc.dynset.SrcRegData != 0 {
+				reg.Set(regID(tc.dynset.SrcRegData), regVal{HumanExpr: tc.srcData})
 			}
-			str, err := NewRuleExprEncoder(&t.exprs).Format()
+
+			ctx := &ctx{
+				reg:  reg,
+				rule: &nftables.Rule{},
+			}
+			enc := &dynsetEncoder{dynset: tc.dynset}
+			ir, err := enc.EncodeIR(ctx)
 			sui.Require().NoError(err)
-			sui.Require().Equal(t.expected, str)
+			sui.Require().Equal(tc.expected, ir.Format())
 		})
 	}
 }
 
+func Test_DynsetEncodeIR(t *testing.T) {
+	suite.Run(t, new(dynsetIRTestSuite))
+}
+
+
 sudo nft add table ip test
 sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0; }'
 
-sudo nft add rule ip test prerouting dup to 10.1.2.3
-sudo nft add rule ip test prerouting dup to 192.168.1.10 device lo
-sudo nft add rule ip test prerouting dup
-sudo nft add rule ip test prerouting dup
+sudo nft add set ip test testset { type ipv4_addr\; }
+
+sudo nft add rule ip test prerouting ip saddr add @testset
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting dup
-Error: syntax error, unexpected newline, expecting to
-add rule ip test prerouting dup
-                               ^
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting dup
-Error: syntax error, unexpected newline, expecting to
-add rule ip test prerouting dup
-                               ^
+sudo nft add set ip test timeoutset { type ipv4_addr\; timeout 10s\; }
 
-                                           
+sudo nft add rule ip test prerouting ip saddr add @timeoutset
+
+
+sudo nft add set ip test updset { type ipv4_addr\; flags dynamic\; }
+
+sudo nft add rule ip test prerouting ip saddr update @updset counter
+
+
+sudo nft add set ip test delset { type ipv4_addr : ifname\; flags dynamic\; }
+
+# Удалим сопоставление 192.0.2.55 : "lo"
+sudo nft add rule ip test prerouting ip saddr delete @delset : "lo" counter
+
+
+sudo nft list table ip test
+
 
 
 
