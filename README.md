@@ -277,54 +277,88 @@ package encoders
 
 import (
 	"testing"
-	"math"
 
 	"github.com/google/nftables/expr"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/sys/unix"
 )
 
-type connlimitEncoderTestSuite struct {
+type cmpEncoderAdvancedTestSuite struct {
 	suite.Suite
 }
 
-func (sui *connlimitEncoderTestSuite) Test_ConnlimitEncodeIR() {
+func (sui *cmpEncoderAdvancedTestSuite) Test_CmpEncodeIR_Advanced() {
 	testCases := []struct {
-		name      string
-		connlimit *expr.Connlimit
-		expected  string
+		name     string
+		setup    func(ctx *ctx) (cmp *expr.Cmp)
+		expected string
 	}{
 		{
-			name:      "basic count",
-			connlimit: &expr.Connlimit{Count: 5, Flags: 0},
-			expected:  "ct count 5",
+			name: "ct state != established",
+			setup: func(ctx *ctx) *expr.Cmp {
+				ct := &expr.Ct{Key: expr.CtKeySTATE, Register: 1}
+				ctx.reg.Set(1, regVal{
+					HumanExpr: "ct state",
+					Expr:      ct,
+				})
+				return &expr.Cmp{
+					Op:       expr.CmpOpNeq,
+					Register: 1,
+					Data:     []byte{byte(CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0},
+				}
+			},
+			expected: "ct state != established",
 		},
 		{
-			name:      "with inv flag",
-			connlimit: &expr.Connlimit{Count: 10, Flags: unix.NFT_LIMIT_F_INV},
-			expected:  "ct count over 10",
+			name: "payload ip version != 5",
+			setup: func(ctx *ctx) *expr.Cmp {
+				pl := &expr.Payload{
+					Base:         expr.PayloadBaseNetworkHeader,
+					Offset:       0,
+					Len:          1,
+					DestRegister: 1,
+				}
+				ctx.reg.Set(1, regVal{
+					HumanExpr: "ip version",
+					Expr:      pl,
+				})
+				return &expr.Cmp{
+					Op:       expr.CmpOpNeq,
+					Register: 1,
+					Data:     []byte{5},
+				}
+			},
+			expected: "ip version != 5",
 		},
 		{
-			name:      "zero count",
-			connlimit: &expr.Connlimit{Count: 0, Flags: 0},
-			expected:  "ct count 0",
-		},
-		{
-			name:      "max uint32 count",
-			connlimit: &expr.Connlimit{Count: math.MaxUint32, Flags: 0},
-			expected:  "ct count 4294967295",
-		},
-		{
-			name:      "unknown flags fallback to over",
-			connlimit: &expr.Connlimit{Count: 1, Flags: 123456}, // любые ненулевые
-			expected:  "ct count over 1",
+			name: "bitwise masked ip dscp == 0x2e",
+			setup: func(ctx *ctx) *expr.Cmp {
+				bw := &expr.Bitwise{
+					SourceRegister: 1,
+					DestRegister:   1,
+					Len:            1,
+					Mask:           []byte{0xfc}, // dscp mask
+					Xor:            []byte{0x00},
+				}
+				ctx.reg.Set(1, regVal{
+					HumanExpr: "ip tos",
+					Expr:      bw,
+				})
+				return &expr.Cmp{
+					Op:       expr.CmpOpEq,
+					Register: 1,
+					Data:     []byte{0x2e}, // EF PHB
+				}
+			},
+			expected: "ip tos == 46",
 		},
 	}
 
 	for _, tc := range testCases {
 		sui.Run(tc.name, func() {
 			ctx := &ctx{}
-			enc := &connlimitEncoder{connlimit: tc.connlimit}
+			cmp := tc.setup(ctx)
+			enc := &cmpEncoder{cmp: cmp}
 			ir, err := enc.EncodeIR(ctx)
 			sui.Require().NoError(err)
 			sui.Require().Equal(tc.expected, ir.Format())
@@ -332,8 +366,8 @@ func (sui *connlimitEncoderTestSuite) Test_ConnlimitEncodeIR() {
 	}
 }
 
-func Test_ConnlimitEncoder(t *testing.T) {
-	suite.Run(t, new(connlimitEncoderTestSuite))
+func Test_CmpEncoderAdvanced(t *testing.T) {
+	suite.Run(t, new(cmpEncoderAdvancedTestSuite))
 }
 
 
@@ -341,23 +375,26 @@ sudo nft add table ip test
 sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0; }'
 
 
-# basic count
-sudo nft add rule ip test prerouting ct count 5
+🧪 1. ct state != established
+bash
+Копировать
+Редактировать
+sudo nft add rule ip test prerouting ct state != established
+🧪 2. payload ip version != 5
+(проверка версии IP — полезна для отладки нестандартных заголовков)
 
-# with inv flag
-sudo nft add rule ip test prerouting ct count over 10
+bash
+Копировать
+Редактировать
+sudo nft add rule ip test prerouting ip version != 5
+🧪 3. bitwise masked ip tos == 46 (EF DSCP = 0x2e)
+DSCP 46 соответствует Expedited Forwarding (EF) в QoS.
 
-# zero count
-sudo nft add rule ip test prerouting ct count 0
-
-# max uint32 count
-sudo nft add rule ip test prerouting ct count 4294967295
-
-# unknown flags (любые ненулевые -> трактуются как over)
-sudo nft add rule ip test prerouting ct count over 1
-
-
-
+bash
+Копировать
+Редактировать
+sudo nft add rule ip test prerouting ip tos 46
+⚠️ Если хочешь указать это точно как ip tos & 0xfc == 0x2e, nft сам упростит это до ip tos 46, если маска совпадает с классом DSCP.
 
 
 
