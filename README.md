@@ -383,26 +383,19 @@ func TestNatEncodeIR(t *testing.T) {
 
 
 🧩 Шаг 1: Создать таблицу
-bash
-Копировать
-Редактировать
+
 sudo nft add table ip test
 🧩 Шаг 2: Создать цепочки NAT
 prerouting (для dnat, redirect)
-bash
-Копировать
-Редактировать
+
 sudo nft add chain ip test prerouting '{ type nat hook prerouting priority 0; }'
 postrouting (для snat, masquerade)
-bash
-Копировать
-Редактировать
+
+
 sudo nft add chain ip test postrouting '{ type nat hook postrouting priority 100; }'
 🧩 Шаг 3: Добавить правила
 1. DNAT к IP и порту
-bash
-Копировать
-Редактировать
+
 sudo nft add rule ip test prerouting dnat to 192.168.0.1:8080
 2. MASQUERADE с диапазоном портов
 bash
@@ -426,6 +419,13 @@ bash
 Копировать
 Редактировать
 sudo nft add rule ip test prerouting dnat to 10.1.1.1:8080 random persistent
+
+
+
+
+az358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting dnat to 192.168.0.1:8080
+Error: transport protocol mapping is only valid after transport protocol match
+add rule ip test prerouting dnat to 192.168.0.1:8080
 
 
 
