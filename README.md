@@ -458,6 +458,29 @@ sudo nft add rule ip test prerouting ct state != established
 sudo nft add rule ip test prerouting ct status { snat, dnat, confirmed }
 
 
+[{
+	"resource": "/home/gaz358/myprog/nft-go/internal/expr-encoders/encodersCt_test.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "IncompatibleAssign",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "IncompatibleAssign"
+		}
+	},
+	"severity": 8,
+	"message": "cannot use CtStateBitESTABLISHED (constant 2 of uint32 type CtState) as byte value in array or slice literal",
+	"source": "compiler",
+	"startLineNumber": 114,
+	"startColumn": 24,
+	"endLineNumber": 114,
+	"endColumn": 45
+}]
+
+
 
 
 
