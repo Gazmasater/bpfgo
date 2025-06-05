@@ -444,6 +444,14 @@ func (b *dynsetEncoder) EncodeIR(ctx *ctx) (irNode, error) {
 }
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add set ip test delset { type ipv4_addr : ifname\; flags dynamic\; }
+Error: syntax error, unexpected colon, expecting newline or semicolon or .
+add set ip test delset { type ipv4_addr : ifname; flags dynamic; }
+                                        ^
+Error: set definition does not specify key
+add set ip test delset { type ipv4_addr : ifname; flags dynamic; }
+
+
 
 
 
