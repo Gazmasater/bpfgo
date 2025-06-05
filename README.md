@@ -394,44 +394,48 @@ sudo nft list table ip test
 
 
 
-az358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test -run Test_DynsetEncodeIR
---- FAIL: Test_DynsetEncodeIR (0.00s)
-    --- FAIL: Test_DynsetEncodeIR/Test_DynsetEncodeIR (0.00s)
-        --- FAIL: Test_DynsetEncodeIR/Test_DynsetEncodeIR/update_set_with_counter (0.00s)
-            encdersDynset_test.go:90: 
-                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encdersDynset_test.go:90
-                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                        Error:          Not equal: 
-                                        expected: "update @updset { ip saddr counter packets 0 bytes 0 }"
-                                        actual  : "update @updset { ip saddr counter packets 0 bytes 0 counter packets 0 bytes 0 }"
-                                    
-                                        Diff:
-                                        --- Expected
-                                        +++ Actual
-                                        @@ -1 +1 @@
-                                        -update @updset { ip saddr counter packets 0 bytes 0 }
-                                        +update @updset { ip saddr counter packets 0 bytes 0 counter packets 0 bytes 0 }
-                        Test:           Test_DynsetEncodeIR/Test_DynsetEncodeIR/update_set_with_counter
-        --- FAIL: Test_DynsetEncodeIR/Test_DynsetEncodeIR/delete_from_map_with_data_and_counter (0.00s)
-            encdersDynset_test.go:90: 
-                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encdersDynset_test.go:90
-                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                        Error:          Not equal: 
-                                        expected: "delete @delset { ip saddr counter packets 0 bytes 0 : lo }"
-                                        actual  : "delete @delset { ip saddr counter packets 0 bytes 0 counter packets 0 bytes 0 : lo }"
-                                    
-                                        Diff:
-                                        --- Expected
-                                        +++ Actual
-                                        @@ -1 +1 @@
-                                        -delete @delset { ip saddr counter packets 0 bytes 0 : lo }
-                                        +delete @delset { ip saddr counter packets 0 bytes 0 counter packets 0 bytes 0 : lo }
-                        Test:           Test_DynsetEncodeIR/Test_DynsetEncodeIR/delete_from_map_with_data_and_counter
-FAIL
-exit status 1
-FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.008s
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+Открой файл dynset.go (или immediate_ir_limit_log_lookup.go, если EncodeIR там).
 
+Найди фрагмент:
+
+go
+Копировать
+Редактировать
+rule := *ctx.rule
+rule.Exprs = dyn.Exprs
+
+str, err := NewRuleExprEncoder(&rule).Format()
+❌ Это приводит к дублированию Exprs, потому что:
+ctx.rule уже содержит Exprs;
+
+ты копируешь их снова в rule.Exprs, и Format() добавляет их дважды.
+
+✅ Как правильно:
+Заменить вышеуказанное на:
+
+go
+Копировать
+Редактировать
+tmpRule := nftables.Rule{Exprs: dyn.Exprs}
+str, err := NewRuleExprEncoder(&tmpRule).Format()
+📌 Почему это работает:
+ты создаёшь новый временный Rule, в котором только dyn.Exprs;
+
+ctx.rule.Exprs не участвует, и counter не дублируется.
+
+🔁 После правки:
+bash
+Копировать
+Редактировать
+go test -run Test_DynsetEncodeIR
+Результат должен быть:
+
+swift
+Копировать
+Редактировать
+PASS
+ok  	github.com/Morwran/nft-go/internal/expr-encoders	0.00s
+Хочешь — покажу полный патч или применю diff вручную.
                             
 
 
