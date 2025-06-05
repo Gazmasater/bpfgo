@@ -291,7 +291,13 @@ ____________________________________________________________________
 }
 
 
-мsudo nft add rule ip test prerouting meta cpu 3
+sudo nft add rule ip test prerouting meta cpu 3
+
+
+@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting meta cpu 3
+Error: No such file or directory; did you mean table ‘test’ in family ip6?
+add rule ip test prerouting meta cpu 3
+            ^^^^
 
 
 
