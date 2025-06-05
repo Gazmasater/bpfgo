@@ -371,6 +371,19 @@ sudo nft add rule ip6 test prerouting exthdr load 1b @0,0 == 0x01
 sudo nft add rule ip6 test prerouting exthdr hdrlength 0 == 8
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip6 test prerouting exthdr load 1b @0,0 => reg 1
+Error: syntax error, unexpected string
+add rule ip6 test prerouting exthdr load 1b @0,0 = 1
+                                    ^^^^
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip6 test prerouting exthdr load 1b @0,0 == 0x01
+Error: syntax error, unexpected string
+add rule ip6 test prerouting exthdr load 1b @0,0 == 0x01
+                                    ^^^^
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip6 test prerouting exthdr hdrlength 0 == 8
+Error: syntax error, unexpected string
+add rule ip6 test prerouting exthdr hdrlength 0 == 8
+                                    ^^^^^^^^^
+
 
 
 
