@@ -382,6 +382,13 @@ sudo nft add rule ip6 test prerouting exthdr @4,8,1
 
 
 
+az358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip6 test prerouting tcp option 2 
+Error: syntax error, unexpected newline
+add rule ip6 test prerouting tcp option 2
+                                        
+
+
+
 
 
 
