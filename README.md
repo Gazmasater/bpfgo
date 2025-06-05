@@ -394,51 +394,57 @@ sudo nft list table ip test
 
 
 
-tmpRule := nftables.Rule{
-	Table: ctx.rule.Table, // сохраняем таблицу, если нужно
-	Exprs: dyn.Exprs,      // только exprs из dynset
+func (b *dynsetEncoder) EncodeIR(ctx *ctx) (irNode, error) {
+	dyn := b.dynset
+	if ctx.rule == nil {
+		return nil, errors.New("ctx has no rule")
+	}
+
+	srcRegKey, ok := ctx.reg.Get(regID(dyn.SrcRegKey))
+	if !ok {
+		return nil, errors.Errorf("%T statement has no key expression", dyn)
+	}
+	exp := srcRegKey.HumanExpr
+
+	// Формируем выражение из Exprs (например, counter/log)
+	tmpRule := nftables.Rule{
+		Table: ctx.rule.Table,
+		Exprs: dyn.Exprs,
+	}
+	exprsStr, err := NewRuleExprEncoder(&tmpRule).Format()
+	if err != nil {
+		return nil, err
+	}
+
+	// Добавляем timeout, если есть
+	if dyn.Timeout != 0 {
+		exp = fmt.Sprintf("%s timeout %s", exp, dyn.Timeout)
+	}
+
+	setName := fmt.Sprintf("@%s", dyn.SetName)
+	sb := strings.Builder{}
+
+	sb.WriteString(fmt.Sprintf("%s %s { %s", DynSetOP(dyn.Operation), setName, exp))
+
+	if exprsStr != "" {
+		sb.WriteString(" ")
+		sb.WriteString(exprsStr)
+	}
+
+	// Добавляем ": value", если есть data
+	if srcRegData, ok := ctx.reg.Get(regID(dyn.SrcRegData)); ok {
+		if exprData := srcRegData.HumanExpr; exprData != "" {
+			sb.WriteString(fmt.Sprintf(" : %s", exprData))
+		}
+	}
+
+	sb.WriteString(" }")
+
+	return simpleIR(sb.String()), nil
 }
 
-str, err := NewRuleExprEncoder(&tmpRule).Format()
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test -run Test_DynsetEncodeIR
---- FAIL: Test_DynsetEncodeIR (0.00s)
-    --- FAIL: Test_DynsetEncodeIR/Test_DynsetEncodeIR (0.00s)
-        --- FAIL: Test_DynsetEncodeIR/Test_DynsetEncodeIR/update_set_with_counter (0.00s)
-            encdersDynset_test.go:90: 
-                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encdersDynset_test.go:90
-                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                        Error:          Not equal: 
-                                        expected: "update @updset { ip saddr counter packets 0 bytes 0 }"
-                                        actual  : "update @updset { ip saddr counter packets 0 bytes 0 counter packets 0 bytes 0 }"
-                                    
-                                        Diff:
-                                        --- Expected
-                                        +++ Actual
-                                        @@ -1 +1 @@
-                                        -update @updset { ip saddr counter packets 0 bytes 0 }
-                                        +update @updset { ip saddr counter packets 0 bytes 0 counter packets 0 bytes 0 }
-                        Test:           Test_DynsetEncodeIR/Test_DynsetEncodeIR/update_set_with_counter
-        --- FAIL: Test_DynsetEncodeIR/Test_DynsetEncodeIR/delete_from_map_with_data_and_counter (0.00s)
-            encdersDynset_test.go:90: 
-                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encdersDynset_test.go:90
-                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                        Error:          Not equal: 
-                                        expected: "delete @delset { ip saddr counter packets 0 bytes 0 : lo }"
-                                        actual  : "delete @delset { ip saddr counter packets 0 bytes 0 counter packets 0 bytes 0 : lo }"
-                                    
-                                        Diff:
-                                        --- Expected
-                                        +++ Actual
-                                        @@ -1 +1 @@
-                                        -delete @delset { ip saddr counter packets 0 bytes 0 : lo }
-                                        +delete @delset { ip saddr counter packets 0 bytes 0 counter packets 0 bytes 0 : lo }
-                        Test:           Test_DynsetEncodeIR/Test_DynsetEncodeIR/delete_from_map_with_data_and_counter
-FAIL
-exit status 1
-FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.008s
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
 
 
 
