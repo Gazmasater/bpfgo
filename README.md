@@ -293,6 +293,29 @@ ____________________________________________________________________
 sudo nft add rule ip test prerouting meta tos 46
 
 
+[{
+	"resource": "/home/gaz358/myprog/nft-go/internal/expr-encoders/encodersCmp_test.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "UndeclaredImportedName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredImportedName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: expr.MetaKeyTOS",
+	"source": "compiler",
+	"startLineNumber": 60,
+	"startColumn": 34,
+	"endLineNumber": 60,
+	"endColumn": 44
+}]
+
+
 
 
 
