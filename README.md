@@ -238,4 +238,27 @@ case *expr.Bitwise:
 }
 
 
+func (b *cmpEncoder) formatCmpLR(ctx *ctx, srcReg regVal) (left, right string) {
+	cmp := b.cmp
+	switch t := srcReg.Expr.(type) {
+	case *expr.Meta:
+		metaBuilder := &metaEncoder{t}
+		right = metaBuilder.buildFromCmpData(ctx, cmp)
+	case *expr.Bitwise:
+		bitwiseBuilder := &bitwiseEncoder{t}
+		right = bitwiseBuilder.buildFromCmpData(ctx, cmp)
+
+	case *expr.Ct:
+		right = CtDesk[t.Key](cmp.Data)
+	case *expr.Payload:
+		payloadBuilder := &payloadEncoder{t}
+		left, right = payloadBuilder.buildLRFromCmpData(ctx, cmp)
+	default:
+		right = rb.RawBytes(cmp.Data).Text(rb.BaseDec)
+	}
+	return left, right
+}
+
+
+
 
