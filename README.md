@@ -289,6 +289,17 @@ func Test_RejectEncoderViaRule(t *testing.T) {
 
 
 
+sudo nft add table ip test
+sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0; }'
+sudo nft add rule ip test prerouting reject with tcp reset
+sudo nft add rule ip test prerouting reject with icmp type 2
+sudo nft add rule ip test prerouting reject with icmpv6 type 10
+sudo nft add rule ip test prerouting reject with icmpx type 5
+sudo nft add rule ip test prerouting reject
+
+
+
+
 
 
 
