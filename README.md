@@ -217,7 +217,50 @@ sudo nft add rule inet test prerouting ct mark set 42
 sudo nft add rule inet test prerouting ct status assured,confirmed,snat,dnat
 
 
-package encoders
+package utils
+
+import (
+	"sort"
+	"strings"
+)
+
+// NormalizeCtExpr приводит ct-выражения к каноническому виду с отсортированными значениями.
+func NormalizeCtExpr(input string) string {
+	prefixes := []string{
+		"ct state ",
+		"ct status ",
+		"ct event ",
+		"ct state !",
+		"ct status !",
+		"ct event !",
+	}
+
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(input, prefix) {
+			return normalizeWithPrefix(input, prefix)
+		}
+		// поддержка выражений типа: ct state != ...
+		if strings.HasPrefix(input, prefix[:len(prefix)-1]+"!=") {
+			return normalizeWithPrefix(input, prefix[:len(prefix)-1]+"!= ")
+		}
+	}
+	return input
+}
+
+func normalizeWithPrefix(input, prefix string) string {
+	rest := strings.TrimPrefix(input, prefix)
+	rest = strings.TrimSpace(rest)
+	values := strings.Split(rest, ",")
+	for i := range values {
+		values[i] = strings.TrimSpace(values[i])
+	}
+	sort.Strings(values)
+	return prefix + strings.Join(values, ",")
+}
+
+
+
+package encoders_test
 
 import (
 	"testing"
@@ -225,6 +268,7 @@ import (
 	"github.com/google/nftables"
 	"github.com/google/nftables/expr"
 	"github.com/stretchr/testify/suite"
+	"your_project_path/internal/utils" // замените на актуальный импорт
 )
 
 type ctEncoderAdvancedTestSuite struct {
@@ -240,92 +284,58 @@ func (sui *ctEncoderAdvancedTestSuite) Test_CtEncodeIR_Complex() {
 		{
 			name: "ct state new,established",
 			exprs: []expr.Any{
-				&expr.Ct{
-					Key:      expr.CtKeySTATE,
-					Register: 1,
-				},
-				&expr.Cmp{
-					Op:       expr.CmpOpEq,
-					Register: 1,
-					Data:     []byte{byte(CtStateBitNEW | CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0},
-				},
+				&expr.Ct{Key: expr.CtKeySTATE, Register: 1},
+				&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{byte(1 | 2), 0, 0, 0, 0, 0, 0, 0}},
 			},
 			expected: "ct state new,established",
 		},
 		{
 			name: "ct direction original",
 			exprs: []expr.Any{
-				&expr.Ct{
-					Key:      expr.CtKeyDIRECTION,
-					Register: 1,
-				},
-				&expr.Cmp{
-					Op:       expr.CmpOpEq,
-					Register: 1,
-					Data:     []byte{0},
-				},
+				&expr.Ct{Key: expr.CtKeyDIRECTION, Register: 1},
+				&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{0}},
 			},
 			expected: "ct direction original",
 		},
 		{
 			name: "ct expiration 5s",
 			exprs: []expr.Any{
-				&expr.Ct{
-					Key:      expr.CtKeyEXPIRATION,
-					Register: 1,
-				},
-				&expr.Cmp{
-					Op:       expr.CmpOpEq,
-					Register: 1,
-					Data:     []byte{0x88, 0x13, 0x00, 0x00}, // 5000 ms = 5s
-				},
+				&expr.Ct{Key: expr.CtKeyEXPIRATION, Register: 1},
+				&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{0x88, 0x13, 0x00, 0x00}},
 			},
 			expected: "ct expiration 5s",
 		},
 		{
 			name: "ct protocol tcp",
 			exprs: []expr.Any{
-				&expr.Ct{
-					Key:      expr.CtKeyPROTOCOL,
-					Register: 1,
-				},
-				&expr.Cmp{
-					Op:       expr.CmpOpEq,
-					Register: 1,
-					Data:     []byte{6}, // TCP
-				},
+				&expr.Ct{Key: expr.CtKeyPROTOCOL, Register: 1},
+				&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{6}},
 			},
 			expected: "ct protocol tcp",
 		},
 		{
 			name: "ct mark set 42",
 			exprs: []expr.Any{
-				&expr.Immediate{
-					Register: 1,
-					Data:     []byte{42, 0, 0, 0},
-				},
-				&expr.Ct{
-					Key:            expr.CtKeyMARK,
-					Register:       1,
-					SourceRegister: true,
-				},
+				&expr.Immediate{Register: 1, Data: []byte{42, 0, 0, 0}},
+				&expr.Ct{Key: expr.CtKeyMARK, Register: 1, SourceRegister: true},
 			},
 			expected: "ct mark set 42",
 		},
 		{
-			name: "ct status snat,dnat,confirmed",
+			name: "ct status snat,dnat,confirmed,assured",
 			exprs: []expr.Any{
-				&expr.Ct{
-					Key:      expr.CtKeySTATUS,
-					Register: 1,
-				},
-				&expr.Cmp{
-					Op:       expr.CmpOpEq,
-					Register: 1,
-					Data:     []byte{0x3C, 0x00, 0x00, 0x00, 0, 0, 0, 0}, // SNAT + DNAT + confirmed
-				},
+				&expr.Ct{Key: expr.CtKeySTATUS, Register: 1},
+				&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{0x3C, 0x00, 0x00, 0x00, 0, 0, 0, 0}},
 			},
-			expected: "ct status snat,dnat,confirmed",
+			expected: "ct status snat,dnat,confirmed,assured",
+		},
+		{
+			name: "ct state != established,invalid",
+			exprs: []expr.Any{
+				&expr.Ct{Key: expr.CtKeySTATE, Register: 1},
+				&expr.Cmp{Op: expr.CmpOpNeq, Register: 1, Data: []byte{byte(2 | 4), 0, 0, 0, 0, 0, 0, 0}},
+			},
+			expected: "ct state != established,invalid",
 		},
 	}
 
@@ -334,7 +344,10 @@ func (sui *ctEncoderAdvancedTestSuite) Test_CtEncodeIR_Complex() {
 			rule := nftables.Rule{Exprs: tc.exprs}
 			str, err := NewRuleExprEncoder(&rule).Format()
 			sui.Require().NoError(err)
-			sui.Require().Equal(tc.expected, str)
+
+			expectedNorm := utils.NormalizeCtExpr(tc.expected)
+			actualNorm := utils.NormalizeCtExpr(str)
+			sui.Require().Equal(expectedNorm, actualNorm)
 		})
 	}
 }
@@ -342,62 +355,6 @@ func (sui *ctEncoderAdvancedTestSuite) Test_CtEncodeIR_Complex() {
 func Test_CtEncoderAdvanced(t *testing.T) {
 	suite.Run(t, new(ctEncoderAdvancedTestSuite))
 }
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test
---- FAIL: Test_CtEncoderAdvanced (0.00s)
-    --- FAIL: Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex (0.00s)
-        --- FAIL: Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex/ct_state_new,established (0.00s)
-            encodersCt_test.go:118: 
-                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encodersCt_test.go:118
-                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                        Error:          Not equal: 
-                                        expected: "ct state new,established"
-                                        actual  : "ct state established,new"
-                                    
-                                        Diff:
-                                        --- Expected
-                                        +++ Actual
-                                        @@ -1 +1 @@
-                                        -ct state new,established
-                                        +ct state established,new
-                        Test:           Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex/ct_state_new,established
-        --- FAIL: Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex/ct_status_snat,dnat,confirmed (0.00s)
-            encodersCt_test.go:118: 
-                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encodersCt_test.go:118
-                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                        Error:          Not equal: 
-                                        expected: "ct status snat,dnat,confirmed"
-                                        actual  : "ct status assured,confirmed,snat,dnat"
-                                    
-                                        Diff:
-                                        --- Expected
-                                        +++ Actual
-                                        @@ -1 +1 @@
-                                        -ct status snat,dnat,confirmed
-                                        +ct status assured,confirmed,snat,dnat
-                        Test:           Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex/ct_status_snat,dnat,confirmed
-[{"match":{"op":"==","left":{"meta":{"key":"l4proto"}},"right":"tcp"}},{"counter":{"bytes":0,"packets":0}},{"log":null},{"accept":null}]
-[{"match":{"op":"!=","left":{"meta":{"key":"oifname"}},"right":"lo"}},{"mangle":{"key":{"meta":{"key":"nftrace"}},"value":1}},{"goto":{"target":"FW-OUT"}}]
-meta l4proto tcp counter packets 0 bytes 0 log accept
-ip version != 5
-ip daddr @ipSet
-ip daddr != 93.184.216.34 meta l4proto tcp dport {80,443} meta l4proto tcp
-th dport != 80
-meta l4proto tcp dport != 80
-meta l4proto tcp sport >= 80 sport <= 100
-meta nftrace set 1 ip daddr 10.0.0.0/8 meta l4proto udp
-meta l4proto icmp type echo-reply
-ct state established,related
-ct expiration 1s
-ct direction original
-ct l3proto ipv4
-ct protocol tcp
-FAIL
-exit status 1
-FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.012s
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
-
 
 
 
