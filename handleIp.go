@@ -59,10 +59,12 @@ func HandleIPEvent(
 			}
 			mu.Unlock()
 
+			name := cachedComm(event.Comm)
+
 			fmt.Println("")
 			fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s \n",
 				event.Pid,
-				pkg.Int8ToString(event.Comm),
+				name,
 				proto,
 				srcAddr,
 				proto,
@@ -89,9 +91,11 @@ func HandleIPEvent(
 				srcAddr = fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), sport)
 				dstAddr = fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
 
+				name := cachedComm(event.Comm)
+
 				fmt.Printf("PID=%d NAME=%s %s:%s -> %s:%s \n",
 					pid,
-					pkg.Int8ToString(event.Comm),
+					name,
 					proto,
 					srcAddr,
 					proto,

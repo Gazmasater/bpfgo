@@ -243,7 +243,7 @@ func main() {
 			executableName = executableName[2:]
 		}
 
-		const batchSize = 8
+		const batchSize = 2
 		batch := make([]perf.Record, 0, batchSize)
 
 		for {
