@@ -199,32 +199,42 @@ Response → тело ответа
 ________________________________________________________________________________
 
 # 1. ct state new,established
-sudo nft add rule ip test prerouting ct state new,established
+sudo nft add rule inet test prerouting ct state new,established
 
 # 2. ct direction original
-sudo nft add rule ip test prerouting ct direction original
+sudo nft add rule inet test prerouting ct direction original
 
 # 3. ct expiration 5s
-sudo nft add rule ip test prerouting ct expiration 5s
+sudo nft add rule inet test prerouting ct expiration 5s
 
 # 4. ct protocol tcp
-sudo nft add rule ip test prerouting ct protocol tcp
+sudo nft add rule inet test prerouting ct protocol tcp
 
 # 5. ct mark set 42
-sudo nft add rule ip test prerouting ct mark set 42
+sudo nft add rule inet test prerouting ct mark set 42
 
 # 6. ct status assured,confirmed,snat,dnat
-sudo nft add rule ip test prerouting ct status assured,confirmed,snat,dnat
+sudo nft add rule inet test prerouting ct status assured,confirmed,snat,dnat
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add table inet test
-sudo nft add chain inet test prerouting '{ type filter hook prerouting priority 0; }'
-[sudo] password for gaz358: 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting ct state new,established
-Error: No such file or directory; did you mean table ‘test’ in family inet?
-add rule ip test prerouting ct state new,established
-            ^^^^
-gaz358@gaz358-BOD-W
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule inet test prerouting ct state new,established
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule inet test prerouting ct direction original
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule inet test prerouting ct expiration 5s
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule inet test prerouting ct protocol tcp
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule inet test prerouting ct mark set 42
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule inet test prerouting ct status assured,confirmed,snat,dnat
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft list ruleset
+table inet test {
+        chain prerouting {
+                type filter hook prerouting priority filter; policy accept;
+                ct state established,new
+                ct direction original
+                ct expiration 5s
+                ct protocol tcp
+                ct mark set 0x0000002a
+                ct status assured,confirmed,snat,dnat
+        }
+}
 
 
 
