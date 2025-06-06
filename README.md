@@ -316,16 +316,15 @@ func main() {
 		return
 	}
 
-	// Пример: k можно задать через логарифм
-	k := int(math.Log(float64(b)) / math.Log(float64(a)))
+	k := int(math.Log(float64(b/a)) / math.Log(float64(2)))
 
-	// Вычисляем N = b - 2^k * a
-	power := 1 << k // 2^k сдвигом
-	N := b - power*a
+	power := 1 << k
+	N := b - power*a + k
 
 	fmt.Printf("k = %d\n", k)
 	fmt.Printf("N = %d\n", N)
 }
+
 
 
 
