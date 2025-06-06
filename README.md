@@ -198,44 +198,8 @@ Response → тело ответа
 Можно сохранить User-Agent, Cookie и использовать их в автоматических скриптах позже
 ________________________________________________________________________________
 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test
---- FAIL: Test_ExthdrEncoder (0.00s)
-    --- FAIL: Test_ExthdrEncoder/Test_ExthdrEncodeIR_ValidOnly (0.00s)
-        --- FAIL: Test_ExthdrEncoder/Test_ExthdrEncodeIR_ValidOnly/exthdr_read_and_compare_(source_+_rhs) (0.00s)
-            encodersExthdr_test.go:71: 
-                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encodersExthdr_test.go:71
-                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                        Error:          Not equal: 
-                                        expected: "exthdr @4,8,2 set 0x1234"
-                                        actual  : "ip option @4,8,2 set 0x1234"
-                                    
-                                        Diff:
-                                        --- Expected
-                                        +++ Actual
-                                        @@ -1 +1 @@
-                                        -exthdr @4,8,2 set 0x1234
-                                        +ip option @4,8,2 set 0x1234
-                        Test:           Test_ExthdrEncoder/Test_ExthdrEncodeIR_ValidOnly/exthdr_read_and_compare_(source_+_rhs)
-[{"match":{"op":"==","left":{"meta":{"key":"l4proto"}},"right":"tcp"}},{"counter":{"bytes":0,"packets":0}},{"log":null},{"accept":null}]
-[{"match":{"op":"!=","left":{"meta":{"key":"oifname"}},"right":"lo"}},{"mangle":{"key":{"meta":{"key":"nftrace"}},"value":1}},{"goto":{"target":"FW-OUT"}}]
-meta l4proto tcp counter packets 0 bytes 0 log accept
-ip version != 5
-ip daddr @ipSet
-ip daddr != 93.184.216.34 meta l4proto tcp dport {80,443} meta l4proto tcp
-th dport != 80
-meta l4proto tcp dport != 80
-meta l4proto tcp sport >= 80 sport <= 100
-meta nftrace set 1 ip daddr 10.0.0.0/8 meta l4proto udp
-meta l4proto icmp type echo-reply
-ct state established,related
-ct expiration 1s
-ct direction original
-ct l3proto ipv4
-ct protocol tcp
-FAIL
-exit status 1
-FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.017s
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+expected: "ip option @4,8,2 set 0x1234"
+
 
 
 
