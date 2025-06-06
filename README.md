@@ -198,42 +198,135 @@ Response → тело ответа
 Можно сохранить User-Agent, Cookie и использовать их в автоматических скриптах позже
 ________________________________________________________________________________
 
-sudo nft add table ip test
-sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0; }'
-sudo nft add set ip test myset { type ipv4_addr; flags dynamic; }
+package main
 
-sudo nft add rule ip test prerouting ip saddr 8.8.8.8 add @myset { 8.8.8.8 log counter }
+// [весь твой код, как был выше, с полной заменой блоков Sysexit==11 и Sysexit==12]
 
+// Оптимизированные блоки ниже (вставлены вместо старых):
 
-{
-	name: "add with log and counter",
-	dynset: &expr.Dynset{
-		Operation: uint32(DynSetOPAdd),
-		SetName:   "myset",
-		SrcRegKey: 4,
-		Exprs: []expr.Any{
-			&expr.Log{},
-			&expr.Counter{},
-		},
-	},
-	srcKey:   "8.8.8.8",
-	expected: "add @myset { 8.8.8.8 log counter packets 0 bytes 0 }",
+if event.Sysexit == 11 {
+	if event.Family == 2 {
+		port := int(event.Dport)
+		data, exists := eventMap[port]
+		if !exists {
+			data = getEventData()
+			eventMap[port] = data
+		}
+		data.Sendmsg = Sendmsg{
+			DstIP:   dstIP_r,
+			DstPort: port,
+			Pid:     event.Pid,
+			Comm:    cachedComm(event.Comm),
+		}
+		data.HasSendmsg = true
+
+		if data.HasLookup && data.HasRecvmsg {
+			if data.Lookup.Proto == 17 {
+				proto = "UDP"
+			}
+			fmt.Print("\n")
+
+			dstHost := resolveHost(dstIP_r)
+			srcHost := resolveHost(data.Lookup.SrcIP)
+
+			dstIPStr := data.Sendmsg.DstIP.String()
+			srcIPStr := data.Lookup.SrcIP.String()
+			dstPort := data.Sendmsg.DstPort
+			srcPort := data.Lookup.SrcPort
+
+			fmt.Printf("SENDMSG PID=%d NAME=%s   %s://%s[%s:%d]->%s[%s:%d]\n",
+				data.Sendmsg.Pid,
+				data.Sendmsg.Comm,
+				proto,
+				dstHost,
+				dstIPStr,
+				dstPort,
+				srcHost,
+				srcIPStr,
+				srcPort,
+			)
+
+			fmt.Printf("SENDMSG\tPID=%d  NAME=%s   %s://%s[%s:%d]<-%s[%s:%d]\n",
+				data.Recvmsg.Pid,
+				data.Sendmsg.Comm,
+				proto,
+				dstHost,
+				dstIPStr,
+				dstPort,
+				srcHost,
+				srcIPStr,
+				srcPort,
+			)
+
+			fmt.Print("\n")
+			delete(eventMap, port)
+			putEventData(data)
+		}
+	}
 }
 
+if event.Sysexit == 12 {
+	if event.Family == 2 {
+		port := int(event.Sport)
+		data, exists := eventMap[port]
+		if !exists {
+			data = getEventData()
+			eventMap[port] = data
+		}
+		data.Recvmsg = Recvmsg{
+			SrcIP:   srcIP_r,
+			SrcPort: port,
+			Pid:     event.Pid,
+			Comm:    cachedComm(event.Comm),
+		}
+		data.HasRecvmsg = true
 
-sudo nft add table ip test
-sudo nft add chain ip test prerouting "{ type filter hook prerouting priority 0; }"
-sudo nft add set ip test myset '{ type ipv4_addr; flags dynamic; }'
-sudo nft add rule ip test prerouting ip saddr 8.8.8.8 add @myset { 8.8.8.8 log counter }
+		if data.HasLookup && data.HasSendmsg {
+			if data.Lookup.Proto == 17 {
+				proto = "UDP"
+			}
+			fmt.Print("\n")
 
+			srcHost := resolveHost(srcIP_r)
+			lookupHost := resolveHost(data.Lookup.SrcIP)
 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add table ip test
-sudo nft add chain ip test prerouting "{ type filter hook prerouting priority 0; }"
-[sudo] password for gaz358: 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add set ip test myset '{ type ipv4_addr; flags dynamic; }'
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting ip saddr 8.8.8.8 add @myset { 8.8.8.8 log counter }
-Error: syntax error, unexpected log
-add rule ip test prerouting ip saddr 8.8.8.8 add @myset { 8.8.8.8 log counter }
-                                                                  ^^^
+			srcIPStr := data.Recvmsg.SrcIP.String()
+			lookupIPStr := data.Lookup.SrcIP.String()
+			srcPort := data.Recvmsg.SrcPort
+			lookupPort := data.Lookup.SrcPort
+
+			fmt.Printf("RECVMSG PID=%d NAME=%s   %s://%s[%s:%d]->%s[%s:%d]\n",
+				data.Recvmsg.Pid,
+				data.Recvmsg.Comm,
+				proto,
+				srcHost,
+				srcIPStr,
+				srcPort,
+				lookupHost,
+				lookupIPStr,
+				lookupPort,
+			)
+
+			fmt.Printf("RECVMSG\tPID=%d  NAME=%s   %s://%s[%s:%d]<-%s[%s:%d]\n",
+				data.Sendmsg.Pid,
+				data.Recvmsg.Comm,
+				proto,
+				srcHost,
+				srcIPStr,
+				srcPort,
+				lookupHost,
+				lookupIPStr,
+				lookupPort,
+			)
+
+			fmt.Print("\n")
+			delete(eventMap, port)
+			putEventData(data)
+		}
+	}
+}
+
+// остальной код без изменений
+
 
 
