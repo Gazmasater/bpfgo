@@ -15,7 +15,6 @@ var (
 func HandleIPEvent(
 	event bpfTraceInfo,
 	srcIP, dstIP net.IP,
-	mu *sync.Mutex,
 	eventChan_sport chan int,
 	eventChan_pid chan int,
 ) {
@@ -37,31 +36,30 @@ func HandleIPEvent(
 			dsthost = "unknown"
 		}
 	}
-	srchost := pkg.ResolveIP(srcIP)
+	srchost := resolveHost(srcIP)
 
 	srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
 	dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
 
 	key := makeConnectionKey(srcIP, uint16(event.Sport), dstIP, event.Dport)
 
-	if event.State == 1 {
+	switch event.State {
+	case 1:
 		muConn.Lock()
-		if _, exists := connections[key]; !exists {
+		_, exists := connections[key]
+		if !exists {
 			connections[key] = true
-			muConn.Unlock()
+		}
+		muConn.Unlock()
 
-			mu.Lock()
+		if !exists {
 			select {
 			case eventChan_sport <- int(event.Sport):
-			default:
-				eventChan_sport <- int(event.Sport)
 				fmt.Printf("State 1: заменен порт %d\n", event.Sport)
+			default:
 			}
-			mu.Unlock()
 
 			name := cachedComm(event.Comm)
-
-			fmt.Println("")
 			fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s \n",
 				event.Pid,
 				name,
@@ -69,18 +67,13 @@ func HandleIPEvent(
 				srcAddr,
 				proto,
 				dstAddr)
-		} else {
-			muConn.Unlock()
 		}
-	}
 
-	if event.State == 2 || event.State == 10 {
-		mu.Lock()
+	case 2, 10:
 		select {
 		case eventChan_pid <- int(event.Pid):
 		default:
 		}
-		mu.Unlock()
 	}
 
 	select {
@@ -100,10 +93,8 @@ func HandleIPEvent(
 					srcAddr,
 					proto,
 					dstAddr)
-				fmt.Println("")
 			}
 		default:
-			return
 		}
 	default:
 	}
