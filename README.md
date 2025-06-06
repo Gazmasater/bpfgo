@@ -202,132 +202,397 @@ package encoders
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/nftables"
+	"github.com/google/nftables/expr"
+	"github.com/stretchr/testify/suite"
+)
+
+type dynsetIRTestSuite struct {
+	suite.Suite
+}
+
+func (sui *dynsetIRTestSuite) Test_DynsetEncodeIR() {
+	testData := []struct {
+		name     string
+		dynset   *expr.Dynset
+		expected string
+	}{
+		{
+			name: "add to IPv4 set",
+			dynset: &expr.Dynset{
+				Operation: uint32(DynSetOPAdd),
+				SetName:   "testset",
+				SrcKeyExpr: &expr.Payload{
+					Base:         expr.PayloadBaseNetworkHeader,
+					Offset:       12,
+					Len:          4,
+					DestRegister: 1,
+				},
+			},
+			expected: "add @testset { ip saddr }",
+		},
+		{
+			name: "add to set with timeout",
+			dynset: &expr.Dynset{
+				Operation: uint32(DynSetOPAdd),
+				SetName:   "timeoutset",
+				Timeout:   10 * time.Second,
+				SrcKeyExpr: &expr.Payload{
+					Base:         expr.PayloadBaseNetworkHeader,
+					Offset:       12,
+					Len:          4,
+					DestRegister: 2,
+				},
+			},
+			expected: "add @timeoutset { ip saddr timeout 10s }",
+		},
+		{
+			name: "update set with counter",
+			dynset: &expr.Dynset{
+				Operation: uint32(DynSetOPUpdate),
+				SetName:   "updset",
+				Exprs: []expr.Any{
+					&expr.Counter{},
+				},
+				SrcKeyExpr: &expr.Payload{
+					Base:         expr.PayloadBaseNetworkHeader,
+					Offset:       12,
+					Len:          4,
+					DestRegister: 3,
+				},
+			},
+			expected: "update @updset { ip saddr counter packets 0 bytes 0 }",
+		},
+	}
+
+	for _, tc := range testData {
+		sui.Run(tc.name, func() {
+			ctx := &ctx{
+				rule: &nftables.Rule{},
+			}
+			enc := &dynsetEncoder{dynset: tc.dynset}
+			ir, err := enc.EncodeIR(ctx)
+			sui.Require().NoError(err)
+			sui.Require().Equal(tc.expected, ir.Format())
+		})
+	}
+}
+
+func Test_DynsetEncodeIR(t *testing.T) {
+	suite.Run(t, new(dynsetIRTestSuite))
+}
+
+
+
+package encoders
+
+import (
+	"testing"
+
 	"github.com/google/nftables/expr"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/sys/unix"
 )
 
-type rejectEncoderViaRuleTestSuite struct {
+type natCmpRulesetStyleTestSuite struct {
 	suite.Suite
 }
 
-func (s *rejectEncoderViaRuleTestSuite) Test_RejectEncodeViaRuleEncoder() {
+func (sui *natCmpRulesetStyleTestSuite) Test_TCPNATRules() {
 	testCases := []struct {
 		name     string
-		reject   *expr.Reject
+		exprs    []expr.Any
 		expected string
 	}{
 		{
-			name: "tcp reset",
-			reject: &expr.Reject{
-				Type: unix.NFT_REJECT_TCP_RST,
-				Code: 0,
+			name: "tcp dport 8080 dnat to 192.168.0.1:8080",
+			exprs: []expr.Any{
+				&expr.Cmp{Register: 1, Op: expr.CmpOpEq, Data: []byte{unix.IPPROTO_TCP}},
+				&expr.Cmp{Register: 2, Op: expr.CmpOpEq, Data: []byte{0x1f, 0x90}},
+				&expr.NAT{
+					Type:        expr.NATTypeDestNAT,
+					Family:      unix.NFPROTO_IPV4,
+					RegAddrMin:  3,
+					RegProtoMin: 4,
+				},
 			},
-			expected: "reject with tcp reset 0",
+			expected: "tcp dport 8080 dnat ip to 192.168.0.1:8080",
 		},
 		{
-			name: "icmpv4 (NFPROTO_IPV4)",
-			reject: &expr.Reject{
-				Type: unix.NFT_REJECT_ICMP_UNREACH,
-				Code: unix.NFPROTO_IPV4,
+			name: "tcp dport 443 redirect to :443",
+			exprs: []expr.Any{
+				&expr.Cmp{Register: 1, Op: expr.CmpOpEq, Data: []byte{unix.IPPROTO_TCP}},
+				&expr.Cmp{Register: 2, Op: expr.CmpOpEq, Data: []byte{0x01, 0xbb}},
+				&expr.NAT{
+					Type:        NATTypeRedir,
+					Family:      unix.NFPROTO_IPV4,
+					RegProtoMin: 3,
+				},
 			},
-			expected: "reject with icmp 2",
+			expected: "tcp dport 443 redirect ip to :443",
 		},
 		{
-			name: "icmpv6 (NFPROTO_IPV6)",
-			reject: &expr.Reject{
-				Type: unix.NFT_REJECT_ICMP_UNREACH,
-				Code: unix.NFPROTO_IPV6,
+			name: "ip protocol tcp masquerade to :1000 random",
+			exprs: []expr.Any{
+				&expr.Cmp{Register: 1, Op: expr.CmpOpEq, Data: []byte{unix.IPPROTO_TCP}},
+				&expr.NAT{
+					Type:        NATTypeMASQ,
+					Family:      unix.NFPROTO_IPV4,
+					RegProtoMin: 2,
+					Random:      true,
+				},
 			},
-			expected: "reject with icmpv6 10",
+			expected: "ip protocol tcp masquerade to :1000 random",
 		},
 		{
-			name: "icmpx non-port-unreach",
-			reject: &expr.Reject{
-				Type: unix.NFT_REJECT_ICMPX_UNREACH,
-				Code: 5,
+			name: "tcp dport 5000 snat to 10.0.0.1-10.0.0.10:1000-2000",
+			exprs: []expr.Any{
+				&expr.Cmp{Register: 1, Op: expr.CmpOpEq, Data: []byte{unix.IPPROTO_TCP}},
+				&expr.Cmp{Register: 2, Op: expr.CmpOpEq, Data: []byte{0x13, 0x88}},
+				&expr.NAT{
+					Type:        expr.NATTypeSourceNAT,
+					Family:      unix.NFPROTO_IPV4,
+					RegAddrMin:  3,
+					RegAddrMax:  4,
+					RegProtoMin: 5,
+					RegProtoMax: 6,
+				},
 			},
-			expected: "reject with icmpx 5",
-		},
-		{
-			name: "icmpx with port unreachable — silent",
-			reject: &expr.Reject{
-				Type: unix.NFT_REJECT_ICMPX_UNREACH,
-				Code: unix.NFT_REJECT_ICMPX_PORT_UNREACH,
-			},
-			expected: "reject",
-		},
-		{
-			name: "empty reject",
-			reject: &expr.Reject{
-				Type: 0,
-				Code: 0,
-			},
-			expected: "reject",
+			expected: "tcp dport 5000 snat ip to 10.0.0.1-10.0.0.10:1000-2000",
 		},
 	}
 
 	for _, tc := range testCases {
-		s.Run(tc.name, func() {
-			rule := &nftables.Rule{
-				Exprs: []expr.Any{
-					tc.reject,
-				},
+		sui.Run(tc.name, func() {
+			ctx := &ctx{}
+			result := ""
+			for i, ex := range tc.exprs {
+				var ir irNode
+				var err error
+				switch e := ex.(type) {
+				case *expr.Cmp:
+					ir, err = (&cmpEncoder{cmp: e}).EncodeIR(ctx)
+				case *expr.NAT:
+					ir, err = (&natEncoder{nat: e}).EncodeIR(ctx)
+				}
+				sui.Require().NoError(err)
+				if i > 0 {
+					result += " "
+				}
+				result += ir.Format()
 			}
-			str, err := NewRuleExprEncoder(rule).Format()
-			s.Require().NoError(err)
-			s.Equal(tc.expected, str)
+			sui.Require().Equal(tc.expected, result)
 		})
 	}
 }
 
-func Test_RejectEncoderViaRule(t *testing.T) {
-	suite.Run(t, new(rejectEncoderViaRuleTestSuite))
+func Test_NatCmpRulesetStyle(t *testing.T) {
+	suite.Run(t, new(natCmpRulesetStyleTestSuite))
 }
 
 
 
-sudo nft add table ip test
-sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0; }'
-sudo nft add rule ip test prerouting reject with tcp reset
-sudo nft add rule ip test prerouting reject with icmp type 2
-sudo nft add rule ip test prerouting reject with icmpv6 type 10
-sudo nft add rule ip test prerouting reject with icmpx type 5
-sudo nft add rule ip test prerouting reject
+package encoders
 
-________________________________________________________________________________________
+import (
+	"testing"
 
-sudo nft add rule inet test prerouting ct state established,new accept
-sudo nft add rule inet test prerouting ct direction original accept
-sudo nft add rule inet test prerouting ct expiration 5s drop
-sudo nft add rule inet test prerouting ct protocol tcp accept
-sudo nft add rule inet test prerouting ct mark set 42
-sudo nft add rule inet test prerouting ct status assured,confirmed,dnat,snat accept
-sudo nft add rule inet test prerouting ct state != established,invalid drop
+	"github.com/Morwran/nft-go/pkg/protocols"
+	"github.com/google/nftables/expr"
+	"github.com/stretchr/testify/suite"
+)
 
-
-sudo nft list ruleset
-sudo nft -a list chain inet test prerouting
-sudo nft delete rule inet test prerouting handle 7
-
-
-nft delete rule inet test prerouting position 0
-
-
-table inet test {
-        chain prerouting {
-                type filter hook prerouting priority filter; policy accept;
-                ct status assured,confirmed,snat,dnat accept
-        }
+type cmpEncoderAdvancedTestSuite struct {
+	suite.Suite
 }
 
-gaz358@gaz358-BOD-WXX9:~/myprog/olimp$ sudo  nft delete rule inet test prerouting position 0
-Error: syntax error, unexpected position, expecting handle
-delete rule inet test prerouting position 0
-                                 ^^
+func (sui *cmpEncoderAdvancedTestSuite) Test_CmpEncodeIR() {
+	testCases := []struct {
+		name     string
+		cmp      *expr.Cmp
+		expected string
+	}{
+		{
+			name: "ct state != established",
+			cmp: &expr.Cmp{
+				Op:       expr.CmpOpNeq,
+				Register: 1,
+				Data:     []byte{byte(CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0},
+			},
+			expected: "ct state != established",
+		},
+		{
+			name: "payload ip version != 5",
+			cmp: &expr.Cmp{
+				Op:       expr.CmpOpNeq,
+				Register: 2,
+				Data:     []byte{0x50},
+			},
+			expected: "ip version != 5",
+		},
+		{
+			name: "ip version == 4",
+			cmp: &expr.Cmp{
+				Op:       expr.CmpOpEq,
+				Register: 2,
+				Data:     []byte{0x40},
+			},
+			expected: "ip version 4",
+		},
+		{
+			name: "ip version == 6",
+			cmp: &expr.Cmp{
+				Op:       expr.CmpOpEq,
+				Register: 2,
+				Data:     []byte{0x60},
+			},
+			expected: "ip version 6",
+		},
+		{
+			name: "meta cpu == 3",
+			cmp: &expr.Cmp{
+				Op:       expr.CmpOpEq,
+				Register: 1,
+				Data:     []byte{3},
+			},
+			expected: "meta cpu 3",
+		},
+	}
 
+	for _, tc := range testCases {
+		sui.Run(tc.name, func() {
+			ctx := &ctx{
+				hdr: new(protocols.ProtoDescPtr),
+			}
+			enc := &cmpEncoder{cmp: tc.cmp}
+			ir, err := enc.EncodeIR(ctx)
+			sui.Require().NoError(err)
+			sui.Require().Equal(tc.expected, ir.Format())
+		})
+	}
+}
+
+func Test_CmpEncoderAdvanced(t *testing.T) {
+	suite.Run(t, new(cmpEncoderAdvancedTestSuite))
+}
+
+
+package encoders
+
+import (
+	"testing"
+
+	"github.com/Morwran/nft-go/pkg/protocols"
+	"github.com/google/nftables/expr"
+	"github.com/stretchr/testify/suite"
+	"golang.org/x/sys/unix"
+)
+
+type cmpEncoderAdvancedTestSuite struct {
+	suite.Suite
+}
+
+func (sui *cmpEncoderAdvancedTestSuite) Test_CmpEncodeIR() {
+	testCases := []struct {
+		name     string
+		exprs    []expr.Any
+		expected string
+	}{
+		{
+			name: "ct state != established",
+			exprs: []expr.Any{
+				&expr.Ct{Key: expr.CtKeySTATE, Register: 1},
+				&expr.Cmp{
+					Op:       expr.CmpOpNeq,
+					Register: 1,
+					Data:     []byte{byte(CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0},
+				},
+			},
+			expected: "ct state != established",
+		},
+		{
+			name: "ip version == 4",
+			exprs: []expr.Any{
+				&expr.Payload{
+					Base:         expr.PayloadBaseNetworkHeader,
+					Offset:       0,
+					Len:          1,
+					DestRegister: 1,
+				},
+				&expr.Bitwise{
+					SourceRegister: 1,
+					DestRegister:   2,
+					Len:            1,
+					Mask:           []byte{0xF0},
+					Xor:            []byte{0x00},
+				},
+				&expr.Cmp{
+					Op:       expr.CmpOpEq,
+					Register: 2,
+					Data:     []byte{0x40},
+				},
+			},
+			expected: "ip version 4",
+		},
+		{
+			name: "ip version == 6",
+			exprs: []expr.Any{
+				&expr.Payload{
+					Base:         expr.PayloadBaseNetworkHeader,
+					Offset:       0,
+					Len:          1,
+					DestRegister: 1,
+				},
+				&expr.Bitwise{
+					SourceRegister: 1,
+					DestRegister:   2,
+					Len:            1,
+					Mask:           []byte{0xF0},
+					Xor:            []byte{0x00},
+				},
+				&expr.Cmp{
+					Op:       expr.CmpOpEq,
+					Register: 2,
+					Data:     []byte{0x60},
+				},
+			},
+			expected: "ip version 6",
+		},
+		{
+			name: "meta cpu == 3",
+			exprs: []expr.Any{
+				&expr.Meta{Key: expr.MetaKeyCPU, Register: 1},
+				&expr.Cmp{
+					Op:       expr.CmpOpEq,
+					Register: 1,
+					Data:     []byte{3},
+				},
+			},
+			expected: "meta cpu 3",
+		},
+	}
+
+	for _, tc := range testCases {
+		sui.Run(tc.name, func() {
+			rule := &exprListToRule(tc.exprs)
+			str, err := NewRuleExprEncoder(rule).Format()
+			sui.Require().NoError(err)
+			sui.Require().Equal(tc.expected, str)
+		})
+	}
+}
+
+func exprListToRule(exprs []expr.Any) *Rule {
+	return &Rule{
+		Exprs: exprs,
+	}
+}
+
+func Test_CmpEncoderAdvanced(t *testing.T) {
+	suite.Run(t, new(cmpEncoderAdvancedTestSuite))
+}
 
 
 
