@@ -217,6 +217,16 @@ sudo nft add rule ip test prerouting ct mark set 42
 sudo nft add rule ip test prerouting ct status assured,confirmed,snat,dnat
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add table inet test
+sudo nft add chain inet test prerouting '{ type filter hook prerouting priority 0; }'
+[sudo] password for gaz358: 
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting ct state new,established
+Error: No such file or directory; did you mean table ‘test’ in family inet?
+add rule ip test prerouting ct state new,established
+            ^^^^
+gaz358@gaz358-BOD-W
+
+
 
 
 
