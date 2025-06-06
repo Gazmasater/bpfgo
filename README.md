@@ -302,30 +302,45 @@ ________________________________________________________________________________
 package main
 
 import (
-	"fmt"
 	"math"
+	"testing"
 )
 
-func main() {
-	var a, b int
-	fmt.Print("Введите a и b: ")
-	fmt.Scan(&a, &b)
+var result int
 
-	if a <= 0 || b <= 0 {
-		fmt.Println("Ошибка: a и b должны быть положительными")
-		return
+// ✅ Вариант до (с math.Log)
+func BenchmarkWithLog(b *testing.B) {
+	var r int
+	for i := 0; i < b.N; i++ {
+		a := 3
+		x := 100000000
+		k := int(math.Log(float64(x/a)) / math.Log(2))
+		power := 1 << k
+		N := x - power*a + k
+		r = N
 	}
+	result = r
+}
 
-	k := int(math.Log(float64(b/a)) / math.Log(float64(2)))
-
-	power := 1 << k
-	N := b - power*a + k
-
-	fmt.Printf("k = %d\n", k)
-	fmt.Printf("N = %d\n", N)
+// ✅ Вариант после (с битовым сдвигом)
+func BenchmarkWithShift(b *testing.B) {
+	var r int
+	for i := 0; i < b.N; i++ {
+		a := 3
+		x := 100000000
+		k := 0
+		for (1 << (k + 1)) * a <= x {
+			k++
+		}
+		power := 1 << k
+		N := x - power*a + k
+		r = N
+	}
+	result = r
 }
 
 
+go test -bench=. -benchmem
 
 
 
