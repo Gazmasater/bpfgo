@@ -245,12 +245,29 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrEncodeIR_ValidOnly() {
 # IPv4 (tcp option)
 sudo nft add table ip test
 sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0; }'
-sudo nft add rule ip test prerouting tcp option sack-permitted
+
 
 # IPv6 (ipv6 option)
 sudo nft add table ip6 test
 sudo nft add chain ip6 test prerouting '{ type filter hook prerouting priority 0; }'
 sudo nft add rule ip6 test prerouting ip6 nexthdr hop-by-hop
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add table ip test
+sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0; }'
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting tcp option sack-permitted
+Error: syntax error, unexpected newline
+add rule ip test prerouting tcp option sack-permitted
+                                                     ^
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add table ip6 test
+sudo nft add chain ip6 test prerouting '{ type filter hook prerouting priority 0; }'
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip6 test prerouting ip6 nexthdr hop-by-hop
+Error: Could not resolve protocol name
+add rule ip6 test prerouting ip6 nexthdr hop-by-hop
+                                         ^^^^^^^^^^
+
+
+
 
 
 
