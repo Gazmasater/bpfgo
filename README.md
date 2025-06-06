@@ -208,11 +208,11 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type payloadEncoderNftTestSuite struct {
+type payloadEncoderNftWithVerdictTestSuite struct {
 	suite.Suite
 }
 
-func (sui *payloadEncoderNftTestSuite) Test_PayloadExprToString_NftStyle() {
+func (sui *payloadEncoderNftWithVerdictTestSuite) Test_PayloadExprToString_WithVerdict() {
 	testData := []struct {
 		name     string
 		exprs    []expr.Any
@@ -220,7 +220,7 @@ func (sui *payloadEncoderNftTestSuite) Test_PayloadExprToString_NftStyle() {
 		nft      string
 	}{
 		{
-			name: "match ip saddr",
+			name: "match ip saddr accept",
 			exprs: []expr.Any{
 				&expr.Payload{
 					DestRegister: 1,
@@ -233,12 +233,13 @@ func (sui *payloadEncoderNftTestSuite) Test_PayloadExprToString_NftStyle() {
 					Register: 1,
 					Data:     []byte{192, 168, 1, 1},
 				},
+				&expr.Verdict{Kind: expr.VerdictAccept},
 			},
-			expected: "ip saddr 192.168.1.1",
-			nft:      "ip saddr 192.168.1.1",
+			expected: "ip saddr 192.168.1.1 accept",
+			nft:      "ip saddr 192.168.1.1 accept",
 		},
 		{
-			name: "match ip daddr",
+			name: "match ip daddr drop",
 			exprs: []expr.Any{
 				&expr.Payload{
 					DestRegister: 1,
@@ -251,12 +252,13 @@ func (sui *payloadEncoderNftTestSuite) Test_PayloadExprToString_NftStyle() {
 					Register: 1,
 					Data:     []byte{10, 0, 0, 1},
 				},
+				&expr.Verdict{Kind: expr.VerdictDrop},
 			},
-			expected: "ip daddr 10.0.0.1",
-			nft:      "ip daddr 10.0.0.1",
+			expected: "ip daddr 10.0.0.1 drop",
+			nft:      "ip daddr 10.0.0.1 drop",
 		},
 		{
-			name: "match th dport",
+			name: "match th dport accept",
 			exprs: []expr.Any{
 				&expr.Payload{
 					DestRegister: 1,
@@ -269,9 +271,10 @@ func (sui *payloadEncoderNftTestSuite) Test_PayloadExprToString_NftStyle() {
 					Register: 1,
 					Data:     []byte{0x00, 0x50}, // port 80
 				},
+				&expr.Verdict{Kind: expr.VerdictAccept},
 			},
-			expected: "th dport 80",
-			nft:      "tcp dport 80",
+			expected: "th dport 80 accept",
+			nft:      "tcp dport 80 accept",
 		},
 	}
 
@@ -285,41 +288,9 @@ func (sui *payloadEncoderNftTestSuite) Test_PayloadExprToString_NftStyle() {
 	}
 }
 
-func Test_PayloadEncoderNft(t *testing.T) {
-	suite.Run(t, new(payloadEncoderNftTestSuite))
+func Test_PayloadEncoderWithVerdict(t *testing.T) {
+	suite.Run(t, new(payloadEncoderNftWithVerdictTestSuite))
 }
-
-
-sudo nft add table ip filter
-sudo nft add chain ip filter input { type filter hook input priority 0 \; }
-
-sudo nft add rule ip filter input ip saddr 192.168.1.1 accept
-
-sudo nft add rule ip filter input ip daddr 10.0.0.1 drop
-
-sudo nft add rule ip filter input tcp dport 80 accept
-
-nft list ruleset
-
-
-az358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft list ruleset
-table inet test {
-        chain prerouting {
-                type filter hook prerouting priority filter; policy accept;
-        }
-}
-table ip filter {
-        chain input {
-                type filter hook input priority filter; policy accept;
-                ip saddr 192.168.1.1 accept
-                ip daddr 10.0.0.1 drop
-                tcp dport 80 accept
-        }
-}
-
-
-
-
 
 
 
