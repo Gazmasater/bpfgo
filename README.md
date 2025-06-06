@@ -290,16 +290,32 @@ func Test_PayloadEncoderNft(t *testing.T) {
 }
 
 
-nft add table ip filter
-nft add chain ip filter input { type filter hook input priority 0 \; }
+sudo nft add table ip filter
+sudo nft add chain ip filter input { type filter hook input priority 0 \; }
 
-nft add rule ip filter input ip saddr 192.168.1.1 accept
+sudo nft add rule ip filter input ip saddr 192.168.1.1 accept
 
-nft add rule ip filter input ip daddr 10.0.0.1 drop
+sudo nft add rule ip filter input ip daddr 10.0.0.1 drop
 
-nft add rule ip filter input tcp dport 80 accept
+sudo nft add rule ip filter input tcp dport 80 accept
 
 nft list ruleset
+
+
+az358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft list ruleset
+table inet test {
+        chain prerouting {
+                type filter hook prerouting priority filter; policy accept;
+        }
+}
+table ip filter {
+        chain input {
+                type filter hook input priority filter; policy accept;
+                ip saddr 192.168.1.1 accept
+                ip daddr 10.0.0.1 drop
+                tcp dport 80 accept
+        }
+}
 
 
 
