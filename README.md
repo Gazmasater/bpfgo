@@ -199,19 +199,20 @@ Response → тело ответа
 ________________________________________________________________________________
 
 
-func (b *bitwiseEncoder) buildFromCmpData(ctx *ctx, cmp *expr.Cmp) (res string) {
-	src := b.Source(ctx)
+func (b *bitwiseEncoder) buildFromCmpData(ctx *ctx, cmp *expr.Cmp) string {
+	// Получаем регистр, из которого читает Bitwise
+	src, _ := ctx.reg.Get(regID(b.bitwise.SourceRegister))
 
-	// 🎯 Специальный случай: ip version
+	// 🎯 Специальный случай: ip version (Payload + маска 0xF0)
 	if payload, ok := src.Expr.(*expr.Payload); ok &&
 		payload.Offset == 0 && payload.Len == 1 &&
 		len(b.bitwise.Mask) == 1 && b.bitwise.Mask[0] == 0xF0 {
 
 		val := rb.RawBytes(cmp.Data).Uint64() >> 4
-		return fmt.Sprintf("%d", val) // ← строго "5", без 0x
+		return fmt.Sprintf("%d", val)
 	}
 
-	// 📌 Общий случай с контекстом заголовка
+	// Попытка использовать описание заголовка
 	if *ctx.hdr != nil {
 		if desc, ok := (*ctx.hdr).Offsets[(*ctx.hdr).CurrentOffset]; ok {
 			return desc.Desc(cmp.Data)
@@ -220,44 +221,13 @@ func (b *bitwiseEncoder) buildFromCmpData(ctx *ctx, cmp *expr.Cmp) (res string) 
 
 	// fallback: hex
 	if rb.RawBytes(cmp.Data).Uint64() != 0 {
-		return fmt.Sprintf("0x%s", rb.RawBytes(cmp.Data).Text(rb.BaseHex))
+		return fmt.Sprintf("0x%x", rb.RawBytes(cmp.Data).Uint64())
 	}
 
 	return ""
 }
 
 
-switch t := srcReg.Expr.(type) {
-case *expr.Meta:
-	metaBuilder := &metaEncoder{t}
-	right = metaBuilder.buildFromCmpData(ctx, cmp)
-case *expr.Bitwise:
-	bitwiseBuilder := &bitwiseEncoder{t}
-	right = bitwiseBuilder.buildFromCmpData(ctx, cmp) // ← ЭТО ДОЛЖНО БЫТЬ
-...
-}
-
-
-func (b *cmpEncoder) formatCmpLR(ctx *ctx, srcReg regVal) (left, right string) {
-	cmp := b.cmp
-	switch t := srcReg.Expr.(type) {
-	case *expr.Meta:
-		metaBuilder := &metaEncoder{t}
-		right = metaBuilder.buildFromCmpData(ctx, cmp)
-	case *expr.Bitwise:
-		bitwiseBuilder := &bitwiseEncoder{t}
-		right = bitwiseBuilder.buildFromCmpData(ctx, cmp)
-
-	case *expr.Ct:
-		right = CtDesk[t.Key](cmp.Data)
-	case *expr.Payload:
-		payloadBuilder := &payloadEncoder{t}
-		left, right = payloadBuilder.buildLRFromCmpData(ctx, cmp)
-	default:
-		right = rb.RawBytes(cmp.Data).Text(rb.BaseDec)
-	}
-	return left, right
-}
 
 
 
