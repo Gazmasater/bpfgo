@@ -297,6 +297,33 @@ sudo nft add rule ip test prerouting reject with icmpv6 type 10
 sudo nft add rule ip test prerouting reject with icmpx type 5
 sudo nft add rule ip test prerouting reject
 
+________________________________________________________________________________________
+
+package main
+
+import (
+	"fmt"
+	"math"
+)
+
+func main() {
+	var a, b int
+	fmt.Print("Введите a и b: ")
+	fmt.Scan(&a, &b)
+
+	if a <= 1 || b <= 0 {
+		fmt.Println("Ошибка: a должно быть > 1 и b > 0")
+		return
+	}
+
+	// Используем log() только один раз, чтобы посчитать ⌊log_a b⌋
+	k := int(math.Log(float64(b)) / math.Log(float64(a)))
+
+	result := b - k*a
+	fmt.Println("Результат:", result)
+}
+
+
 
 
 
