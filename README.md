@@ -212,7 +212,7 @@ type rejectEncoderTestSuite struct {
 	suite.Suite
 }
 
-func (sui *rejectEncoderTestSuite) Test_RejectEncodeIR() {
+func (s *rejectEncoderTestSuite) Test_RejectEncodeIR() {
 	testCases := []struct {
 		name     string
 		reject   *expr.Reject
@@ -227,20 +227,36 @@ func (sui *rejectEncoderTestSuite) Test_RejectEncodeIR() {
 			expected: "reject with tcp reset 0",
 		},
 		{
-			name: "icmpv4",
+			name: "icmpv4 (NFPROTO_IPV4)",
 			reject: &expr.Reject{
 				Type: unix.NFT_REJECT_ICMP_UNREACH,
-				Code: unix.NFPROTO_IPV4,
+				Code: unix.NFPROTO_IPV4, // = 2
 			},
-			expected: "reject with icmp 1",
+			expected: "reject with icmp 2",
 		},
 		{
-			name: "icmpv6",
+			name: "icmpv6 (NFPROTO_IPV6)",
 			reject: &expr.Reject{
 				Type: unix.NFT_REJECT_ICMP_UNREACH,
-				Code: unix.NFPROTO_IPV6,
+				Code: unix.NFPROTO_IPV6, // = 10
 			},
 			expected: "reject with icmpv6 10",
+		},
+		{
+			name: "icmpx non-port-unreach",
+			reject: &expr.Reject{
+				Type: unix.NFT_REJECT_ICMPX_UNREACH,
+				Code: 5, // ≠ NFT_REJECT_ICMPX_PORT_UNREACH (1)
+			},
+			expected: "reject with icmpx 5",
+		},
+		{
+			name: "icmpx with port unreachable — silent (empty typeStr)",
+			reject: &expr.Reject{
+				Type: unix.NFT_REJECT_ICMPX_UNREACH,
+				Code: unix.NFT_REJECT_ICMPX_PORT_UNREACH, // = 1
+			},
+			expected: "reject", // TypeToString() вернёт ""
 		},
 		{
 			name: "empty reject",
@@ -253,12 +269,12 @@ func (sui *rejectEncoderTestSuite) Test_RejectEncodeIR() {
 	}
 
 	for _, tc := range testCases {
-		sui.Run(tc.name, func() {
+		s.Run(tc.name, func() {
 			ctx := &ctx{}
 			enc := &rejectEncoder{reject: tc.reject}
 			ir, err := enc.EncodeIR(ctx)
-			sui.Require().NoError(err)
-			sui.Equal(tc.expected, ir.Format())
+			s.Require().NoError(err)
+			s.Equal(tc.expected, ir.Format())
 		})
 	}
 }
@@ -267,43 +283,6 @@ func Test_RejectEncoder(t *testing.T) {
 	suite.Run(t, new(rejectEncoderTestSuite))
 }
 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test 
---- FAIL: Test_RejectEncoder (0.00s)
-    --- FAIL: Test_RejectEncoder/Test_RejectEncodeIR (0.00s)
-        --- FAIL: Test_RejectEncoder/Test_RejectEncodeIR/icmpv4 (0.00s)
-            encodersReject_test.go:61: 
-                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encodersReject_test.go:61
-                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                        Error:          Not equal: 
-                                        expected: "reject with icmp 1"
-                                        actual  : "reject with icmp 2"
-                                    
-                                        Diff:
-                                        --- Expected
-                                        +++ Actual
-                                        @@ -1 +1 @@
-                                        -reject with icmp 1
-                                        +reject with icmp 2
-                        Test:           Test_RejectEncoder/Test_RejectEncodeIR/icmpv4
-[{"match":{"op":"==","left":{"meta":{"key":"l4proto"}},"right":"tcp"}},{"counter":{"bytes":0,"packets":0}},{"log":null},{"accept":null}]
-[{"match":{"op":"!=","left":{"meta":{"key":"oifname"}},"right":"lo"}},{"mangle":{"key":{"meta":{"key":"nftrace"}},"value":1}},{"goto":{"target":"FW-OUT"}}]
-meta l4proto tcp counter packets 0 bytes 0 log accept
-ip version != 5
-ip daddr @ipSet
-ip daddr != 93.184.216.34 meta l4proto tcp dport {80,443} meta l4proto tcp
-th dport != 80
-meta l4proto tcp dport != 80
-meta l4proto tcp sport >= 80 sport <= 100
-meta nftrace set 1 ip daddr 10.0.0.0/8 meta l4proto udp
-meta l4proto icmp type echo-reply
-ct state established,related
-ct expiration 1s
-ct direction original
-ct l3proto ipv4
-ct protocol tcp
-FAIL
-exit status 1
-FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.022s
 
 
 
