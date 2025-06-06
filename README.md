@@ -355,6 +355,36 @@ gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip tes
 Error: syntax error, unexpected persistent, expecting end of file or newline or semicolon
 add rule ip test postrouting masquerade to :1000-2000 random persistent
 
+
+
+
+{
+	name: "masquerade to :1000 random persistent",
+	setup: func(ctx *ctx) []irNode {
+		ctx.reg.Set(1, regVal{HumanExpr: "1000"})
+
+		nat := &expr.NAT{
+			Type:        NATTypeMASQ,
+			Family:      unix.NFPROTO_IPV4,
+			RegProtoMin: 1,
+			Random:      true,
+			Persistent:  true,
+		}
+		natIR, _ := (&natEncoder{nat: nat}).EncodeIR(ctx)
+		return []irNode{natIR}
+	},
+	expected: "masquerade to :1000 random persistent",
+},
+
+
+sudo nft add rule ip test postrouting masquerade to :1000 random persistent
+
+_______________________________________________________________________________
+
+
+
+
+
 sudo nft list ruleset
 
 
