@@ -238,6 +238,9 @@ sudo nft add rule ip test prerouting ip version != 5
 sudo nft add rule ip test prerouting ip version 4
 sudo nft add rule ip test prerouting ip version 6
 
+sudo nft list table ip test
+
+
 
 
 
