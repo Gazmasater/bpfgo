@@ -382,29 +382,36 @@ func main() {
 								proto = "UDP"
 							}
 							fmt.Print("\n")
+							dstHost := resolveHost(dstIP_r)
+							srcHost := resolveHost(data.Lookup.SrcIP)
+
+							dstIPStr := data.Sendmsg.DstIP.String()
+							srcIPStr := data.Lookup.SrcIP.String()
+							dstPort := data.Sendmsg.DstPort
+							srcPort := data.Lookup.SrcPort
 
 							fmt.Printf("SENDMSG PID=%d NAME=%s   %s://%s[%s:%d]->%s[%s:%d]\n",
 								data.Sendmsg.Pid,
 								data.Sendmsg.Comm,
 								proto,
-								resolveHost(dstIP_r),
-								data.Sendmsg.DstIP,
-								data.Sendmsg.DstPort,
-								resolveHost(data.Lookup.SrcIP),
-								data.Lookup.SrcIP.String(),
-								data.Lookup.SrcPort,
+								dstHost,
+								dstIPStr,
+								dstPort,
+								srcHost,
+								srcIPStr,
+								srcPort,
 							)
 
-							fmt.Printf("SENDMSG	PID=%d  NAME=%s   %s://%s[%s:%d]<-%s[%s:%d]\n",
+							fmt.Printf("SENDMSG\tPID=%d  NAME=%s   %s://%s[%s:%d]<-%s[%s:%d]\n",
 								data.Recvmsg.Pid,
 								data.Sendmsg.Comm,
 								proto,
-								resolveHost(dstIP_r),
-								data.Sendmsg.DstIP,
-								data.Sendmsg.DstPort,
-								resolveHost(data.Lookup.SrcIP),
-								data.Lookup.SrcIP.String(),
-								data.Lookup.SrcPort,
+								dstHost,
+								dstIPStr,
+								dstPort,
+								srcHost,
+								srcIPStr,
+								srcPort,
 							)
 
 							fmt.Print("\n")
@@ -506,29 +513,36 @@ func main() {
 								proto = "UDP"
 							}
 							fmt.Print("\n")
+							srcHost := resolveHost(srcIP_r)
+							lookupHost := resolveHost(data.Lookup.SrcIP)
+
+							srcIPStr := data.Recvmsg.SrcIP.String()
+							lookupIPStr := data.Lookup.SrcIP.String()
+							srcPort := data.Recvmsg.SrcPort
+							lookupPort := data.Lookup.SrcPort
 
 							fmt.Printf("RECVMSG PID=%d NAME=%s   %s://%s[%s:%d]->%s[%s:%d]\n",
 								data.Recvmsg.Pid,
 								data.Recvmsg.Comm,
 								proto,
-								resolveHost(srcIP_r),
-								data.Recvmsg.SrcIP,
-								data.Recvmsg.SrcPort,
-								resolveHost(data.Lookup.SrcIP),
-								data.Lookup.SrcIP.String(),
-								data.Lookup.SrcPort,
+								srcHost,
+								srcIPStr,
+								srcPort,
+								lookupHost,
+								lookupIPStr,
+								lookupPort,
 							)
 
-							fmt.Printf("RECVMSG	PID=%d  NAME=%s   %s://%s[%s:%d]<-%s[%s:%d]\n",
+							fmt.Printf("RECVMSG\tPID=%d  NAME=%s   %s://%s[%s:%d]<-%s[%s:%d]\n",
 								data.Sendmsg.Pid,
 								data.Recvmsg.Comm,
 								proto,
-								resolveHost(srcIP_r),
-								data.Recvmsg.SrcIP,
-								data.Recvmsg.SrcPort,
-								resolveHost(data.Lookup.SrcIP),
-								data.Lookup.SrcIP.String(),
-								data.Lookup.SrcPort,
+								srcHost,
+								srcIPStr,
+								srcPort,
+								lookupHost,
+								lookupIPStr,
+								lookupPort,
 							)
 
 							fmt.Print("\n")
