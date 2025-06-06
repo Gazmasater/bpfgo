@@ -199,105 +199,45 @@ Response → тело ответа
 ________________________________________________________________________________
 
 
+az358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test
+--- FAIL: Test_CmpEncoderAdvanced (0.00s)
+    --- FAIL: Test_CmpEncoderAdvanced/Test_CmpEncodeIR (0.00s)
+        --- FAIL: Test_CmpEncoderAdvanced/Test_CmpEncodeIR/payload_ip_version_!=_5 (0.00s)
+            encodersCmp_test.go:85: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encodersCmp_test.go:85
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Not equal: 
+                                        expected: "ip version != 5"
+                                        actual  : "ip hdrlength != 5"
+                                    
+                                        Diff:
+                                        --- Expected
+                                        +++ Actual
+                                        @@ -1 +1 @@
+                                        -ip version != 5
+                                        +ip hdrlength != 5
+                        Test:           Test_CmpEncoderAdvanced/Test_CmpEncodeIR/payload_ip_version_!=_5
+[{"match":{"op":"==","left":{"meta":{"key":"l4proto"}},"right":"tcp"}},{"counter":{"bytes":0,"packets":0}},{"log":null},{"accept":null}]
+[{"match":{"op":"!=","left":{"meta":{"key":"oifname"}},"right":"lo"}},{"mangle":{"key":{"meta":{"key":"nftrace"}},"value":1}},{"goto":{"target":"FW-OUT"}}]
+meta l4proto tcp counter packets 0 bytes 0 log accept
+ip version != 5
+ip daddr @ipSet
+ip daddr != 93.184.216.34 meta l4proto tcp dport {80,443} meta l4proto tcp
+th dport != 80
+meta l4proto tcp dport != 80
+meta l4proto tcp sport >= 80 sport <= 100
+meta nftrace set 1 ip daddr 10.0.0.0/8 meta l4proto udp
+meta l4proto icmp type echo-reply
+ct state established,related
+ct expiration 1s
+ct direction original
+ct l3proto ipv4
+ct protocol tcp
+FAIL
+exit status 1
+FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.012s
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
 
-
-ctx := &ctx{
-	hdr: new(pr.ProtoDescPtr),
-}
-
-
-package encoders
-
-import (
-	"testing"
-
-	"github.com/google/nftables/expr"
-	"github.com/stretchr/testify/suite"
-	"github.com/Morwran/nft-go/pkg/protocols"
-)
-
-type cmpEncoderAdvancedTestSuite struct {
-	suite.Suite
-}
-
-func (sui *cmpEncoderAdvancedTestSuite) Test_CmpEncodeIR() {
-	testCases := []struct {
-		name     string
-		setup    func(ctx *ctx) *expr.Cmp
-		expected string
-	}{
-		{
-			name: "ct state != established",
-			setup: func(ctx *ctx) *expr.Cmp {
-				ct := &expr.Ct{Key: expr.CtKeySTATE, Register: 1}
-				ctx.reg.Set(1, regVal{
-					HumanExpr: "ct state",
-					Expr:      ct,
-				})
-				return &expr.Cmp{
-					Op:       expr.CmpOpNeq,
-					Register: 1,
-					Data:     []byte{byte(CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0},
-				}
-			},
-			expected: "ct state != established",
-		},
-		{
-			name: "payload ip version != 5",
-			setup: func(ctx *ctx) *expr.Cmp {
-				pl := &expr.Payload{
-					Base:         expr.PayloadBaseNetworkHeader,
-					Offset:       0,
-					Len:          1,
-					DestRegister: 1,
-				}
-				ctx.reg.Set(1, regVal{
-					HumanExpr: "ip version",
-					Expr:      pl,
-				})
-				return &expr.Cmp{
-					Op:       expr.CmpOpNeq,
-					Register: 1,
-					Data:     []byte{5},
-				}
-			},
-			expected: "ip version != 5",
-		},
-		{
-			name: "meta cpu == 3",
-			setup: func(ctx *ctx) *expr.Cmp {
-				meta := &expr.Meta{Key: expr.MetaKeyCPU, Register: 1}
-				ctx.reg.Set(1, regVal{
-					HumanExpr: "meta cpu",
-					Expr:      meta,
-				})
-				return &expr.Cmp{
-					Op:       expr.CmpOpEq,
-					Register: 1,
-					Data:     []byte{3},
-				}
-			},
-			expected: "meta cpu 3",
-		},
-	}
-
-	for _, tc := range testCases {
-		sui.Run(tc.name, func() {
-			ctx := &ctx{
-				hdr: new(protocols.ProtoDescPtr), // ⚠️ fix panic
-			}
-			cmp := tc.setup(ctx)
-			enc := &cmpEncoder{cmp: cmp}
-			ir, err := enc.EncodeIR(ctx)
-			sui.Require().NoError(err)
-			sui.Require().Equal(tc.expected, ir.Format())
-		})
-	}
-}
-
-func Test_CmpEncoderAdvanced(t *testing.T) {
-	suite.Run(t, new(cmpEncoderAdvancedTestSuite))
-}
 
 
 
