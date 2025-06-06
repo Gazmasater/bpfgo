@@ -311,20 +311,21 @@ func main() {
 	fmt.Print("Введите a и b: ")
 	fmt.Scan(&a, &b)
 
-	if a <= 1 || b <= 0 {
-		fmt.Println("Ошибка: a должно быть > 1 и b > 0")
+	if a <= 0 || b <= 0 {
+		fmt.Println("Ошибка: a и b должны быть положительными")
 		return
 	}
 
-	// Используем log() только один раз, чтобы посчитать ⌊log_a b⌋
+	// Пример: k можно задать через логарифм
 	k := int(math.Log(float64(b)) / math.Log(float64(a)))
 
-	result := b - k*a
-	fmt.Println("Результат:", result)
+	// Вычисляем N = b - 2^k * a
+	power := 1 << k // 2^k сдвигом
+	N := b - power*a
+
+	fmt.Printf("k = %d\n", k)
+	fmt.Printf("N = %d\n", N)
 }
-
-
-
 
 
 
