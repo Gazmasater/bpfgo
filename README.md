@@ -198,135 +198,94 @@ Response → тело ответа
 Можно сохранить User-Agent, Cookie и использовать их в автоматических скриптах позже
 ________________________________________________________________________________
 
-package main
+func HandleIPEvent(
+	event bpfTraceInfo,
+	srcIP, dstIP net.IP,
+	eventChan_sport chan int,
+	eventChan_pid chan int,
+) {
+	var (
+		proto   string
+		dsthost string
+		err     error
+	)
 
-// [весь твой код, как был выше, с полной заменой блоков Sysexit==11 и Sysexit==12]
+	if event.Family == 6 {
+		proto = "TCP"
+	}
 
-// Оптимизированные блоки ниже (вставлены вместо старых):
+	if dstIP.IsLoopback() {
+		dsthost = pkg.ResolveIP(dstIP)
+	} else {
+		dsthost, err = pkg.ResolveIP_n(dstIP)
+		if err != nil {
+			dsthost = "unknown"
+		}
+	}
+	srchost := pkg.ResolveIP(srcIP)
 
-if event.Sysexit == 11 {
-	if event.Family == 2 {
-		port := int(event.Dport)
-		data, exists := eventMap[port]
+	srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
+	dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
+
+	key := makeConnectionKey(srcIP, uint16(event.Sport), dstIP, event.Dport)
+
+	switch event.State {
+	case 1:
+		muConn.Lock()
+		_, exists := connections[key]
 		if !exists {
-			data = getEventData()
-			eventMap[port] = data
+			connections[key] = true
 		}
-		data.Sendmsg = Sendmsg{
-			DstIP:   dstIP_r,
-			DstPort: port,
-			Pid:     event.Pid,
-			Comm:    cachedComm(event.Comm),
-		}
-		data.HasSendmsg = true
+		muConn.Unlock()
 
-		if data.HasLookup && data.HasRecvmsg {
-			if data.Lookup.Proto == 17 {
-				proto = "UDP"
+		if !exists {
+			select {
+			case eventChan_sport <- int(event.Sport):
+				fmt.Printf("State 1: заменен порт %d\n", event.Sport)
+			default:
 			}
-			fmt.Print("\n")
 
-			dstHost := resolveHost(dstIP_r)
-			srcHost := resolveHost(data.Lookup.SrcIP)
-
-			dstIPStr := data.Sendmsg.DstIP.String()
-			srcIPStr := data.Lookup.SrcIP.String()
-			dstPort := data.Sendmsg.DstPort
-			srcPort := data.Lookup.SrcPort
-
-			fmt.Printf("SENDMSG PID=%d NAME=%s   %s://%s[%s:%d]->%s[%s:%d]\n",
-				data.Sendmsg.Pid,
-				data.Sendmsg.Comm,
+			name := cachedComm(event.Comm)
+			fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s \n",
+				event.Pid,
+				name,
 				proto,
-				dstHost,
-				dstIPStr,
-				dstPort,
-				srcHost,
-				srcIPStr,
-				srcPort,
-			)
-
-			fmt.Printf("SENDMSG\tPID=%d  NAME=%s   %s://%s[%s:%d]<-%s[%s:%d]\n",
-				data.Recvmsg.Pid,
-				data.Sendmsg.Comm,
+				srcAddr,
 				proto,
-				dstHost,
-				dstIPStr,
-				dstPort,
-				srcHost,
-				srcIPStr,
-				srcPort,
-			)
-
-			fmt.Print("\n")
-			delete(eventMap, port)
-			putEventData(data)
+				dstAddr)
 		}
+
+	case 2, 10:
+		select {
+		case eventChan_pid <- int(event.Pid):
+		default:
+		}
+	}
+
+	select {
+	case sport := <-eventChan_sport:
+		select {
+		case pid := <-eventChan_pid:
+			if pid > 0 {
+				srcAddr = fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), sport)
+				dstAddr = fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
+
+				name := cachedComm(event.Comm)
+
+				fmt.Printf("PID=%d NAME=%s %s:%s -> %s:%s \n",
+					pid,
+					name,
+					proto,
+					srcAddr,
+					proto,
+					dstAddr)
+			}
+		default:
+		}
+	default:
 	}
 }
 
-if event.Sysexit == 12 {
-	if event.Family == 2 {
-		port := int(event.Sport)
-		data, exists := eventMap[port]
-		if !exists {
-			data = getEventData()
-			eventMap[port] = data
-		}
-		data.Recvmsg = Recvmsg{
-			SrcIP:   srcIP_r,
-			SrcPort: port,
-			Pid:     event.Pid,
-			Comm:    cachedComm(event.Comm),
-		}
-		data.HasRecvmsg = true
-
-		if data.HasLookup && data.HasSendmsg {
-			if data.Lookup.Proto == 17 {
-				proto = "UDP"
-			}
-			fmt.Print("\n")
-
-			srcHost := resolveHost(srcIP_r)
-			lookupHost := resolveHost(data.Lookup.SrcIP)
-
-			srcIPStr := data.Recvmsg.SrcIP.String()
-			lookupIPStr := data.Lookup.SrcIP.String()
-			srcPort := data.Recvmsg.SrcPort
-			lookupPort := data.Lookup.SrcPort
-
-			fmt.Printf("RECVMSG PID=%d NAME=%s   %s://%s[%s:%d]->%s[%s:%d]\n",
-				data.Recvmsg.Pid,
-				data.Recvmsg.Comm,
-				proto,
-				srcHost,
-				srcIPStr,
-				srcPort,
-				lookupHost,
-				lookupIPStr,
-				lookupPort,
-			)
-
-			fmt.Printf("RECVMSG\tPID=%d  NAME=%s   %s://%s[%s:%d]<-%s[%s:%d]\n",
-				data.Sendmsg.Pid,
-				data.Recvmsg.Comm,
-				proto,
-				srcHost,
-				srcIPStr,
-				srcPort,
-				lookupHost,
-				lookupIPStr,
-				lookupPort,
-			)
-
-			fmt.Print("\n")
-			delete(eventMap, port)
-			putEventData(data)
-		}
-	}
-}
-
-// остальной код без изменений
 
 
 
