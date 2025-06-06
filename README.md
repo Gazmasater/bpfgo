@@ -369,6 +369,13 @@ _________________________________________
 sudo nft add rule ip test postrouting masquerade to :1000 random
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test postrouting masquerade to :1000 random
+Error: transport protocol mapping is only valid after transport protocol match
+add rule ip test postrouting masquerade to :1000 random
+                             ~~~~~~~~~~     ^^^^
+gaz358@gaz358-BO
+
+
 
 _______________________________________________________________________________
 
