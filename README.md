@@ -198,137 +198,28 @@ Response → тело ответа
 Можно сохранить User-Agent, Cookie и использовать их в автоматических скриптах позже
 ________________________________________________________________________________
 
-package encoders
+# 1. ct state new,established
+sudo nft add rule ip test prerouting ct state new,established
 
-import (
-	"encoding/binary"
-	"encoding/json"
-	"fmt"
-	"strings"
+# 2. ct direction original
+sudo nft add rule ip test prerouting ct direction original
 
-	"github.com/Morwran/nft-go/internal/bytes"
-	pr "github.com/Morwran/nft-go/pkg/protocols"
+# 3. ct expiration 5s
+sudo nft add rule ip test prerouting ct expiration 5s
 
-	"github.com/google/nftables/expr"
-	"github.com/pkg/errors"
-)
+# 4. ct protocol tcp
+sudo nft add rule ip test prerouting ct protocol tcp
 
-func init() {
-	register(&expr.Ct{}, func(e expr.Any) encoder {
-		return &ctEncoder{ct: e.(*expr.Ct)}
-	})
-}
+# 5. ct mark set 42
+sudo nft add rule ip test prerouting ct mark set 42
 
-type ctEncoder struct {
-	ct *expr.Ct
-}
-
-func (b *ctEncoder) EncodeIR(ctx *ctx) (irNode, error) {
-	ct := b.ct
-	human := fmt.Sprintf("ct %s", CtKey(ct.Key))
-	if !ct.SourceRegister {
-		if ct.Register == 0 {
-			return nil, errors.Errorf("%T expression has invalid destination register %d", ct, ct.Register)
-		}
-		ctx.reg.Set(regID(ct.Register),
-			regVal{
-				HumanExpr: human,
-				Expr:      ct,
-			})
-		return nil, ErrNoIR
-	}
-	srcReg, ok := ctx.reg.Get(regID(ct.Register))
-	if !ok {
-		return nil, errors.Errorf("%T statement has no expression", ct)
-	}
-	if imm, ok := srcReg.Expr.(*expr.Immediate); ok && len(imm.Data) >= 4 {
-		val := binary.LittleEndian.Uint32(imm.Data)
-		return simpleIR(fmt.Sprintf("%s set %d", human, val)), nil
-	}
-	rhs := srcReg.HumanExpr
-	return simpleIR(fmt.Sprintf("%s set %s", human, rhs)), nil
-}
-
-func (b *ctEncoder) buildCtWithMask(base string, mask []byte) string {
-	return fmt.Sprintf("%s %s", base, CtDesk[b.ct.Key](mask))
-}
-
-func (b *ctEncoder) EncodeJSON(ctx *ctx) ([]byte, error) {
-	ct := b.ct
-	ctJson := map[string]interface{}{
-		"ct": struct {
-			Key string `json:"key"`
-		}{
-			Key: CtKey(ct.Key).String(),
-		},
-	}
-	if !ct.SourceRegister {
-		if ct.Register == 0 {
-			return nil, errors.Errorf("%T expression has invalid destination register %d", ct, ct.Register)
-		}
-		ctx.reg.Set(regID(ct.Register), regVal{Data: ctJson})
-		return nil, ErrNoJSON
-	}
-
-	srcReg, ok := ctx.reg.Get(regID(ct.Register))
-	if !ok || srcReg.Data == nil {
-		return nil, errors.Errorf("%T statement has no expression", ct)
-	}
-
-	mangle := map[string]interface{}{
-		"mangle": struct {
-			Key any `json:"key"`
-			Val any `json:"value"`
-		}{
-			Key: ctJson,
-			Val: srcReg.Data,
-		},
-	}
-	return json.Marshal(mangle)
-}
-
-// ... оставшаяся часть без изменений ...
+# 6. ct status assured,confirmed,snat,dnat
+sudo nft add rule ip test prerouting ct status assured,confirmed,snat,dnat
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test
---- FAIL: Test_CtEncoderAdvanced (0.00s)
-    --- FAIL: Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex (0.00s)
-        --- FAIL: Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex/ct_status_snat,dnat,confirmed (0.00s)
-            encodersCt_test.go:115: 
-                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encodersCt_test.go:115
-                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                        Error:          Not equal: 
-                                        expected: "ct status confirmed,dnat,snat"
-                                        actual  : "ct status assured,confirmed,snat,dnat"
-                                    
-                                        Diff:
-                                        --- Expected
-                                        +++ Actual
-                                        @@ -1 +1 @@
-                                        -ct status confirmed,dnat,snat
-                                        +ct status assured,confirmed,snat,dnat
-                        Test:           Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex/ct_status_snat,dnat,confirmed
-[{"match":{"op":"==","left":{"meta":{"key":"l4proto"}},"right":"tcp"}},{"counter":{"bytes":0,"packets":0}},{"log":null},{"accept":null}]
-[{"match":{"op":"!=","left":{"meta":{"key":"oifname"}},"right":"lo"}},{"mangle":{"key":{"meta":{"key":"nftrace"}},"value":1}},{"goto":{"target":"FW-OUT"}}]
-meta l4proto tcp counter packets 0 bytes 0 log accept
-ip version != 5
-ip daddr @ipSet
-ip daddr != 93.184.216.34 meta l4proto tcp dport {80,443} meta l4proto tcp
-th dport != 80
-meta l4proto tcp dport != 80
-meta l4proto tcp sport >= 80 sport <= 100
-meta nftrace set 1 ip daddr 10.0.0.0/8 meta l4proto udp
-meta l4proto icmp type echo-reply
-ct state established,related
-ct expiration 1s
-ct direction original
-ct l3proto ipv4
-ct protocol tcp
-FAIL
-exit status 1
-FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.012s
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+
+
 
 
 
