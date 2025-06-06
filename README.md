@@ -201,128 +201,104 @@ ________________________________________________________________________________
 
 
 
-package encoders
-
-import (
-	"testing"
-	"sort"
-	"strings"
-
-	"github.com/google/nftables"
-	"github.com/google/nftables/expr"
-	"github.com/stretchr/testify/suite"
-)
-
-type ctEncoderAdvancedTestSuite struct {
-	suite.Suite
-}
-
-func (sui *ctEncoderAdvancedTestSuite) Test_CtEncodeIR_Complex() {
-	testData := []struct {
-		name     string
-		exprs    nftables.Rule
-		expected string
-	}{
-		{
-			name: "ct state new,established",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{Key: expr.CtKeySTATE, Register: 1},
-					&expr.Cmp{
-						Op:       expr.CmpOpEq,
-						Register: 1,
-						Data:     []byte{byte(CtStateBitNEW | CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0},
-					},
-				},
-			},
-			expected: "ct state established,new", // упорядочено!
-		},
-		{
-			name: "ct direction original",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{Key: expr.CtKeyDIRECTION, Register: 1},
-					&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{0}},
-				},
-			},
-			expected: "ct direction original",
-		},
-		{
-			name: "ct expiration 5s",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{Key: expr.CtKeyEXPIRATION, Register: 1},
-					&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{0x88, 0x13, 0x00, 0x00}}, // 5000
-				},
-			},
-			expected: "ct expiration 5s",
-		},
-		{
-			name: "ct protocol tcp",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{Key: expr.CtKeyPROTOCOL, Register: 1},
-					&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{6}},
-				},
-			},
-			expected: "ct protocol tcp",
-		},
-		{
-			name: "ct mark set 42",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Immediate{Register: 1, Data: []byte{42, 0, 0, 0}},
-					&expr.Ct{
-						Key:            expr.CtKeyMARK,
-						Register:       1,
-						SourceRegister: true,
-					},
-				},
-			},
-			expected: "ct mark set 42",
-		},
-		{
-			name: "ct status snat,dnat,confirmed",
-			exprs: nftables.Rule{
-				Exprs: []expr.Any{
-					&expr.Ct{Key: expr.CtKeySTATUS, Register: 1},
-					&expr.Cmp{
-						Op:       expr.CmpOpEq,
-						Register: 1,
-						Data:     []byte{0x3C, 0x00, 0x00, 0x00}, // snat + dnat + confirmed + assured
-					},
-				},
-			},
-			expected: "ct status confirmed,dnat,snat", // упорядочено!
-		},
-	}
-
-	for _, tc := range testData {
-		sui.Run(tc.name, func() {
-			str, err := NewRuleExprEncoder(&tc.exprs).Format()
-			sui.Require().NoError(err)
-
-			// normalize comma-separated values for order-insensitive comparison
-			if strings.HasPrefix(tc.expected, "ct state") || strings.HasPrefix(tc.expected, "ct status") {
-				expectedParts := strings.Split(tc.expected, " ")
-				actualParts := strings.Split(str, " ")
-
-				// сортируем значения после ключа
-				sort.Strings(expectedParts[2:])
-				sort.Strings(actualParts[2:])
-
-				tc.expected = strings.Join(expectedParts, " ")
-				str = strings.Join(actualParts, " ")
-			}
-
-			sui.Equal(tc.expected, str)
-		})
-	}
-}
-
-func Test_CtEncoderAdvanced(t *testing.T) {
-	suite.Run(t, new(ctEncoderAdvancedTestSuite))
-}
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test 
+--- FAIL: Test_CmpEncoderAdvanced (0.00s)
+    --- FAIL: Test_CmpEncoderAdvanced/Test_CmpEncodeIR (0.00s)
+        --- FAIL: Test_CmpEncoderAdvanced/Test_CmpEncodeIR/payload_ip_version_!=_5 (0.00s)
+            panic.go:262: test panicked: runtime error: invalid memory address or nil pointer dereference
+                goroutine 15 [running]:
+                runtime/debug.Stack()
+                        /home/gaz358/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.2.linux-amd64/src/runtime/debug/stack.go:26 +0x5e
+                github.com/stretchr/testify/suite.failOnPanic(0xc0002728c0, {0x8b5b00, 0xd2f540})
+                        /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:89 +0x37
+                github.com/stretchr/testify/suite.recoverAndFailOnPanic(0xc0002728c0)
+                        /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:83 +0x35
+                panic({0x8b5b00?, 0xd2f540?})
+                        /home/gaz358/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.2.linux-amd64/src/runtime/panic.go:792 +0x132
+                github.com/Morwran/nft-go/internal/expr-encoders.includeHeaderIfKnown(...)
+                        /home/gaz358/myprog/nft-go/internal/expr-encoders/payload.go:213
+                github.com/Morwran/nft-go/internal/expr-encoders.(*payloadEncoder).buildLRFromCmpData(0x7d9d7ae592b8?, 0xc0001ff520, 0xc0001ff540)
+                        /home/gaz358/myprog/nft-go/internal/expr-encoders/payload.go:158 +0x30
+                github.com/Morwran/nft-go/internal/expr-encoders.(*cmpEncoder).formatCmpLR(0x7d9d7afc0108?, 0x20?, {{0x93bfc7, 0xa}, 0x0, {0x9d7a80, 0xc00002c900}, {0x0, 0x0}, {0x0, ...}})
+                        /home/gaz358/myprog/nft-go/internal/expr-encoders/cmp.go:109 +0x134
+                github.com/Morwran/nft-go/internal/expr-encoders.(*cmpEncoder).EncodeIR(0xc000070ea8, 0xc0001ff520)
+                        /home/gaz358/myprog/nft-go/internal/expr-encoders/cmp.go:36 +0x174
+                github.com/Morwran/nft-go/internal/expr-encoders.(*cmpEncoderAdvancedTestSuite).Test_CmpEncodeIR.func4()
+                        /home/gaz358/myprog/nft-go/internal/expr-encoders/encodersCmp_test.go:80 +0x67
+                github.com/stretchr/testify/suite.(*Suite).Run.func1(0xc0002728c0)
+                        /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115 +0x169
+                testing.tRunner(0xc0002728c0, 0xc0001ff500)
+                        /home/gaz358/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.2.linux-amd64/src/testing/testing.go:1792 +0xf4
+                created by testing.(*T).Run in goroutine 13
+                        /home/gaz358/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.2.linux-amd64/src/testing/testing.go:1851 +0x413
+--- FAIL: Test_CtEncoderAdvanced (0.00s)
+    --- FAIL: Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex (0.00s)
+        --- FAIL: Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex/ct_mark_set_42 (0.00s)
+            encodersCt_test.go:115: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encodersCt_test.go:115
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Not equal: 
+                                        expected: "ct mark set 42"
+                                        actual  : "ct mark set *"
+                                    
+                                        Diff:
+                                        --- Expected
+                                        +++ Actual
+                                        @@ -1 +1 @@
+                                        -ct mark set 42
+                                        +ct mark set *
+                        Test:           Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex/ct_mark_set_42
+        --- FAIL: Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex/ct_status_snat,dnat,confirmed (0.00s)
+            encodersCt_test.go:115: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encodersCt_test.go:115
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Not equal: 
+                                        expected: "ct status confirmed,dnat,snat"
+                                        actual  : "ct status assured,confirmed,snat,dnat"
+                                    
+                                        Diff:
+                                        --- Expected
+                                        +++ Actual
+                                        @@ -1 +1 @@
+                                        -ct status confirmed,dnat,snat
+                                        +ct status assured,confirmed,snat,dnat
+                        Test:           Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex/ct_status_snat,dnat,confirmed
+--- FAIL: Test_ExthdrEncoder (0.00s)
+    --- FAIL: Test_ExthdrEncoder/Test_ExthdrEncodeIR_ValidOnly (0.00s)
+        --- FAIL: Test_ExthdrEncoder/Test_ExthdrEncodeIR_ValidOnly/exthdr_read_and_compare_(source_+_rhs) (0.00s)
+            encodersExthdr_test.go:71: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encodersExthdr_test.go:71
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Not equal: 
+                                        expected: "exthdr @4,8,2 set 0x1234"
+                                        actual  : "ip option @4,8,2 set 0x1234"
+                                    
+                                        Diff:
+                                        --- Expected
+                                        +++ Actual
+                                        @@ -1 +1 @@
+                                        -exthdr @4,8,2 set 0x1234
+                                        +ip option @4,8,2 set 0x1234
+                        Test:           Test_ExthdrEncoder/Test_ExthdrEncodeIR_ValidOnly/exthdr_read_and_compare_(source_+_rhs)
+[{"match":{"op":"==","left":{"meta":{"key":"l4proto"}},"right":"tcp"}},{"counter":{"bytes":0,"packets":0}},{"log":null},{"accept":null}]
+[{"match":{"op":"!=","left":{"meta":{"key":"oifname"}},"right":"lo"}},{"mangle":{"key":{"meta":{"key":"nftrace"}},"value":1}},{"goto":{"target":"FW-OUT"}}]
+meta l4proto tcp counter packets 0 bytes 0 log accept
+ip version != 5
+ip daddr @ipSet
+ip daddr != 93.184.216.34 meta l4proto tcp dport {80,443} meta l4proto tcp
+th dport != 80
+meta l4proto tcp dport != 80
+meta l4proto tcp sport >= 80 sport <= 100
+meta nftrace set 1 ip daddr 10.0.0.0/8 meta l4proto udp
+meta l4proto icmp type echo-reply
+ct state established,related
+ct expiration 1s
+ct direction original
+ct l3proto ipv4
+ct protocol tcp
+FAIL
+exit status 1
+FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.019s
 
 
 
