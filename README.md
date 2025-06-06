@@ -234,6 +234,31 @@ sudo nft add rule ip test prerouting @nh,0,1 & 0xf0 == 0x60
 📝 0x60 = 6 << 4
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting @nh,0,1 & 0xf0 != 0x50
+[1] 5208
+Error: syntax error, unexpected newline
+add rule ip test prerouting @nh,0,1
+                                   ^
+0xf0: command not found
+[1]+  Exit 1                  sudo nft add rule ip test prerouting @nh,0,1
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting meta cpu 3
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting @nh,0,1 & 0xf0 == 0x40
+[1] 5325
+Error: syntax error, unexpected newline
+add rule ip test prerouting @nh,0,1
+                                   ^
+0xf0: command not found
+[1]+  Exit 1                  sudo nft add rule ip test prerouting @nh,0,1
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting @nh,0,1 & 0xf0 == 0x60
+[1] 5373
+Error: syntax error, unexpected newline
+add rule ip test prerouting @nh,0,1
+                                   ^
+0xf0: command not found
+[1]+  Exit 1                  sudo nft add rule ip test prerouting @nh,0,1
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+
+
 
 
 
