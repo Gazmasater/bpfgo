@@ -202,11 +202,15 @@ package encoders
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 
+	"github.com/Morwran/nft-go/internal/bytes"
+	pr "github.com/Morwran/nft-go/pkg/protocols"
+
 	"github.com/google/nftables/expr"
+	"github.com/pkg/errors"
 )
 
 func init() {
@@ -221,83 +225,69 @@ type ctEncoder struct {
 
 func (b *ctEncoder) EncodeIR(ctx *ctx) (irNode, error) {
 	ct := b.ct
-	if ct.SourceRegister {
-		// handle set expression (e.g., ct mark set ...)
-		src, ok := ctx.reg.Get(regID(ct.Register))
-		if !ok {
-			return newIRNodef("ct %s set *", ctKeyStr(ct.Key)), nil
+	human := fmt.Sprintf("ct %s", CtKey(ct.Key))
+	if !ct.SourceRegister {
+		if ct.Register == 0 {
+			return nil, errors.Errorf("%T expression has invalid destination register %d", ct, ct.Register)
 		}
-		if imm, ok := src.Expr.(*expr.Immediate); ok && len(imm.Data) >= 4 {
-			val := binary.LittleEndian.Uint32(imm.Data)
-			return newIRNodef("ct %s set %d", ctKeyStr(ct.Key), val), nil
-		}
-		rhs := src.HumanExpr
-		return newIRNodef("ct %s set %s", ctKeyStr(ct.Key), rhs), nil
+		ctx.reg.Set(regID(ct.Register),
+			regVal{
+				HumanExpr: human,
+				Expr:      ct,
+			})
+		return nil, ErrNoIR
 	}
-	ctx.reg.Set(regID(ct.Register), regVal{
-		HumanExpr: fmt.Sprintf("ct %s", ctKeyStr(ct.Key)),
-		Expr:      ct,
-		Len:       4,
-	})
-	return nil, ErrNoIR
+	srcReg, ok := ctx.reg.Get(regID(ct.Register))
+	if !ok {
+		return nil, errors.Errorf("%T statement has no expression", ct)
+	}
+	if imm, ok := srcReg.Expr.(*expr.Immediate); ok && len(imm.Data) >= 4 {
+		val := binary.LittleEndian.Uint32(imm.Data)
+		return simpleIR(fmt.Sprintf("%s set %d", human, val)), nil
+	}
+	rhs := srcReg.HumanExpr
+	return simpleIR(fmt.Sprintf("%s set %s", human, rhs)), nil
+}
+
+func (b *ctEncoder) buildCtWithMask(base string, mask []byte) string {
+	return fmt.Sprintf("%s %s", base, CtDesk[b.ct.Key](mask))
 }
 
 func (b *ctEncoder) EncodeJSON(ctx *ctx) ([]byte, error) {
-	return nil, ErrNoJSON
+	ct := b.ct
+	ctJson := map[string]interface{}{
+		"ct": struct {
+			Key string `json:"key"`
+		}{
+			Key: CtKey(ct.Key).String(),
+		},
+	}
+	if !ct.SourceRegister {
+		if ct.Register == 0 {
+			return nil, errors.Errorf("%T expression has invalid destination register %d", ct, ct.Register)
+		}
+		ctx.reg.Set(regID(ct.Register), regVal{Data: ctJson})
+		return nil, ErrNoJSON
+	}
+
+	srcReg, ok := ctx.reg.Get(regID(ct.Register))
+	if !ok || srcReg.Data == nil {
+		return nil, errors.Errorf("%T statement has no expression", ct)
+	}
+
+	mangle := map[string]interface{}{
+		"mangle": struct {
+			Key any `json:"key"`
+			Val any `json:"value"`
+		}{
+			Key: ctJson,
+			Val: srcReg.Data,
+		},
+	}
+	return json.Marshal(mangle)
 }
 
-func ctKeyStr(k expr.CtKey) string {
-	switch k {
-	case expr.CtKeySTATE:
-		return "state"
-	case expr.CtKeyDIRECTION:
-		return "direction"
-	case expr.CtKeySTATUS:
-		return "status"
-	case expr.CtKeyEXPIRATION:
-		return "expiration"
-	case expr.CtKeyMARK:
-		return "mark"
-	case expr.CtKeyPROTOCOL:
-		return "protocol"
-	case expr.CtKeyL3PROTOCOL:
-		return "l3proto"
-	}
-	return fmt.Sprintf("key(%d)", k)
-}
-
-func ctStatusFlags(data []byte) string {
-	raw := binary.LittleEndian.Uint32(data)
-	var flags []string
-	if raw&nftCtStatusAssured != 0 {
-		flags = append(flags, "assured")
-	}
-	if raw&nftCtStatusConfirmed != 0 {
-		flags = append(flags, "confirmed")
-	}
-	if raw&nftCtStatusRelated != 0 {
-		flags = append(flags, "related")
-	}
-	if raw&nftCtStatusSrcNAT != 0 {
-		flags = append(flags, "snat")
-	}
-	if raw&nftCtStatusDstNAT != 0 {
-		flags = append(flags, "dnat")
-	}
-	sort.Strings(flags)
-	return strings.Join(flags, ",")
-}
-
-const (
-	nftCtStatusExpected  = 1 << 0
-	nftCtStatusSeenReply = 1 << 1
-	nftCtStatusAssured   = 1 << 2
-	nftCtStatusConfirmed = 1 << 3
-	nftCtStatusRelated   = 1 << 4
-	nftCtStatusSrcNAT    = 1 << 5
-	nftCtStatusDstNAT    = 1 << 6
-	nftCtStatusDYING     = 1 << 7
-)
+// ... оставшаяся часть без изменений ...
 
 
 
