@@ -231,7 +231,8 @@ func (b *ctEncoder) EncodeIR(ctx *ctx) (irNode, error) {
 			val := binary.LittleEndian.Uint32(imm.Data)
 			return newIRNodef("ct %s set %d", ctKeyStr(ct.Key), val), nil
 		}
-		return newIRNodef("ct %s set *", ctKeyStr(ct.Key)), nil
+		rhs := src.HumanExpr
+		return newIRNodef("ct %s set %s", ctKeyStr(ct.Key), rhs), nil
 	}
 	ctx.reg.Set(regID(ct.Register), regVal{
 		HumanExpr: fmt.Sprintf("ct %s", ctKeyStr(ct.Key)),
