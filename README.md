@@ -309,6 +309,11 @@ nft add rule ip filter input ct state != established,invalid drop
 
 
 
+nft delete rule ip filter input position 2
+
+
+
+
 
 
 
