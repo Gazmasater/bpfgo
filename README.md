@@ -201,20 +201,6 @@ ________________________________________________________________________________
 
 
 
-package encoders
-
-import (
-	"testing"
-
-	"github.com/google/nftables/expr"
-	"github.com/stretchr/testify/suite"
-	"golang.org/x/sys/unix"
-)
-
-type natCmpRulesetStyleTestSuite struct {
-	suite.Suite
-}
-
 func (sui *natCmpRulesetStyleTestSuite) Test_TCPDnatAndRedirect() {
 	testCases := []struct {
 		name     string
@@ -229,16 +215,8 @@ func (sui *natCmpRulesetStyleTestSuite) Test_TCPDnatAndRedirect() {
 				ctx.reg.Set(3, regVal{HumanExpr: "192.168.0.1"})
 				ctx.reg.Set(4, regVal{HumanExpr: "8080"})
 
-				protoCmp := &expr.Cmp{
-					Register: 1,
-					Op:       expr.CmpOpEq,
-					Data:     []byte{unix.IPPROTO_TCP},
-				}
-				dportCmp := &expr.Cmp{
-					Register: 2,
-					Op:       expr.CmpOpEq,
-					Data:     []byte{0x1f, 0x90}, // 8080
-				}
+				protoCmp := &expr.Cmp{Register: 1, Op: expr.CmpOpEq, Data: []byte{unix.IPPROTO_TCP}}
+				dportCmp := &expr.Cmp{Register: 2, Op: expr.CmpOpEq, Data: []byte{0x1f, 0x90}}
 				nat := &expr.NAT{
 					Type:        expr.NATTypeDestNAT,
 					Family:      unix.NFPROTO_IPV4,
@@ -261,16 +239,8 @@ func (sui *natCmpRulesetStyleTestSuite) Test_TCPDnatAndRedirect() {
 				ctx.reg.Set(2, regVal{HumanExpr: "443"})
 				ctx.reg.Set(3, regVal{HumanExpr: "443"})
 
-				protoCmp := &expr.Cmp{
-					Register: 1,
-					Op:       expr.CmpOpEq,
-					Data:     []byte{unix.IPPROTO_TCP},
-				}
-				dportCmp := &expr.Cmp{
-					Register: 2,
-					Op:       expr.CmpOpEq,
-					Data:     []byte{0x01, 0xbb}, // 443
-				}
+				protoCmp := &expr.Cmp{Register: 1, Op: expr.CmpOpEq, Data: []byte{unix.IPPROTO_TCP}}
+				dportCmp := &expr.Cmp{Register: 2, Op: expr.CmpOpEq, Data: []byte{0x01, 0xbb}}
 				nat := &expr.NAT{
 					Type:        NATTypeRedir,
 					Family:      unix.NFPROTO_IPV4,
@@ -285,6 +255,54 @@ func (sui *natCmpRulesetStyleTestSuite) Test_TCPDnatAndRedirect() {
 			},
 			expected: "tcp dport 443 redirect ip to :443",
 		},
+		{
+			name: "masquerade to :1000-2000 random persistent",
+			setup: func(ctx *ctx) []irNode {
+				ctx.reg.Set(1, regVal{HumanExpr: "1000"})
+				ctx.reg.Set(2, regVal{HumanExpr: "2000"})
+
+				nat := &expr.NAT{
+					Type:        NATTypeMASQ,
+					Family:      unix.NFPROTO_IPV4,
+					RegProtoMin: 1,
+					RegProtoMax: 2,
+					Random:      true,
+					Persistent:  true,
+				}
+				natIR, _ := (&natEncoder{nat: nat}).EncodeIR(ctx)
+				return []irNode{natIR}
+			},
+			expected: "masquerade to :1000-2000 random persistent",
+		},
+		{
+			name: "tcp dport 5000 snat to 10.0.0.1-10.0.0.10:1000-2000",
+			setup: func(ctx *ctx) []irNode {
+				ctx.reg.Set(1, regVal{HumanExpr: "tcp"})
+				ctx.reg.Set(2, regVal{HumanExpr: "5000"})
+				ctx.reg.Set(3, regVal{HumanExpr: "10.0.0.1"})
+				ctx.reg.Set(4, regVal{HumanExpr: "10.0.0.10"})
+				ctx.reg.Set(5, regVal{HumanExpr: "1000"})
+				ctx.reg.Set(6, regVal{HumanExpr: "2000"})
+
+				protoCmp := &expr.Cmp{Register: 1, Op: expr.CmpOpEq, Data: []byte{unix.IPPROTO_TCP}}
+				dportCmp := &expr.Cmp{Register: 2, Op: expr.CmpOpEq, Data: []byte{0x13, 0x88}} // 5000
+
+				nat := &expr.NAT{
+					Type:        expr.NATTypeSourceNAT,
+					Family:      unix.NFPROTO_IPV4,
+					RegAddrMin:  3,
+					RegAddrMax:  4,
+					RegProtoMin: 5,
+					RegProtoMax: 6,
+				}
+
+				protoIR, _ := (&cmpEncoder{cmp: protoCmp}).EncodeIR(ctx)
+				dportIR, _ := (&cmpEncoder{cmp: dportCmp}).EncodeIR(ctx)
+				natIR, _ := (&natEncoder{nat: nat}).EncodeIR(ctx)
+				return []irNode{protoIR, dportIR, natIR}
+			},
+			expected: "tcp dport 5000 snat ip to 10.0.0.1-10.0.0.10:1000-2000",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -292,7 +310,6 @@ func (sui *natCmpRulesetStyleTestSuite) Test_TCPDnatAndRedirect() {
 			ctx := &ctx{}
 			irs := tc.setup(ctx)
 
-			// Собираем строку
 			result := ""
 			for i, ir := range irs {
 				if ir == nil {
@@ -309,42 +326,17 @@ func (sui *natCmpRulesetStyleTestSuite) Test_TCPDnatAndRedirect() {
 	}
 }
 
-func Test_NatCmpRulesetStyle(t *testing.T) {
-	suite.Run(t, new(natCmpRulesetStyleTestSuite))
-}
-
-
-
-
 
 sudo nft add table ip test
-sudo nft add chain ip test prerouting '{ type nat hook prerouting priority 0; }'
-
-sudo nft add rule ip test prerouting tcp dport 8080 dnat to 192.168.0.1:8080
-
-
-sudo nft add rule ip test prerouting tcp dport 443 redirect to :443
+sudo nft add chain ip test prerouting '{ type nat hook prerouting priority filter; policy accept; }'
+sudo nft add chain ip test postrouting '{ type nat hook postrouting priority 100; policy accept; }'
 
 
+sudo nft add rule ip test postrouting masquerade to :1000-2000 random persistent
 
-az358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting tcp dport 8080 dnat to 192.168.0.1:8080
+sudo nft add rule ip test postrouting tcp dport 5000 snat to 10.0.0.1-10.0.0.10:1000-2000
 
-
-sudo nft add rule ip test prerouting tcp dport 443 redirect to :443
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft list ruleset
-table ip test {
-        chain prerouting {
-                type nat hook prerouting priority filter; policy accept;
-                tcp dport 8080 dnat to 192.168.0.1:8080
-                tcp dport 443 redirect to :443
-        }
-}
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
-
-
-
-
-
+sudo nft list ruleset
 
 
 
