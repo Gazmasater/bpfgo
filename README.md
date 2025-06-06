@@ -212,10 +212,20 @@ sudo nft add chain ip filter input '{ type filter hook input priority 0; policy 
 # --- 1. TCP dport 80 → accept ---
 sudo nft add rule ip filter input tcp dport 80 accept
 
-sudo nft add rule ip filter input 'ip version 4 accept'
-sudo nft add rule ip filter input 'ip version != 6 drop'
-sudo nft add rule ip filter input 'tcp dport 80 accept'
-sudo nft add rule ip filter input 'tcp dport 336 accept'
+sudo nft add table inet test
+sudo nft add chain inet test prerouting '{ type filter hook prerouting priority 0; }'
+
+sudo nft add rule inet test input 'ip version 4 accept'
+sudo nft add rule inet test input 'ip version != 6 drop'
+sudo nft add rule inet test input 'tcp dport 80 accept'
+sudo nft add rule inet test input 'tcp dport 336 accept'
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule inet test input 'ip version 4 accept'
+Error: Could not process rule: No such file or directory
+add rule inet test input ip version 4 accept
+                   ^^^^^
+gaz358@gaz358-BOD-WXX9:~/myprog
 
 
 gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add table inet test
