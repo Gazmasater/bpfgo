@@ -198,34 +198,75 @@ Response → тело ответа
 Можно сохранить User-Agent, Cookie и использовать их в автоматических скриптах позже
 ________________________________________________________________________________
 
-📦 Вот готовый фикс для ctEncoder.EncodeIR или format():
-Найди блок, который отвечает за expr.Ct и expr.Immediate, и добавь такую логику:
+package encoders
 
-go
-Копировать
-Редактировать
-case expr.CtKeyMARK:
+import (
+	"encoding/binary"
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/google/nftables/expr"
+)
+
+func init() {
+	register(&expr.Ct{}, func(e expr.Any) encoder {
+		return &ctEncoder{ct: e.(*expr.Ct)}
+	})
+}
+
+type ctEncoder struct {
+	ct *expr.Ct
+}
+
+func (b *ctEncoder) EncodeIR(ctx *ctx) (irNode, error) {
+	ct := b.ct
 	if ct.SourceRegister {
-		// Это операция set: ct mark set <value>
-		srcReg, ok := ctx.reg.Get(regID(ct.Register))
+		// handle set expression (e.g., ct mark set ...)
+		src, ok := ctx.reg.Get(regID(ct.Register))
 		if !ok {
-			return nil, errors.New("ct mark set: source register not found")
+			return newIRNodef("ct %s set *", ctKeyStr(ct.Key)), nil
 		}
-		// Попытка извлечь число из Immediate
-		if imm, ok := srcReg.Expr.(*expr.Immediate); ok && len(imm.Data) >= 4 {
+		if imm, ok := src.Expr.(*expr.Immediate); ok && len(imm.Data) >= 4 {
 			val := binary.LittleEndian.Uint32(imm.Data)
-			return newIRNodef("ct mark set %d", val), nil
+			return newIRNodef("ct %s set %d", ctKeyStr(ct.Key), val), nil
 		}
-		return newIRNodef("ct mark set *"), nil // fallback
+		return newIRNodef("ct %s set *", ctKeyStr(ct.Key)), nil
 	}
-✅ 2. ct status ...
-Чтобы избежать несоответствия, добавь сортировку и фильтрацию валидных битов:
+	ctx.reg.Set(regID(ct.Register), regVal{
+		HumanExpr: fmt.Sprintf("ct %s", ctKeyStr(ct.Key)),
+		Expr:      ct,
+		Len:       4,
+	})
+	return nil, ErrNoIR
+}
 
-go
-Копировать
-Редактировать
-case expr.CtKeySTATUS:
-	raw := binary.LittleEndian.Uint32(cmp.Data)
+func (b *ctEncoder) EncodeJSON(ctx *ctx) ([]byte, error) {
+	return nil, ErrNoJSON
+}
+
+func ctKeyStr(k expr.CtKey) string {
+	switch k {
+	case expr.CtKeySTATE:
+		return "state"
+	case expr.CtKeyDIRECTION:
+		return "direction"
+	case expr.CtKeySTATUS:
+		return "status"
+	case expr.CtKeyEXPIRATION:
+		return "expiration"
+	case expr.CtKeyMARK:
+		return "mark"
+	case expr.CtKeyPROTOCOL:
+		return "protocol"
+	case expr.CtKeyL3PROTOCOL:
+		return "l3proto"
+	}
+	return fmt.Sprintf("key(%d)", k)
+}
+
+func ctStatusFlags(data []byte) string {
+	raw := binary.LittleEndian.Uint32(data)
 	var flags []string
 	if raw&nftCtStatusAssured != 0 {
 		flags = append(flags, "assured")
@@ -242,14 +283,10 @@ case expr.CtKeySTATUS:
 	if raw&nftCtStatusDstNAT != 0 {
 		flags = append(flags, "dnat")
 	}
-	sort.Strings(flags) // опционально
-	return newIRNodef("ct status %s", strings.Join(flags, ",")), nil
-📌 Константы
-Если их нет — добавь:
+	sort.Strings(flags)
+	return strings.Join(flags, ",")
+}
 
-go
-Копировать
-Редактировать
 const (
 	nftCtStatusExpected  = 1 << 0
 	nftCtStatusSeenReply = 1 << 1
@@ -260,7 +297,6 @@ const (
 	nftCtStatusDstNAT    = 1 << 6
 	nftCtStatusDYING     = 1 << 7
 )
-
 
 
 
