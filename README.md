@@ -344,6 +344,61 @@ func Test_CtEncoderAdvanced(t *testing.T) {
 }
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test
+--- FAIL: Test_CtEncoderAdvanced (0.00s)
+    --- FAIL: Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex (0.00s)
+        --- FAIL: Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex/ct_state_new,established (0.00s)
+            encodersCt_test.go:118: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encodersCt_test.go:118
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Not equal: 
+                                        expected: "ct state new,established"
+                                        actual  : "ct state established,new"
+                                    
+                                        Diff:
+                                        --- Expected
+                                        +++ Actual
+                                        @@ -1 +1 @@
+                                        -ct state new,established
+                                        +ct state established,new
+                        Test:           Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex/ct_state_new,established
+        --- FAIL: Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex/ct_status_snat,dnat,confirmed (0.00s)
+            encodersCt_test.go:118: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encodersCt_test.go:118
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Not equal: 
+                                        expected: "ct status snat,dnat,confirmed"
+                                        actual  : "ct status assured,confirmed,snat,dnat"
+                                    
+                                        Diff:
+                                        --- Expected
+                                        +++ Actual
+                                        @@ -1 +1 @@
+                                        -ct status snat,dnat,confirmed
+                                        +ct status assured,confirmed,snat,dnat
+                        Test:           Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex/ct_status_snat,dnat,confirmed
+[{"match":{"op":"==","left":{"meta":{"key":"l4proto"}},"right":"tcp"}},{"counter":{"bytes":0,"packets":0}},{"log":null},{"accept":null}]
+[{"match":{"op":"!=","left":{"meta":{"key":"oifname"}},"right":"lo"}},{"mangle":{"key":{"meta":{"key":"nftrace"}},"value":1}},{"goto":{"target":"FW-OUT"}}]
+meta l4proto tcp counter packets 0 bytes 0 log accept
+ip version != 5
+ip daddr @ipSet
+ip daddr != 93.184.216.34 meta l4proto tcp dport {80,443} meta l4proto tcp
+th dport != 80
+meta l4proto tcp dport != 80
+meta l4proto tcp sport >= 80 sport <= 100
+meta nftrace set 1 ip daddr 10.0.0.0/8 meta l4proto udp
+meta l4proto icmp type echo-reply
+ct state established,related
+ct expiration 1s
+ct direction original
+ct l3proto ipv4
+ct protocol tcp
+FAIL
+exit status 1
+FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.012s
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+
+
 
 
 
