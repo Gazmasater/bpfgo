@@ -212,27 +212,36 @@ sudo nft add chain ip filter input '{ type filter hook input priority 0; policy 
 # --- 1. TCP dport 80 → accept ---
 sudo nft add rule ip filter input tcp dport 80 accept
 
-# --- 2. IP version == 4 ---
-sudo nft add rule ip filter input \
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip filter input \
     payload load 1b @nh,0 => reg 1; \
     bitwise reg 1 = (reg 1 & 0xf0) ^ 0x00; \
     cmp eq reg 1 0x40; \
     accept
-
-# --- 3. IP version != 6 ---
-sudo nft add rule ip filter input \
+bash: syntax error near unexpected token `('
+cmp: eq: No such file or directory
+accept: command not found
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip filter input \
     payload load 1b @nh,0 => reg 1; \
     bitwise reg 1 = (reg 1 & 0xf0) ^ 0x00; \
     cmp neq reg 1 0x60; \
     drop
-
-# --- 4. TCP dport через битовую маску и XOR (== 336) ---
-sudo nft add rule ip filter input \
+bash: syntax error near unexpected token `('
+cmp: neq: No such file or directory
+Command 'drop' not found, did you mean:
+  command 'krop' from snap krop (0.6.0)
+  command 'dtop' from deb diod (1.0.24-5.1)
+  command 'grop' from deb grop (2:0.10-1.2)
+  command 'krop' from deb krop (0.6.0-2ubuntu1)
+See 'snap info <snapname>' for additional versions.
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip filter input \
     payload load 2b @th,2 => reg 1; \
     bitwise reg 2 = (reg 1 & 0xffff) ^ 0x10; \
     cmp eq reg 2 0x0150; \
     accept
-
+bash: syntax error near unexpected token `('
+cmp: eq: No such file or directory
+accept: command not found
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go
 
 
 
