@@ -299,17 +299,33 @@ sudo nft add rule ip test prerouting reject
 
 ________________________________________________________________________________________
 
-nft add rule ip filter input ct state established,new accept
-nft add rule ip filter input ct direction original accept
-nft add rule ip filter input ct expiration 5s drop
-nft add rule ip filter input ct protocol tcp accept
-nft add rule ip filter input ct mark set 42
-nft add rule ip filter input ct status assured,confirmed,dnat,snat accept
-nft add rule ip filter input ct state != established,invalid drop
+sudo nft add rule inet test prerouting ct state established,new accept
+sudo nft add rule inet test prerouting ct direction original accept
+sudo nft add rule inet test prerouting ct expiration 5s drop
+sudo nft add rule inet test prerouting ct protocol tcp accept
+sudo nft add rule inet test prerouting ct mark set 42
+sudo nft add rule inet test prerouting ct status assured,confirmed,dnat,snat accept
+sudo nft add rule inet test prerouting ct state != established,invalid drop
 
 
+sudo nft list ruleset
 
-nft delete rule ip filter input position 2
+nft delete rule inet test prerouting position 0
+
+
+table inet test {
+        chain prerouting {
+                type filter hook prerouting priority filter; policy accept;
+                ct status assured,confirmed,snat,dnat accept
+        }
+}
+
+gaz358@gaz358-BOD-WXX9:~/myprog/olimp$ sudo  nft delete rule inet test prerouting position 0
+Error: syntax error, unexpected position, expecting handle
+delete rule inet test prerouting position 0
+                                 ^^
+
+
 
 
 
