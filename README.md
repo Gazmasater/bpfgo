@@ -332,9 +332,28 @@ sudo nft add chain ip test prerouting '{ type nat hook prerouting priority filte
 sudo nft add chain ip test postrouting '{ type nat hook postrouting priority 100; policy accept; }'
 
 
-sudo nft add rule ip test postrouting masquerade to :1000-2000 random persistent
-
+_____________
 sudo nft add rule ip test postrouting tcp dport 5000 snat to 10.0.0.1-10.0.0.10:1000-2000
+
+az358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft list ruleset
+table ip test {
+        chain prerouting {
+                type nat hook prerouting priority filter; policy accept;
+        }
+
+        chain postrouting {
+                type nat hook postrouting priority srcnat; policy accept;
+                tcp dport 5000 snat to 10.0.0.1-10.0.0.10:1000-2000
+        }
+}
+_________________________________________
+
+sudo nft add rule ip test postrouting masquerade to :1000-2000 random persistent   //err
+
+
+gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test postrouting masquerade to :1000-2000 random persistent
+Error: syntax error, unexpected persistent, expecting end of file or newline or semicolon
+add rule ip test postrouting masquerade to :1000-2000 random persistent
 
 sudo nft list ruleset
 
