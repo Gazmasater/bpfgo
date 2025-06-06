@@ -199,167 +199,73 @@ Response → тело ответа
 ________________________________________________________________________________
 
 
-func (b *bitwiseEncoder) buildFromCmpData(ctx *ctx, cmp *expr.Cmp) string {
-	// Получаем регистр, из которого читает Bitwise
-	src, _ := ctx.reg.Get(regID(b.bitwise.SourceRegister))
-
-	// 🎯 Специальный случай: ip version (Payload + маска 0xF0)
-	if payload, ok := src.Expr.(*expr.Payload); ok &&
-		payload.Offset == 0 && payload.Len == 1 &&
-		len(b.bitwise.Mask) == 1 && b.bitwise.Mask[0] == 0xF0 {
-
-		val := rb.RawBytes(cmp.Data).Uint64() >> 4
-		return fmt.Sprintf("%d", val)
-	}
-
-	// Попытка использовать описание заголовка
-	if *ctx.hdr != nil {
-		if desc, ok := (*ctx.hdr).Offsets[(*ctx.hdr).CurrentOffset]; ok {
-			return desc.Desc(cmp.Data)
+{
+	name: "ip version == 4",
+	setup: func(ctx *ctx) *expr.Cmp {
+		pl := &expr.Payload{
+			Base:         expr.PayloadBaseNetworkHeader,
+			Offset:       0,
+			Len:          1,
+			DestRegister: 1,
 		}
-	}
-
-	// fallback: hex
-	if rb.RawBytes(cmp.Data).Uint64() != 0 {
-		return fmt.Sprintf("0x%x", rb.RawBytes(cmp.Data).Uint64())
-	}
-
-	return ""
-}
-
-
-
-package encoders
-
-import (
-	"testing"
-
-	"github.com/google/nftables/expr"
-	"github.com/stretchr/testify/suite"
-	"github.com/Morwran/nft-go/pkg/protocols"
-)
-
-type cmpEncoderAdvancedTestSuite struct {
-	suite.Suite
-}
-
-func (sui *cmpEncoderAdvancedTestSuite) Test_CmpEncodeIR() {
-	testCases := []struct {
-		name     string
-		setup    func(ctx *ctx) *expr.Cmp
-		expected string
-	}{
-		{
-			name: "ct state != established",
-			setup: func(ctx *ctx) *expr.Cmp {
-				ct := &expr.Ct{Key: expr.CtKeySTATE, Register: 1}
-				ctx.reg.Set(1, regVal{
-					HumanExpr: "ct state",
-					Expr:      ct,
-				})
-				return &expr.Cmp{
-					Op:       expr.CmpOpNeq,
-					Register: 1,
-					Data:     []byte{byte(CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0},
-				}
-			},
-			expected: "ct state != established",
-		},
-		{
-			name: "payload ip version != 5",
-			setup: func(ctx *ctx) *expr.Cmp {
-				// Настройка Payload
-				pl := &expr.Payload{
-					Base:         expr.PayloadBaseNetworkHeader,
-					Offset:       0,
-					Len:          1,
-					DestRegister: 1,
-				}
-				// Bitwise маска для извлечения версии IP
-				bw := &expr.Bitwise{
-					SourceRegister: 1,
-					DestRegister:   2,
-					Len:            1,
-					Mask:           []byte{0xF0},
-					Xor:            []byte{0x00},
-				}
-				// Cmp с результатом битовой маски (5 << 4 == 0x50)
-				cmp := &expr.Cmp{
-					Op:       expr.CmpOpNeq,
-					Register: 2,
-					Data:     []byte{0x50},
-				}
-
-				// Контекст регистров
-				ctx.reg.Set(1, regVal{
-					HumanExpr: "ip version",
-					Expr:      pl,
-				})
-				ctx.reg.Set(2, regVal{
-					HumanExpr: "ip version",
-					Expr:      bw,
-				})
-
-				return cmp
-			},
-			expected: "ip version != 5",
-		},
-		{
-			name: "meta cpu == 3",
-			setup: func(ctx *ctx) *expr.Cmp {
-				meta := &expr.Meta{Key: expr.MetaKeyCPU, Register: 1}
-				ctx.reg.Set(1, regVal{
-					HumanExpr: "meta cpu",
-					Expr:      meta,
-				})
-				return &expr.Cmp{
-					Op:       expr.CmpOpEq,
-					Register: 1,
-					Data:     []byte{3},
-				}
-			},
-			expected: "meta cpu 3",
-		},
-	}
-
-	for _, tc := range testCases {
-		sui.Run(tc.name, func() {
-			ctx := &ctx{
-				hdr: new(protocols.ProtoDescPtr), // обязательно для payload/builder
-			}
-			cmp := tc.setup(ctx)
-			enc := &cmpEncoder{cmp: cmp}
-			ir, err := enc.EncodeIR(ctx)
-			sui.Require().NoError(err)
-			sui.Require().Equal(tc.expected, ir.Format())
+		bw := &expr.Bitwise{
+			SourceRegister: 1,
+			DestRegister:   2,
+			Len:            1,
+			Mask:           []byte{0xF0},
+			Xor:            []byte{0x00},
+		}
+		cmp := &expr.Cmp{
+			Op:       expr.CmpOpEq,
+			Register: 2,
+			Data:     []byte{0x40}, // 4 << 4
+		}
+		ctx.reg.Set(1, regVal{
+			HumanExpr: "ip version",
+			Expr:      pl,
 		})
-	}
-}
+		ctx.reg.Set(2, regVal{
+			HumanExpr: "ip version",
+			Expr:      bw,
+		})
+		return cmp
+	},
+	expected: "ip version 4",
+},
+{
+	name: "ip version == 6",
+	setup: func(ctx *ctx) *expr.Cmp {
+		pl := &expr.Payload{
+			Base:         expr.PayloadBaseNetworkHeader,
+			Offset:       0,
+			Len:          1,
+			DestRegister: 1,
+		}
+		bw := &expr.Bitwise{
+			SourceRegister: 1,
+			DestRegister:   2,
+			Len:            1,
+			Mask:           []byte{0xF0},
+			Xor:            []byte{0x00},
+		}
+		cmp := &expr.Cmp{
+			Op:       expr.CmpOpEq,
+			Register: 2,
+			Data:     []byte{0x60}, // 6 << 4
+		}
+		ctx.reg.Set(1, regVal{
+			HumanExpr: "ip version",
+			Expr:      pl,
+		})
+		ctx.reg.Set(2, regVal{
+			HumanExpr: "ip version",
+			Expr:      bw,
+		})
+		return cmp
+	},
+	expected: "ip version 6",
+},
 
-func Test_CmpEncoderAdvanced(t *testing.T) {
-	suite.Run(t, new(cmpEncoderAdvancedTestSuite))
-}
 
-
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test
-[{"match":{"op":"==","left":{"meta":{"key":"l4proto"}},"right":"tcp"}},{"counter":{"bytes":0,"packets":0}},{"log":null},{"accept":null}]
-[{"match":{"op":"!=","left":{"meta":{"key":"oifname"}},"right":"lo"}},{"mangle":{"key":{"meta":{"key":"nftrace"}},"value":1}},{"goto":{"target":"FW-OUT"}}]
-meta l4proto tcp counter packets 0 bytes 0 log accept
-ip version != 5
-ip daddr @ipSet
-ip daddr != 93.184.216.34 meta l4proto tcp dport {80,443} meta l4proto tcp
-th dport != 80
-meta l4proto tcp dport != 80
-meta l4proto tcp sport >= 80 sport <= 100
-meta nftrace set 1 ip daddr 10.0.0.0/8 meta l4proto udp
-meta l4proto icmp type echo-reply
-ct state established,related
-ct expiration 1s
-ct direction original
-ct l3proto ipv4
-ct protocol tcp
-PASS
-ok      github.com/Morwran/nft-go/internal/expr-encoders        0.012s
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
 
 
