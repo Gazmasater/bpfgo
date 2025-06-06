@@ -198,102 +198,40 @@ Response → тело ответа
 Можно сохранить User-Agent, Cookie и использовать их в автоматических скриптах позже
 ________________________________________________________________________________
 
-		{
-			name: "match th dport accept",
-			exprs: []expr.Any{
-				&expr.Payload{
-					DestRegister: 1,
-					Base:         expr.PayloadBaseTransportHeader,
-					Offset:       2,
-					Len:          2,
-				},
-				&expr.Cmp{
-					Op:       expr.CmpOpEq,
-					Register: 1,
-					Data:     []byte{0x00, 0x50}, // port 80
-				},
-				&expr.Verdict{Kind: expr.VerdictAccept},
-			},
-			expected: "th dport 80 accept",
-			nft:      "tcp dport 80 accept",
-		},
+#!/bin/bash
 
-		{
-			name: "match ip version 4 accept",
-			exprs: []expr.Any{
-				&expr.Payload{
-					DestRegister: 1,
-					Base:         expr.PayloadBaseNetworkHeader,
-					Offset:       0,
-					Len:          1,
-				},
-				&expr.Bitwise{
-					SourceRegister: 1,
-					DestRegister:   1,
-					Len:            1,
-					Mask:           []byte{0xF0},
-					Xor:            []byte{0x00},
-				},
-				&expr.Cmp{
-					Op:       expr.CmpOpEq,
-					Register: 1,
-					Data:     []byte{0x40}, // version 4 << 4
-				},
-				&expr.Verdict{Kind: expr.VerdictAccept},
-			},
-			expected: "ip version 4 accept",
-		},
-		{
-			name: "match ip version != 6 drop",
-			exprs: []expr.Any{
-				&expr.Payload{
-					DestRegister: 1,
-					Base:         expr.PayloadBaseNetworkHeader,
-					Offset:       0,
-					Len:          1,
-				},
-				&expr.Bitwise{
-					SourceRegister: 1,
-					DestRegister:   1,
-					Len:            1,
-					Mask:           []byte{0xF0},
-					Xor:            []byte{0x00},
-				},
-				&expr.Cmp{
-					Op:       expr.CmpOpNeq,
-					Register: 1,
-					Data:     []byte{0x60}, // version 6 << 4
-				},
-				&expr.Verdict{Kind: expr.VerdictDrop},
-			},
-			expected: "ip version != 6 drop",
-		},
-		{
-			name: "bitwise mask+xor+accept on dport",
-			exprs: []expr.Any{
-				&expr.Payload{
-					DestRegister: 1,
-					Base:         expr.PayloadBaseTransportHeader,
-					Offset:       2,
-					Len:          2,
-				},
-				&expr.Bitwise{
-					SourceRegister: 1,
-					DestRegister:   2,
-					Len:            2,
-					Mask:           []byte{0xFF, 0xFF},
-					Xor:            []byte{0x00, 0x10},
-				},
-				&expr.Cmp{
-					Op:       expr.CmpOpEq,
-					Register: 2,
-					Data:     []byte{0x01, 0x50},
-				},
-				&expr.Verdict{Kind: expr.VerdictAccept},
-			},
-			expected: "th dport 336 accept",
-		},
+# Удаление таблицы, если она уже существует
+sudo nft delete table ip filter 2>/dev/null
 
+# Создание таблицы
+sudo nft add table ip filter
+
+# Создание цепочки
+sudo nft add chain ip filter input '{ type filter hook input priority 0; policy accept; }'
+
+# --- 1. TCP dport 80 → accept ---
+sudo nft add rule ip filter input tcp dport 80 accept
+
+# --- 2. IP version == 4 ---
+sudo nft add rule ip filter input \
+    payload load 1b @nh,0 => reg 1; \
+    bitwise reg 1 = (reg 1 & 0xf0) ^ 0x00; \
+    cmp eq reg 1 0x40; \
+    accept
+
+# --- 3. IP version != 6 ---
+sudo nft add rule ip filter input \
+    payload load 1b @nh,0 => reg 1; \
+    bitwise reg 1 = (reg 1 & 0xf0) ^ 0x00; \
+    cmp neq reg 1 0x60; \
+    drop
+
+# --- 4. TCP dport через битовую маску и XOR (== 336) ---
+sudo nft add rule ip filter input \
+    payload load 2b @th,2 => reg 1; \
+    bitwise reg 2 = (reg 1 & 0xffff) ^ 0x10; \
+    cmp eq reg 2 0x0150; \
+    accept
 
 
 
