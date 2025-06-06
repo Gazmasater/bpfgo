@@ -221,10 +221,9 @@ sudo nft add rule ip test prerouting ip saddr 8.8.8.8 add @myset { 8.8.8.8 log c
 }
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add table ip test
-sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0; }'
-sudo nft add set ip test myset { type ipv4_addr; flags dynamic; }
-[sudo] password for gaz358: 
-bash: syntax error near unexpected token `}'
+sudo nft add table ip test
+sudo nft add chain ip test prerouting "{ type filter hook prerouting priority 0; }"
+sudo nft add set ip test myset '{ type ipv4_addr; flags dynamic; }'
+sudo nft add rule ip test prerouting ip saddr 8.8.8.8 add @myset { 8.8.8.8 log counter }
 
 
