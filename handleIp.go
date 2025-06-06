@@ -18,15 +18,15 @@ func HandleIPEvent(
 	eventChan_sport chan int,
 	eventChan_pid chan int,
 ) {
+	if event.Family != 6 {
+		return
+	}
+
 	var (
-		proto   string
+		proto   = "TCP"
 		dsthost string
 		err     error
 	)
-
-	if event.Family == 6 {
-		proto = "TCP"
-	}
 
 	if dstIP.IsLoopback() {
 		dsthost = pkg.ResolveIP(dstIP)
