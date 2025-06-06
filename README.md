@@ -229,6 +229,40 @@ ________________________________________________________________________________
 Хочешь — пришли TypeToString() и rejectIR.Format() из твоей версии — скажу точно.
 
 
+func (b *rejectEncoder) TypeToString() string {
+	switch b.reject.Type {
+	case unix.NFT_REJECT_TCP_RST:
+		return "tcp reset"
+	case unix.NFT_REJECT_ICMPX_UNREACH:
+		if b.reject.Code == unix.NFT_REJECT_ICMPX_PORT_UNREACH {
+			break
+		}
+		return "icmpx"
+	case unix.NFT_REJECT_ICMP_UNREACH:
+		switch b.reject.Code {
+		case unix.NFPROTO_IPV4:
+			return "icmp"
+		case unix.NFPROTO_IPV6:
+			return "icmpv6"
+		}
+	}
+	return ""
+}
+
+
+func (r *rejectIR) Format() string {
+	sb := strings.Builder{}
+	sb.WriteString("reject")
+	if typ := r.typeStr; typ != "" {
+		sb.WriteString(fmt.Sprintf(" with %s %d", typ, r.code))
+	}
+	return sb.String()
+}
+
+
+
+
+
 
 
 
