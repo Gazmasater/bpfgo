@@ -348,16 +348,6 @@ table ip test {
 }
 _________________________________________
 
-sudo nft add rule ip test postrouting masquerade to :1000-2000 random persistent   //err
-
-
-gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test postrouting masquerade to :1000-2000 random persistent
-Error: syntax error, unexpected persistent, expecting end of file or newline or semicolon
-add rule ip test postrouting masquerade to :1000-2000 random persistent
-
-
-
-
 {
 	name: "masquerade to :1000 random persistent",
 	setup: func(ctx *ctx) []irNode {
@@ -378,6 +368,13 @@ add rule ip test postrouting masquerade to :1000-2000 random persistent
 
 
 sudo nft add rule ip test postrouting masquerade random persistent to :1000
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test postrouting masquerade random persistent to :1000
+Error: syntax error, unexpected persistent, expecting end of file or newline or semicolon
+add rule ip test postrouting masquerade random persistent to :1000
+                                               ^^^^^^^^^^
+gaz358@gaz358-BOD-WXX9
 
 
 
