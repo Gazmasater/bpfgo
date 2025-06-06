@@ -198,59 +198,33 @@ Response → тело ответа
 Можно сохранить User-Agent, Cookie и использовать их в автоматических скриптах позже
 ________________________________________________________________________________
 
-func HandleIPEvent(
-	event bpfTraceInfo,
-	srcIP, dstIP net.IP,
-	eventChan_sport chan int,
-	eventChan_pid chan int,
-) {
-	if event.Family != 6 {
-		return
-	}
+{
+	name: "reject with tcp reset",
+	setup: func(ctx *ctx) *expr.Cmp {
+		// В rejectEncoder нет смысла привязываться к Cmp напрямую,
+		// поэтому мы просто эмулируем RuleExpr, а не Cmp,
+		// вызывая Format напрямую.
 
-	var (
-		proto   = "TCP"
-		dsthost = resolveHostSafe(dstIP)
-		srchost = resolveHost(srcIP)
-	)
-
-	srcAddr := formatAddr(srchost, srcIP, event.Sport)
-	dstAddr := formatAddr(dsthost, dstIP, event.Dport)
-
-	key := makeConnectionKey(srcIP, uint16(event.Sport), dstIP, event.Dport)
-
-	switch event.State {
-	case 1:
-		muConn.Lock()
-		if _, exists := connections[key]; exists {
-			muConn.Unlock()
-			return
+		// Зарегистрировать выражение вручную:
+		reject := &expr.Reject{
+			Type: unix.NFT_REJECT_TCP_RST,
+			Code: 0,
 		}
-		connections[key] = true
-		muConn.Unlock()
-
-		select {
-		case eventChan_sport <- int(event.Sport):
-			fmt.Printf("State 1: заменен порт %d\n", event.Sport)
-		default:
+		enc := &rejectEncoder{reject: reject}
+		ir, err := enc.EncodeIR(ctx)
+		ctx.reg.Set(255, regVal{
+			HumanExpr: ir.Format(),
+		})
+		_ = err // пропускаем, т.к. используем ниже в Format()
+		return &expr.Cmp{
+			Register: 255,
+			Op:       expr.CmpOpEq,
+			Data:     []byte{}, // неважно, просто хак
 		}
+	},
+	expected: "reject with tcp reset 0",
+},
 
-		name := cachedComm(event.Comm)
-		fmt.Printf("PID=%d NAME=%s %s:%s <- %s:%s \n",
-			event.Pid,
-			name,
-			proto,
-			srcAddr,
-			proto,
-			dstAddr)
-
-	case 2, 10:
-		select {
-		case eventChan_pid <- int(event.Pid):
-		default:
-		}
-	}
-}
 
 
 
