@@ -198,47 +198,184 @@ Response → тело ответа
 Можно сохранить User-Agent, Cookie и использовать их в автоматических скриптах позже
 ________________________________________________________________________________
 
+package encoders
 
-sudo nft add table ip test
-sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0; }'
+import (
+	"sort"
+	"strings"
+	"testing"
 
-📌 1. ct state != established
-bash
-Копировать
-Редактировать
-sudo nft add rule ip test prerouting ct state != established
-📌 2. ip version != 5
-bash
-Копировать
-Редактировать
-sudo nft add rule ip test prerouting @nh,0,1 & 0xf0 != 0x50
-📝 0x50 = 5 << 4
+	"github.com/google/nftables"
+	"github.com/google/nftables/expr"
+	"github.com/stretchr/testify/suite"
+)
 
-📌 3. meta cpu 3
-bash
-Копировать
-Редактировать
-sudo nft add rule ip test prerouting meta cpu 3
-📌 4. ip version == 4
-bash
-Копировать
-Редактировать
-sudo nft add rule ip test prerouting @nh,0,1 & 0xf0 == 0x40
-📝 0x40 = 4 << 4
+type ctEncoderAdvancedTestSuite struct {
+	suite.Suite
+}
 
-📌 5. ip version == 6
-bash
-Копировать
-Редактировать
-sudo nft add rule ip test prerouting @nh,0,1 & 0xf0 == 0x60
-📝 0x60 = 6 << 4
+func (sui *ctEncoderAdvancedTestSuite) Test_CtEncodeIR_Complex() {
+	testData := []struct {
+		name     string
+		exprs    nftables.Rule
+		expected string
+	}{
+		{
+			name: "ct state new,established",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{Key: expr.CtKeySTATE, Register: 1},
+					&expr.Cmp{
+						Op:       expr.CmpOpEq,
+						Register: 1,
+						Data:     []byte{byte(CtStateBitNEW | CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0},
+					},
+				},
+			},
+			expected: "ct state established,new", // упорядочено!
+		},
+		{
+			name: "ct direction original",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{Key: expr.CtKeyDIRECTION, Register: 1},
+					&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{0}},
+				},
+			},
+			expected: "ct direction original",
+		},
+		{
+			name: "ct expiration 5s",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{Key: expr.CtKeyEXPIRATION, Register: 1},
+					&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{0x88, 0x13, 0x00, 0x00}}, // 5000
+				},
+			},
+			expected: "ct expiration 5s",
+		},
+		{
+			name: "ct protocol tcp",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{Key: expr.CtKeyPROTOCOL, Register: 1},
+					&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{6}},
+				},
+			},
+			expected: "ct protocol tcp",
+		},
+		{
+			name: "ct mark set 42",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Immediate{Register: 1, Data: []byte{42, 0, 0, 0}},
+					&expr.Ct{
+						Key:            expr.CtKeyMARK,
+						Register:       1,
+						SourceRegister: true,
+					},
+				},
+			},
+			expected: "ct mark set 42",
+		},
+		{
+			name: "ct status snat,dnat,confirmed",
+			exprs: nftables.Rule{
+				Exprs: []expr.Any{
+					&expr.Ct{Key: expr.CtKeySTATUS, Register: 1},
+					&expr.Cmp{
+						Op:       expr.CmpOpEq,
+						Register: 1,
+						Data:     []byte{0x3C, 0x00, 0x00, 0x00}, // snat + dnat + confirmed + assured
+					},
+				},
+			},
+			expected: "ct status confirmed,dnat,snat", // упорядочено!
+		},
+	}
+
+	for _, tc := range testData {
+		sui.Run(tc.name, func() {
+			str, err := NewRuleExprEncoder(&tc.exprs).Format()
+			sui.Require().NoError(err)
+
+			// normalize comma-separated values for order-insensitive comparison
+			if strings.HasPrefix(tc.expected, "ct state") || strings.HasPrefix(tc.expected, "ct status") {
+				expectedParts := strings.Split(tc.expected, " ")
+				actualParts := strings.Split(str, " ")
+
+				// сортируем значения после ключа
+				sort.Strings(expectedParts[2:])
+				sort.Strings(actualParts[2:])
+
+				tc.expected = strings.Join(expectedParts, " ")
+				str = strings.Join(actualParts, " ")
+			}
+
+			sui.Equal(tc.expected, str)
+		})
+	}
+}
+
+func Test_CtEncoderAdvanced(t *testing.T) {
+	suite.Run(t, new(ctEncoderAdvancedTestSuite))
+}
 
 
-sudo nft add rule ip test prerouting ip version != 5
-sudo nft add rule ip test prerouting ip version 4
-sudo nft add rule ip test prerouting ip version 6
 
-sudo nft list table ip test
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test
+--- FAIL: Test_CtEncoderAdvanced (0.00s)
+    --- FAIL: Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex (0.00s)
+        --- FAIL: Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex/ct_mark_set_42 (0.00s)
+            encodersCt_test.go:115: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encodersCt_test.go:115
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Not equal: 
+                                        expected: "ct mark set 42"
+                                        actual  : "ct mark set *"
+                                    
+                                        Diff:
+                                        --- Expected
+                                        +++ Actual
+                                        @@ -1 +1 @@
+                                        -ct mark set 42
+                                        +ct mark set *
+                        Test:           Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex/ct_mark_set_42
+        --- FAIL: Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex/ct_status_snat,dnat,confirmed (0.00s)
+            encodersCt_test.go:115: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encodersCt_test.go:115
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Not equal: 
+                                        expected: "ct status confirmed,dnat,snat"
+                                        actual  : "ct status assured,confirmed,snat,dnat"
+                                    
+                                        Diff:
+                                        --- Expected
+                                        +++ Actual
+                                        @@ -1 +1 @@
+                                        -ct status confirmed,dnat,snat
+                                        +ct status assured,confirmed,snat,dnat
+                        Test:           Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex/ct_status_snat,dnat,confirmed
+[{"match":{"op":"==","left":{"meta":{"key":"l4proto"}},"right":"tcp"}},{"counter":{"bytes":0,"packets":0}},{"log":null},{"accept":null}]
+[{"match":{"op":"!=","left":{"meta":{"key":"oifname"}},"right":"lo"}},{"mangle":{"key":{"meta":{"key":"nftrace"}},"value":1}},{"goto":{"target":"FW-OUT"}}]
+meta l4proto tcp counter packets 0 bytes 0 log accept
+ip version != 5
+ip daddr @ipSet
+ip daddr != 93.184.216.34 meta l4proto tcp dport {80,443} meta l4proto tcp
+th dport != 80
+meta l4proto tcp dport != 80
+meta l4proto tcp sport >= 80 sport <= 100
+meta nftrace set 1 ip daddr 10.0.0.0/8 meta l4proto udp
+meta l4proto icmp type echo-reply
+ct state established,related
+ct expiration 1s
+ct direction original
+ct l3proto ipv4
+ct protocol tcp
+FAIL
+exit status 1
+FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.013s
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
 
 
 
