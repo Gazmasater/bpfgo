@@ -198,187 +198,33 @@ Response → тело ответа
 Можно сохранить User-Agent, Cookie и использовать их в автоматических скриптах позже
 ________________________________________________________________________________
 
-package encoders
-
-import (
-	"sort"
-	"strings"
-	"testing"
-
-	"github.com/google/nftables"
-
-	"github.com/google/nftables/expr"
-	"github.com/stretchr/testify/suite"
-)
-
-type ctEncoderAdvancedTestSuite struct {
-	suite.Suite
-}
-
-func (sui *ctEncoderAdvancedTestSuite) Test_CtEncodeIR_Complex() {
-	testData := []struct {
-		name     string
-		exprs    []expr.Any
-		expected string
-	}{
-		{
-			name: "ct state new,established",
-			exprs: []expr.Any{
-				&expr.Ct{Key: expr.CtKeySTATE, Register: 1},
-				&expr.Cmp{
-					Op:       expr.CmpOpEq,
-					Register: 1,
-					Data:     []byte{byte(CtStateBitNEW | CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0},
-				},
-			},
-			expected: "ct state new,established",
-		},
-		{
-			name: "ct direction original",
-			exprs: []expr.Any{
-				&expr.Ct{Key: expr.CtKeyDIRECTION, Register: 1},
-				&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{0}},
-			},
-			expected: "ct direction original",
-		},
-		{
-			name: "ct expiration 5s",
-			exprs: []expr.Any{
-				&expr.Ct{Key: expr.CtKeyEXPIRATION, Register: 1},
-				&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{0x88, 0x13, 0x00, 0x00}},
-			},
-			expected: "ct expiration 5s",
-		},
-		{
-			name: "ct protocol tcp",
-			exprs: []expr.Any{
-				&expr.Ct{Key: expr.CtKeyPROTOCOL, Register: 1},
-				&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{6}},
-			},
-			expected: "ct protocol tcp",
-		},
-		{
-			name: "ct mark set 42",
-			exprs: []expr.Any{
-				&expr.Immediate{Register: 1, Data: []byte{42, 0, 0, 0}},
-				&expr.Ct{Key: expr.CtKeyMARK, Register: 1, SourceRegister: true},
-			},
-			expected: "ct mark set 42",
-		},
-		{
-			name: "ct status snat,dnat,confirmed,assured",
-			exprs: []expr.Any{
-				&expr.Ct{Key: expr.CtKeySTATUS, Register: 1},
-				&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{0x3C, 0x00, 0x00, 0x00, 0, 0, 0, 0}},
-			},
-			expected: "ct status snat,dnat,confirmed,assured",
-		},
-		{
-			name: "ct state != established,invalid",
-			exprs: []expr.Any{
-				&expr.Ct{Key: expr.CtKeySTATE, Register: 1},
-				&expr.Cmp{
-					Op:       expr.CmpOpNeq,
-					Register: 1,
-					Data:     []byte{byte(CtStateBitESTABLISHED | CtStateBitINVALID), 0, 0, 0, 0, 0, 0, 0},
-				},
-			},
-			expected: "ct state != established,invalid",
-		},
-	}
-
-	for _, tc := range testData {
-		sui.Run(tc.name, func() {
-			rule := nftables.Rule{Exprs: tc.exprs}
-			str, err := NewRuleExprEncoder(&rule).Format()
-			sui.Require().NoError(err)
-
-			expectedNorm := NormalizeCtExpr(tc.expected)
-			actualNorm := NormalizeCtExpr(str)
-			sui.Require().Equal(expectedNorm, actualNorm)
-		})
-	}
-}
-
-func Test_CtEncoderAdvanced(t *testing.T) {
-	suite.Run(t, new(ctEncoderAdvancedTestSuite))
-}
-
 func NormalizeCtExpr(input string) string {
+	// нормализуем 'ct state != ...' и аналогичные
+	negationPrefixes := []string{
+		"ct state !=",
+		"ct status !=",
+		"ct event !=",
+	}
+	for _, prefix := range negationPrefixes {
+		if strings.HasPrefix(input, prefix) {
+			return normalizeWithPrefix(input, prefix)
+		}
+	}
+
+	// обычные (не инвертированные)
 	prefixes := []string{
 		"ct state ",
 		"ct status ",
 		"ct event ",
-		"ct state !",
-		"ct status !",
-		"ct event !",
 	}
-
 	for _, prefix := range prefixes {
 		if strings.HasPrefix(input, prefix) {
 			return normalizeWithPrefix(input, prefix)
-		}
-		// поддержка выражений типа: ct state != ...
-		if strings.HasPrefix(input, prefix[:len(prefix)-1]+"!=") {
-			return normalizeWithPrefix(input, prefix[:len(prefix)-1]+"!= ")
-		}
-		if strings.HasPrefix(input, prefix[:len(prefix)-1]+"!= ") {
-			return normalizeWithPrefix(input, prefix[:len(prefix)-1]+"!= ")
 		}
 	}
 	return input
 }
 
-func normalizeWithPrefix(input, prefix string) string {
-	rest := strings.TrimPrefix(input, prefix)
-	rest = strings.TrimSpace(rest)
-	values := strings.Split(rest, ",")
-	for i := range values {
-		values[i] = strings.TrimSpace(values[i])
-	}
-	sort.Strings(values)
-	return prefix + strings.Join(values, ",")
-}
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test
---- FAIL: Test_CtEncoderAdvanced (0.00s)
-    --- FAIL: Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex (0.00s)
-        --- FAIL: Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex/ct_state_!=_established,invalid (0.00s)
-            encodersCt_test.go:98: 
-                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encodersCt_test.go:98
-                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
-                        Error:          Not equal: 
-                                        expected: "ct state != established,invalid"
-                                        actual  : "ct state != invalid,established"
-                                    
-                                        Diff:
-                                        --- Expected
-                                        +++ Actual
-                                        @@ -1 +1 @@
-                                        -ct state != established,invalid
-                                        +ct state != invalid,established
-                        Test:           Test_CtEncoderAdvanced/Test_CtEncodeIR_Complex/ct_state_!=_established,invalid
-[{"match":{"op":"==","left":{"meta":{"key":"l4proto"}},"right":"tcp"}},{"counter":{"bytes":0,"packets":0}},{"log":null},{"accept":null}]
-[{"match":{"op":"!=","left":{"meta":{"key":"oifname"}},"right":"lo"}},{"mangle":{"key":{"meta":{"key":"nftrace"}},"value":1}},{"goto":{"target":"FW-OUT"}}]
-meta l4proto tcp counter packets 0 bytes 0 log accept
-ip version != 5
-ip daddr @ipSet
-ip daddr != 93.184.216.34 meta l4proto tcp dport {80,443} meta l4proto tcp
-th dport != 80
-meta l4proto tcp dport != 80
-meta l4proto tcp sport >= 80 sport <= 100
-meta nftrace set 1 ip daddr 10.0.0.0/8 meta l4proto udp
-meta l4proto icmp type echo-reply
-ct state established,related
-ct expiration 1s
-ct direction original
-ct l3proto ipv4
-ct protocol tcp
-FAIL
-exit status 1
-FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.016s
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
 
 
 
