@@ -279,6 +279,13 @@ func Test_ExthdrEncoder(t *testing.T) {
 }
 
 
+sudo nft add table ip test
+sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0; }'
+sudo nft add rule ip test prerouting tcp option 2
+sudo nft add rule ip test prerouting ip option 1
+sudo nft add rule ip test prerouting ip option @4,8,2 set 0x1234
+
+
 
 
 
