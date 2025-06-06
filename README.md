@@ -309,6 +309,9 @@ sudo nft add rule inet test prerouting ct state != established,invalid drop
 
 
 sudo nft list ruleset
+sudo nft -a list chain inet test prerouting
+sudo nft delete rule inet test prerouting handle 7
+
 
 nft delete rule inet test prerouting position 0
 
