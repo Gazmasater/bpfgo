@@ -286,6 +286,21 @@ sudo nft add rule ip test prerouting ip option 1
 sudo nft add rule ip test prerouting ip option @4,8,2 set 0x1234
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting tcp option 2
+Error: syntax error, unexpected newline
+add rule ip test prerouting tcp option 2
+                                        ^
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting ip option 1
+Error: syntax error, unexpected number, expecting lsrr or rr or ssrr or ra
+add rule ip test prerouting ip option 1
+                                      ^
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting ip option @4,8,2 set 0x1234
+Error: syntax error, unexpected @, expecting lsrr or rr or ssrr or ra
+add rule ip test prerouting ip option @4,8,2 set 0x1234
+                                      ^
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+
+
 
 
 
