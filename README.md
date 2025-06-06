@@ -198,25 +198,10 @@ Response → тело ответа
 Можно сохранить User-Agent, Cookie и использовать их в автоматических скриптах позже
 ________________________________________________________________________________
 
-package encoders
-
-import (
-	"testing"
-
-	"github.com/google/nftables/expr"
-	"github.com/stretchr/testify/suite"
-	"golang.org/x/sys/unix"
-)
-
-type exthdrEncoderTestSuite struct {
-	suite.Suite
-}
-
 func (sui *exthdrEncoderTestSuite) Test_ExthdrEncodeIR_ValidOnly() {
 	testCases := []struct {
 		name     string
 		exthdr   *expr.Exthdr
-		regSetup func(ctx *ctx)
 		expected string
 	}{
 		{
@@ -227,7 +212,7 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrEncodeIR_ValidOnly() {
 				Flags:        unix.NFT_EXTHDR_F_PRESENT,
 				DestRegister: 1,
 			},
-			expected: "", // EncodeIR вернёт nil, ErrNoIR
+			expected: "", // no IR
 		},
 		{
 			name: "ipv6 option present → store to register",
@@ -237,68 +222,36 @@ func (sui *exthdrEncoderTestSuite) Test_ExthdrEncodeIR_ValidOnly() {
 				Flags:        unix.NFT_EXTHDR_F_PRESENT,
 				DestRegister: 2,
 			},
-			expected: "", // тоже вернёт nil, ErrNoIR
-		},
-		{
-			name: "exthdr read and compare (source + rhs)",
-			exthdr: &expr.Exthdr{
-				Type:           4,
-				Offset:         8,
-				Len:            2,
-				SourceRegister: 3,
-			},
-			regSetup: func(ctx *ctx) {
-				ctx.reg.Set(3, regVal{HumanExpr: "0x1234"})
-			},
-			expected: "ip option @4,8,2 set 0x1234",
+			expected: "", // no IR
 		},
 	}
 
 	for _, tc := range testCases {
 		sui.Run(tc.name, func() {
 			ctx := &ctx{}
-			if tc.regSetup != nil {
-				tc.regSetup(ctx)
-			}
 			enc := &exthdrEncoder{extdhdr: tc.exthdr}
 			ir, err := enc.EncodeIR(ctx)
 
 			if tc.expected == "" {
 				sui.Require().ErrorIs(err, ErrNoIR)
 				sui.Require().Nil(ir)
-			} else {
-				sui.Require().NoError(err)
-				sui.Require().Equal(tc.expected, ir.Format())
 			}
 		})
 	}
 }
 
-func Test_ExthdrEncoder(t *testing.T) {
-	suite.Run(t, new(exthdrEncoderTestSuite))
-}
 
 
+# IPv4 (tcp option)
 sudo nft add table ip test
 sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0; }'
-sudo nft add rule ip test prerouting tcp option 2
-sudo nft add rule ip test prerouting ip option 1
-sudo nft add rule ip test prerouting ip option @4,8,2 set 0x1234
+sudo nft add rule ip test prerouting tcp option sack-permitted
 
+# IPv6 (ipv6 option)
+sudo nft add table ip6 test
+sudo nft add chain ip6 test prerouting '{ type filter hook prerouting priority 0; }'
+sudo nft add rule ip6 test prerouting ip6 nexthdr hop-by-hop
 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting tcp option 2
-Error: syntax error, unexpected newline
-add rule ip test prerouting tcp option 2
-                                        ^
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting ip option 1
-Error: syntax error, unexpected number, expecting lsrr or rr or ssrr or ra
-add rule ip test prerouting ip option 1
-                                      ^
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting ip option @4,8,2 set 0x1234
-Error: syntax error, unexpected @, expecting lsrr or rr or ssrr or ra
-add rule ip test prerouting ip option @4,8,2 set 0x1234
-                                      ^
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
 
 
 
