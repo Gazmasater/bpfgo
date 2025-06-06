@@ -198,30 +198,26 @@ Response → тело ответа
 Можно сохранить User-Agent, Cookie и использовать их в автоматических скриптах позже
 ________________________________________________________________________________
 
-name: "bitwise mask+xor+accept on dport",
-			exprs: []expr.Any{
-				&expr.Payload{
-					DestRegister: 1,
-					Base:         expr.PayloadBaseTransportHeader,
-					Offset:       2,
-					Len:          2,
-				},
-				&expr.Bitwise{
-					SourceRegister: 1,
-					DestRegister:   2,
-					Len:            2,
-					Mask:           []byte{0xFF, 0xFF},
-					Xor:            []byte{0x00, 0x10},
-				},
-				&expr.Cmp{
-					Op:       expr.CmpOpEq,
-					Register: 2,
-					Data:     []byte{0x01, 0x50},
-				},
-				&expr.Verdict{Kind: expr.VerdictAccept},
-			},
+sudo nft add table ip test
+sudo nft add chain ip test prerouting '{ type filter hook prerouting priority 0; }'
+sudo nft add set ip test myset { type ipv4_addr; flags dynamic; }
+
+sudo nft add rule ip test prerouting ip saddr 8.8.8.8 add @myset { 8.8.8.8 log counter }
 
 
-
+{
+	name: "add with log and counter",
+	dynset: &expr.Dynset{
+		Operation: uint32(DynSetOPAdd),
+		SetName:   "myset",
+		SrcRegKey: 4,
+		Exprs: []expr.Any{
+			&expr.Log{},
+			&expr.Counter{},
+		},
+	},
+	srcKey:   "8.8.8.8",
+	expected: "add @myset { 8.8.8.8 log counter packets 0 bytes 0 }",
+}
 
 
