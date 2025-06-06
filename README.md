@@ -234,24 +234,9 @@ sudo nft add rule ip test prerouting @nh,0,1 & 0xf0 == 0x60
 📝 0x60 = 6 << 4
 
 
-sudo nft add rule ip test prerouting '@nh,0,1 & 0xf0 != 0x50'
-sudo nft add rule ip test prerouting '@nh,0,1 & 0xf0 == 0x40'
-sudo nft add rule ip test prerouting '@nh,0,1 & 0xf0 == 0x60'
-
-
-az358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test prerouting '@nh,0,1 & 0xf0 != 0x50'
-sudo nft add rule ip test prerouting '@nh,0,1 & 0xf0 == 0x40'
-sudo nft add rule ip test prerouting '@nh,0,1 & 0xf0 == 0x60'
-Error: Value 240 exceeds valid range 0-1
-add rule ip test prerouting @nh,0,1 & 0xf0 != 0x50
-                                      ^^^^
-Error: Value 240 exceeds valid range 0-1
-add rule ip test prerouting @nh,0,1 & 0xf0 == 0x40
-                                      ^^^^
-Error: Value 240 exceeds valid range 0-1
-add rule ip test prerouting @nh,0,1 & 0xf0 == 0x60
-                                      ^^^^
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+sudo nft add rule ip test prerouting ip version != 5
+sudo nft add rule ip test prerouting ip version 4
+sudo nft add rule ip test prerouting ip version 6
 
 
 
