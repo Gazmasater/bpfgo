@@ -198,7 +198,8 @@ Response → тело ответа
 Можно сохранить User-Agent, Cookie и использовать их в автоматических скриптах позже
 ________________________________________________________________________________
 
-package encoders
+# Полный юнит-тест с кейсами для payload + bitwise + verdict
+bitwise_payload_verdict_tests = '''package encoders
 
 import (
 	"testing"
@@ -208,57 +209,68 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type payloadEncoderNftWithVerdictTestSuite struct {
+type payloadBitwiseVerdictTestSuite struct {
 	suite.Suite
 }
 
-func (sui *payloadEncoderNftWithVerdictTestSuite) Test_PayloadExprToString_WithVerdict() {
+func (sui *payloadBitwiseVerdictTestSuite) Test_PayloadWithBitwiseAndVerdict() {
 	testData := []struct {
 		name     string
 		exprs    []expr.Any
 		expected string
-		nft      string
 	}{
 		{
-			name: "match ip saddr accept",
+			name: "match ip version 4 accept",
 			exprs: []expr.Any{
 				&expr.Payload{
 					DestRegister: 1,
 					Base:         expr.PayloadBaseNetworkHeader,
-					Offset:       12,
-					Len:          4,
+					Offset:       0,
+					Len:          1,
+				},
+				&expr.Bitwise{
+					SourceRegister: 1,
+					DestRegister:   1,
+					Len:            1,
+					Mask:           []byte{0xF0},
+					Xor:            []byte{0x00},
 				},
 				&expr.Cmp{
 					Op:       expr.CmpOpEq,
 					Register: 1,
-					Data:     []byte{192, 168, 1, 1},
+					Data:     []byte{0x40}, // version 4 << 4
 				},
 				&expr.Verdict{Kind: expr.VerdictAccept},
 			},
-			expected: "ip saddr 192.168.1.1 accept",
-			nft:      "ip saddr 192.168.1.1 accept",
+			expected: "ip version 4 accept",
 		},
 		{
-			name: "match ip daddr drop",
+			name: "match ip version != 6 drop",
 			exprs: []expr.Any{
 				&expr.Payload{
 					DestRegister: 1,
 					Base:         expr.PayloadBaseNetworkHeader,
-					Offset:       16,
-					Len:          4,
+					Offset:       0,
+					Len:          1,
+				},
+				&expr.Bitwise{
+					SourceRegister: 1,
+					DestRegister:   1,
+					Len:            1,
+					Mask:           []byte{0xF0},
+					Xor:            []byte{0x00},
 				},
 				&expr.Cmp{
-					Op:       expr.CmpOpEq,
+					Op:       expr.CmpOpNeq,
 					Register: 1,
-					Data:     []byte{10, 0, 0, 1},
+					Data:     []byte{0x60}, // version 6 << 4
 				},
 				&expr.Verdict{Kind: expr.VerdictDrop},
 			},
-			expected: "ip daddr 10.0.0.1 drop",
-			nft:      "ip daddr 10.0.0.1 drop",
+			expected: "ip version != 6 drop",
 		},
 		{
-			name: "match th dport accept",
+			name: "bitwise mask+xor+accept on dport",
 			exprs: []expr.Any{
 				&expr.Payload{
 					DestRegister: 1,
@@ -266,15 +278,21 @@ func (sui *payloadEncoderNftWithVerdictTestSuite) Test_PayloadExprToString_WithV
 					Offset:       2,
 					Len:          2,
 				},
+				&expr.Bitwise{
+					SourceRegister: 1,
+					DestRegister:   2,
+					Len:            2,
+					Mask:           []byte{0xFF, 0xFF},
+					Xor:            []byte{0x00, 0x10},
+				},
 				&expr.Cmp{
 					Op:       expr.CmpOpEq,
-					Register: 1,
-					Data:     []byte{0x00, 0x50}, // port 80
+					Register: 2,
+					Data:     []byte{0x01, 0x50},
 				},
 				&expr.Verdict{Kind: expr.VerdictAccept},
 			},
-			expected: "th dport 80 accept",
-			nft:      "tcp dport 80 accept",
+			expected: "(th dport & 0xffff) ^ 0x10 == 336", // manually calculated for explanation
 		},
 	}
 
@@ -288,9 +306,17 @@ func (sui *payloadEncoderNftWithVerdictTestSuite) Test_PayloadExprToString_WithV
 	}
 }
 
-func Test_PayloadEncoderWithVerdict(t *testing.T) {
-	suite.Run(t, new(payloadEncoderNftWithVerdictTestSuite))
+func Test_PayloadBitwiseVerdict(t *testing.T) {
+	suite.Run(t, new(payloadBitwiseVerdictTestSuite))
 }
+'''
+
+# Сохраняем файл
+file_path = "/mnt/data/payload_bitwise_verdict_test.go"
+with open(file_path, "w") as f:
+    f.write(bitwise_payload_verdict_tests)
+
+file_path
 
 
 
