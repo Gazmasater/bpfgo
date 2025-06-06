@@ -204,15 +204,15 @@ func HandleIPEvent(
 	eventChan_sport chan int,
 	eventChan_pid chan int,
 ) {
+	if event.Family != 6 {
+		return
+	}
+
 	var (
-		proto   string
+		proto   = "TCP"
 		dsthost string
 		err     error
 	)
-
-	if event.Family == 6 {
-		proto = "TCP"
-	}
 
 	if dstIP.IsLoopback() {
 		dsthost = pkg.ResolveIP(dstIP)
@@ -222,7 +222,7 @@ func HandleIPEvent(
 			dsthost = "unknown"
 		}
 	}
-	srchost := pkg.ResolveIP(srcIP)
+	srchost := resolveHost(srcIP)
 
 	srcAddr := fmt.Sprintf("//%s[%s]:%d", srchost, srcIP.String(), event.Sport)
 	dstAddr := fmt.Sprintf("//%s[%s]:%d", dsthost, dstIP.String(), event.Dport)
@@ -285,7 +285,6 @@ func HandleIPEvent(
 	default:
 	}
 }
-
 
 
 
