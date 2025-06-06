@@ -349,31 +349,41 @@ table ip test {
 _________________________________________
 
 {
-	name: "masquerade to :1000 random", // только один флаг
+	name: "ip protocol tcp masquerade to :1000 random",
 	setup: func(ctx *ctx) []irNode {
-		ctx.reg.Set(1, regVal{HumanExpr: "1000"})
+		// Установка значений регистров
+		ctx.reg.Set(1, regVal{HumanExpr: "tcp"})    // ip protocol match
+		ctx.reg.Set(2, regVal{HumanExpr: "1000"})   // masquerade порт
+
+		// protocol match (обязателен для to :port)
+		protoCmp := &expr.Cmp{
+			Register: 1,
+			Op:       expr.CmpOpEq,
+			Data:     []byte{unix.IPPROTO_TCP}, // IPPROTO_TCP = 6
+		}
+
+		// NAT выражение
 		nat := &expr.NAT{
 			Type:        NATTypeMASQ,
 			Family:      unix.NFPROTO_IPV4,
-			RegProtoMin: 1,
+			RegProtoMin: 2,
 			Random:      true,
 		}
+
+		// Генерация IR
+		protoIR, _ := (&cmpEncoder{cmp: protoCmp}).EncodeIR(ctx)
 		natIR, _ := (&natEncoder{nat: nat}).EncodeIR(ctx)
-		return []irNode{natIR}
+
+		return []irNode{protoIR, natIR}
 	},
-	expected: "masquerade to :1000 random",
+	expected: "ip protocol tcp masquerade to :1000 random",
 }
 
 
 
-sudo nft add rule ip test postrouting masquerade to :1000 random
 
+sudo nft add rule ip test postrouting ip protocol tcp masquerade to :1000 random
 
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip test postrouting masquerade to :1000 random
-Error: transport protocol mapping is only valid after transport protocol match
-add rule ip test postrouting masquerade to :1000 random
-                             ~~~~~~~~~~     ^^^^
-gaz358@gaz358-BO
 
 
 
