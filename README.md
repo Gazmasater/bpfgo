@@ -198,45 +198,28 @@ Response → тело ответа
 Можно сохранить User-Agent, Cookie и использовать их в автоматических скриптах позже
 ________________________________________________________________________________
 
-#!/bin/bash
-
-# Удаление таблицы, если она уже существует
-sudo nft delete table ip filter 2>/dev/null
-
-# Создание таблицы
-sudo nft add table ip filter
-
-# Создание цепочки
-sudo nft add chain ip filter input '{ type filter hook input priority 0; policy accept; }'
-
-# --- 1. TCP dport 80 → accept ---
-sudo nft add rule ip filter input tcp dport 80 accept
-
-sudo nft add table inet test
-sudo nft add chain inet test prerouting '{ type filter hook prerouting priority 0; }'
-
-sudo nft add rule inet test input 'ip version 4 accept'
-sudo nft add rule inet test input 'ip version != 6 drop'
-sudo nft add rule inet test input 'tcp dport 80 accept'
-sudo nft add rule inet test input 'tcp dport 336 accept'
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule inet test input 'ip version 4 accept'
-Error: Could not process rule: No such file or directory
-add rule inet test input ip version 4 accept
-                   ^^^^^
-gaz358@gaz358-BOD-WXX9:~/myprog
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add table inet test
-sudo nft add chain inet test prerouting '{ type filter hook prerouting priority 0; }'
-gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ sudo nft add rule ip filter input 'ip version 4 accept'
-Error: Could not process rule: No such file or directory
-add rule ip filter input ip version 4 accept
-            ^^^^^^
-
-
-
+name: "bitwise mask+xor+accept on dport",
+			exprs: []expr.Any{
+				&expr.Payload{
+					DestRegister: 1,
+					Base:         expr.PayloadBaseTransportHeader,
+					Offset:       2,
+					Len:          2,
+				},
+				&expr.Bitwise{
+					SourceRegister: 1,
+					DestRegister:   2,
+					Len:            2,
+					Mask:           []byte{0xFF, 0xFF},
+					Xor:            []byte{0x00, 0x10},
+				},
+				&expr.Cmp{
+					Op:       expr.CmpOpEq,
+					Register: 2,
+					Data:     []byte{0x01, 0x50},
+				},
+				&expr.Verdict{Kind: expr.VerdictAccept},
+			},
 
 
 
