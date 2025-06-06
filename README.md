@@ -198,65 +198,73 @@ Response → тело ответа
 Можно сохранить User-Agent, Cookie и использовать их в автоматических скриптах позже
 ________________________________________________________________________________
 
-{
-	name: "reject with tcp reset",
-	setup: func(ctx *ctx) *expr.Cmp {
-		// В rejectEncoder нет смысла привязываться к Cmp напрямую,
-		// поэтому мы просто эмулируем RuleExpr, а не Cmp,
-		// вызывая Format напрямую.
+package encoders
 
-		// Зарегистрировать выражение вручную:
-		reject := &expr.Reject{
-			Type: unix.NFT_REJECT_TCP_RST,
-			Code: 0,
-		}
-		enc := &rejectEncoder{reject: reject}
-		ir, err := enc.EncodeIR(ctx)
-		ctx.reg.Set(255, regVal{
-			HumanExpr: ir.Format(),
-		})
-		_ = err // пропускаем, т.к. используем ниже в Format()
-		return &expr.Cmp{
-			Register: 255,
-			Op:       expr.CmpOpEq,
-			Data:     []byte{}, // неважно, просто хак
-		}
-	},
-	expected: "reject with tcp reset 0",
-},
+import (
+	"testing"
 
+	"github.com/google/nftables/expr"
+	"github.com/stretchr/testify/suite"
+	"golang.org/x/sys/unix"
+)
 
-Хочешь — пришли TypeToString() и rejectIR.Format() из твоей версии — скажу точно.
-
-
-func (b *rejectEncoder) TypeToString() string {
-	switch b.reject.Type {
-	case unix.NFT_REJECT_TCP_RST:
-		return "tcp reset"
-	case unix.NFT_REJECT_ICMPX_UNREACH:
-		if b.reject.Code == unix.NFT_REJECT_ICMPX_PORT_UNREACH {
-			break
-		}
-		return "icmpx"
-	case unix.NFT_REJECT_ICMP_UNREACH:
-		switch b.reject.Code {
-		case unix.NFPROTO_IPV4:
-			return "icmp"
-		case unix.NFPROTO_IPV6:
-			return "icmpv6"
-		}
-	}
-	return ""
+type rejectEncoderTestSuite struct {
+	suite.Suite
 }
 
-
-func (r *rejectIR) Format() string {
-	sb := strings.Builder{}
-	sb.WriteString("reject")
-	if typ := r.typeStr; typ != "" {
-		sb.WriteString(fmt.Sprintf(" with %s %d", typ, r.code))
+func (sui *rejectEncoderTestSuite) Test_RejectEncodeIR() {
+	testCases := []struct {
+		name     string
+		reject   *expr.Reject
+		expected string
+	}{
+		{
+			name: "tcp reset",
+			reject: &expr.Reject{
+				Type: unix.NFT_REJECT_TCP_RST,
+				Code: 0,
+			},
+			expected: "reject with tcp reset 0",
+		},
+		{
+			name: "icmpv4",
+			reject: &expr.Reject{
+				Type: unix.NFT_REJECT_ICMP_UNREACH,
+				Code: unix.NFPROTO_IPV4,
+			},
+			expected: "reject with icmp 1",
+		},
+		{
+			name: "icmpv6",
+			reject: &expr.Reject{
+				Type: unix.NFT_REJECT_ICMP_UNREACH,
+				Code: unix.NFPROTO_IPV6,
+			},
+			expected: "reject with icmpv6 10",
+		},
+		{
+			name: "empty reject",
+			reject: &expr.Reject{
+				Type: 0,
+				Code: 0,
+			},
+			expected: "reject",
+		},
 	}
-	return sb.String()
+
+	for _, tc := range testCases {
+		sui.Run(tc.name, func() {
+			ctx := &ctx{}
+			enc := &rejectEncoder{reject: tc.reject}
+			ir, err := enc.EncodeIR(ctx)
+			sui.Require().NoError(err)
+			sui.Equal(tc.expected, ir.Format())
+		})
+	}
+}
+
+func Test_RejectEncoder(t *testing.T) {
+	suite.Run(t, new(rejectEncoderTestSuite))
 }
 
 
