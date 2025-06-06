@@ -299,48 +299,14 @@ sudo nft add rule ip test prerouting reject
 
 ________________________________________________________________________________________
 
-package main
+nft add rule ip filter input ct state established,new accept
+nft add rule ip filter input ct direction original accept
+nft add rule ip filter input ct expiration 5s drop
+nft add rule ip filter input ct protocol tcp accept
+nft add rule ip filter input ct mark set 42
+nft add rule ip filter input ct status assured,confirmed,dnat,snat accept
+nft add rule ip filter input ct state != established,invalid drop
 
-import (
-	"math"
-	"testing"
-)
-
-var result int
-
-// ✅ Вариант до (с math.Log)
-func BenchmarkWithLog(b *testing.B) {
-	var r int
-	for i := 0; i < b.N; i++ {
-		a := 3
-		x := 100000000
-		k := int(math.Log(float64(x/a)) / math.Log(2))
-		power := 1 << k
-		N := x - power*a + k
-		r = N
-	}
-	result = r
-}
-
-// ✅ Вариант после (с битовым сдвигом)
-func BenchmarkWithShift(b *testing.B) {
-	var r int
-	for i := 0; i < b.N; i++ {
-		a := 3
-		x := 100000000
-		k := 0
-		for (1 << (k + 1)) * a <= x {
-			k++
-		}
-		power := 1 << k
-		N := x - power*a + k
-		r = N
-	}
-	result = r
-}
-
-
-go test -bench=. -benchmem
 
 
 
