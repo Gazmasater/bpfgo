@@ -267,7 +267,43 @@ func Test_RejectEncoder(t *testing.T) {
 	suite.Run(t, new(rejectEncoderTestSuite))
 }
 
-
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test 
+--- FAIL: Test_RejectEncoder (0.00s)
+    --- FAIL: Test_RejectEncoder/Test_RejectEncodeIR (0.00s)
+        --- FAIL: Test_RejectEncoder/Test_RejectEncodeIR/icmpv4 (0.00s)
+            encodersReject_test.go:61: 
+                        Error Trace:    /home/gaz358/myprog/nft-go/internal/expr-encoders/encodersReject_test.go:61
+                                                                /home/gaz358/go/pkg/mod/github.com/stretchr/testify@v1.10.0/suite/suite.go:115
+                        Error:          Not equal: 
+                                        expected: "reject with icmp 1"
+                                        actual  : "reject with icmp 2"
+                                    
+                                        Diff:
+                                        --- Expected
+                                        +++ Actual
+                                        @@ -1 +1 @@
+                                        -reject with icmp 1
+                                        +reject with icmp 2
+                        Test:           Test_RejectEncoder/Test_RejectEncodeIR/icmpv4
+[{"match":{"op":"==","left":{"meta":{"key":"l4proto"}},"right":"tcp"}},{"counter":{"bytes":0,"packets":0}},{"log":null},{"accept":null}]
+[{"match":{"op":"!=","left":{"meta":{"key":"oifname"}},"right":"lo"}},{"mangle":{"key":{"meta":{"key":"nftrace"}},"value":1}},{"goto":{"target":"FW-OUT"}}]
+meta l4proto tcp counter packets 0 bytes 0 log accept
+ip version != 5
+ip daddr @ipSet
+ip daddr != 93.184.216.34 meta l4proto tcp dport {80,443} meta l4proto tcp
+th dport != 80
+meta l4proto tcp dport != 80
+meta l4proto tcp sport >= 80 sport <= 100
+meta nftrace set 1 ip daddr 10.0.0.0/8 meta l4proto udp
+meta l4proto icmp type echo-reply
+ct state established,related
+ct expiration 1s
+ct direction original
+ct l3proto ipv4
+ct protocol tcp
+FAIL
+exit status 1
+FAIL    github.com/Morwran/nft-go/internal/expr-encoders        0.022s
 
 
 
