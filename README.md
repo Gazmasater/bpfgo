@@ -539,7 +539,8 @@ func Test_NatCmpRulesetStyle(t *testing.T) {
 
 
 
-
+sui.T().Logf("EXPECTED: %s", tc.expected)
+			sui.T().Logf("ACTUAL:   %s", result)
 
 
 
