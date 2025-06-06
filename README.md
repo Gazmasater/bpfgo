@@ -543,6 +543,14 @@ sui.T().Logf("EXPECTED: %s", tc.expected)
 			sui.T().Logf("ACTUAL:   %s", result)
 
 
+   gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ go test -run TestNatEncodeIR -v
+testing: warning: no tests to run
+PASS
+ok      github.com/Morwran/nft-go/internal/expr-encoders        0.005s
+gaz358@gaz358-BOD-WXX9:~/myprog/nft-go/internal/expr-encoders$ 
+
+
+
 
 
 
