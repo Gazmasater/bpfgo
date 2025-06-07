@@ -1,54 +1,29 @@
 
-r
+🐧 Для Ubuntu / Debian
+🔧 Способ 1: Через официальное хранилище Tor Project
+Добавьте ключ репозитория:
 
 
- https://storage.googleapis.com/chrome-for-testing-public/137.0.7151.68/linux64/chromedriver-linux64.zip
-
- unzip chromedriver-linux64.zip
-sudo mv chromedriver-linux64/chromedriver /usr/local/bin/chromedriver
-sudo chmod +x /usr/local/bin/chromedriver
-
-gaz358@gaz358-BOD-WXX9:/usr/local/bin$ chromedriver --version
-ChromeDriver 114.0.5735.90 (386bc09e8f4f2e025eddae123f36f6263096ae49-refs/branch-heads/5735@{#1052})
-gaz358@gaz358-BOD-WXX9:/usr/local/bin$ 
+sudo apt install gnupg
+curl -fsSL https://deb.torproject.org/torproject.org/pubkey.asc | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/tor.gpg > /dev/null
+Добавьте репозиторий:
 
 
-🧱 Шаги для установки Chrome 114 на Ubuntu
-1. Удалите текущую версию Chrome (если установлена):
-
-sudo apt remove google-chrome-stable
-sudo apt purge google-chrome-stable
-2. Загрузите .deb файл Chrome 114 вручную:
-
-wget https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_114.0.5735.90-1_amd64.deb
-Если wget недоступен — установите:
+echo "deb [arch=amd64] https://deb.torproject.org/torproject.org $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/tor.list
+Обновите пакеты и установите Tor:
 
 
-sudo apt install wget
-3. Установите его:
-
-sudo dpkg -i google-chrome-stable_114.0.5735.90-1_amd64.deb
-Если появятся ошибки с зависимостями:
+sudo apt update
+sudo apt install tor deb.torproject.org-keyring
+Запуск и проверка:
 
 
-sudo apt install -f
-4. Проверьте версию:
-
-google-chrome --version
-# Должно быть: Google Chrome 114.0.5735.90
-🔒 Блокировка обновлений (чтобы не обновился обратно):
-Создайте файл блокировки:
-
-
-sudo apt-mark hold google-chrome-stable
-Проверка:
-
-
-apt-mark showhold
+sudo systemctl start tor
+sudo systemctl enable tor
+systemctl status tor
 
 
 
-https://www.comss.ru/page.php?id=12001#google_vignette
 
 
 
