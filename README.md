@@ -608,147 +608,82 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type dynsetIRTestSuite struct {
+type dynsetIRExprTestSuite struct {
 	suite.Suite
 }
 
-func (sui *dynsetIRTestSuite) Test_DynsetEncodeIR() {
+func (sui *dynsetIRExprTestSuite) Test_DynsetEncodeIR_ExprBased() {
 	testData := []struct {
 		name     string
-		dynset   *expr.Dynset
+		exprs    []expr.Any
 		expected string
 	}{
 		{
-			name: "add to IPv4 set",
-			dynset: &expr.Dynset{
-				Operation: uint32(DynSetOPAdd),
-				SetName:   "testset",
-				SrcKeyExpr: &expr.Payload{
-					Base:         expr.PayloadBaseNetworkHeader,
-					Offset:       12,
-					Len:          4,
-					DestRegister: 1,
+			name: "add to IPv4 set via Immediate",
+			exprs: []expr.Any{
+				&expr.Immediate{
+					Register: 1,
+					Data:     []byte{192, 168, 1, 10},
+				},
+				&expr.Dynset{
+					Operation: uint32(DynSetOPAdd),
+					SetName:   "ipv4set",
+					SrcRegKey: 1,
 				},
 			},
-			expected: "add @testset { ip saddr }",
+			expected: "add @ipv4set { 192.168.1.10 }",
 		},
 		{
 			name: "add to set with timeout",
-			dynset: &expr.Dynset{
-				Operation: uint32(DynSetOPAdd),
-				SetName:   "timeoutset",
-				Timeout:   10 * time.Second,
-				SrcKeyExpr: &expr.Payload{
-					Base:         expr.PayloadBaseNetworkHeader,
-					Offset:       12,
-					Len:          4,
-					DestRegister: 2,
+			exprs: []expr.Any{
+				&expr.Immediate{
+					Register: 2,
+					Data:     []byte{10, 0, 0, 5},
+				},
+				&expr.Dynset{
+					Operation: uint32(DynSetOPAdd),
+					SetName:   "timeoutset",
+					SrcRegKey: 2,
+					Timeout:   5 * time.Second,
 				},
 			},
-			expected: "add @timeoutset { ip saddr timeout 10s }",
+			expected: "add @timeoutset { 10.0.0.5 timeout 5s }",
 		},
 		{
 			name: "update set with counter",
-			dynset: &expr.Dynset{
-				Operation: uint32(DynSetOPUpdate),
-				SetName:   "updset",
-				Exprs: []expr.Any{
-					&expr.Counter{},
+			exprs: []expr.Any{
+				&expr.Immediate{
+					Register: 3,
+					Data:     []byte("key"),
 				},
-				SrcKeyExpr: &expr.Payload{
-					Base:         expr.PayloadBaseNetworkHeader,
-					Offset:       12,
-					Len:          4,
-					DestRegister: 3,
+				&expr.Dynset{
+					Operation: uint32(DynSetOPUpdate),
+					SetName:   "updset",
+					SrcRegKey: 3,
+					Exprs: []expr.Any{
+						&expr.Counter{},
+					},
 				},
 			},
-			expected: "update @updset { ip saddr counter packets 0 bytes 0 }",
+			expected: "update @updset { key counter packets 0 bytes 0 }",
 		},
 	}
 
 	for _, tc := range testData {
 		sui.Run(tc.name, func() {
-			ctx := &ctx{
-				rule: &nftables.Rule{},
+			rule := &nftables.Rule{
+				Exprs: tc.exprs,
 			}
-			enc := &dynsetEncoder{dynset: tc.dynset}
-			ir, err := enc.EncodeIR(ctx)
+			str, err := NewRuleExprEncoder(rule).Format()
 			sui.Require().NoError(err)
-			sui.Require().Equal(tc.expected, ir.Format())
+			sui.Require().Equal(tc.expected, str)
 		})
 	}
 }
 
-func Test_DynsetEncodeIR(t *testing.T) {
-	suite.Run(t, new(dynsetIRTestSuite))
+func Test_DynsetEncodeIR_Expr(t *testing.T) {
+	suite.Run(t, new(dynsetIRExprTestSuite))
 }
-
-
-[{
-	"resource": "/home/gaz358/myprog/nft-go/internal/expr-encoders/encdersDynset_test.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingLitField",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingLitField"
-		}
-	},
-	"severity": 8,
-	"message": "unknown field SrcKeyExpr in struct literal of type expr.Dynset",
-	"source": "compiler",
-	"startLineNumber": 27,
-	"startColumn": 5,
-	"endLineNumber": 27,
-	"endColumn": 15
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/nft-go/internal/expr-encoders/encdersDynset_test.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingLitField",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingLitField"
-		}
-	},
-	"severity": 8,
-	"message": "unknown field SrcKeyExpr in struct literal of type expr.Dynset",
-	"source": "compiler",
-	"startLineNumber": 42,
-	"startColumn": 5,
-	"endLineNumber": 42,
-	"endColumn": 15
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/nft-go/internal/expr-encoders/encdersDynset_test.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingLitField",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingLitField"
-		}
-	},
-	"severity": 8,
-	"message": "unknown field SrcKeyExpr in struct literal of type expr.Dynset",
-	"source": "compiler",
-	"startLineNumber": 59,
-	"startColumn": 5,
-	"endLineNumber": 59,
-	"endColumn": 15
-}]
 
 
 
