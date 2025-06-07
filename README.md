@@ -1,4 +1,4 @@
-https://chatgpt.com/c/68449aec-a6ac-8003-aa15-67e06d3013ac#:~:text=%F0%9F%94%97-,chromedriver%2Dlinux64.zip,-%D0%A0%D0%B0%D1%81%D0%BF%D0%B0%D0%BA%D1%83%D0%B9%D1%82%D0%B5%20%D0%B8%20%D1%83%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%B8%D1%82%D0%B5
+https://chromedriver%2Dlinux64.zip
 
 unzip chromedriver-linux64.zip
 sudo mv chromedriver-linux64/chromedriver /usr/local/bin/chromedriver
@@ -10,6 +10,10 @@ sudo chmod +x /usr/local/bin/chromedriver
  unzip chromedriver-linux64.zip
 sudo mv chromedriver-linux64/chromedriver /usr/local/bin/chromedriver
 sudo chmod +x /usr/local/bin/chromedriver
+
+gaz358@gaz358-BOD-WXX9:/usr/local/bin$ chromedriver --version
+ChromeDriver 114.0.5735.90 (386bc09e8f4f2e025eddae123f36f6263096ae49-refs/branch-heads/5735@{#1052})
+gaz358@gaz358-BOD-WXX9:/usr/local/bin$ 
 
 
 
