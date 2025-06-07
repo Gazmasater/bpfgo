@@ -602,132 +602,100 @@ package encoders
 import (
 	"testing"
 
-	"github.com/google/nftables"
 	"github.com/google/nftables/expr"
 	"github.com/stretchr/testify/suite"
+	"golang.org/x/sys/unix"
 )
 
-type cmpEncoderExprBasedTestSuite struct {
+type exthdrIRTestSuite struct {
 	suite.Suite
 }
 
-func (sui *cmpEncoderExprBasedTestSuite) Test_CmpEncodeIR_ExprBased() {
-	testCases := []struct {
+func (sui *exthdrIRTestSuite) Test_ExthdrEncodeIR() {
+	testData := []struct {
 		name     string
-		exprs    []expr.Any
+		exthdr   *expr.Exthdr
+		regSetup func(ctx *ctx)
 		expected string
 	}{
 		{
-			name: "ct state != established",
-			exprs: []expr.Any{
-				&expr.Ct{Key: expr.CtKeySTATE, Register: 1},
-				&expr.Cmp{
-					Op:       expr.CmpOpNeq,
-					Register: 1,
-					Data:     []byte{byte(CtStateBitESTABLISHED), 0, 0, 0, 0, 0, 0, 0},
-				},
+			name: "read IPv6 option into register (no IR)",
+			exthdr: &expr.Exthdr{
+				Op:           expr.ExthdrOpIpv6,
+				Type:         1,
+				Flags:        unix.NFT_EXTHDR_F_PRESENT,
+				DestRegister: 1,
 			},
-			expected: "ct state != established",
+			expected: "",
 		},
 		{
-			name: "payload ip version != 5",
-			exprs: []expr.Any{
-				&expr.Payload{
-					Base:         expr.PayloadBaseNetworkHeader,
-					Offset:       0,
-					Len:          1,
-					DestRegister: 1,
-				},
-				&expr.Bitwise{
-					SourceRegister: 1,
-					DestRegister:   2,
-					Len:            1,
-					Mask:           []byte{0xF0},
-					Xor:            []byte{0x00},
-				},
-				&expr.Cmp{
-					Op:       expr.CmpOpNeq,
-					Register: 2,
-					Data:     []byte{0x50},
-				},
+			name: "compare with RHS via register (ip option)",
+			exthdr: &expr.Exthdr{
+				Op:             expr.ExthdrOpIpv6,
+				Type:           5,
+				Offset:         12,
+				Len:            1,
+				SourceRegister: 3,
 			},
-			expected: "ip version != 5",
+			regSetup: func(ctx *ctx) {
+				ctx.reg.Set(3, regVal{HumanExpr: "0xab"})
+			},
+			expected: "ip option @5,12,1 set 0xab",
 		},
 		{
-			name: "ip version == 4",
-			exprs: []expr.Any{
-				&expr.Payload{
-					Base:         expr.PayloadBaseNetworkHeader,
-					Offset:       0,
-					Len:          1,
-					DestRegister: 1,
-				},
-				&expr.Bitwise{
-					SourceRegister: 1,
-					DestRegister:   2,
-					Len:            1,
-					Mask:           []byte{0xF0},
-					Xor:            []byte{0x00},
-				},
-				&expr.Cmp{
-					Op:       expr.CmpOpEq,
-					Register: 2,
-					Data:     []byte{0x40},
-				},
+			name: "compare with RHS via register (tcp option)",
+			exthdr: &expr.Exthdr{
+				Op:             expr.ExthdrOpTcpopt,
+				Type:           2,
+				Offset:         4,
+				Len:            1,
+				SourceRegister: 4,
 			},
-			expected: "ip version 4",
+			regSetup: func(ctx *ctx) {
+				ctx.reg.Set(4, regVal{HumanExpr: "0x42"})
+			},
+			expected: "tcp option @2,4,1 set 0x42",
 		},
 		{
-			name: "ip version == 6",
-			exprs: []expr.Any{
-				&expr.Payload{
-					Base:         expr.PayloadBaseNetworkHeader,
-					Offset:       0,
-					Len:          1,
-					DestRegister: 1,
-				},
-				&expr.Bitwise{
-					SourceRegister: 1,
-					DestRegister:   2,
-					Len:            1,
-					Mask:           []byte{0xF0},
-					Xor:            []byte{0x00},
-				},
-				&expr.Cmp{
-					Op:       expr.CmpOpEq,
-					Register: 2,
-					Data:     []byte{0x60},
-				},
+			name: "unknown Op → fallback to exthdr",
+			exthdr: &expr.Exthdr{
+				Op:             99,
+				Type:           9,
+				Offset:         1,
+				Len:            1,
+				SourceRegister: 5,
 			},
-			expected: "ip version 6",
-		},
-		{
-			name: "meta cpu == 3",
-			exprs: []expr.Any{
-				&expr.Meta{Key: expr.MetaKeyCPU, Register: 1},
-				&expr.Cmp{
-					Op:       expr.CmpOpEq,
-					Register: 1,
-					Data:     []byte{3},
-				},
+			regSetup: func(ctx *ctx) {
+				ctx.reg.Set(5, regVal{HumanExpr: "value"})
 			},
-			expected: "meta cpu 3",
+			expected: "exthdr @9,1,1 set value",
 		},
 	}
 
-	for _, tc := range testCases {
+	for _, tc := range testData {
 		sui.Run(tc.name, func() {
-			rule := &nftables.Rule{Exprs: tc.exprs}
-			str, err := NewRuleExprEncoder(rule).Format()
-			sui.Require().NoError(err)
-			sui.Require().Equal(tc.expected, str)
+			ctx := &ctx{}
+			if tc.regSetup != nil {
+				tc.regSetup(ctx)
+			}
+			enc := &exthdrEncoder{extdhdr: tc.exthdr}
+			ir, err := enc.EncodeIR(ctx)
+
+			if tc.expected == "" {
+				sui.Require().ErrorIs(err, ErrNoIR)
+				sui.Require().Nil(ir)
+			} else {
+				sui.Require().NoError(err)
+				sui.Require().Equal(tc.expected, ir.Format())
+			}
 		})
 	}
 }
 
-func Test_CmpEncodeIR_ExprBased(t *testing.T) {
-	suite.Run(t, new(cmpEncoderExprBasedTestSuite))
+func Test_ExthdrEncodeIR(t *testing.T) {
+	suite.Run(t, new(exthdrIRTestSuite))
 }
+
 
 
 
