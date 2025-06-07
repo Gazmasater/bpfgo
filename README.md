@@ -47,15 +47,9 @@ sudo apt-mark hold google-chrome-stable
 apt-mark showhold
 
 
-sudo wget https://github.com/ungoogled-software/chromium-deb-packages/releases/download/114.0.5735.90-1/google-chrome-stable_114.0.5735.90-1_amd64.deb
 
-az358@gaz358-BOD-WXX9:~/myprog/btn$ sudo wget https://github.com/ungoogled-software/chromium-deb-packages/releases/download/114.0.5735.90-1/google-chrome-stable_114.0.5735.90-1_amd64.deb
-[sudo] password for gaz358: 
---2025-06-08 00:12:01--  https://github.com/ungoogled-software/chromium-deb-packages/releases/download/114.0.5735.90-1/google-chrome-stable_114.0.5735.90-1_amd64.deb
-Resolving github.com (github.com)... 140.82.121.3
-Connecting to github.com (github.com)|140.82.121.3|:443... connected.
-HTTP request sent, awaiting response... 404 Not Found
-2025-06-08 00:12:06 ERROR 404: Not Found.
+https://www.comss.ru/page.php?id=12001#google_vignette
+
 
 
 
