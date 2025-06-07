@@ -47,13 +47,12 @@ sudo apt-mark hold google-chrome-stable
 apt-mark showhold
 
 
+sudo wget https://github.com/ungoogled-software/chromium-deb-packages/releases/download/114.0.5735.90-1/google-chrome-stable_114.0.5735.90-1_amd64.deb
 
-gaz358@gaz358-BOD-WXX9:~/myprog/btn$ sudo wget https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_114.0.5735.90-1_amd64.deb
---2025-06-08 00:07:38--  https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_114.0.5735.90-1_amd64.deb
-Resolving dl.google.com (dl.google.com)... 173.194.221.190, 173.194.221.91, 173.194.221.93, ...
-Connecting to dl.google.com (dl.google.com)|173.194.221.190|:443... connected.
-HTTP request sent, awaiting response... 404 Not Found
-2025-06-08 00:07:38 ERROR 404: Not Found.
+
+
+
+
 
 
 
