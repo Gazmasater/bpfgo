@@ -601,81 +601,81 @@ package encoders
 
 import (
 	"testing"
-	"time"
 
 	"github.com/google/nftables"
 	"github.com/google/nftables/expr"
 	"github.com/stretchr/testify/suite"
+	"golang.org/x/sys/unix"
 )
 
-type dynsetIRExprTestSuite struct {
+type natIRExprTestSuite struct {
 	suite.Suite
 }
 
-func (sui *dynsetIRExprTestSuite) Test_DynsetEncodeIR_ExprBased() {
-	testData := []struct {
+func (sui *natIRExprTestSuite) Test_NATEncodeIR_ExprBased() {
+	testCases := []struct {
 		name     string
 		exprs    []expr.Any
 		expected string
 	}{
 		{
-			name: "add to IPv4 set via Payload",
+			name: "tcp dport 8080 dnat to 192.168.0.1:8080",
 			exprs: []expr.Any{
-				&expr.Payload{
-					DestRegister: 1,
-					Base:         expr.PayloadBaseNetworkHeader,
-					Offset:       12, // ip saddr
-					Len:          4,
-				},
-				&expr.Dynset{
-					Operation: uint32(DynSetOPAdd),
-					SetName:   "ipv4set",
-					SrcRegKey: 1,
+				&expr.Payload{DestRegister: 1, Base: expr.PayloadBaseTransportHeader, Offset: 2, Len: 2},
+				&expr.Cmp{Register: 1, Op: expr.CmpOpEq, Data: []byte{0x1f, 0x90}}, // 8080
+				&expr.NAT{
+					Type:        expr.NATTypeDestNAT,
+					Family:      unix.NFPROTO_IPV4,
+					RegAddrMin:  2,
+					RegProtoMin: 3,
 				},
 			},
-			expected: "add @ipv4set { ip saddr }",
+			expected: "tcp dport 8080 dnat ip to 192.168.0.1:8080",
 		},
 		{
-			name: "add to set with timeout via Payload",
+			name: "tcp dport 443 redirect to :443",
 			exprs: []expr.Any{
-				&expr.Payload{
-					DestRegister: 2,
-					Base:         expr.PayloadBaseNetworkHeader,
-					Offset:       12, // ip saddr
-					Len:          4,
-				},
-				&expr.Dynset{
-					Operation: uint32(DynSetOPAdd),
-					SetName:   "timeoutset",
-					SrcRegKey: 2,
-					Timeout:   5 * time.Second,
+				&expr.Payload{DestRegister: 1, Base: expr.PayloadBaseTransportHeader, Offset: 2, Len: 2},
+				&expr.Cmp{Register: 1, Op: expr.CmpOpEq, Data: []byte{0x01, 0xbb}}, // 443
+				&expr.NAT{
+					Type:        NATTypeRedir,
+					Family:      unix.NFPROTO_IPV4,
+					RegProtoMin: 2,
 				},
 			},
-			expected: "add @timeoutset { ip saddr timeout 5s }",
+			expected: "tcp dport 443 redirect ip to :443",
 		},
 		{
-			name: "update set with counter via Payload",
+			name: "ip protocol tcp masquerade to :1000 random",
 			exprs: []expr.Any{
-				&expr.Payload{
-					DestRegister: 3,
-					Base:         expr.PayloadBaseNetworkHeader,
-					Offset:       12, // ip saddr
-					Len:          4,
-				},
-				&expr.Dynset{
-					Operation: uint32(DynSetOPUpdate),
-					SetName:   "updset",
-					SrcRegKey: 3,
-					Exprs: []expr.Any{
-						&expr.Counter{},
-					},
+				&expr.NAT{
+					Type:        NATTypeMASQ,
+					Family:      unix.NFPROTO_IPV4,
+					RegProtoMin: 1,
+					Random:      true,
 				},
 			},
-			expected: "update @updset { ip saddr counter packets 0 bytes 0 }",
+			expected: "ip protocol tcp masquerade to :1000 random",
+		},
+		{
+			name: "tcp dport 5000 snat to 10.0.0.1-10.0.0.10:1000-2000",
+			exprs: []expr.Any{
+				&expr.Payload{DestRegister: 1, Base: expr.PayloadBaseTransportHeader, Offset: 2, Len: 2},
+				&expr.Cmp{Register: 1, Op: expr.CmpOpEq, Data: []byte{0x13, 0x88}}, // 5000
+				&expr.NAT{
+					Type:        expr.NATTypeSourceNAT,
+					Family:      unix.NFPROTO_IPV4,
+					RegAddrMin:  2,
+					RegAddrMax:  3,
+					RegProtoMin: 4,
+					RegProtoMax: 5,
+				},
+			},
+			expected: "tcp dport 5000 snat ip to 10.0.0.1-10.0.0.10:1000-2000",
 		},
 	}
 
-	for _, tc := range testData {
+	for _, tc := range testCases {
 		sui.Run(tc.name, func() {
 			rule := &nftables.Rule{
 				Exprs: tc.exprs,
@@ -687,11 +687,9 @@ func (sui *dynsetIRExprTestSuite) Test_DynsetEncodeIR_ExprBased() {
 	}
 }
 
-func Test_DynsetEncodeIR_Expr(t *testing.T) {
-	suite.Run(t, new(dynsetIRExprTestSuite))
+func Test_NATEncodeIR_ExprBased(t *testing.T) {
+	suite.Run(t, new(natIRExprTestSuite))
 }
-
-
 
 
 
