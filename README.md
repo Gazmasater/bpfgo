@@ -1,28 +1,44 @@
 
-🐧 Для Ubuntu / Debian
-🔧 Способ 1: Через официальное хранилище Tor Project
-Добавьте ключ репозитория:
+go mod init ozon-opener
+go get github.com/go-rod/rod
+go get github.com/go-rod/rod/lib/launcher
 
 
-sudo apt install gnupg
-curl -fsSL https://deb.torproject.org/torproject.org/pubkey.asc | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/tor.gpg > /dev/null
-Добавьте репозиторий:
 
+package main
 
-echo "deb [arch=amd64] https://deb.torproject.org/torproject.org $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/tor.list
-Обновите пакеты и установите Tor:
+import (
+	"log"
+	"time"
 
+	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/launcher"
+)
 
-sudo apt update
-sudo apt install tor deb.torproject.org-keyring
-Запуск и проверка:
+func main() {
+	// Запускаем Chrome с графическим интерфейсом
+	url := launcher.New().
+		// .Headless(true) — убрать комментарий, если нужен headless режим
+		Set("start-maximized").
+		MustLaunch()
 
+	// Подключаемся к браузеру
+	browser := rod.New().ControlURL(url).MustConnect()
+	defer browser.MustClose()
 
-sudo systemctl start tor
-sudo systemctl enable tor
-systemctl status tor
+	// Открываем страницу
+	page := browser.MustPage("https://www.ozon.ru")
 
+	// Ждём, пока страница загрузится (например, элемент <body>)
+	page.MustElement("body")
 
+	// Выводим заголовок страницы
+	title := page.MustEval("() => document.title").String()
+	log.Println("Страница загружена:", title)
+
+	// Держим браузер открытым 10 секунд
+	time.Sleep(10 * time.Second)
+}
 
 
 
