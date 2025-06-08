@@ -3,9 +3,15 @@ wget https://storage.googleapis.com/chrome-for-testing-public/137.0.7151.68/linu
 wget https://storage.googleapis.com/chrome-for-testing-public/137.0.7151.68/linux64/chromedriver-linux64.zip
 
 unzip chrome-linux64.zip
-unzip chromedriver-linux64.zip
+sudo unzip chromedriver-linux64.zip
 
 ./chromedriver-linux64/chromedriver --browser-binary=./chrome-linux64/chrome
+
+gaz358@gaz358-BOD-WXX9:/usr/local/bin$ ./chromedriver-linux64/chromedriver --browser-binary=./chrome-linux64/chrome
+Starting ChromeDriver 137.0.7151.68 (2989ffee9373ea8b8623bd98b3cb350a8e95cadc-refs/branch-heads/7151@{#1873}) on port 0
+Only local connections are allowed.
+Please see https://chromedriver.chromium.org/security-considerations for suggestions on keeping ChromeDriver safe.
+ChromeDriver was started successfully on port 33679.
 
 
 
