@@ -6,8 +6,15 @@ Please see https://chromedriver.chromium.org/security-considerations for suggest
 ChromeDriver was started successfully on port 39107.
 
 
-sudo chmod +x /usr/local/bin/chromedriver
+gaz358@gaz358-BOD-WXX9:~/myprog/btn$ sudo chmod +x /usr/local/bin/chromedriver-linux64
+gaz358@gaz358-BOD-WXX9:~/myprog/btn$ go run .
+2025/06/08 11:04:41 ошибка при запуске WebDriver: ошибка при запуске Chrome WebDriver: fork/exec /usr/local/bin/chromedriver-linux64: permission denied
+exit status 1
+gaz358@gaz358-BOD-WXX9:~/myprog/btn$ 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/btn$ go run .
+2025/06/08 11:06:55 ошибка при запуске WebDriver: ошибка при запуске Chrome WebDriver: fork/exec /usr/local/bin/chromedriver-linux64: permission denied
+exit status 1
 
 package webdriver
 
