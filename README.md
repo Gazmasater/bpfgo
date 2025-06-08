@@ -1,47 +1,55 @@
 
-wget https://storage.googleapis.com/chrome-for-testing-public/137.0.7151.68/linux64/chrome-linux64.zip
-wget https://storage.googleapis.com/chrome-for-testing-public/137.0.7151.68/linux64/chromedriver-linux64.zip
+gaz358@gaz358-BOD-WXX9:/usr/local/bin$ ./chromedriver-linux64/chromedriver --browser-binary=./chrome-linux64/chrome
+Starting ChromeDriver 137.0.7151.68 (2989ffee9373ea8b8623bd98b3cb350a8e95cadc-refs/branch-heads/7151@{#1873}) on port 0
+Only local connections are allowed.
+Please see https://chromedriver.chromium.org/security-considerations for suggestions on keeping ChromeDriver safe.
+ChromeDriver was started successfully on port 39107.
 
-unzip chrome-linux64.zip
-sudo unzip chromedriver-linux64.zip
-
-./chromedriver-linux64/chromedriver --browser-binary=./chrome-linux64/chrome
-
-
-package main
+package webdriver
 
 import (
-	"log"
+	"fmt"
 
 	"github.com/tebeka/selenium"
+	"github.com/tebeka/selenium/chrome"
 )
 
-func main() {
-	const (
-		seleniumURL = "http://localhost:42285" // ✅ убрали /wd/hub
-	)
+const (
+	seleniumPath = "/usr/local/bin/chromedriver"
+	port         = 4444
+)
 
-	caps := selenium.Capabilities{
-		"browserName": "chrome",
-	}
-
-	wd, err := selenium.NewRemote(caps, seleniumURL)
+// StartWebDriver запускает Selenium WebDriver и создает удаленный драйвер
+func StartWebDriver() (selenium.WebDriver, error) {
+	opts := []selenium.ServiceOption{}
+	_, err := selenium.NewChromeDriverService(seleniumPath, port, opts...)
 	if err != nil {
-		log.Fatal(err)
-	}
-	defer wd.Quit()
-
-	err = wd.Get("https://www.ozon.ru")
-	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("ошибка при запуске Chrome WebDriver: %s", err)
 	}
 
-	title, err := wd.Title()
-	if err != nil {
-		log.Fatal(err)
+	caps := selenium.Capabilities{"browserName": "chrome"}
+	chromeCaps := chrome.Capabilities{
+		Path: "",
+		Args: []string{
+			
+		},
 	}
-	log.Println("Страница загружена:", title)
+	caps.AddChrome(chromeCaps)
+
+	wd, err := selenium.NewRemote(caps, fmt.Sprintf("http://localhost:%d", 39107))
+	if err != nil {
+		return nil, fmt.Errorf("ошибка при создании удаленного драйвера: %s", err)
+	}
+
+	return wd, nil
 }
+
+
+az358@gaz358-BOD-WXX9:~/myprog/btn$ go run .
+2025/06/08 10:48:31 ошибка при запуске WebDriver: ошибка при запуске Chrome WebDriver: fork/exec /usr/local/bin/chromedriver: no such file or directory
+exit status 1
+
+
 
 
 
