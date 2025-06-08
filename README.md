@@ -5,6 +5,10 @@ Only local connections are allowed.
 Please see https://chromedriver.chromium.org/security-considerations for suggestions on keeping ChromeDriver safe.
 ChromeDriver was started successfully on port 39107.
 
+
+sudo chmod +x /usr/local/bin/chromedriver
+
+
 package webdriver
 
 import (
