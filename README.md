@@ -1,47 +1,11 @@
 
-go mod init ozon-opener
-go get github.com/go-rod/rod
-go get github.com/go-rod/rod/lib/launcher
+wget https://storage.googleapis.com/chrome-for-testing-public/137.0.7151.68/linux64/chrome-linux64.zip
+wget https://storage.googleapis.com/chrome-for-testing-public/137.0.7151.68/linux64/chromedriver-linux64.zip
 
+unzip chrome-linux64.zip
+unzip chromedriver-linux64.zip
 
-
-package main
-
-import (
-	"log"
-	"time"
-
-	"github.com/go-rod/rod"
-	"github.com/go-rod/rod/lib/launcher"
-)
-
-func main() {
-	url := launcher.New().
-		Headless(false).              // Показывает GUI
-		Set("start-maximized").
-		MustLaunch()
-
-	browser := rod.New().ControlURL(url).MustConnect()
-	defer browser.MustClose()
-
-	page := browser.MustPage("https://www.ozon.ru")
-
-	// Ждём появления <body> — значит, страница загружена
-	page.MustElement("body")
-
-	// Выводим заголовок
-	title := page.MustEval("() => document.title").String()
-	log.Println("Заголовок страницы:", title)
-
-	// Получаем и выводим HTML-код всей страницы
-	html := page.MustHTML()
-	log.Println("HTML-код страницы:\n", html)
-
-	time.Sleep(10 * time.Second)
-}
-
-
-
+./chromedriver-linux64/chromedriver --browser-binary=./chrome-linux64/chrome
 
 
 
