@@ -1,5 +1,47 @@
 
-const seleniumPath = "/usr/local/bin/chromedriver-linux64/chromedriver"
+gaz358@gaz358-BOD-WXX9:/usr/local/bin$ ./chromedriver-linux64/chromedriver --browser-binary=./chrome-linux64/chrome
+Starting ChromeDriver 137.0.7151.68 (2989ffee9373ea8b8623bd98b3cb350a8e95cadc-refs/branch-heads/7151@{#1873}) on port 0
+Only local connections are allowed.
+Please see https://chromedriver.chromium.org/security-considerations for suggestions on keeping ChromeDriver safe.
+ChromeDriver was started successfully on port 33125.
+
+
+package webdriver
+
+import (
+	"fmt"
+
+	"github.com/tebeka/selenium"
+	"github.com/tebeka/selenium/chrome"
+)
+
+const (
+	seleniumPath = "/usr/local/bin/chromedriver-linux64/chromedriver"
+	port         = 4444
+)
+
+// StartWebDriver запускает Selenium WebDriver и создает удаленный драйвер
+func StartWebDriver() (selenium.WebDriver, error) {
+	opts := []selenium.ServiceOption{}
+	_, err := selenium.NewChromeDriverService(seleniumPath, port, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка при запуске Chrome WebDriver: %s", err)
+	}
+
+	caps := selenium.Capabilities{"browserName": "chrome"}
+	chromeCaps := chrome.Capabilities{
+		Path: "",
+		Args: []string{},
+	}
+	caps.AddChrome(chromeCaps)
+
+	wd, err := selenium.NewRemote(caps, fmt.Sprintf("http://localhost:%d", 33125))
+	if err != nil {
+		return nil, fmt.Errorf("ошибка при создании удаленного драйвера: %s", err)
+	}
+
+	return wd, nil
+}
 
 
 
