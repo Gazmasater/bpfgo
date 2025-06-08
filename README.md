@@ -14,6 +14,42 @@ Please see https://chromedriver.chromium.org/security-considerations for suggest
 ChromeDriver was started successfully on port 33679.
 
 
+package main
+
+import (
+	"log"
+
+	"github.com/tebeka/selenium"
+)
+
+func main() {
+	const (
+		seleniumURL = "http://localhost:33679/wd/hub"
+	)
+
+	caps := selenium.Capabilities{
+		"browserName": "chrome",
+	}
+
+	wd, err := selenium.NewRemote(caps, seleniumURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer wd.Quit()
+
+	err = wd.Get("https://www.ozon.ru")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	title, err := wd.Title()
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Страница загружена:", title)
+}
+
+
 
 
 
