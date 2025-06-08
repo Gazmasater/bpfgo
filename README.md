@@ -7,11 +7,11 @@ sudo unzip chromedriver-linux64.zip
 
 ./chromedriver-linux64/chromedriver --browser-binary=./chrome-linux64/chrome
 
-gaz358@gaz358-BOD-WXX9:/usr/local/bin$ ./chromedriver-linux64/chromedriver --browser-binary=./chrome-linux64/chrome
+az358@gaz358-BOD-WXX9:/usr/local/bin$ ./chromedriver-linux64/chromedriver --browser-binary=./chrome-linux64/chrome
 Starting ChromeDriver 137.0.7151.68 (2989ffee9373ea8b8623bd98b3cb350a8e95cadc-refs/branch-heads/7151@{#1873}) on port 0
 Only local connections are allowed.
 Please see https://chromedriver.chromium.org/security-considerations for suggestions on keeping ChromeDriver safe.
-ChromeDriver was started successfully on port 33679.
+ChromeDriver was started successfully on port 42285.
 
 
 package main
@@ -24,7 +24,7 @@ import (
 
 func main() {
 	const (
-		seleniumURL = "http://localhost:33679/wd/hub"
+		seleniumURL = "http://localhost:42285/wd/hub"
 	)
 
 	caps := selenium.Capabilities{
@@ -48,6 +48,12 @@ func main() {
 	}
 	log.Println("Страница загружена:", title)
 }
+
+gaz358@gaz358-BOD-WXX9:~/myprog/pars$ go run .
+2025/06/08 04:33:46 unknown command: unknown command: unknown command: wd/hub/session
+exit status 1
+gaz358@gaz358-BO
+
 
 
 
