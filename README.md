@@ -16,37 +16,29 @@ import (
 )
 
 func main() {
-	// Запускаем Chrome с графическим интерфейсом
 	url := launcher.New().
-		// .Headless(true) — убрать комментарий, если нужен headless режим
+		Headless(false).              // Показывает GUI
 		Set("start-maximized").
 		MustLaunch()
 
-	// Подключаемся к браузеру
 	browser := rod.New().ControlURL(url).MustConnect()
 	defer browser.MustClose()
 
-	// Открываем страницу
 	page := browser.MustPage("https://www.ozon.ru")
 
-	// Ждём, пока страница загрузится (например, элемент <body>)
+	// Ждём появления <body> — значит, страница загружена
 	page.MustElement("body")
 
-	// Выводим заголовок страницы
+	// Выводим заголовок
 	title := page.MustEval("() => document.title").String()
-	log.Println("Страница загружена:", title)
+	log.Println("Заголовок страницы:", title)
 
-	// Держим браузер открытым 10 секунд
+	// Получаем и выводим HTML-код всей страницы
+	html := page.MustHTML()
+	log.Println("HTML-код страницы:\n", html)
+
 	time.Sleep(10 * time.Second)
 }
-
-url := launcher.New().
-	Headless(false).
-	Set("start-maximized").
-	MustLaunch()
-
-
-
 
 
 
