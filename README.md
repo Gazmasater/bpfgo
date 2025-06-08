@@ -40,6 +40,12 @@ func main() {
 	time.Sleep(10 * time.Second)
 }
 
+url := launcher.New().
+	Headless(false).
+	Set("start-maximized").
+	MustLaunch()
+
+
 
 
 
