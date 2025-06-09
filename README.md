@@ -304,13 +304,10 @@ func BenchmarkArrayAccess(b *testing.B) {
 }
 
 
-go install golang.org/x/perf/cmd/benchstat@latest
+http://localhost:6060/debug/pprof/
+http://localhost:6060/debug/pprof/profile?seconds=30
+http://localhost:6060/debug/pprof/heap
 
-go test -bench=. -benchmem > old.txt
-# после изменений
-go test -bench=. -benchmem > new.txt
-
-benchstat old.txt new.txt
 
 
 
