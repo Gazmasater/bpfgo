@@ -322,6 +322,25 @@ curl -o heap.prof http://localhost:6060/debug/pprof/heap
 (pprof) list strings.Builder.WriteString
 (pprof) web  # откроет граф
 
+
+(pprof) top
+Showing nodes accounting for 41279.90kB, 100% of 41279.90kB total
+Showing top 10 nodes out of 45
+      flat  flat%   sum%        cum   cum%
+17698.88kB 42.88% 42.88% 22825.58kB 55.29%  github.com/cilium/ebpf/btf.readAndInflateTypes
+ 7925.21kB 19.20% 62.07%  7925.21kB 19.20%  github.com/cilium/ebpf/btf.indexTypes
+ 5126.69kB 12.42% 74.49%  5126.69kB 12.42%  github.com/cilium/ebpf/btf.readAndInflateTypes.func2
+ 3584.09kB  8.68% 83.18%  3584.09kB  8.68%  bufio.(*Scanner).Text (inline)
+ 3356.76kB  8.13% 91.31%  6940.85kB 16.81%  github.com/cilium/ebpf/btf.readStringTable
+    1539kB  3.73% 95.04%     1539kB  3.73%  runtime.allocm
+ 1536.14kB  3.72% 98.76%  1536.14kB  3.72%  runtime.acquireSudog
+  513.12kB  1.24%   100%   513.12kB  1.24%  slices.Clone[go.shape.[]github.com/cilium/ebpf/asm.Instruction,go.shape.struct { OpCode github.com/cilium/ebpf/asm.OpCode; Dst github.com/cilium/ebpf/asm.Register; Src github.com/cilium/ebpf/asm.Register; Offset int16; Constant int64; Metadata github.com/cilium/ebpf/asm.Metadata }]
+         0     0%   100% 37691.64kB 91.31%  github.com/cilium/ebpf.(*CollectionSpec).LoadAndAssign
+         0     0%   100% 37691.64kB 91.31%  github.com/cilium/ebpf.(*CollectionSpec).LoadAndAssign.func1
+(pprof) 
+
+
+
 go tool pprof -http=:8082 ./bpfgo heap.prof
 go tool pprof ./bpfgo heap.prof
 
