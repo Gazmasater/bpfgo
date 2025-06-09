@@ -237,40 +237,78 @@ ________________________________________________________________________________
 package main
 
 import (
-    "fmt"
-    "log"
-    "time"
-
-    "github.com/tebeka/selenium"
+	"testing"
 )
 
-const (
-    seleniumPath    = ""                             // Не нужен, если chromedriver уже установлен
-    chromeDriverPath = "/usr/bin/chromedriver"       // Путь к вашему chromedriver
-    port            = 9515
-)
-
-func main() {
-    opts := []selenium.ServiceOption{}
-    service, err := selenium.NewChromeDriverService(chromeDriverPath, port, opts...)
-    if err != nil {
-        log.Fatalf("Ошибка запуска ChromeDriver: %v", err)
-    }
-    defer service.Stop()
-
-    caps := selenium.Capabilities{"browserName": "chrome"}
-    wd, err := selenium.NewRemote(caps, fmt.Sprintf("http://localhost:%d/wd/hub", port))
-    if err != nil {
-        log.Fatalf("Ошибка подключения к WebDriver: %v", err)
-    }
-    defer wd.Quit()
-
-    if err := wd.Get("https://www.google.com"); err != nil {
-        log.Fatalf("Ошибка загрузки страницы: %v", err)
-    }
-
-    time.Sleep(5 * time.Second) // Подождать для демонстрации
+type EventData struct {
+	HasLookup  bool
+	HasSendmsg bool
+	HasRecvmsg bool
 }
+
+var eventDataPool = make(chan *EventData, 65536)
+
+func getEventData() *EventData {
+	select {
+	case e := <-eventDataPool:
+		return e
+	default:
+		return &EventData{}
+	}
+}
+
+func putEventData(ed *EventData) {
+	*ed = EventData{}
+	select {
+	case eventDataPool <- ed:
+	default:
+	}
+}
+
+func BenchmarkMapAccess(b *testing.B) {
+	m := make(map[int]*EventData)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		port := i % 65536
+		data, ok := m[port]
+		if !ok {
+			data = getEventData()
+			m[port] = data
+		}
+		data.HasLookup = true
+		if i%7 == 0 {
+			putEventData(m[port])
+			delete(m, port)
+		}
+	}
+}
+
+func BenchmarkArrayAccess(b *testing.B) {
+	var arr [65536]*EventData
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		port := i % 65536
+		data := arr[port]
+		if data == nil {
+			data = getEventData()
+			arr[port] = data
+		}
+		data.HasLookup = true
+		if i%7 == 0 {
+			putEventData(arr[port])
+			arr[port] = nil
+		}
+	}
+}
+
+
+go test -bench=. -benchmem > old.txt
+go test -bench=. -benchmem > new.txt
+go install golang.org/x/perf/cmd/benchcmp@latest
+benchcmp old.txt new.txt
+
 
 
 
