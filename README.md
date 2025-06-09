@@ -304,9 +304,18 @@ func BenchmarkArrayAccess(b *testing.B) {
 }
 
 
-http://localhost:6060/debug/pprof/
+Дескриптор нового namespace: 6
+Go sizeof(traceInfo) = 88
+2025/06/10 01:58:26 Starting pprof HTTP server on :6060
+Press Ctrl+C to exit
+
+
+http://localhost:6060
 http://localhost:6060/debug/pprof/profile?seconds=30
 http://localhost:6060/debug/pprof/heap
+
+az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ http://localhost:6060/debug/pprof/
+bash: http://localhost:6060/debug/pprof/: No such file or directory
 
 
 
