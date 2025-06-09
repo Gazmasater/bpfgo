@@ -310,6 +310,14 @@ go install golang.org/x/perf/cmd/benchcmp@latest
 benchcmp old.txt new.txt
 
 
+az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ go install golang.org/x/perf/cmd/benchcmp@latest
+benchcmp old.txt new.txt
+go: downloading golang.org/x/perf v0.0.0-20250605212013-b481878a17be
+go: golang.org/x/perf/cmd/benchcmp@latest: module golang.org/x/perf@latest found (v0.0.0-20250605212013-b481878a17be), but does not contain package golang.org/x/perf/cmd/benchcmp
+Command 'benchcmp' not found, but can be installed with:
+sudo apt install golang-golang-x-tools
+
+
 
 
 
