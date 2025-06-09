@@ -317,7 +317,16 @@ http://localhost:6060/debug/pprof/heap
 curl -o cpu.prof http://localhost:6060/debug/pprof/profile?seconds=30
 curl -o heap.prof http://localhost:6060/debug/pprof/heap
 
-
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ curl -o cpu.prof http://localhost:6060/debug/pprof/profile?seconds=30
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100  1103  100  1103    0     0     36      0  0:00:30  0:00:30 --:--:--   291
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ curl -o heap.prof http://localhost:6060/debug/pprof/heap
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100  5145    0  5145    0     0  1009k      0 --:--:-- --:--:-- --:--:-- 1256k
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo$ ^C
+gaz358@gaz358-BOD-WXX9:~/myprog/bpfgo
 
 
 
