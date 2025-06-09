@@ -314,10 +314,8 @@ http://localhost:6060
 http://localhost:6060/debug/pprof/profile?seconds=30
 http://localhost:6060/debug/pprof/heap
 
-az358@gaz358-BOD-WXX9:~/myprog/bpfgo$ http://localhost:6060/debug/pprof/
-bash: http://localhost:6060/debug/pprof/: No such file or directory
-
-
+curl -o cpu.prof http://localhost:6060/debug/pprof/profile?seconds=30
+curl -o heap.prof http://localhost:6060/debug/pprof/heap
 
 
 
