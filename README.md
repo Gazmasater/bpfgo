@@ -1,3 +1,7 @@
+./chromedriver-linux64/chromedriver --browser-binary=./chrome-linux64/chrome
+
+
+
 const (
 	seleniumPath = "/usr/local/bin/chromedriver-linux64/chromedriver"
 	port         = 4444
