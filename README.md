@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	seleniumURL = "http://localhost:9515/wd/hub"
+	seleniumURL = "http://localhost:44243"
 )
 
 func main() {
@@ -22,7 +22,7 @@ func main() {
 		"browserName": "chrome",
 		"goog:chromeOptions": map[string]interface{}{
 			"args": []string{
-				"--headless",
+				//		"--headless",
 				"--no-sandbox",
 				"--disable-dev-shm-usage",
 			},
@@ -37,7 +37,7 @@ func main() {
 	defer wd.Quit()
 
 	// Открытие страницы
-	if err := wd.Get("https://example.com"); err != nil {
+	if err := wd.Get("https://ozon.ru"); err != nil {
 		log.Fatalf("Ошибка загрузки страницы: %s", err)
 	}
 
@@ -62,6 +62,7 @@ func main() {
 	}
 	fmt.Println("HTML длина:", len(html))
 }
+
 
 
 
