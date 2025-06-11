@@ -5,68 +5,37 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
 
-	"github.com/tebeka/selenium"
-)
-
-const (
-	seleniumURL = "http://localhost:44243"
+	"github.com/chromedp/chromedp"
 )
 
 func main() {
-	// Настройки браузера через Capabilities
-	caps := selenium.Capabilities{
-		"browserName": "chrome",
-		"goog:chromeOptions": map[string]interface{}{
-			"args": []string{
-				//		"--headless",
-				"--no-sandbox",
-				"--disable-dev-shm-usage",
-			},
-		},
-	}
+	ctx, cancel := chromedp.NewExecAllocator(context.Background(),
+		chromedp.Flag("headless", false), // запускаем с GUI
+		chromedp.Flag("disable-blink-features", "AutomationControlled"),
+	)
+	defer cancel()
 
-	// Подключение к chromedriver
-	wd, err := selenium.NewRemote(caps, seleniumURL)
+	ctx, cancel = chromedp.NewContext(ctx)
+	defer cancel()
+
+	var html string
+	err := chromedp.Run(ctx,
+		chromedp.Navigate("https://ozon.ru"),
+		chromedp.Sleep(3*time.Second),
+		chromedp.OuterHTML("html", &html),
+	)
 	if err != nil {
-		log.Fatalf("Ошибка подключения к chromedriver: %s", err)
-	}
-	defer wd.Quit()
-
-	// Открытие страницы
-	if err := wd.Get("https://ozon.ru"); err != nil {
-		log.Fatalf("Ошибка загрузки страницы: %s", err)
+		log.Fatal(err)
 	}
 
-	// Получение заголовка
-	title, err := wd.Title()
-	if err != nil {
-		log.Fatalf("Ошибка получения заголовка: %s", err)
-	}
-	fmt.Println("Заголовок страницы:", title)
-
-	// Скролл страницы
-	_, err = wd.ExecuteScript("window.scrollTo(0, 2000);", nil)
-	if err != nil {
-		log.Printf("Ошибка скролла: %s", err)
-	}
-	time.Sleep(2 * time.Second)
-
-	// Получение HTML
-	html, err := wd.PageSource()
-	if err != nil {
-		log.Fatalf("Ошибка получения HTML: %s", err)
-	}
 	fmt.Println("HTML длина:", len(html))
 }
 
-
-Перейди на вкладку Console и введи:
-
-navigator.webdriver
 
 
 
