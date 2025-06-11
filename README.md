@@ -13,101 +13,55 @@ import (
 )
 
 const (
-	// Адрес, на котором запущен chromedriver
 	seleniumURL = "http://localhost:9515/wd/hub"
 )
 
 func main() {
-	// Настройки опций браузера
+	// Настройки браузера через Capabilities
 	caps := selenium.Capabilities{
 		"browserName": "chrome",
-	}
-	chromeCaps := map[string]interface{}{
-		"args": []string{
-			"--headless", // можно убрать, если нужен GUI
-			"--no-sandbox",
-			"--disable-dev-shm-usage",
+		"goog:chromeOptions": map[string]interface{}{
+			"args": []string{
+				"--headless",
+				"--no-sandbox",
+				"--disable-dev-shm-usage",
+			},
 		},
 	}
-	caps.AddChrome(chromeCaps)
 
-	// Подключаемся к уже запущенному chromedriver
+	// Подключение к chromedriver
 	wd, err := selenium.NewRemote(caps, seleniumURL)
 	if err != nil {
 		log.Fatalf("Ошибка подключения к chromedriver: %s", err)
 	}
 	defer wd.Quit()
 
-	// Открываем страницу
+	// Открытие страницы
 	if err := wd.Get("https://example.com"); err != nil {
 		log.Fatalf("Ошибка загрузки страницы: %s", err)
 	}
 
-	// Получаем заголовок страницы
+	// Получение заголовка
 	title, err := wd.Title()
 	if err != nil {
 		log.Fatalf("Ошибка получения заголовка: %s", err)
 	}
 	fmt.Println("Заголовок страницы:", title)
 
-	// Скроллим вниз (пример)
-	err = wd.ExecuteScript("window.scrollTo(0, 2000);", nil)
+	// Скролл страницы
+	_, err = wd.ExecuteScript("window.scrollTo(0, 2000);", nil)
 	if err != nil {
 		log.Printf("Ошибка скролла: %s", err)
 	}
 	time.Sleep(2 * time.Second)
 
-	// Получаем HTML страницы
+	// Получение HTML
 	html, err := wd.PageSource()
 	if err != nil {
-		log.Fatalf("Ошибка получения исходного кода страницы: %s", err)
+		log.Fatalf("Ошибка получения HTML: %s", err)
 	}
 	fmt.Println("HTML длина:", len(html))
 }
-
-[{
-	"resource": "/home/gaz358/myprog/pars/pars.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "IncompatibleAssign",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "IncompatibleAssign"
-		}
-	},
-	"severity": 8,
-	"message": "cannot use chromeCaps (variable of type map[string]interface{}) as chrome.Capabilities value in argument to caps.AddChrome",
-	"source": "compiler",
-	"startLineNumber": 28,
-	"startColumn": 17,
-	"endLineNumber": 28,
-	"endColumn": 27
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/pars/pars.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "WrongAssignCount",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "WrongAssignCount"
-		}
-	},
-	"severity": 8,
-	"message": "assignment mismatch: 1 variable but wd.ExecuteScript returns 2 values",
-	"source": "compiler",
-	"startLineNumber": 50,
-	"startColumn": 8,
-	"endLineNumber": 50,
-	"endColumn": 58
-}]
 
 
 
