@@ -64,6 +64,12 @@ func main() {
 }
 
 
+Перейди на вкладку Console и введи:
+
+navigator.webdriver
+
+
+
 
 
 
