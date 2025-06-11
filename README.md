@@ -2,32 +2,69 @@
 
 
 
-const (
-	seleniumPath = "/usr/local/bin/chromedriver-linux64/chromedriver"
-	port         = 4444
+package main
+
+import (
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/tebeka/selenium"
 )
 
-func StartWebDriver() (selenium.WebDriver, error) {
-	opts := []selenium.ServiceOption{}
-	_, err := selenium.NewChromeDriverService(seleniumPath, port, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("ошибка при запуске Chrome WebDriver: %s", err)
-	}
+const (
+	// Адрес, на котором запущен chromedriver
+	seleniumURL = "http://localhost:9515/wd/hub"
+)
 
-	caps := selenium.Capabilities{"browserName": "chrome"}
-	chromeCaps := chrome.Capabilities{
-		Path: "/usr/local/bin/chrome-linux64/chrome", // полный путь до Chrome
-		Args: []string{},
+func main() {
+	// Настройки опций браузера
+	caps := selenium.Capabilities{
+		"browserName": "chrome",
+	}
+	chromeCaps := map[string]interface{}{
+		"args": []string{
+			"--headless", // можно убрать, если нужен GUI
+			"--no-sandbox",
+			"--disable-dev-shm-usage",
+		},
 	}
 	caps.AddChrome(chromeCaps)
 
-	wd, err := selenium.NewRemote(caps, fmt.Sprintf("http://localhost:%d/wd/hub", port))
+	// Подключаемся к уже запущенному chromedriver
+	wd, err := selenium.NewRemote(caps, seleniumURL)
 	if err != nil {
-		return nil, fmt.Errorf("ошибка при создании удаленного драйвера: %s", err)
+		log.Fatalf("Ошибка подключения к chromedriver: %s", err)
+	}
+	defer wd.Quit()
+
+	// Открываем страницу
+	if err := wd.Get("https://example.com"); err != nil {
+		log.Fatalf("Ошибка загрузки страницы: %s", err)
 	}
 
-	return wd, nil
+	// Получаем заголовок страницы
+	title, err := wd.Title()
+	if err != nil {
+		log.Fatalf("Ошибка получения заголовка: %s", err)
+	}
+	fmt.Println("Заголовок страницы:", title)
+
+	// Скроллим вниз (пример)
+	err = wd.ExecuteScript("window.scrollTo(0, 2000);", nil)
+	if err != nil {
+		log.Printf("Ошибка скролла: %s", err)
+	}
+	time.Sleep(2 * time.Second)
+
+	// Получаем HTML страницы
+	html, err := wd.PageSource()
+	if err != nil {
+		log.Fatalf("Ошибка получения исходного кода страницы: %s", err)
+	}
+	fmt.Println("HTML длина:", len(html))
 }
+
 
 
 
