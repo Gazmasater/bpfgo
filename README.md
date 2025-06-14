@@ -247,6 +247,42 @@ user-agent
 Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36
 
 
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/chromedp/chromedp"
+)
+
+func main() {
+	ctx, cancel := chromedp.NewExecAllocator(context.Background(),
+		chromedp.Flag("headless", false), // запускаем с GUI
+		chromedp.Flag("disable-blink-features", "AutomationControlled"),
+	)
+	defer cancel()
+
+	ctx, cancel = chromedp.NewContext(ctx)
+	defer cancel()
+
+	var html string
+	err := chromedp.Run(ctx,
+		chromedp.Navigate("https://www.avito.ru"),
+		chromedp.Sleep(5500*time.Second),
+		chromedp.OuterHTML("html", &html),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("HTML длина:", len(html))
+}
+
+
+
 
 
 
