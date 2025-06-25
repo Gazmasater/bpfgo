@@ -183,67 +183,41 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math/rand"
 	"time"
 
 	"github.com/chromedp/chromedp"
 )
 
 func main() {
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("headless", false),
+	ctx, cancel := chromedp.NewExecAllocator(context.Background(),
+		chromedp.Flag("headless", false), // запускаем с GUI
 		chromedp.Flag("disable-blink-features", "AutomationControlled"),
-		chromedp.Flag("enable-automation", false),
-		chromedp.UserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "+
-			"AppleWebKit/537.36 (KHTML, like Gecko) "+
-			"Chrome/114.0.0.0 Safari/537.36"),
 	)
-
-	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
 	defer cancel()
 
-	ctx, cancel := chromedp.NewContext(allocCtx)
+	ctx, cancel = chromedp.NewContext(ctx)
 	defer cancel()
 
 	var html string
-	var x, y int64
+	err := chromedp.Run(ctx,
+		chromedp.Navigate("https://ozon.ru"),
 
-	tasks := chromedp.Tasks{
-		chromedp.Navigate("https://www.ozon.ru"),
+		// Подождать появления кнопки и кликнуть по ней
+		chromedp.WaitVisible(`button.cookie.accept`, chromedp.ByQuery),
+		chromedp.Click(`button.cookie.accept`, chromedp.ByQuery),
 
-		// Ждём до 10 секунд для прохождения JS-челленджа Cloudflare
-		chromedp.Sleep(10 * time.Second),
+		// Подождать исчезновения баннера и полной загрузки
+		chromedp.Sleep(2*time.Second),
 
-		// Эмуляция движения мыши и взаимодействий
-		randomMouseMove(&x, &y),
-		chromedp.Sleep(2 * time.Second),
-		chromedp.ScrollIntoView("body", chromedp.ByQuery),
-		chromedp.Sleep(2 * time.Second),
-
-		// Попытка кликнуть в произвольное место (например, логотип)
-		chromedp.Click("a", chromedp.ByQuery), // клик по первой ссылке на странице
-		chromedp.Sleep(3 * time.Second),
-
-		// Получение HTML
+		// Получить весь HTML
 		chromedp.OuterHTML("html", &html),
-	}
-
-	if err := chromedp.Run(ctx, tasks); err != nil {
+	)
+	if err != nil {
 		log.Fatal(err)
 	}
 
 	fmt.Println("HTML длина:", len(html))
 }
-
-// randomMouseMove возвращает chromedp.ActionFunc для имитации случайного движения мыши
-func randomMouseMove(x, y *int64) chromedp.ActionFunc {
-	return func(ctx context.Context) error {
-		*x = rand.Int63n(600) + 200 // [200, 800]
-		*y = rand.Int63n(300) + 100 // [100, 400]
-		return chromedp.MouseClickXY(float64(*x), float64(*y)).Do(ctx)
-	}
-}
-
 
 
 
