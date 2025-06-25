@@ -183,33 +183,67 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand"
 	"time"
 
 	"github.com/chromedp/chromedp"
 )
 
 func main() {
-	ctx, cancel := chromedp.NewExecAllocator(context.Background(),
-		chromedp.Flag("headless", false), // запускаем с GUI
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("headless", false),
 		chromedp.Flag("disable-blink-features", "AutomationControlled"),
+		chromedp.Flag("enable-automation", false),
+		chromedp.UserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "+
+			"AppleWebKit/537.36 (KHTML, like Gecko) "+
+			"Chrome/114.0.0.0 Safari/537.36"),
 	)
+
+	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
 	defer cancel()
 
-	ctx, cancel = chromedp.NewContext(ctx)
+	ctx, cancel := chromedp.NewContext(allocCtx)
 	defer cancel()
 
 	var html string
-	err := chromedp.Run(ctx,
+	var x, y int64
+
+	tasks := chromedp.Tasks{
 		chromedp.Navigate("https://www.ozon.ru"),
-		chromedp.Sleep(5500*time.Second),
+
+		// Ждём до 10 секунд для прохождения JS-челленджа Cloudflare
+		chromedp.Sleep(10 * time.Second),
+
+		// Эмуляция движения мыши и взаимодействий
+		randomMouseMove(&x, &y),
+		chromedp.Sleep(2 * time.Second),
+		chromedp.ScrollIntoView("body", chromedp.ByQuery),
+		chromedp.Sleep(2 * time.Second),
+
+		// Попытка кликнуть в произвольное место (например, логотип)
+		chromedp.Click("a", chromedp.ByQuery), // клик по первой ссылке на странице
+		chromedp.Sleep(3 * time.Second),
+
+		// Получение HTML
 		chromedp.OuterHTML("html", &html),
-	)
-	if err != nil {
+	}
+
+	if err := chromedp.Run(ctx, tasks); err != nil {
 		log.Fatal(err)
 	}
 
 	fmt.Println("HTML длина:", len(html))
 }
+
+// randomMouseMove возвращает chromedp.ActionFunc для имитации случайного движения мыши
+func randomMouseMove(x, y *int64) chromedp.ActionFunc {
+	return func(ctx context.Context) error {
+		*x = rand.Int63n(600) + 200 // [200, 800]
+		*y = rand.Int63n(300) + 100 // [100, 400]
+		return chromedp.MouseClickXY(float64(*x), float64(*y)).Do(ctx)
+	}
+}
+
 
 
 
