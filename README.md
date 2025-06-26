@@ -190,7 +190,7 @@ import (
 
 func main() {
 	ctx, cancel := chromedp.NewExecAllocator(context.Background(),
-		chromedp.Flag("headless", false), // запускаем с GUI
+		chromedp.Flag("headless", false),
 		chromedp.Flag("disable-blink-features", "AutomationControlled"),
 	)
 	defer cancel()
@@ -200,17 +200,16 @@ func main() {
 
 	var html string
 	err := chromedp.Run(ctx,
-		// Открываем сайт
 		chromedp.Navigate("https://ozon.ru"),
 
-		// Ждём появления кнопки "Принять" cookies и кликаем по ней
-		chromedp.WaitVisible(`button.cookie_accept`, chromedp.ByQuery),
-		chromedp.Click(`button.cookie_accept`, chromedp.ByQuery),
+		// Ждём появления и кликаем по кнопке "Принять"
+		chromedp.WaitVisible(`button.uw_af6`, chromedp.ByQuery),
+		chromedp.Click(`button.uw_af6`, chromedp.ByQuery),
 
-		// Ждём 2 секунды, чтобы баннер скрылся
+		// Подождать, чтобы баннер скрылся
 		chromedp.Sleep(2*time.Second),
 
-		// Получаем HTML всей страницы
+		// Получить HTML всей страницы
 		chromedp.OuterHTML("html", &html),
 	)
 	if err != nil {
