@@ -200,16 +200,17 @@ func main() {
 
 	var html string
 	err := chromedp.Run(ctx,
+		// Открываем сайт
 		chromedp.Navigate("https://ozon.ru"),
 
-		// Подождать появления кнопки и кликнуть по ней
-		chromedp.WaitVisible(`button.cookie.accept`, chromedp.ByQuery),
-		chromedp.Click(`button.cookie.accept`, chromedp.ByQuery),
+		// Ждём появления кнопки "Принять" cookies и кликаем по ней
+		chromedp.WaitVisible(`button.cookie_accept`, chromedp.ByQuery),
+		chromedp.Click(`button.cookie_accept`, chromedp.ByQuery),
 
-		// Подождать исчезновения баннера и полной загрузки
+		// Ждём 2 секунды, чтобы баннер скрылся
 		chromedp.Sleep(2*time.Second),
 
-		// Получить весь HTML
+		// Получаем HTML всей страницы
 		chromedp.OuterHTML("html", &html),
 	)
 	if err != nil {
