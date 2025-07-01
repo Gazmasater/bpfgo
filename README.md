@@ -471,5 +471,16 @@ func main() {
 }
 
 
+# 1. Создать задачу
+curl -X POST http://localhost:8080/
+
+# 2. Получить статус (замените ID на свой)
+curl http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
+
+# 3. Удалить задачу
+curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
+
+
+
 
 
