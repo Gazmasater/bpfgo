@@ -495,6 +495,15 @@ git branch -M main
 git push -u origin main
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$         git config --global --add safe.directory /home/gaz358/myprog/workmate
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ git remote add origin https://github.com/Gazmasater/workmate.git
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ git branch -M main
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ git push -u origin main
+error: src refspec main does not match any
+error: failed to push some refs to 'https://github.com/Gazmasater/workmate.git'
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+
+
 
 
 
