@@ -482,22 +482,39 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
-echo "# workmate" >> README.md
-git init
-git add README.md
-git commit -m "first commit"
-git branch -M main
-git remote add origin https://github.com/Gazmasater/workmate.git
-git push -u origin main
+package main
 
-git remote add origin https://github.com/Gazmasater/workmate.git
-git branch -M main
-git push -u origin main
+import (
+    "context"
+    "net/http"
 
+    "workmate/internal/delivery/_http"
+    "workmate/logger"
+    "workmate/repository/memory"
+    "workmate/usecase"
+)
 
-git add .
-git commit -m "initial commit"
-git push -u origin main
+func main() {
+    // Устанавливаем уровень логирования (по умолчанию — ErrorLevel)
+    logger.SetLevel(logger.InfoLevel)
+
+    // Создаём контекст для логов
+    ctx := context.Background()
+    // Получаем глобальный логгер и даём ему имя "main"
+    log := logger.Global().Named("main")
+
+    repo := memory.NewInMemoryRepo()
+    uc := usecase.NewTaskUseCase(repo)
+    handler := _http.NewHandler(uc)
+
+    // Логируем старт приложения
+    log.Infow("Starting HTTP server", "addr", ":8080")
+
+    // Запускаем сервер и в случае ошибки логируем фатал
+    if err := http.ListenAndServe(":8080", handler.Routes()); err != nil {
+        log.Fatalw("Server failed to start", "error", err)
+    }
+}
 
 
 
