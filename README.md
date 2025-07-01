@@ -480,6 +480,20 @@ curl http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 # 3. Удалить задачу
 curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
+________________________________________________________________________________________________
+
+echo "# workmate" >> README.md
+git init
+git add README.md
+git commit -m "first commit"
+git branch -M main
+git remote add origin https://github.com/Gazmasater/workmate.git
+git push -u origin main
+
+git remote add origin https://github.com/Gazmasater/workmate.git
+git branch -M main
+git push -u origin main
+
 
 
 
