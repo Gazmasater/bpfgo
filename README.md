@@ -219,5 +219,257 @@ func main() {
 	fmt.Println("HTML длина:", len(html))
 }
 
+___________________________________________________________________________________________
+
+✅ Структура проекта
+go
+Копировать
+Редактировать
+task-service/
+├── cmd/
+│   └── server/
+│       └── main.go
+├── internal/
+│   ├── delivery/
+│   │   └── http/
+│   │       └── task_handler.go
+│   ├── domain/
+│   │   └── model.go
+│   │   └── repository.go
+│   ├── usecase/
+│   │   └── task_usecase.go
+│   └── repository/
+│       └── memory/
+│           └── task_repo.go
+├── go.mod
+├── README.md
+📄 domain/model.go
+go
+Копировать
+Редактировать
+package domain
+
+import "time"
+
+type Status string
+
+const (
+	StatusPending   Status = "PENDING"
+	StatusRunning   Status = "RUNNING"
+	StatusCompleted Status = "COMPLETED"
+	StatusFailed    Status = "FAILED"
+)
+
+type Task struct {
+	ID         string    `json:"id"`
+	CreatedAt  time.Time `json:"created_at"`
+	StartedAt  time.Time `json:"started_at,omitempty"`
+	EndedAt    time.Time `json:"ended_at,omitempty"`
+	Status     Status    `json:"status"`
+	Result     string    `json:"result,omitempty"`
+}
+📄 domain/repository.go
+go
+Копировать
+Редактировать
+package domain
+
+type TaskRepository interface {
+	Create(*Task) error
+	Update(*Task) error
+	Delete(id string) error
+	Get(id string) (*Task, error)
+}
+📄 usecase/task_usecase.go
+go
+Копировать
+Редактировать
+package usecase
+
+import (
+	"sync"
+	"time"
+
+	"task-service/internal/domain"
+
+	"github.com/google/uuid"
+)
+
+type TaskUseCase struct {
+	repo domain.TaskRepository
+}
+
+func NewTaskUseCase(repo domain.TaskRepository) *TaskUseCase {
+	return &TaskUseCase{repo: repo}
+}
+
+func (uc *TaskUseCase) CreateTask() (*domain.Task, error) {
+	task := &domain.Task{
+		ID:        uuid.NewString(),
+		CreatedAt: time.Now(),
+		Status:    domain.StatusPending,
+	}
+	if err := uc.repo.Create(task); err != nil {
+		return nil, err
+	}
+	go uc.run(task)
+	return task, nil
+}
+
+func (uc *TaskUseCase) run(task *domain.Task) {
+	task.Status = domain.StatusRunning
+	task.StartedAt = time.Now()
+	time.Sleep(3 * time.Minute)
+	task.Status = domain.StatusCompleted
+	task.EndedAt = time.Now()
+	task.Result = "OK"
+	_ = uc.repo.Update(task)
+}
+
+func (uc *TaskUseCase) GetTask(id string) (*domain.Task, error) {
+	return uc.repo.Get(id)
+}
+
+func (uc *TaskUseCase) DeleteTask(id string) error {
+	return uc.repo.Delete(id)
+}
+📄 repository/memory/task_repo.go
+go
+Копировать
+Редактировать
+package memory
+
+import (
+	"errors"
+	"sync"
+
+	"task-service/internal/domain"
+)
+
+type InMemoryRepo struct {
+	mu    sync.RWMutex
+	tasks map[string]*domain.Task
+}
+
+func NewInMemoryRepo() *InMemoryRepo {
+	return &InMemoryRepo{tasks: make(map[string]*domain.Task)}
+}
+
+func (r *InMemoryRepo) Create(t *domain.Task) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.tasks[t.ID] = t
+	return nil
+}
+
+func (r *InMemoryRepo) Update(t *domain.Task) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.tasks[t.ID]; !ok {
+		return errors.New("not found")
+	}
+	r.tasks[t.ID] = t
+	return nil
+}
+
+func (r *InMemoryRepo) Delete(id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.tasks, id)
+	return nil
+}
+
+func (r *InMemoryRepo) Get(id string) (*domain.Task, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	t, ok := r.tasks[id]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	return t, nil
+}
+📄 delivery/http/task_handler.go
+go
+Копировать
+Редактировать
+package http
+
+import (
+	"encoding/json"
+	"net/http"
+	"task-service/internal/usecase"
+
+	"github.com/go-chi/chi/v5"
+)
+
+type Handler struct {
+	uc *usecase.TaskUseCase
+}
+
+func NewHandler(uc *usecase.TaskUseCase) *Handler {
+	return &Handler{uc: uc}
+}
+
+func (h *Handler) Routes() http.Handler {
+	r := chi.NewRouter()
+	r.Post("/", h.create)
+	r.Get("/{id}", h.get)
+	r.Delete("/{id}", h.delete)
+	return r
+}
+
+func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
+	task, err := h.uc.CreateTask()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, task)
+}
+
+func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	task, err := h.uc.GetTask(id)
+	if err != nil {
+		http.Error(w, "task not found", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, task)
+}
+
+func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	_ = h.uc.DeleteTask(id)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func writeJSON(w http.ResponseWriter, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(v)
+}
+📄 cmd/server/main.go
+go
+Копировать
+Редактировать
+package main
+
+import (
+	"log"
+	"net/http"
+	"task-service/internal/delivery/http"
+	"task-service/internal/repository/memory"
+	"task-service/internal/usecase"
+)
+
+func main() {
+	repo := memory.NewInMemoryRepo()
+	uc := usecase.NewTaskUseCase(repo)
+	handler := http.NewHandler(uc)
+
+	log.Println("Listening on :8080")
+	log.Fatal(http.ListenAndServe(":8080", handler.Routes()))
+}
+
+
 
 
