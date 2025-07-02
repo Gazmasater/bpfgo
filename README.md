@@ -484,6 +484,9 @@ ________________________________________________________________________________
 
  swag init   --generalInfo main.go   --output docs
 
+ swag init -g cmd/server/main.go
+
+
 
 
 swag init \
