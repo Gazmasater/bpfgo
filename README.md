@@ -523,34 +523,7 @@ swag init \
 
 swag init -g cmd/server/main.go -o cmd/server/docs
 
-// @Summary      Создать новую задачу
-// @Description  Инициализирует задачу со статусом Pending и возвращает её с сгенерированным ID
-// @Tags         tasks
-// @Produce      json
-// @Success      200  {object}  domen.Task         "Задача успешно создана"
-// @Router       /tasks [post]
-func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-	h.log.Infow("create task request", "method", r.Method, "path", r.URL.Path)
 
-	task, err := h.uc.CreateTask()
-	if err != nil {
-		h.log.Errorw("failed to create task", "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	h.log.Infow("task created", "id", task.ID)
-	writeJSON(w, task)
-}
-
-type ErrorResponse struct {
-    // сообщение об ошибке
-    //
-    // required: true
-    Message string `json:"message" example:"something went wrong"`
-}
-
-// @Failure      500  {object}  phttp.ErrorResponse  "Внутренняя ошибка сервера"
 
 
 
