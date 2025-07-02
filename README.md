@@ -575,6 +575,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, task)
 }
 
+var _ = domen.Task{}
+
+
 
 
 
