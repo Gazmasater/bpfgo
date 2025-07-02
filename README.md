@@ -503,15 +503,8 @@ swag init \
 
 swag init --parseInternal  --parseDependency   -g ./main.go -o ./docs
 
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ swag init --parseInternal  --parseDependency   -g ./main.go -o ./docs
-2025/07/02 10:27:39 Generate swagger docs....
-2025/07/02 10:27:39 Generate general API Info, search dir:./
-2025/07/02 10:27:41 warning: failed to evaluate const mProfCycleWrap at /usr/local/go/src/runtime/mprof.go:179:7, reflect: call of reflect.Value.Len on zero Value
-missing go.sum entry for module providing package golang.org/x/text/unicode/bidi; to add:
-        go mod download golang.org/x/text
-missing go.sum entry for module providing package golang.org/x/text/unicode/bidi; to add:
-        go mod download golang.org/x/text
-2025/07/02 10:27:41 ParseComment error in file /home/gaz358/myprog/workmate/internal/delivery/phttp/task_handler.go :cannot find type definition: usecase.TaskInput
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+go mod download golang.org/x/text
+go mod tidy
+
 
 
