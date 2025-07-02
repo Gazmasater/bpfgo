@@ -538,86 +538,65 @@ swag init \
 package main
 
 import (
-    "context"
-    "net/http"
-    "os"
-    "os/signal"
-    "time"
+	"context"
+	"net/http"
+	"os"
+	"os/signal"
+	"time"
 
-    "workmate/internal/delivery/_http"
-    "workmate/pkg/logger"
-    "workmate/repository/memory"
-    "workmate/usecase"
+	"workmate/internal/delivery/_http"
+	"workmate/pkg/logger"
+	"workmate/repository/memory"
+	"workmate/usecase"
 
-    httpSwagger "github.com/swaggo/http-swagger"
-    "go.uber.org/zap/zapcore"
+	httpSwagger "github.com/swaggo/http-swagger"
 
-    _ "workmate/cmd/server/docs" // сгенерированные swagger-файлы
+	_ "workmate/cmd/server/docs" // сгенерированные swagger-файлы
 )
 
 func main() {
-    // Настраиваем логгер
-    logger.SetLevel(logger.InfoLevel)
-    log := logger.Global().Named("main")
+	// Настраиваем логгер
+	logger.SetLevel(logger.InfoLevel)
+	log := logger.Global().Named("main")
 
-    // 1) Создаём репозиторий, юзкейз и HTTP-хендлер
-    repo := memory.NewInMemoryRepo()
-    uc   := usecase.NewTaskUseCase(repo)
-    handler := _http.NewHandler(uc)
+	// 1) Создаём репозиторий, юзкейз и HTTP-хендлер
+	repo := memory.NewInMemoryRepo()
+	uc := usecase.NewTaskUseCase(repo)
+	handler := _http.NewHandler(uc)
 
-    // 2) Строим маршруты и вешаем swagger-ui
-    router := handler.Routes()
-    router.Handle("/swagger/{any:.*}", httpSwagger.WrapHandler)
+	// 2) Строим маршруты и вешаем swagger-ui
+	router := handler.Routes()
+	
+	router.ServeHTTP("/swagger/{any:.*}", httpSwagger.WrapHandler)
 
-    // 3) Конфигурируем HTTP-сервер с уже готовым router
-    srv := &http.Server{
-        Addr:    ":8080",
-        Handler: router,
-    }
+	// 3) Конфигурируем HTTP-сервер с уже готовым router
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: router,
+	}
 
-    // 4) Graceful shutdown
-    quit := make(chan os.Signal, 1)
-    signal.Notify(quit, os.Interrupt)
+	// 4) Graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt)
 
-    go func() {
-        log.Infow("Starting HTTP server", "addr", srv.Addr)
-        if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-            log.Fatalw("ListenAndServe failed", "error", err)
-        }
-    }()
+	go func() {
+		log.Infow("Starting HTTP server", "addr", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalw("ListenAndServe failed", "error", err)
+		}
+	}()
 
-    <-quit
-    log.Infow("Shutting down server…")
+	<-quit
+	log.Infow("Shutting down server…")
 
-    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
-    if err := srv.Shutdown(ctx); err != nil {
-        log.Fatalw("Server forced to shutdown", "error", err)
-    }
-    log.Infow("Server exited gracefully")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalw("Server forced to shutdown", "error", err)
+	}
+	log.Infow("Server exited gracefully")
 }
 
-[{
-	"resource": "/home/gaz358/myprog/workmate/cmd/server/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingFieldOrMethod",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingFieldOrMethod"
-		}
-	},
-	"severity": 8,
-	"message": "router.Handle undefined (type http.Handler has no field or method Handle)",
-	"source": "compiler",
-	"startLineNumber": 38,
-	"startColumn": 9,
-	"endLineNumber": 38,
-	"endColumn": 15
-}]
 
 
 
