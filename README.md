@@ -510,11 +510,14 @@ go mod download golang.org/x/text
 go mod tidy
 
 
-swag init \
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ swag init \
   -g cmd/server/main.go \
   -d cmd/server \
   -d internal/delivery/phttp \
   -o docs
-
+2025/07/02 19:18:30 Generate swagger docs....
+2025/07/02 19:18:30 Generate general API Info, search dir:internal/delivery/phttp
+2025/07/02 19:18:30 cannot parse source files /home/gaz358/myprog/workmate/internal/delivery/phttp/cmd/server/main.go: open /home/gaz358/myprog/workmate/internal/delivery/phttp/cmd/server/main.go: no such file or directory
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
 
 
