@@ -521,7 +521,7 @@ swag init \
   -o cmd/server/docs
   ___________________________________________________________________
 
-  package phttp
+package phttp
 
 import (
 	"encoding/json"
@@ -529,7 +529,7 @@ import (
 
 	"workmate/pkg/logger"
 	"workmate/usecase"
-
+	"workmate/domain"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -558,6 +558,8 @@ func (h *Handler) Routes() http.Handler {
 // @Description  Инициализирует задачу со статусом Pending и возвращает её с сгенерированным ID
 // @Tags         tasks
 // @Produce      json
+// @Success      200  {object}  domain.Task
+// @Failure      500  {object}  ErrorResponse  "Ошибка на сервере"
 // @Router       /tasks [post]
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	h.log.Infow("create task request", "method", r.Method, "path", r.URL.Path)
@@ -573,6 +575,14 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, task)
 }
 
+// @Summary      Получить задачу по ID
+// @Description  Возвращает задачу по её идентификатору
+// @Tags         tasks
+// @Produce      json
+// @Param        id   path      string       true  "ID задачи"
+// @Success      200  {object}  domain.Task
+// @Failure      404  {object}  ErrorResponse  "Задача не найдена"
+// @Router       /tasks/{id} [get]
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	h.log.Infow("get task request", "method", r.Method, "path", r.URL.Path, "id", id)
@@ -588,6 +598,13 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, task)
 }
 
+// @Summary      Удалить задачу по ID
+// @Description  Удаляет задачу из системы по её идентификатору
+// @Tags         tasks
+// @Param        id   path      string       true  "ID задачи"
+// @Success      204  "No Content"
+// @Failure      500  {object}  ErrorResponse  "Ошибка на сервере"
+// @Router       /tasks/{id} [delete]
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	h.log.Infow("delete task request", "method", r.Method, "path", r.URL.Path, "id", id)
@@ -606,6 +623,7 @@ func writeJSON(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
 }
+
 
 
 
