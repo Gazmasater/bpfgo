@@ -482,13 +482,13 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ swag init \
-  -g ./cmd/server/main.go \
-  --dir ./cmd/server \
-  -o ./cmd/server/docs
-2025/07/02 06:21:16 Generate swagger docs....
-2025/07/02 06:21:16 Generate general API Info, search dir:./cmd/server
-2025/07/02 06:21:16 cannot parse source files /home/gaz358/myprog/workmate/cmd/server/cmd/server/main.go: open /home/gaz358/myprog/workmate/cmd/server/cmd/server/main.go: no such file or directory
+
+
+
+swag init \
+  --generalInfo cmd/server/main.go \
+  --dir . \
+  --output cmd/server/docs
 
 
 
