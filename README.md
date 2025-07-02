@@ -523,9 +523,142 @@ swag init \
 
 swag init -g cmd/server/main.go -o cmd/server/docs
 
+
+
+// main.go
+package main
+
+import (
+	"context"
+	"net/http"
+	"os"
+	"os/signal"
+	"time"
+
+	"github.com/gaz358/myprog/workmate/internal/delivery/phttp"
+	"github.com/gaz358/myprog/workmate/pkg/logger"
+	"github.com/gaz358/myprog/workmate/repository/memory"
+	"github.com/gaz358/myprog/workmate/usecase"
+
+	httpSwagger "github.com/swaggo/http-swagger"
+	"github.com/go-chi/chi/v5"
+)
+
+func main() {
+	logger.SetLevel(logger.InfoLevel)
+	logg := logger.Global().Named("main")
+
+	// Общий контекст с отменой при шутдауне
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	repo := memory.NewInMemoryRepo()
+	uc := usecase.NewTaskUseCase(repo)
+	handler := phttp.NewHandler(uc)
+
+	r := chi.NewRouter()
+	r.Mount("/tasks", handler.Routes())
+	r.Get("/swagger/*", httpSwagger.WrapHandler)
+
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: r,
+	}
+
+	// Горутина для запуска сервера
+	go func() {
+		logg.Infow("Starting HTTP server", "addr", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logg.Fatalw("ListenAndServe failed", "error", err)
+		}
+	}()
+
+	// Ожидаем сигнала прерывания
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt)
+	<-quit
+	logg.Infow("Shutting down server…")
+
+	// Отмена общего контекста — остановка фоновых задач
+	cancel()
+
+	// Грейсфул-шутдаун HTTP-сервера
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logg.Fatalw("Server forced to shutdown", "error", err)
+	}
+	logg.Infow("Server exited gracefully")
+}
+
+
+// usecase/task_usecase.go
+package usecase
+
+import (
+	"context"
+	"time"
+
+	"github.com/gaz358/myprog/workmate/domen"
+	"github.com/google/uuid"
+)
+
+// TaskUseCase содержит репозиторий и отвечает за бизнес-логику задач
+type TaskUseCase struct {
+	repo domen.TaskRepository
+}
+
+// NewTaskUseCase создаёт экземпляр с репозиторием
+func NewTaskUseCase(repo domen.TaskRepository) *TaskUseCase {
+	return &TaskUseCase{repo: repo}
+}
+
+// CreateTask создаёт задачу и запускает фоновую обработку с контекстом
+func (uc *TaskUseCase) CreateTask(ctx context.Context) (*domen.Task, error) {
+	task := &domen.Task{
+		ID:        uuid.NewString(),
+		CreatedAt: time.Now(),
+		Status:    domen.StatusPending,
+	}
+	if err := uc.repo.Create(task); err != nil {
+		return nil, err
+	}
+	// Запуск фоновой работы с учётом контекста
+	go uc.run(ctx, task)
+	return task, nil
+}
+
+// run выполняет задачу, отменяется при ctx.Done()
+func (uc *TaskUseCase) run(ctx context.Context, task *domen.Task) {
+	task.Status = domen.StatusRunning
+	task.StartedAt = time.Now()
+	select {
+	case <-ctx.Done():
+		task.Status = domen.StatusFailed
+	case <-time.After(3 * time.Minute):
+		task.Status = domen.StatusCompleted
+	}
+	task.EndedAt = time.Now()
+	task.Result = "OK"
+	_ = uc.repo.Update(task)
+}
+
+// GetTask возвращает задачу по ID
+func (uc *TaskUseCase) GetTask(id string) (*domen.Task, error) {
+	return uc.repo.Get(id)
+}
+
+// DeleteTask удаляет задачу из репозитория
+func (uc *TaskUseCase) DeleteTask(id string) error {
+	return uc.repo.Delete(id)
+}
+
+
+// internal/delivery/phttp/handler.go
 package phttp
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -536,29 +669,27 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// ErrorResponse формат ошибки
+// ErrorResponse форматирует JSON-ответ при ошибке
 type ErrorResponse struct {
 	Message string `json:"message"`
 }
 
-// TaskResponse ответ задачи с полем duration
-// swagger:model TaskResponse
+// TaskResponse модель ответа задачи с duration
 type TaskResponse struct {
-	ID        string    `json:"id" example:"uuid"`
-	Status    string    `json:"status" example:"PENDING"`
+	ID        string    `json:"id"`
+	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
-	Duration  string    `json:"duration" example:"3m0s"`
+	Duration  string    `json:"duration"`
 	Result    string    `json:"result,omitempty"`
 }
 
-// Handler для HTTP
+// Handler обрабатывает HTTP-запросы задач
 type Handler struct {
 	uc  *usecase.TaskUseCase
 	log logger.TypeOfLogger
 }
 
-// NewHandler создает Handler
-func NewHandler(uc *usecase.TaskUseCase) *Handler {
+// NewHandler создает новый Handler\ nfunc NewHandler(uc *usecase.TaskUseCase) *Handler {
 	return &Handler{uc: uc, log: logger.Global().Named("http")}
 }
 
@@ -571,16 +702,10 @@ func (h *Handler) Routes() http.Handler {
 	return r
 }
 
-// @Summary Create task
-// @Tags tasks
-// @Produce json
-// @Success 200 {object} TaskResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /tasks [post]
+// create создаёт задачу, передавая r.Context() в usecase
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-	task, err := h.uc.CreateTask()
+	task, err := h.uc.CreateTask(r.Context())
 	if err != nil {
-		h.log.Errorw("create task failed", "error", err)
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -593,14 +718,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, rep, http.StatusOK)
 }
 
-// @Summary Get task
-// @Tags tasks
-// @Produce json
-// @Param id path string true "Task ID"
-// @Success 200 {object} TaskResponse
-// @Failure 404 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /tasks/{id} [get]
+// get возвращает задачу с вычислением duration
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	task, err := h.uc.GetTask(id)
@@ -616,22 +734,11 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 			dur = time.Since(task.StartedAt)
 		}
 	}
-	rep := TaskResponse{
-		ID:        task.ID,
-		Status:    string(task.Status),
-		CreatedAt: task.CreatedAt,
-		Duration:  dur.String(),
-		Result:    task.Result,
-	}
+	rep := TaskResponse{ID: task.ID, Status: string(task.Status), CreatedAt: task.CreatedAt, Duration: dur.String(), Result: task.Result}
 	writeJSON(w, rep, http.StatusOK)
 }
 
-// @Summary Delete task
-// @Tags tasks
-// @Param id path string true "Task ID"
-// @Success 204
-// @Failure 500 {object} ErrorResponse
-// @Router /tasks/{id} [delete]
+// delete удаляет задачу
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if err := h.uc.DeleteTask(id); err != nil {
@@ -641,17 +748,17 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// writeJSON устанавливает header, code и кодирует JSON
 func writeJSON(w http.ResponseWriter, v interface{}, code int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(v)
+	 _ = json.NewEncoder(w).Encode(v)
 }
 
+// writeError отвечает ошибкой
 func writeError(w http.ResponseWriter, code int, msg string) {
 	writeJSON(w, ErrorResponse{Message: msg}, code)
 }
-
-
 
 
 
