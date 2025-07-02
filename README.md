@@ -527,12 +527,13 @@ import (
 	"encoding/json"
 	"net/http"
 
-	_ "github.com/gaz358/workmate/domen"
-
-	"github.com/gaz358/workmate/pkg/logger"
-	"github.com/gaz358/workmate/usecase"
+	"github.com/gaz358/myprog/workmate/domen"
+	"github.com/gaz358/myprog/workmate/pkg/logger"
+	"github.com/gaz358/myprog/workmate/usecase"
 	"github.com/go-chi/chi/v5"
 )
+
+var _ = domen.Task{}
 
 type Handler struct {
 	uc  *usecase.TaskUseCase
@@ -559,7 +560,7 @@ func (h *Handler) Routes() http.Handler {
 // @Description  Инициализирует задачу со статусом Pending и возвращает её с сгенерированным ID
 // @Tags         tasks
 // @Produce      json
-// @Success      200  {object}  domen.Task             "Задача успешно создана"
+// @Success      200  {object}  domen.Task         "Задача успешно создана"
 // @Router       /tasks [post]
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	h.log.Infow("create task request", "method", r.Method, "path", r.URL.Path)
@@ -575,7 +576,6 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, task)
 }
 
-var _ = domen.Task{}
 
 
 
