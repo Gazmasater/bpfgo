@@ -486,10 +486,12 @@ ________________________________________________________________________________
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ swag init
-2025/07/02 10:05:43 Generate swagger docs....
-2025/07/02 10:05:43 Generate general API Info, search dir:./
-2025/07/02 10:05:43 ParseComment error in file /home/gaz358/myprog/workmate/internal/delivery/phttp/task_handler.go :cannot find type definition: usecase.TaskInput
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+swag init \
+  --parseInternal \
+  --parseDependency \
+  --moduleName $(grep '^module ' go.mod | awk '{print $2}') \
+  -g ./cmd/server/main.go \
+  -o ./cmd/server/docs
+
 
 
