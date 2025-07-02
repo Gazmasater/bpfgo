@@ -512,16 +512,9 @@ go mod tidy
 
 swag init \
   --parseDependency \
-  -g cmd/server/main.go \
-  -d cmd/server,internal/delivery/phttp \
-  -o docs
-
-  gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ swag init   --parseDependency   -g cmd/server/main.go   -d cmd/server,internal/delivery/phttp   -o docs
-2025/07/02 18:59:41 Generate swagger docs....
-2025/07/02 18:59:41 Generate general API Info, search dir:cmd/server
-2025/07/02 18:59:41 Generate general API Info, search dir:internal/delivery/phttp
-2025/07/02 18:59:41 pkg /home/gaz358/myprog/workmate/cmd/server/cmd/server cannot find all dependencies, chdir /home/gaz358/myprog/workmate/cmd/server/cmd/server: no such file or directory
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+  -g main.go \
+  -d ../../internal/delivery/phttp \
+  -o ../../docs
 
 
 
