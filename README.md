@@ -493,21 +493,23 @@ import (
     "workmate/usecase"
 )
 
+// Handler handles HTTP requests for tasks.
 type Handler struct {
     uc  *usecase.TaskUseCase
-    log logger.Logger  // или конкретный тип из вашего пакета, например *zap.SugaredLogger
+    log logger.TypeOfLogger
 }
 
+// NewHandler creates a new HTTP handler with task use case and logger.
 func NewHandler(uc *usecase.TaskUseCase) *Handler {
     // Получаем глобальный именованный логгер для HTTP-слоя
     l := logger.Global().Named("http")
-
     return &Handler{
         uc:  uc,
         log: l,
     }
 }
 
+// Routes sets up chi router with task endpoints.
 func (h *Handler) Routes() http.Handler {
     r := chi.NewRouter()
     r.Post("/", h.create)
@@ -516,8 +518,9 @@ func (h *Handler) Routes() http.Handler {
     return r
 }
 
+// create handles POST / to create a new task.
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-    h.log.Infow("incoming request", "method", "POST", "path", r.URL.Path)
+    h.log.Infow("create task request", "method", r.Method, "path", r.URL.Path)
 
     task, err := h.uc.CreateTask()
     if err != nil {
@@ -530,9 +533,10 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
     writeJSON(w, task)
 }
 
+// get handles GET /{id} to retrieve a task by ID.
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
     id := chi.URLParam(r, "id")
-    h.log.Infow("incoming request", "method", "GET", "path", r.URL.Path, "id", id)
+    h.log.Infow("get task request", "method", r.Method, "path", r.URL.Path, "id", id)
 
     task, err := h.uc.GetTask(id)
     if err != nil {
@@ -545,9 +549,10 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
     writeJSON(w, task)
 }
 
+// delete handles DELETE /{id} to delete a task by ID.
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
     id := chi.URLParam(r, "id")
-    h.log.Infow("incoming request", "method", "DELETE", "path", r.URL.Path, "id", id)
+    h.log.Infow("delete task request", "method", r.Method, "path", r.URL.Path, "id", id)
 
     if err := h.uc.DeleteTask(id); err != nil {
         h.log.Errorw("failed to delete task", "id", id, "error", err)
@@ -559,9 +564,10 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
     w.WriteHeader(http.StatusNoContent)
 }
 
+// writeJSON writes v as JSON to the http.ResponseWriter.
 func writeJSON(w http.ResponseWriter, v interface{}) {
     w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(v)
+    _ = json.NewEncoder(w).Encode(v)
 }
 
 
