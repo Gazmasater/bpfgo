@@ -527,44 +527,48 @@ swag init -g cmd/server/main.go -o cmd/server/docs
 // @Description  Возвращает задачу по её идентификатору
 // @Tags         tasks
 // @Produce      json
-// @Param        id   path      string       true  "ID задачи"
+// @Param        id   path      string            true  "ID задачи"
+// @Success      200  {object}  domen.Task        "Задача найдена"
+// @Failure      404  {object}  phttp.ErrorResponse  "Задача не найдена"
+// @Failure      500  {object}  phttp.ErrorResponse  "Внутренняя ошибка сервера"
 // @Router       /tasks/{id} [get]
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	h.log.Infow("get task request", "method", r.Method, "path", r.URL.Path, "id", id)
+    id := chi.URLParam(r, "id")
+    h.log.Infow("get task request", "method", r.Method, "path", r.URL.Path, "id", id)
 
-	task, err := h.uc.GetTask(id)
-	if err != nil {
-		h.log.Warnw("task not found", "id", id)
-		http.Error(w, "task not found", http.StatusNotFound)
-		return
-	}
+    task, err := h.uc.GetTask(id)
+    if err != nil {
+        h.log.Warnw("task not found", "id", id)
+        writeJSON(w, phttp.ErrorResponse{Message: "task not found"})
+        w.WriteHeader(http.StatusNotFound)
+        return
+    }
 
-	h.log.Infow("task retrieved", "id", task.ID)
-	writeJSON(w, task)
+    h.log.Infow("task retrieved", "id", task.ID)
+    writeJSON(w, task)
 }
 
 // @Summary      Удалить задачу по ID
 // @Description  Удаляет задачу из системы по её идентификатору
 // @Tags         tasks
-// @Param        id   path      string       true  "ID задачи"
+// @Param        id   path      string            true  "ID задачи"
 // @Success      204  "No Content"
+// @Failure      500  {object}  phttp.ErrorResponse  "Внутренняя ошибка сервера"
 // @Router       /tasks/{id} [delete]
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	h.log.Infow("delete task request", "method", r.Method, "path", r.URL.Path, "id", id)
+    id := chi.URLParam(r, "id")
+    h.log.Infow("delete task request", "method", r.Method, "path", r.URL.Path, "id", id)
 
-	if err := h.uc.DeleteTask(id); err != nil {
-		h.log.Errorw("failed to delete task", "id", id, "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+    if err := h.uc.DeleteTask(id); err != nil {
+        h.log.Errorw("failed to delete task", "id", id, "error", err)
+        writeJSON(w, phttp.ErrorResponse{Message: err.Error()})
+        w.WriteHeader(http.StatusInternalServerError)
+        return
+    }
 
-	h.log.Infow("task deleted", "id", id)
-	w.WriteHeader(http.StatusNoContent)
+    h.log.Infow("task deleted", "id", id)
+    w.WriteHeader(http.StatusNoContent)
 }
-
-
 
 
 
