@@ -516,6 +516,17 @@ go
 func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) { … }
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ swag init \
+  --generalInfo cmd/server/main.go \
+  --dir . \
+  --output cmd/server/docs
+2025/07/02 06:39:14 Generate swagger docs....
+2025/07/02 06:39:14 Generate general API Info, search dir:.
+2025/07/02 06:39:14 warning: failed to get package name in dir: ., error: execute go list command, exit status 1, stdout:, stderr:no Go files in /home/gaz358/myprog/workmate
+2025/07/02 06:39:14 ParseComment error in file /home/gaz358/myprog/workmate/internal/delivery/_http/task_handler.go :cannot find type definition: usecase.TaskInput
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+
+
 
 
 
