@@ -604,13 +604,10 @@ type Task struct {
 	Result    string    `json:"result,omitempty"`
 }
 
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ swag init   -g main.go   -d cmd/server,internal/delivery/phttp   -o cmd/server/docs
-2025/07/02 20:52:15 Generate swagger docs....
-2025/07/02 20:52:15 Generate general API Info, search dir:cmd/server
-2025/07/02 20:52:16 Generate general API Info, search dir:internal/delivery/phttp
-2025/07/02 20:52:16 ParseComment error in file /home/gaz358/myprog/workmate/internal/delivery/phttp/task_handler.go :cannot find type definition: domain.Task
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
 
+  "github.com/gaz358/myprog/workmate/domain"
+    "github.com/gaz358/myprog/workmate/pkg/logger"
+    "github.com/gaz358/myprog/workmate/usecase"
 
 
 
