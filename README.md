@@ -538,65 +538,71 @@ swag init \
 package main
 
 import (
-	"context"
-	"net/http"
-	"os"
-	"os/signal"
-	"time"
+    "context"
+    "log"
+    "net/http"
+    "os"
+    "os/signal"
+    "time"
 
-	"workmate/internal/delivery/_http"
-	"workmate/pkg/logger"
-	"workmate/repository/memory"
-	"workmate/usecase"
+    "workmate/internal/delivery/_http"
+    "workmate/pkg/logger"
+    "workmate/repository/memory"
+    "workmate/usecase"
 
-	httpSwagger "github.com/swaggo/http-swagger"
+    httpSwagger "github.com/swaggo/http-swagger"
 
-	_ "workmate/cmd/server/docs" // сгенерированные swagger-файлы
+    _ "workmate/cmd/server/docs" // сгенерированные swagger-файлы
+    "github.com/go-chi/chi/v5"
 )
 
 func main() {
-	// Настраиваем логгер
-	logger.SetLevel(logger.InfoLevel)
-	log := logger.Global().Named("main")
+    // 1) Логгер
+    logger.SetLevel(logger.InfoLevel)
+    logg := logger.Global().Named("main")
 
-	// 1) Создаём репозиторий, юзкейз и HTTP-хендлер
-	repo := memory.NewInMemoryRepo()
-	uc := usecase.NewTaskUseCase(repo)
-	handler := _http.NewHandler(uc)
+    // 2) Репозиторий, юзкейс, handler
+    repo := memory.NewInMemoryRepo()
+    uc := usecase.NewTaskUseCase(repo)
+    handler := _http.NewHandler(uc)
 
-	// 2) Строим маршруты и вешаем swagger-ui
-	router := handler.Routes()
-	
-	router.ServeHTTP("/swagger/{any:.*}", httpSwagger.WrapHandler)
+    // 3) Создаём корневой chi.Router и монтируем в него:
+    r := chi.NewRouter()
 
-	// 3) Конфигурируем HTTP-сервер с уже готовым router
-	srv := &http.Server{
-		Addr:    ":8080",
-		Handler: router,
-	}
+    // 3.1) Ваши маршруты API
+    r.Mount("/", handler.Routes())
 
-	// 4) Graceful shutdown
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt)
+    // 3.2) Swagger UI по пути /swagger/*
+    //     httpSwagger.WrapHandler сам отдаёт статические файлы и индекс
+    r.Get("/swagger/*", httpSwagger.WrapHandler)
 
-	go func() {
-		log.Infow("Starting HTTP server", "addr", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalw("ListenAndServe failed", "error", err)
-		}
-	}()
+    // 4) Конфигурируем и запускаем HTTP-сервер
+    srv := &http.Server{
+        Addr:    ":8080",
+        Handler: r,
+    }
 
-	<-quit
-	log.Infow("Shutting down server…")
+    // graceful shutdown
+    quit := make(chan os.Signal, 1)
+    signal.Notify(quit, os.Interrupt)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalw("Server forced to shutdown", "error", err)
-	}
-	log.Infow("Server exited gracefully")
+    go func() {
+        logg.Infow("Starting HTTP server", "addr", srv.Addr)
+        if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+            logg.Fatalw("ListenAndServe failed", "error", err)
+        }
+    }()
+
+    <-quit
+    logg.Infow("Shutting down server…")
+
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
+    if err := srv.Shutdown(ctx); err != nil {
+        logg.Fatalw("Server forced to shutdown", "error", err)
+    }
+    logg.Infow("Server exited gracefully")
 }
-
 
 
 
