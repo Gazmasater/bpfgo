@@ -577,6 +577,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 
+// swagger:model Task
+
+
 
 
 
