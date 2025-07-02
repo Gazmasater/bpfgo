@@ -548,12 +548,12 @@ func main() {
 	logger.SetLevel(logger.InfoLevel)
 	logg := logger.Global().Named("main")
 
-	// Общий контекст для фоновых задач
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// Контекст для graceful shutdown HTTP-сервера
+	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
+	defer shutdownCancel()
 
 	repo := memory.NewInMemoryRepo()
-	uc := usecase.NewTaskUseCase(ctx, repo)
+	uc := usecase.NewTaskUseCase(repo)
 	handler := phttp.NewHandler(uc)
 
 	r := chi.NewRouter()
@@ -572,22 +572,181 @@ func main() {
 		}
 	}()
 
-	// Ожидаем SIGINT/SIGTERM
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt)
 	<-quit
-	logg.Infow("Shutting down server…")
+	logg.Infow("Shutdown signal received")
 
-	// Отмена фоновых задач
-	cancel()
-
-	// Грейсфул-шутдаун HTTP-сервера
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer shutdownCancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
+	// Graceful shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
 		logg.Fatalw("Server forced to shutdown", "error", err)
 	}
-	logg.Infow("Server exited gracefully")
+	logg.Infow("Server exited")
+}
+
+
+// usecase/task_usecase.go
+package usecase
+
+import (
+	"context"
+	"time"
+
+	"github.com/gaz358/myprog/workmate/domen"
+	"github.com/google/uuid"
+)
+
+// TaskUseCase отвечает за бизнес-логику задач
+type TaskUseCase struct {
+	repo domen.TaskRepository
+}
+
+// NewTaskUseCase создаёт TaskUseCase с репозиторием задач
+func NewTaskUseCase(repo domen.TaskRepository) *TaskUseCase {
+	return &TaskUseCase{repo: repo}
+}
+
+// CreateTask инициализирует задачу и запускает фоновую обработку
+func (uc *TaskUseCase) CreateTask(ctx context.Context) (*domen.Task, error) {
+	task := &domen.Task{
+		ID:        uuid.NewString(),
+		CreatedAt: time.Now(),
+		Status:    domen.StatusPending,
+	}
+	if err := uc.repo.Create(task); err != nil {
+		return nil, err
+	}
+	go uc.run(ctx, task)
+	return task, nil
+}
+
+// run выполняет задачу и реагирует на отмену контекста
+func (uc *TaskUseCase) run(ctx context.Context, task *domen.Task) {
+	task.Status = domen.StatusRunning
+	task.StartedAt = time.Now()
+	select {
+	case <-ctx.Done():
+		task.Status = domen.StatusFailed
+	case <-time.After(3 * time.Minute):
+		task.Status = domen.StatusCompleted
+	}
+	task.EndedAt = time.Now()
+	task.Result = "OK"
+	_ = uc.repo.Update(task)
+}
+
+// GetTask возвращает задачу по ID
+func (uc *TaskUseCase) GetTask(id string) (*domen.Task, error) {
+	return uc.repo.Get(id)
+}
+
+// DeleteTask удаляет задачу
+func (uc *TaskUseCase) DeleteTask(id string) error {
+	return uc.repo.Delete(id)
+}
+
+
+// internal/delivery/phttp/handler.go
+package phttp
+
+import (
+	"encoding/json"
+	"net/http"
+	"time"
+
+	"context"
+	"github.com/gaz358/myprog/workmate/domen"
+	"github.com/gaz358/myprog/workmate/pkg/logger"
+	"github.com/gaz358/myprog/workmate/usecase"
+	"github.com/go-chi/chi/v5"
+)
+
+// ErrorResponse формат ошибки
+type ErrorResponse struct {
+	Message string `json:"message"`
+}
+
+// TaskResponse модель ответа задачи с duration
+type TaskResponse struct {
+	ID        string    `json:"id"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+	Duration  string    `json:"duration"`
+	Result    string    `json:"result,omitempty"`
+}
+
+// Handler обрабатывает HTTP для задач
+type Handler struct {
+	uc  *usecase.TaskUseCase
+	log logger.TypeOfLogger
+}
+
+// NewHandler создает HTTP handler
+func NewHandler(uc *usecase.TaskUseCase) *Handler {
+	return &Handler{uc: uc, log: logger.Global().Named("http")}
+}
+
+func (h *Handler) Routes() http.Handler {
+	r := chi.NewRouter()
+	r.Post("/", h.create)
+	r.Get("/{id}", h.get)
+	r.Delete("/{id}", h.delete)
+	return r
+}
+
+func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
+	task, err := h.uc.CreateTask(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	resp := TaskResponse{
+		ID:        task.ID,
+		Status:    string(task.Status),
+		CreatedAt: task.CreatedAt,
+		Duration:  "0s",
+	}
+	writeJSON(w, resp, http.StatusOK)
+}
+
+func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	task, err := h.uc.GetTask(id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "task not found")
+		return
+	}
+	var dur time.Duration
+	if !task.StartedAt.IsZero() {
+		if task.Status == domen.StatusCompleted && !task.EndedAt.IsZero() {
+			dur = task.EndedAt.Sub(task.StartedAt)
+		} else {
+			dur = time.Since(task.StartedAt)
+		}
+	}
+	resp := TaskResponse{ID: task.ID, Status: string(task.Status), CreatedAt: task.CreatedAt, Duration: dur.String(), Result: task.Result}
+	writeJSON(w, resp, http.StatusOK)
+}
+
+func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if err := h.uc.DeleteTask(id); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func writeJSON(w http.ResponseWriter, v interface{}, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeError(w http.ResponseWriter, code int, msg string) {
+	writeJSON(w, ErrorResponse{Message: msg}, code)
 }
 
 
