@@ -494,4 +494,21 @@ swag init \
   -o ./cmd/server/docs
 
 
+swag init \
+  --parseInternal \
+  --parseDependency \
+  -g ./cmd/server/main.go \
+  -o ./cmd/server/docs
+
+
+  gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ swag init \
+  --parseInternal \
+  --parseDependency \
+  -g ./cmd/server/main.go \
+  -o ./cmd/server/docs
+2025/07/02 10:18:21 Generate swagger docs....
+2025/07/02 10:18:21 Generate general API Info, search dir:./
+2025/07/02 10:18:21 cannot parse source files /home/gaz358/myprog/workmate/cmd/server/main.go: open /home/gaz358/myprog/workmate/cmd/server/main.go: no such file or directory
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+
 
