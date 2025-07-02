@@ -523,6 +523,9 @@ swag init \
 
     "workmate/domain"
 
+    // @Success      200  {object}  domain.Task             "Задача успешно создана"
+// @Failure      500  {object}  phttp.ErrorResponse     "Внутренняя ошибка сервера"
+
 
 
 
