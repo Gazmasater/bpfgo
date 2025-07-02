@@ -486,79 +486,10 @@ ________________________________________________________________________________
 
 
 
-1. Сгенерируйте Swagger с флагом --parseInternal
-По умолчанию swag не сканирует внутренние (internal/...) пакеты. Нужно явно указать:
-
-bash
-Копировать код
-# из корня вашего модуля
-swag init \
-  --parseInternal \
-  --parseDependency \
-  -g ./cmd/server/main.go \
-  -o ./cmd/server/docs
---parseInternal — включает сканирование папок internal/...
-
---parseDependency — подтягивает модели из зависимостей (например, ваш usecase.TaskInput)
-
--g указывает на точку входа (где лежит package main)
-
--o — куда класть сгенерированные файлы
-
-После этого пересоберите и запустите:
-
-bash
-Копировать код
-go run ./cmd/server/main.go
-2. Проверьте, что ваш путь появился в swagger.json
-Откройте в браузере или через curl:
-
-bash
-Копировать код
-curl -s http://localhost:8080/swagger/doc.json | jq .paths
-Ищите там ключ "/tasks". Если он есть — значит генерация прошла успешно и проблема в отдаче UI.
-Если его нет — ещё раз проверьте логи swag init на предмет ошибок и наличие ваших комментариев над методом create.
-
-3. Правильно смонтируйте Swagger-UI в Chi
-Вместо
-
-go
-Копировать код
-r.Get("/swagger/*", httpSwagger.WrapHandler)
-используйте
-
-go
-Копировать код
-// монтируем всё содержимое /swagger
-r.Mount("/swagger", httpSwagger.WrapHandler(
-  httpSwagger.URL("/swagger/doc.json"),
-))
-Теперь заходите по адресу
-
-bash
-Копировать код
-http://localhost:8080/swagger/index.html
-— UI должен подхватить doc.json и отобразить раздел POST /tasks.
-
-Если после этих шагов /tasks всё ещё отсутствует:
-
-Скопируйте сюда блок ".paths" из doc.json (или ошибки, которые выводит swag init).
-
-Покажите, пожалуйста, логи swag init и go run (они обычно пишут, какие пакеты сканировали и какие модели нашли).
-
-С этой информацией мы точно найдём, где “теряется” ваш POST.
-
-
-
-
-
-
-
-
-
-
-
-
-
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ swag init
+2025/07/02 10:05:43 Generate swagger docs....
+2025/07/02 10:05:43 Generate general API Info, search dir:./
+2025/07/02 10:05:43 ParseComment error in file /home/gaz358/myprog/workmate/internal/delivery/phttp/task_handler.go :cannot find type definition: usecase.TaskInput
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
 
 
