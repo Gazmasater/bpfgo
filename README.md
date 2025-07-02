@@ -536,12 +536,12 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// ErrorResponse описывает формат ответа при ошибке
+// ErrorResponse формат ошибки
 type ErrorResponse struct {
-	Message string `json:"message" example:"something went wrong"`
+	Message string `json:"message"`
 }
 
-// TaskResponse описывает JSON-ответ с полем duration
+// TaskResponse ответ задачи с полем duration
 // swagger:model TaskResponse
 type TaskResponse struct {
 	ID        string    `json:"id" example:"uuid"`
@@ -551,21 +551,18 @@ type TaskResponse struct {
 	Result    string    `json:"result,omitempty"`
 }
 
-var _ = domen.Task{}
-
-// Handler реализует HTTP-доставку для задач
+// Handler для HTTP
 type Handler struct {
 	uc  *usecase.TaskUseCase
 	log logger.TypeOfLogger
 }
 
-// NewHandler создаёт новый HTTP-хендлер задач
+// NewHandler создает Handler
 func NewHandler(uc *usecase.TaskUseCase) *Handler {
-	l := logger.Global().Named("http")
-	return &Handler{uc: uc, log: l}
+	return &Handler{uc: uc, log: logger.Global().Named("http")}
 }
 
-// Routes монтирует маршруты для задач
+// Routes монтирует маршруты
 func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Post("/", h.create)
@@ -574,55 +571,43 @@ func (h *Handler) Routes() http.Handler {
 	return r
 }
 
-// @Summary      Создать новую задачу
-// @Description  Инициализирует задачу со статусом Pending и возвращает её с сгенерированным ID
-// @Tags         tasks
-// @Produce      json
-// @Success      200  {object}  TaskResponse  "Задача успешно создана"
-// @Failure      500  {object}  ErrorResponse  "Внутренняя ошибка сервера"
-// @Router       /tasks [post]
+// @Summary Create task
+// @Tags tasks
+// @Produce json
+// @Success 200 {object} TaskResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tasks [post]
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-	h.log.Infow("create task request", "method", r.Method, "path", r.URL.Path)
-
 	task, err := h.uc.CreateTask()
 	if err != nil {
-		h.log.Errorw("failed to create task", "error", err)
+		h.log.Errorw("create task failed", "error", err)
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-
-	h.log.Infow("task created", "id", task.ID)
-
-	resp := TaskResponse{
+	rep := TaskResponse{
 		ID:        task.ID,
 		Status:    string(task.Status),
 		CreatedAt: task.CreatedAt,
 		Duration:  "0s",
 	}
-	writeJSON(w, resp, http.StatusOK)
+	writeJSON(w, rep, http.StatusOK)
 }
 
-// @Summary      Получить задачу по ID
-// @Description  Возвращает задачу по её идентификатору с текущей длительностью
-// @Tags         tasks
-// @Produce      json
-// @Param        id   path      string            true  "ID задачи"
-// @Success      200  {object}  TaskResponse      "Задача найдена"
-// @Failure      404  {object}  ErrorResponse     "Задача не найдена"
-// @Failure      500  {object}  ErrorResponse     "Внутренняя ошибка сервера"
-// @Router       /tasks/{id} [get]
+// @Summary Get task
+// @Tags tasks
+// @Produce json
+// @Param id path string true "Task ID"
+// @Success 200 {object} TaskResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /tasks/{id} [get]
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	h.log.Infow("get task request", "method", r.Method, "path", r.URL.Path, "id", id)
-
 	task, err := h.uc.GetTask(id)
 	if err != nil {
-		h.log.Warnw("task not found", "id", id)
 		writeError(w, http.StatusNotFound, "task not found")
 		return
 	}
-
-	// Вычисляем duration
 	var dur time.Duration
 	if !task.StartedAt.IsZero() {
 		if task.Status == domen.StatusCompleted && !task.EndedAt.IsZero() {
@@ -631,48 +616,37 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 			dur = time.Since(task.StartedAt)
 		}
 	}
-
-	resp := TaskResponse{
+	rep := TaskResponse{
 		ID:        task.ID,
 		Status:    string(task.Status),
 		CreatedAt: task.CreatedAt,
 		Duration:  dur.String(),
 		Result:    task.Result,
 	}
-
-	h.log.Infow("task retrieved", "id", task.ID, "duration", resp.Duration)
-	writeJSON(w, resp, http.StatusOK)
+	writeJSON(w, rep, http.StatusOK)
 }
 
-// @Summary      Удалить задачу по ID
-// @Description  Удаляет задачу из системы по её идентификатору
-// @Tags         tasks
-// @Param        id   path      string            true  "ID задачи"
-// @Success      204  "No Content"
-// @Failure      500  {object}  ErrorResponse  "Внутренняя ошибка сервера"
-// @Router       /tasks/{id} [delete]
+// @Summary Delete task
+// @Tags tasks
+// @Param id path string true "Task ID"
+// @Success 204
+// @Failure 500 {object} ErrorResponse
+// @Router /tasks/{id} [delete]
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	h.log.Infow("delete task request", "method", r.Method, "path", r.URL.Path, "id", id)
-
 	if err := h.uc.DeleteTask(id); err != nil {
-		h.log.Errorw("failed to delete task", "id", id, "error", err)
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-
-	h.log.Infow("task deleted", "id", id)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// writeJSON устанавливает заголовок и код ответа, затем кодирует JSON
 func writeJSON(w http.ResponseWriter, v interface{}, code int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// writeError формирует JSON-ошибку
 func writeError(w http.ResponseWriter, code int, msg string) {
 	writeJSON(w, ErrorResponse{Message: msg}, code)
 }
