@@ -484,169 +484,75 @@ ________________________________________________________________________________
 
  swag init   --generalInfo main.go   --output docs
 
-package phttp
-
-import (
-	"encoding/json"
-	"net/http"
-
-	"workmate/pkg/logger"
-	"workmate/usecase"
-
-	"github.com/go-chi/chi/v5"
-)
-
-type Handler struct {
-	uc  *usecase.TaskUseCase
-	log logger.TypeOfLogger
-}
-
-func NewHandler(uc *usecase.TaskUseCase) *Handler {
-	l := logger.Global().Named("http")
-	return &Handler{
-		uc:  uc,
-		log: l,
-	}
-}
-
-func (h *Handler) Routes() http.Handler {
-	r := chi.NewRouter()
-	r.Post("/", h.create)
-	r.Get("/{id}", h.get)
-	r.Delete("/{id}", h.delete)
-	return r
-}
-
-// @Summary      Создать задачу
-// @Description  Принимает JSON с новой задачей и возвращает её с ID
-// @Tags         tasks
-// @Accept       json
-// @Produce      json
-// @Param        task  body      usecase.TaskInput  true  "Данные задачи"
-// @Success      200   {object}  usecase.Task
-// @Router      /tasks [post]
-func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-	h.log.Infow("create task request", "method", r.Method, "path", r.URL.Path)
-
-	task, err := h.uc.CreateTask()
-	if err != nil {
-		h.log.Errorw("failed to create task", "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	h.log.Infow("task created", "id", task.ID)
-	writeJSON(w, task)
-}
-
-func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	h.log.Infow("get task request", "method", r.Method, "path", r.URL.Path, "id", id)
-
-	task, err := h.uc.GetTask(id)
-	if err != nil {
-		h.log.Warnw("task not found", "id", id)
-		http.Error(w, "task not found", http.StatusNotFound)
-		return
-	}
-
-	h.log.Infow("task retrieved", "id", task.ID)
-	writeJSON(w, task)
-}
-
-func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	h.log.Infow("delete task request", "method", r.Method, "path", r.URL.Path, "id", id)
-
-	if err := h.uc.DeleteTask(id); err != nil {
-		h.log.Errorw("failed to delete task", "id", id, "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	h.log.Infow("task deleted", "id", id)
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func writeJSON(w http.ResponseWriter, v interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(v)
-}
 
 
-// @title           Workmate API
-// @version         1.0
-// @description     Сервис управления задачами
-// @host            localhost:8080
-// @BasePath        /
-package main
+1. Сгенерируйте Swagger с флагом --parseInternal
+По умолчанию swag не сканирует внутренние (internal/...) пакеты. Нужно явно указать:
 
-import (
-	"context"
-	"net/http"
-	"os"
-	"os/signal"
-	"time"
+bash
+Копировать код
+# из корня вашего модуля
+swag init \
+  --parseInternal \
+  --parseDependency \
+  -g ./cmd/server/main.go \
+  -o ./cmd/server/docs
+--parseInternal — включает сканирование папок internal/...
 
-	_http "workmate/internal/delivery/phttp"
-	"workmate/pkg/logger"
-	"workmate/repository/memory"
-	"workmate/usecase"
+--parseDependency — подтягивает модели из зависимостей (например, ваш usecase.TaskInput)
 
-	httpSwagger "github.com/swaggo/http-swagger"
+-g указывает на точку входа (где лежит package main)
 
-	_ "workmate/cmd/server/docs" // сгенерированные swagger-файлы
+-o — куда класть сгенерированные файлы
 
-	"github.com/go-chi/chi/v5"
-)
+После этого пересоберите и запустите:
 
-func main() {
-	// 1) Логгер
-	logger.SetLevel(logger.InfoLevel)
-	logg := logger.Global().Named("main")
+bash
+Копировать код
+go run ./cmd/server/main.go
+2. Проверьте, что ваш путь появился в swagger.json
+Откройте в браузере или через curl:
 
-	// 2) Репозиторий, юзкейс, handler
-	repo := memory.NewInMemoryRepo()
-	uc := usecase.NewTaskUseCase(repo)
-	handler := _http.NewHandler(uc)
+bash
+Копировать код
+curl -s http://localhost:8080/swagger/doc.json | jq .paths
+Ищите там ключ "/tasks". Если он есть — значит генерация прошла успешно и проблема в отдаче UI.
+Если его нет — ещё раз проверьте логи swag init на предмет ошибок и наличие ваших комментариев над методом create.
 
-	// 3) Создаём корневой chi.Router и монтируем в него:
-	r := chi.NewRouter()
+3. Правильно смонтируйте Swagger-UI в Chi
+Вместо
 
-	// 3.1) Ваши маршруты API
-	r.Mount("/tasks", handler.Routes())
+go
+Копировать код
+r.Get("/swagger/*", httpSwagger.WrapHandler)
+используйте
 
-	// 3.2) Swagger UI по пути /swagger/*
-	//     httpSwagger.WrapHandler сам отдаёт статические файлы и индекс
-	r.Get("/swagger/*", httpSwagger.WrapHandler)
+go
+Копировать код
+// монтируем всё содержимое /swagger
+r.Mount("/swagger", httpSwagger.WrapHandler(
+  httpSwagger.URL("/swagger/doc.json"),
+))
+Теперь заходите по адресу
 
-	// 4) Конфигурируем и запускаем HTTP-сервер
-	srv := &http.Server{
-		Addr:    ":8080",
-		Handler: r,
-	}
+bash
+Копировать код
+http://localhost:8080/swagger/index.html
+— UI должен подхватить doc.json и отобразить раздел POST /tasks.
 
-	// graceful shutdown
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt)
+Если после этих шагов /tasks всё ещё отсутствует:
 
-	go func() {
-		logg.Infow("Starting HTTP server", "addr", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logg.Fatalw("ListenAndServe failed", "error", err)
-		}
-	}()
+Скопируйте сюда блок ".paths" из doc.json (или ошибки, которые выводит swag init).
 
-	<-quit
-	logg.Infow("Shutting down server…")
+Покажите, пожалуйста, логи swag init и go run (они обычно пишут, какие пакеты сканировали и какие модели нашли).
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		logg.Fatalw("Server forced to shutdown", "error", err)
-	}
-	logg.Infow("Server exited gracefully")
-}
+С этой информацией мы точно найдём, где “теряется” ваш POST.
+
+
+
+
+
+
 
 
 
