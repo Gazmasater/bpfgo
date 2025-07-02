@@ -482,26 +482,41 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
-
-
-
  swag init   --generalInfo main.go   --output docs
 
+package phttp
 
+import (
+	"encoding/json"
+	"net/http"
 
-  В начале cmd/server/main.go (перед package main) добавьте общие мета-теги Swagger, например:
+	"workmate/pkg/logger"
+	"workmate/usecase"
 
-go
-Копировать код
-// @title           Workmate API
-// @version         1.0
-// @description     Сервис управления задачами
-// @host            localhost:8080
-// @BasePath        /
-В своих HTTP-хендлерах (в workmate/internal/delivery/_http) добавьте комментарии для каждого маршрута, например:
+	"github.com/go-chi/chi/v5"
+)
 
-go
-Копировать код
+type Handler struct {
+	uc  *usecase.TaskUseCase
+	log logger.TypeOfLogger
+}
+
+func NewHandler(uc *usecase.TaskUseCase) *Handler {
+	l := logger.Global().Named("http")
+	return &Handler{
+		uc:  uc,
+		log: l,
+	}
+}
+
+func (h *Handler) Routes() http.Handler {
+	r := chi.NewRouter()
+	r.Post("/", h.create)
+	r.Get("/{id}", h.get)
+	r.Delete("/{id}", h.delete)
+	return r
+}
+
 // @Summary      Создать задачу
 // @Description  Принимает JSON с новой задачей и возвращает её с ID
 // @Tags         tasks
@@ -509,73 +524,130 @@ go
 // @Produce      json
 // @Param        task  body      usecase.TaskInput  true  "Данные задачи"
 // @Success      200   {object}  usecase.Task
-// @Router       /tasks [post]
-func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) { … }
-
-
-Перейдите в папку cmd/server:
-
-bash
-Копировать код
-cd cmd/server
-Запустите:
-
-bash
-Копировать код
-swag init \
-  --generalInfo main.go \
-  --output docs
-
-
 // @Router      /tasks [post]
+func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
+	h.log.Infow("create task request", "method", r.Method, "path", r.URL.Path)
+
+	task, err := h.uc.CreateTask()
+	if err != nil {
+		h.log.Errorw("failed to create task", "error", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.log.Infow("task created", "id", task.ID)
+	writeJSON(w, task)
+}
+
+func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	h.log.Infow("get task request", "method", r.Method, "path", r.URL.Path, "id", id)
+
+	task, err := h.uc.GetTask(id)
+	if err != nil {
+		h.log.Warnw("task not found", "id", id)
+		http.Error(w, "task not found", http.StatusNotFound)
+		return
+	}
+
+	h.log.Infow("task retrieved", "id", task.ID)
+	writeJSON(w, task)
+}
+
+func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	h.log.Infow("delete task request", "method", r.Method, "path", r.URL.Path, "id", id)
+
+	if err := h.uc.DeleteTask(id); err != nil {
+		h.log.Errorw("failed to delete task", "id", id, "error", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.log.Infow("task deleted", "id", id)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func writeJSON(w http.ResponseWriter, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(v)
+}
 
 
-// вместо r.Mount("/", handler.Routes())
-r.Mount("/tasks", handler.Routes())
+// @title           Workmate API
+// @version         1.0
+// @description     Сервис управления задачами
+// @host            localhost:8080
+// @BasePath        /
+package main
 
-[{
-	"resource": "/home/gaz358/myprog/workmate/cmd/server/docs/docs.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingLitField",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingLitField"
+import (
+	"context"
+	"net/http"
+	"os"
+	"os/signal"
+	"time"
+
+	_http "workmate/internal/delivery/phttp"
+	"workmate/pkg/logger"
+	"workmate/repository/memory"
+	"workmate/usecase"
+
+	httpSwagger "github.com/swaggo/http-swagger"
+
+	_ "workmate/cmd/server/docs" // сгенерированные swagger-файлы
+
+	"github.com/go-chi/chi/v5"
+)
+
+func main() {
+	// 1) Логгер
+	logger.SetLevel(logger.InfoLevel)
+	logg := logger.Global().Named("main")
+
+	// 2) Репозиторий, юзкейс, handler
+	repo := memory.NewInMemoryRepo()
+	uc := usecase.NewTaskUseCase(repo)
+	handler := _http.NewHandler(uc)
+
+	// 3) Создаём корневой chi.Router и монтируем в него:
+	r := chi.NewRouter()
+
+	// 3.1) Ваши маршруты API
+	r.Mount("/tasks", handler.Routes())
+
+	// 3.2) Swagger UI по пути /swagger/*
+	//     httpSwagger.WrapHandler сам отдаёт статические файлы и индекс
+	r.Get("/swagger/*", httpSwagger.WrapHandler)
+
+	// 4) Конфигурируем и запускаем HTTP-сервер
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: r,
+	}
+
+	// graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt)
+
+	go func() {
+		logg.Infow("Starting HTTP server", "addr", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logg.Fatalw("ListenAndServe failed", "error", err)
 		}
-	},
-	"severity": 8,
-	"message": "unknown field LeftDelim in struct literal of type \"github.com/swaggo/swag\".Spec",
-	"source": "compiler",
-	"startLineNumber": 30,
-	"startColumn": 2,
-	"endLineNumber": 30,
-	"endColumn": 11
-}]
+	}()
 
-[{
-	"resource": "/home/gaz358/myprog/workmate/cmd/server/docs/docs.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingLitField",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingLitField"
-		}
-	},
-	"severity": 8,
-	"message": "unknown field RightDelim in struct literal of type \"github.com/swaggo/swag\".Spec",
-	"source": "compiler",
-	"startLineNumber": 31,
-	"startColumn": 2,
-	"endLineNumber": 31,
-	"endColumn": 12
-}]
+	<-quit
+	logg.Infow("Shutting down server…")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		logg.Fatalw("Server forced to shutdown", "error", err)
+	}
+	logg.Infow("Server exited gracefully")
+}
+
 
 
 
