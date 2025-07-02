@@ -521,23 +521,16 @@ swag init \
   -o cmd/server/docs
   ___________________________________________________________________
 
-    "workmate/domain"
-
-    // @Success      200  {object}  domain.Task             "Задача успешно создана"
-// @Failure      500  {object}  phttp.ErrorResponse     "Внутренняя ошибка сервера"
-
-
 package phttp
 
 import (
 	"encoding/json"
 	"net/http"
 
-	_ "workmate/domain"
+	_ "github.com/gaz358/workmate/domen"
 
-	"workmate/pkg/logger"
-	"workmate/usecase"
-
+	"github.com/gaz358/workmate/pkg/logger"
+	"github.com/gaz358/workmate/usecase"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -566,7 +559,7 @@ func (h *Handler) Routes() http.Handler {
 // @Description  Инициализирует задачу со статусом Pending и возвращает её с сгенерированным ID
 // @Tags         tasks
 // @Produce      json
-// @Success      200  {object}  domain.Task             "Задача успешно создана"
+// @Success      200  {object}  domen.Task             "Задача успешно создана"
 // @Router       /tasks [post]
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	h.log.Infow("create task request", "method", r.Method, "path", r.URL.Path)
@@ -581,33 +574,6 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	h.log.Infow("task created", "id", task.ID)
 	writeJSON(w, task)
 }
-
-package domain
-
-import "time"
-
-type Status string
-
-const (
-	StatusPending   Status = "PENDING"
-	StatusRunning   Status = "RUNNING"
-	StatusCompleted Status = "COMPLETED"
-	StatusFailed    Status = "FAILED"
-)
-
-type Task struct {
-	ID        string    `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	StartedAt time.Time `json:"started_at,omitempty"`
-	EndedAt   time.Time `json:"ended_at,omitempty"`
-	Status    Status    `json:"status"`
-	Result    string    `json:"result,omitempty"`
-}
-
-
-  "github.com/gaz358/myprog/workmate/domain"
-    "github.com/gaz358/myprog/workmate/pkg/logger"
-    "github.com/gaz358/myprog/workmate/usecase"
 
 
 
