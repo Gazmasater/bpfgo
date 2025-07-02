@@ -527,6 +527,91 @@ swag init \
 // @Failure      500  {object}  phttp.ErrorResponse     "Внутренняя ошибка сервера"
 
 
+package phttp
+
+import (
+	"encoding/json"
+	"net/http"
+
+	_ "workmate/domain"
+
+	"workmate/pkg/logger"
+	"workmate/usecase"
+
+	"github.com/go-chi/chi/v5"
+)
+
+type Handler struct {
+	uc  *usecase.TaskUseCase
+	log logger.TypeOfLogger
+}
+
+func NewHandler(uc *usecase.TaskUseCase) *Handler {
+	l := logger.Global().Named("http")
+	return &Handler{
+		uc:  uc,
+		log: l,
+	}
+}
+
+func (h *Handler) Routes() http.Handler {
+	r := chi.NewRouter()
+	r.Post("/", h.create)
+	r.Get("/{id}", h.get)
+	r.Delete("/{id}", h.delete)
+	return r
+}
+
+// @Summary      Создать новую задачу
+// @Description  Инициализирует задачу со статусом Pending и возвращает её с сгенерированным ID
+// @Tags         tasks
+// @Produce      json
+// @Success      200  {object}  domain.Task             "Задача успешно создана"
+// @Router       /tasks [post]
+func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
+	h.log.Infow("create task request", "method", r.Method, "path", r.URL.Path)
+
+	task, err := h.uc.CreateTask()
+	if err != nil {
+		h.log.Errorw("failed to create task", "error", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.log.Infow("task created", "id", task.ID)
+	writeJSON(w, task)
+}
+
+package domain
+
+import "time"
+
+type Status string
+
+const (
+	StatusPending   Status = "PENDING"
+	StatusRunning   Status = "RUNNING"
+	StatusCompleted Status = "COMPLETED"
+	StatusFailed    Status = "FAILED"
+)
+
+type Task struct {
+	ID        string    `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	StartedAt time.Time `json:"started_at,omitempty"`
+	EndedAt   time.Time `json:"ended_at,omitempty"`
+	Status    Status    `json:"status"`
+	Result    string    `json:"result,omitempty"`
+}
+
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ swag init   -g main.go   -d cmd/server,internal/delivery/phttp   -o cmd/server/docs
+2025/07/02 20:52:15 Generate swagger docs....
+2025/07/02 20:52:15 Generate general API Info, search dir:cmd/server
+2025/07/02 20:52:16 Generate general API Info, search dir:internal/delivery/phttp
+2025/07/02 20:52:16 ParseComment error in file /home/gaz358/myprog/workmate/internal/delivery/phttp/task_handler.go :cannot find type definition: domain.Task
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+
+
 
 
 
