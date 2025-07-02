@@ -597,6 +597,28 @@ func main() {
     log.Infow("Server exited gracefully")
 }
 
+[{
+	"resource": "/home/gaz358/myprog/workmate/cmd/server/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "router.Handle undefined (type http.Handler has no field or method Handle)",
+	"source": "compiler",
+	"startLineNumber": 38,
+	"startColumn": 9,
+	"endLineNumber": 38,
+	"endColumn": 15
+}]
+
 
 
 
