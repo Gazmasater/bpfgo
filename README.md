@@ -511,25 +511,9 @@ go mod tidy
 
 
 swag init \
-  --parseDependency \
-  -g main.go \
-  -d ../../internal/delivery/phttp \
-  -o ../../docs
-
-  gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ swag init
---parseDependency
--g main.go
--d ../../internal/delivery/phttp
--o ../../docs
-2025/07/02 19:06:37 Generate swagger docs....
-2025/07/02 19:06:37 Generate general API Info, search dir:./
-2025/07/02 19:06:37 warning: failed to get package name in dir: ./, error: execute go list command, exit status 1, stdout:, stderr:no Go files in /home/gaz358/myprog/workmate
-2025/07/02 19:06:37 cannot parse source files /home/gaz358/myprog/workmate/main.go: open /home/gaz358/myprog/workmate/main.go: no such file or directory
---parseDependency: command not found
--g: command not found
--d: command not found
--o: command not found
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+  -g cmd/server/main.go \
+  -d internal/delivery/phttp \
+  -o docs
 
 
 
