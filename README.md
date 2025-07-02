@@ -750,6 +750,51 @@ func writeError(w http.ResponseWriter, code int, msg string) {
 }
 
 
+[{
+	"resource": "/home/gaz358/myprog/workmate/cmd/server/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "WrongArgCount",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "WrongArgCount"
+		}
+	},
+	"severity": 8,
+	"message": "too many arguments in call to usecase.NewTaskUseCase\n\thave (context.Context, *memory.InMemoryRepo)\n\twant (domen.TaskRepository)",
+	"source": "compiler",
+	"startLineNumber": 36,
+	"startColumn": 36,
+	"endLineNumber": 36,
+	"endColumn": 40
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/workmate/internal/delivery/phttp/task_handler.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "WrongArgCount",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "WrongArgCount"
+		}
+	},
+	"severity": 8,
+	"message": "not enough arguments in call to h.uc.CreateTask\n\thave ()\n\twant (context.Context)",
+	"source": "compiler",
+	"startLineNumber": 56,
+	"startColumn": 31,
+	"endLineNumber": 56,
+	"endColumn": 31
+}]
+
+
 
 
 
