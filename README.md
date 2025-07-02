@@ -482,75 +482,87 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
-package main
+package _http
 
 import (
-    "context"
-    "log"
+    "encoding/json"
     "net/http"
-    "os"
-    "os/signal"
-    "time"
 
-    "workmate/internal/delivery/_http"
+    "github.com/go-chi/chi/v5"
     "workmate/logger"
-    "workmate/repository/memory"
     "workmate/usecase"
 )
 
-func main() {
-    // Настраиваем логгер
-    logger.SetLevel(logger.InfoLevel)
-    log := logger.Global().Named("main")
-
-    // Создаём репозиторий, юзкейз и HTTP-хендлер
-    repo := memory.NewInMemoryRepo()
-    uc := usecase.NewTaskUseCase(repo)
-    handler := _http.NewHandler(uc)
-
-    // Конфигурируем HTTP-сервер
-    srv := &http.Server{
-        Addr:    ":8080",
-        Handler: handler.Routes(),
-    }
-
-    // Канал для перехвата сигнала прерывания
-    quit := make(chan os.Signal, 1)
-    signal.Notify(quit, os.Interrupt)
-
-    // Запускаем сервер в горутине
-    go func() {
-        log.Infow("Starting HTTP server", "addr", srv.Addr)
-        if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-            log.Fatalw("ListenAndServe failed", "error", err)
-        }
-    }()
-
-    // Ждём SIGINT (CTRL+C)
-    <-quit
-    log.Infow("Shutting down server...")
-
-    // Создаём контекст с таймаутом для завершения работы
-    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
-
-    if err := srv.Shutdown(ctx); err != nil {
-        log.Fatalw("Server forced to shutdown", "error", err)
-    }
-
-    log.Infow("Server exited gracefully")
+type Handler struct {
+    uc  *usecase.TaskUseCase
+    log logger.Logger  // или конкретный тип из вашего пакета, например *zap.SugaredLogger
 }
 
+func NewHandler(uc *usecase.TaskUseCase) *Handler {
+    // Получаем глобальный именованный логгер для HTTP-слоя
+    l := logger.Global().Named("http")
 
+    return &Handler{
+        uc:  uc,
+        log: l,
+    }
+}
 
-import "go.uber.org/zap/zapcore"
+func (h *Handler) Routes() http.Handler {
+    r := chi.NewRouter()
+    r.Post("/", h.create)
+    r.Get("/{id}", h.get)
+    r.Delete("/{id}", h.delete)
+    return r
+}
 
-const (
-    DebugLevel = zapcore.DebugLevel
-    InfoLevel  = zapcore.InfoLevel
-    WarnLevel  = zapcore.WarnLevel
-    ErrorLevel = zapcore.ErrorLevel
-)
+func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
+    h.log.Infow("incoming request", "method", "POST", "path", r.URL.Path)
+
+    task, err := h.uc.CreateTask()
+    if err != nil {
+        h.log.Errorw("failed to create task", "error", err)
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+    h.log.Infow("task created", "id", task.ID)
+    writeJSON(w, task)
+}
+
+func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
+    id := chi.URLParam(r, "id")
+    h.log.Infow("incoming request", "method", "GET", "path", r.URL.Path, "id", id)
+
+    task, err := h.uc.GetTask(id)
+    if err != nil {
+        h.log.Warnw("task not found", "id", id)
+        http.Error(w, "task not found", http.StatusNotFound)
+        return
+    }
+
+    h.log.Infow("task retrieved", "id", task.ID)
+    writeJSON(w, task)
+}
+
+func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
+    id := chi.URLParam(r, "id")
+    h.log.Infow("incoming request", "method", "DELETE", "path", r.URL.Path, "id", id)
+
+    if err := h.uc.DeleteTask(id); err != nil {
+        h.log.Errorw("failed to delete task", "id", id, "error", err)
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+    h.log.Infow("task deleted", "id", id)
+    w.WriteHeader(http.StatusNoContent)
+}
+
+func writeJSON(w http.ResponseWriter, v interface{}) {
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(v)
+}
 
 
 
