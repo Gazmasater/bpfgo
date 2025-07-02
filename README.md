@@ -485,10 +485,7 @@ ________________________________________________________________________________
 
 
 
-swag init \
-  --generalInfo cmd/server/main.go \
-  --dir . \
-  --output cmd/server/docs
+ swag init   --generalInfo main.go   --output docs
 
 
 
@@ -608,6 +605,16 @@ func main() {
 http://localhost:8080/swagger/index.html
 
 
+Workmate API
+
+ 1.0 
+
+[ Base URL: localhost:8080/ ]
+
+doc.json
+
+Сервис управления задачами
+No operations defined in spec!
 
 
 
