@@ -482,93 +482,13 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
-package _http
-
-import (
-    "encoding/json"
-    "net/http"
-
-    "github.com/go-chi/chi/v5"
-    "workmate/logger"
-    "workmate/usecase"
-)
-
-// Handler handles HTTP requests for tasks.
-type Handler struct {
-    uc  *usecase.TaskUseCase
-    log logger.TypeOfLogger
-}
-
-// NewHandler creates a new HTTP handler with task use case and logger.
-func NewHandler(uc *usecase.TaskUseCase) *Handler {
-    // Получаем глобальный именованный логгер для HTTP-слоя
-    l := logger.Global().Named("http")
-    return &Handler{
-        uc:  uc,
-        log: l,
-    }
-}
-
-// Routes sets up chi router with task endpoints.
-func (h *Handler) Routes() http.Handler {
-    r := chi.NewRouter()
-    r.Post("/", h.create)
-    r.Get("/{id}", h.get)
-    r.Delete("/{id}", h.delete)
-    return r
-}
-
-// create handles POST / to create a new task.
-func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-    h.log.Infow("create task request", "method", r.Method, "path", r.URL.Path)
-
-    task, err := h.uc.CreateTask()
-    if err != nil {
-        h.log.Errorw("failed to create task", "error", err)
-        http.Error(w, err.Error(), http.StatusInternalServerError)
-        return
-    }
-
-    h.log.Infow("task created", "id", task.ID)
-    writeJSON(w, task)
-}
-
-// get handles GET /{id} to retrieve a task by ID.
-func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
-    id := chi.URLParam(r, "id")
-    h.log.Infow("get task request", "method", r.Method, "path", r.URL.Path, "id", id)
-
-    task, err := h.uc.GetTask(id)
-    if err != nil {
-        h.log.Warnw("task not found", "id", id)
-        http.Error(w, "task not found", http.StatusNotFound)
-        return
-    }
-
-    h.log.Infow("task retrieved", "id", task.ID)
-    writeJSON(w, task)
-}
-
-// delete handles DELETE /{id} to delete a task by ID.
-func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
-    id := chi.URLParam(r, "id")
-    h.log.Infow("delete task request", "method", r.Method, "path", r.URL.Path, "id", id)
-
-    if err := h.uc.DeleteTask(id); err != nil {
-        h.log.Errorw("failed to delete task", "id", id, "error", err)
-        http.Error(w, err.Error(), http.StatusInternalServerError)
-        return
-    }
-
-    h.log.Infow("task deleted", "id", id)
-    w.WriteHeader(http.StatusNoContent)
-}
-
-// writeJSON writes v as JSON to the http.ResponseWriter.
-func writeJSON(w http.ResponseWriter, v interface{}) {
-    w.Header().Set("Content-Type", "application/json")
-    _ = json.NewEncoder(w).Encode(v)
-}
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ swag init \
+  -g ./cmd/server/main.go \
+  --dir ./cmd/server \
+  -o ./cmd/server/docs
+2025/07/02 06:21:16 Generate swagger docs....
+2025/07/02 06:21:16 Generate general API Info, search dir:./cmd/server
+2025/07/02 06:21:16 cannot parse source files /home/gaz358/myprog/workmate/cmd/server/cmd/server/main.go: open /home/gaz358/myprog/workmate/cmd/server/cmd/server/main.go: no such file or directory
 
 
 
