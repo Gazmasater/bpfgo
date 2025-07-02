@@ -525,113 +525,29 @@ swag init -g cmd/server/main.go -o cmd/server/docs
 
 
 
-// internal/delivery/phttp/task_handler.go
-package phttp
-
-import (
-    "context"
-    "encoding/json"
-    "net/http"
-    "time"
-
-    "github.com/gaz358/myprog/workmate/domen"
-    "github.com/gaz358/myprog/workmate/pkg/logger"
-    "github.com/gaz358/myprog/workmate/usecase"
-    "github.com/go-chi/chi/v5"
-)
-
-// ErrorResponse формат ошибки
-type ErrorResponse struct {
-    Message string `json:"message"`
+type Task struct {
+	ID        string        `json:"id"`
+	CreatedAt time.Time     `json:"created_at"`
+	StartedAt time.Time     `json:"started_at,omitempty"`
+	EndedAt   time.Time     `json:"ended_at,omitempty"`
+	Duration  time.Duration `json:"duration,omitempty"`
+	Status    Status        `json:"status"`
+	Result    string        `json:"result,omitempty"`
 }
 
-// TaskResponse модель ответа задачи
-type TaskResponse struct {
-    ID        string    `json:"id"`
-    Status    string    `json:"status"`
-    CreatedAt time.Time `json:"created_at"`
-    Duration  string    `json:"duration"`
-    Result    string    `json:"result,omitempty"`
-}
+func (uc *TaskUseCase) run(task *domen.Task) {
+	task.Status = domen.StatusRunning
+	task.StartedAt = time.Now()
 
-// Handler обрабатывает HTTP-запросы задач
-type Handler struct {
-    uc  *usecase.TaskUseCase
-    log logger.TypeOfLogger
-}
+	time.Sleep(3 * time.Minute) // имитация работы
 
-// NewHandler создаёт новый HTTP-handler
-func NewHandler(uc *usecase.TaskUseCase) *Handler {
-    return &Handler{uc: uc, log: logger.Global().Named("http")}
-}
+	task.Status = domen.StatusCompleted
+	task.EndedAt = time.Now()
+	task.Duration = task.EndedAt.Sub(task.StartedAt)
+	task.Result = "OK"
 
-func (h *Handler) Routes() http.Handler {
-    r := chi.NewRouter()
-    r.Post("/", h.create)
-    r.Get("/{id}", h.get)
-    r.Delete("/{id}", h.delete)
-    return r
+	_ = uc.repo.Update(task)
 }
-
-func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-    task, err := h.uc.CreateTask(r.Context())
-    if err != nil {
-        writeError(w, http.StatusInternalServerError, err.Error())
-        return
-    }
-    resp := TaskResponse{
-        ID:        task.ID,
-        Status:    string(task.Status),
-        CreatedAt: task.CreatedAt,
-        Duration:  "0s",
-    }
-    writeJSON(w, resp, http.StatusOK)
-}
-
-func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
-    id := chi.URLParam(r, "id")
-    task, err := h.uc.GetTask(id)
-    if err != nil {
-        writeError(w, http.StatusNotFound, "task not found")
-        return
-    }
-    var dur time.Duration
-    if !task.StartedAt.IsZero() {
-        if task.Status == domen.StatusCompleted && !task.EndedAt.IsZero() {
-            dur = task.EndedAt.Sub(task.StartedAt)
-        } else {
-            dur = time.Since(task.StartedAt)
-        }
-    }
-    resp := TaskResponse{
-        ID:        task.ID,
-        Status:    string(task.Status),
-        CreatedAt: task.CreatedAt,
-        Duration:  dur.String(),
-        Result:    task.Result,
-    }
-    writeJSON(w, resp, http.StatusOK)
-}
-
-func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
-    id := chi.URLParam(r, "id")
-    if err := h.uc.DeleteTask(id); err != nil {
-        writeError(w, http.StatusInternalServerError, err.Error())
-        return
-    }
-    w.WriteHeader(http.StatusNoContent)
-}
-
-func writeJSON(w http.ResponseWriter, v interface{}, code int) {
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(code)
-    _ = json.NewEncoder(w).Encode(v)
-}
-
-func writeError(w http.ResponseWriter, code int, msg string) {
-    writeJSON(w, ErrorResponse{Message: msg}, code)
-}
-
 
 
 
