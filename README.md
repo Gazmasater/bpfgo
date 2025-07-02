@@ -543,6 +543,16 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, task)
 }
 
+type ErrorResponse struct {
+    // сообщение об ошибке
+    //
+    // required: true
+    Message string `json:"message" example:"something went wrong"`
+}
+
+// @Failure      500  {object}  phttp.ErrorResponse  "Внутренняя ошибка сервера"
+
+
 
 
 
