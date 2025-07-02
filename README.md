@@ -492,5 +492,31 @@ swag init \
 
 
 
+  В начале cmd/server/main.go (перед package main) добавьте общие мета-теги Swagger, например:
+
+go
+Копировать код
+// @title           Workmate API
+// @version         1.0
+// @description     Сервис управления задачами
+// @host            localhost:8080
+// @BasePath        /
+В своих HTTP-хендлерах (в workmate/internal/delivery/_http) добавьте комментарии для каждого маршрута, например:
+
+go
+Копировать код
+// @Summary      Создать задачу
+// @Description  Принимает JSON с новой задачей и возвращает её с ID
+// @Tags         tasks
+// @Accept       json
+// @Produce      json
+// @Param        task  body      usecase.TaskInput  true  "Данные задачи"
+// @Success      200   {object}  usecase.Task
+// @Router       /tasks [post]
+func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) { … }
+
+
+
+
 
 
