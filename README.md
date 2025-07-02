@@ -515,4 +515,9 @@ swag init \
   -d cmd/server,internal/delivery/phttp \
   -o docs
 
+swag init \
+  -g main.go \
+  -d cmd/server,internal/delivery/phttp \
+  -o cmd/server/docs
+
 
