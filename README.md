@@ -521,6 +521,29 @@ swag init \
   -o cmd/server/docs
   ___________________________________________________________________
 
+package domen
+
+import "time"
+
+type Status string
+
+const (
+	StatusPending   Status = "PENDING"
+	StatusRunning   Status = "RUNNING"
+	StatusCompleted Status = "COMPLETED"
+	StatusFailed    Status = "FAILED"
+)
+
+// swagger:model Task
+type Task struct {
+	ID        string    `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	StartedAt time.Time `json:"started_at,omitempty"`
+	EndedAt   time.Time `json:"ended_at,omitempty"`
+	Status    Status    `json:"status"`
+	Result    string    `json:"result,omitempty"`
+}
+
 package phttp
 
 import (
@@ -577,7 +600,12 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 
-// swagger:model Task
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ swag init   -g main.go   -d cmd/server,internal/delivery/phttp   -o cmd/server/docs
+2025/07/02 23:09:52 Generate swagger docs....
+2025/07/02 23:09:52 Generate general API Info, search dir:cmd/server
+2025/07/02 23:09:52 Generate general API Info, search dir:internal/delivery/phttp
+2025/07/02 23:09:52 ParseComment error in file /home/gaz358/myprog/workmate/internal/delivery/phttp/task_handler.go :cannot find type definition: domen.Task
+gaz358@gaz358-BOD-WXX9:~/myprog
 
 
 
