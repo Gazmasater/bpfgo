@@ -507,4 +507,13 @@ go mod download golang.org/x/text
 go mod tidy
 
 
+// @Summary      Создать новую задачу
+// @Description  Инициализирует задачу со статусом Pending и возвращает её с сгенерированным ID
+// @Tags         tasks
+// @Produce      json
+// @Success      200  {object}  domain.Task
+// @Failure      500  {object}  ErrorResponse  "Ошибка на сервере"
+// @Router       /tasks [post]
+
+
 
