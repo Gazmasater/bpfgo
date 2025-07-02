@@ -533,6 +533,50 @@ swag init \
 // вместо r.Mount("/", handler.Routes())
 r.Mount("/tasks", handler.Routes())
 
+[{
+	"resource": "/home/gaz358/myprog/workmate/cmd/server/docs/docs.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "MissingLitField",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingLitField"
+		}
+	},
+	"severity": 8,
+	"message": "unknown field LeftDelim in struct literal of type \"github.com/swaggo/swag\".Spec",
+	"source": "compiler",
+	"startLineNumber": 30,
+	"startColumn": 2,
+	"endLineNumber": 30,
+	"endColumn": 11
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/workmate/cmd/server/docs/docs.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "MissingLitField",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingLitField"
+		}
+	},
+	"severity": 8,
+	"message": "unknown field RightDelim in struct literal of type \"github.com/swaggo/swag\".Spec",
+	"source": "compiler",
+	"startLineNumber": 31,
+	"startColumn": 2,
+	"endLineNumber": 31,
+	"endColumn": 12
+}]
+
 
 
 
