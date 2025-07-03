@@ -482,28 +482,21 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
-func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	h.log.Infow("get task request", "method", r.Method, "path", r.URL.Path, "id", id)
+200
+Undocumented
+	
+Response body
+Download
 
-	task, err := h.uc.GetTask(id)
-	if err != nil {
-		if errors.Is(err, domen.ErrNotFound) {
-			h.log.Warnw("task not found", "id", id)
-			w.WriteHeader(http.StatusNotFound)
-			writeJSON(w, ErrorResponse{Message: "task not found"})
-			return
-		}
-
-		h.log.Errorw("failed to get task", "id", id, "error", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		writeJSON(w, ErrorResponse{Message: err.Error()})
-		return
-	}
-
-	h.log.Infow("task retrieved", "id", task.ID)
-	writeJSON(w, task)
+{
+  "message": "not found"
 }
+
+Response headers
+
+ content-length: 24  content-type: application/json  date: Thu,03 Jul 2025 10:48:36 GMT 
+
+Responses
 
 
 
