@@ -488,33 +488,66 @@ go test -v -run ^TestInMemoryRepo_Delete$
 
 golangci-lint run
 
-name: Go Test & Lint
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
 
-jobs:
-  check:
-    runs-on: ubuntu-latest
+// В пакете domen/model.go (добавим статус)
 
-    steps:
-      - uses: actions/checkout@v3
+const (
+    StatusCancelled Status = "CANCELLED"
+)
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.21
 
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v3
-        with:
-          version: latest
+// В пакете usecase/task_usecase.go (метод CancelTask)
 
-      - name: Run tests
-        run: go test ./... -v
+// CancelTask помечает задачу как отменённую, если она ещё не завершена
+func (uc *TaskUseCase) CancelTask(id string) error {
+    task, err := uc.repo.Get(id)
+    if err != nil {
+        return err
+    }
+    if task.Status == domen.StatusCompleted || task.Status == domen.StatusFailed || task.Status == domen.StatusCancelled {
+        return nil
+    }
+    task.Status = domen.StatusCancelled
+    task.Result = "Cancelled"
+    return uc.repo.Update(task)
+}
+
+
+// В пакете delivery/phttp/task_handler.go
+
+// @Summary      Отменить задачу
+// @Description  Прерывает выполнение задачи, если она ещё не завершена
+// @Tags         tasks
+// @Param        id   path      string  true  "ID задачи"
+// @Success      200  {object}  map[string]string  "Задача отменена"
+// @Failure      404  {object}  ErrorResponse       "Задача не найдена"
+// @Failure      500  {object}  ErrorResponse       "Внутренняя ошибка"
+// @Router       /tasks/{id}/cancel [put]
+func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
+    id := chi.URLParam(r, "id")
+    h.log.Infow("cancel task request", "method", r.Method, "path", r.URL.Path, "id", id)
+
+    err := h.uc.CancelTask(id)
+    if err != nil {
+        if errors.Is(err, domen.ErrNotFound) {
+            h.log.Warnw("task not found", "id", id)
+            w.WriteHeader(http.StatusNotFound)
+            writeJSON(w, ErrorResponse{Message: "task not found"})
+            return
+        }
+        h.log.Errorw("failed to cancel task", "id", id, "error", err)
+        w.WriteHeader(http.StatusInternalServerError)
+        writeJSON(w, ErrorResponse{Message: err.Error()})
+        return
+    }
+
+    h.log.Infow("task cancelled", "id", id)
+    writeJSON(w, map[string]string{"status": "cancelled"})
+}
+
+// Добавь в хендлер роутер:
+// r.Put("/{id}/cancel", h.cancel)
 
 
 
