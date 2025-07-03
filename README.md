@@ -506,6 +506,8 @@ jobs:
 
 
 mkdir -p .github/workflows
+mv go.yml .github/workflows/go.yml
+
 
 
 git add .github/workflows/go.yml
