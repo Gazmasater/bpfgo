@@ -484,188 +484,25 @@ ________________________________________________________________________________
 
  swag init   --generalInfo main.go   --output docs
 
-// internal/config/config.go
-package config
-
-import (
-	"log"
-	"os"
-	"strconv"
-	"time"
-
-	"github.com/joho/godotenv"
-)
-
-// Config содержит все переменные окружения, необходимые приложению
-// Значения берутся из файла .env (если он есть) или из текущего окружения
-//
-// Пример .env:
-// PORT=8080
-// LOG_LEVEL=info
-// TASK_DURATION=180
-// SHUTDOWN_TIMEOUT=5
-
-type Config struct {
-	Port            string        // PORT — порт сервера
-	LogLevel        string        // LOG_LEVEL — уровень логирования
-	TaskDuration    time.Duration // TASK_DURATION — продолжительность задачи в секундах
-	ShutdownTimeout time.Duration // SHUTDOWN_TIMEOUT — таймаут на graceful shutdown в секундах
+🔧 Измени task_usecase.go так:
+go
+Копировать код
+type TaskUseCase struct {
+	repo     domen.TaskRepository
+	duration time.Duration
 }
 
-// Load загружает переменные окружения из .env файла и возвращает структуру конфигурации.
-// Если файл .env отсутствует, используются переменные окружения системы или значения по умолчанию.
-func Load() *Config {
-	if err := godotenv.Load(); err != nil {
-		log.Println("[config] .env не найден, используются переменные окружения по умолчанию")
-	}
-
-	cfg := &Config{
-		Port:            getEnv("PORT", "8080"),
-		LogLevel:        getEnv("LOG_LEVEL", "info"),
-		TaskDuration:    getEnvAsDuration("TASK_DURATION", 180*time.Second),
-		ShutdownTimeout: getEnvAsDuration("SHUTDOWN_TIMEOUT", 5*time.Second),
-	}
-
-	log.Printf("[config] PORT=%s", cfg.Port)
-	log.Printf("[config] LOG_LEVEL=%s", cfg.LogLevel)
-	log.Printf("[config] TASK_DURATION=%s", cfg.TaskDuration)
-	log.Printf("[config] SHUTDOWN_TIMEOUT=%s", cfg.ShutdownTimeout)
-
-	return cfg
-}
-
-// getEnv возвращает значение переменной окружения или значение по умолчанию
-func getEnv(key string, def string) string {
-	val := os.Getenv(key)
-	if val == "" {
-		return def
-	}
-	return val
-}
-
-// getEnvAsDuration возвращает значение переменной окружения как time.Duration в секундах
-func getEnvAsDuration(key string, def time.Duration) time.Duration {
-	val := os.Getenv(key)
-	if val == "" {
-		return def
-	}
-	i, err := strconv.Atoi(val)
-	if err != nil {
-		log.Printf("[config] неверное значение %s=%q: %v, используется по умолчанию: %v", key, val, err, def)
-		return def
-	}
-	return time.Duration(i) * time.Second
-}
-
-
-
-// @title           Tasks API
-// @version         1.0
-// @description     Сервис управления задачами
-// @host            localhost:8080
-// @BasePath        /
-package main
-
-import (
-	"context"
-	"net/http"
-	"os"
-	"os/signal"
-	"time"
-
-	"github.com/gaz358/myprog/workmate/internal/config"
-	"github.com/gaz358/myprog/workmate/internal/delivery/phttp"
-	"github.com/gaz358/myprog/workmate/pkg/logger"
-	"github.com/gaz358/myprog/workmate/repository/memory"
-	"github.com/gaz358/myprog/workmate/usecase"
-
-	httpSwagger "github.com/swaggo/http-swagger"
-
-	_ "github.com/gaz358/myprog/workmate/cmd/server/docs"
-
-	"github.com/go-chi/chi/v5"
-)
-
-func main() {
-	cfg := config.Load()
-
-	logger.SetLevel(parseLogLevel(cfg.LogLevel))
-	logg := logger.Global().Named("main")
-
-	repo := memory.NewInMemoryRepo()
-	uc := usecase.NewTaskUseCase(repo, cfg.TaskDuration)
-	handler := phttp.NewHandler(uc)
-
-	r := chi.NewRouter()
-	r.Mount("/tasks", handler.Routes())
-	r.Get("/swagger/*", httpSwagger.WrapHandler)
-
-	srv := &http.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: r,
-	}
-
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt)
-
-	go func() {
-		logg.Infow("Starting HTTP server", "addr", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logg.Fatalw("ListenAndServe failed", "error", err)
-		}
-	}()
-
-	<-quit
-	logg.Infow("Shutting down server…")
-
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
-	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		logg.Fatalw("Server forced to shutdown", "error", err)
-	}
-	logg.Infow("Server exited gracefully")
-}
-
-func parseLogLevel(level string) logger.LogLevel {
-	switch level {
-	case "debug":
-		return logger.DebugLevel
-	case "info":
-		return logger.InfoLevel
-	case "warn":
-		return logger.WarnLevel
-	case "error":
-		return logger.ErrorLevel
-	default:
-		return logger.InfoLevel
+func NewTaskUseCase(repo domen.TaskRepository, duration time.Duration) *TaskUseCase {
+	return &TaskUseCase{
+		repo:     repo,
+		duration: duration,
 	}
 }
+Затем в методе run замени time.Sleep(3 * time.Minute) на:
 
-func NewTaskUseCase(repo domen.TaskRepository) *TaskUseCase {
-	return &TaskUseCase{repo: repo}
-}
-
-[{
-	"resource": "/home/gaz358/myprog/workmate/cmd/server/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "WrongArgCount",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "WrongArgCount"
-		}
-	},
-	"severity": 8,
-	"message": "too many arguments in call to usecase.NewTaskUseCase\n\thave (*memory.InMemoryRepo, unknown type)\n\twant (domen.TaskRepository)",
-	"source": "compiler",
-	"startLineNumber": 34,
-	"startColumn": 37,
-	"endLineNumber": 34,
-	"endColumn": 53
-}]
+go
+Копировать код
+time.Sleep(uc.duration)
 
 
 
