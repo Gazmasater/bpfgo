@@ -482,16 +482,6 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
-package memory
-
-import (
-	"testing"
-	"time"
-
-	"github.com/gaz358/myprog/workmate/domen"
-	"github.com/stretchr/testify/assert"
-)
-
 func TestInMemoryRepo_CreateAndGet_ExactMatch(t *testing.T) {
 	repo := NewInMemoryRepo()
 
@@ -505,15 +495,12 @@ func TestInMemoryRepo_CreateAndGet_ExactMatch(t *testing.T) {
 		Result:    "OK",
 	}
 
-	// создаём задачу
 	err := repo.Create(expectedTask)
 	assert.NoError(t, err, "ошибка при создании задачи")
 
-	// получаем задачу
 	got, err := repo.Get(expectedTask.ID)
 	assert.NoError(t, err, "ошибка при получении задачи")
 
-	// сравниваем все поля
 	assert.Equal(t, expectedTask.ID, got.ID)
 	assert.Equal(t, expectedTask.CreatedAt, got.CreatedAt)
 	assert.Equal(t, expectedTask.StartedAt, got.StartedAt)
@@ -522,6 +509,7 @@ func TestInMemoryRepo_CreateAndGet_ExactMatch(t *testing.T) {
 	assert.Equal(t, expectedTask.Status, got.Status)
 	assert.Equal(t, expectedTask.Result, got.Result)
 }
+
 
 
 
