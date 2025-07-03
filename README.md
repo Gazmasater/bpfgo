@@ -511,10 +511,27 @@ mv go.yml .github/workflows/go.yml
 
 
 git add .github/workflows/go.yml
-git commit -m "добавлен минимальный CI для автотестов"
+git commit -m "add min CI for autotest"
 git push origin main
 
-
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo mv go.yml .github/workflows/go.yml
+[sudo] password for gaz358: 
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ git add .github/workflows/go.yml
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ git commit -m "add min CI for autotest"
+[main 71bace5] add min CI for autotest
+ 1 file changed, 17 insertions(+)
+ create mode 100644 .github/workflows/go.yml
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ git push origin main
+Enumerating objects: 6, done.
+Counting objects: 100% (6/6), done.
+Delta compression using up to 8 threads
+Compressing objects: 100% (3/3), done.
+Writing objects: 100% (5/5), 524 bytes | 524.00 KiB/s, done.
+Total 5 (delta 1), reused 0 (delta 0), pack-reused 0
+remote: Resolving deltas: 100% (1/1), completed with 1 local object.
+To https://github.com/Gazmasater/workmate
+   211df33..71bace5  main -> main
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
 
 
 
