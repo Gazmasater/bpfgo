@@ -525,32 +525,6 @@ swag init -g cmd/server/main.go -o cmd/server/docs
 
 
 
-type Task struct {
-	ID        string        `json:"id"`
-	CreatedAt time.Time     `json:"created_at"`
-	StartedAt time.Time     `json:"started_at,omitempty"`
-	EndedAt   time.Time     `json:"ended_at,omitempty"`
-	Duration  time.Duration `json:"duration,omitempty"`
-	Status    Status        `json:"status"`
-	Result    string        `json:"result,omitempty"`
-}
-
-func (uc *TaskUseCase) run(task *domen.Task) {
-	task.Status = domen.StatusRunning
-	task.StartedAt = time.Now()
-
-	time.Sleep(3 * time.Minute) // имитация работы
-
-	task.Status = domen.StatusCompleted
-	task.EndedAt = time.Now()
-	task.Duration = task.EndedAt.Sub(task.StartedAt)
-	task.Result = "OK"
-
-	_ = uc.repo.Update(task)
-}
-
-
-
 // swagger:model Task
 type Task struct {
 	ID        string    `json:"id"`
@@ -568,19 +542,21 @@ type Task struct {
 
 
 
-task.Duration = time.Since(task.StartedAt).String()
+func (uc *TaskUseCase) run(task *domen.Task) {
+	task.Status = domen.StatusRunning
+	task.StartedAt = time.Now()
 
-[{
-	"resource": "/home/gaz358/myprog/workmate/usecase/task_usecase.go",
-	"owner": "go-staticcheck",
-	"severity": 4,
-	"message": "cannot use time.Since(task.StartedAt).String() (value of type string) as time.Duration value in assignment (compile)",
-	"source": "go-staticcheck",
-	"startLineNumber": 39,
-	"startColumn": 18,
-	"endLineNumber": 39,
-	"endColumn": 53
-}]
+	time.Sleep(3 * time.Minute)
+
+	task.Status = domen.StatusCompleted
+	task.EndedAt = time.Now()
+	task.Duration = task.EndedAt.Sub(task.StartedAt).String()
+	task.Result = "OK"
+
+	_ = uc.repo.Update(task)
+}
+
+
 
 
 
