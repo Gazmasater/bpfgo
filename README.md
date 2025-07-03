@@ -484,13 +484,74 @@ ________________________________________________________________________________
 
  swag init   --generalInfo main.go   --output docs
 
-PORT=8080
-LOG_LEVEL=info
-TASK_DURATION=180
-SHUTDOWN_TIMEOUT=5
+type TaskRepository interface {
+	Create(*Task) error
+	Update(*Task) error
+	Delete(id string) error
+	Get(id string) (*Task, error)
+	List() ([]*Task, error) // 👈 добавить
+}
 
 
-godotenv.Load(".env", "../.env", "../../.env")
+func (r *InMemoryRepo) List() ([]*domen.Task, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	tasks := make([]*domen.Task, 0, len(r.tasks))
+	for _, t := range r.tasks {
+		tasks = append(tasks, t)
+	}
+	return tasks, nil
+}
+
+
+func (uc *TaskUseCase) ListTasks() ([]*domen.Task, error) {
+	return uc.repo.List()
+}
+
+
+// @Summary      Получить список всех задач
+// @Tags         tasks
+// @Produce      json
+// @Success      200  {array}  TaskListItem
+// @Failure      500  {object}  ErrorResponse
+// @Router       /tasks/all [get]
+func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
+	tasks, err := h.uc.ListTasks()
+	if err != nil {
+		h.log.Errorw("failed to list tasks", "error", err)
+		writeJSON(w, ErrorResponse{Message: err.Error()})
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	var result []map[string]interface{}
+	for _, t := range tasks {
+		item := map[string]interface{}{
+			"id":     t.ID,
+			"status": t.Status,
+		}
+		if t.Status == domen.StatusCompleted {
+			item["duration"] = t.EndedAt.Sub(t.StartedAt).String()
+		}
+		result = append(result, item)
+	}
+
+	writeJSON(w, result)
+}
+
+
+r.Get("/all", h.list)
+
+// TaskListItem ...
+type TaskListItem struct {
+	ID       string `json:"id"`
+	Status   string `json:"status"`
+	Duration string `json:"duration,omitempty"`
+}
+
+
+
 
 
 
