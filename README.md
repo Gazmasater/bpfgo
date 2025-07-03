@@ -488,6 +488,22 @@ go test -v -run ^TestInMemoryRepo_Delete$
 
 golangci-lint run
 
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ golangci-lint run
+WARN The linter 'exportloopref' is deprecated (since v1.60.2) due to: Since Go1.22 (loopvar) this linter is no longer relevant. Replaced by copyloopvar. 
+ERRO [linters_context] exportloopref: This linter is fully inactivated: it will not produce any reports. 
+cmd/server/main.go:41:10: G112: Potential Slowloris Attack because ReadHeaderTimeout is not configured in the http.Server (gosec)
+        srv := &http.Server{
+                Addr:    ":" + cfg.Port,
+                Handler: r,
+        }
+config/config.go:27:54: Magic number: 60, in <argument> detected (mnd)
+                TaskDuration:    getEnvAsDuration("TASK_DURATION", 60*time.Second),
+                                                                   ^
+config/config.go:28:57: Magic number: 5, in <argument> detected (mnd)
+                ShutdownTimeout: getEnvAsDuration("SHUTDOWN_TIMEOUT", 5*time.Second),
+                                                                      ^
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+
 
 
 
