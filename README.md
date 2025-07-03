@@ -482,33 +482,20 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
-func TestInMemoryRepo_Delete(t *testing.T) {
-	repo := NewInMemoryRepo()
-
-	task := &domen.Task{
-		ID:        "task-to-delete",
-		CreatedAt: time.Now(),
-		Status:    domen.StatusPending,
-	}
-
-	// Создаем задачу
-	err := repo.Create(task)
-	assert.NoError(t, err, "ошибка при создании задачи")
-
-	// Удаляем задачу
-	err = repo.Delete(task.ID)
-	assert.NoError(t, err, "ошибка при удалении задачи")
-
-	// Проверяем, что задача действительно удалена
-	_, err = repo.Get(task.ID)
-	assert.ErrorIs(t, err, domen.ErrNotFound, "ожидалась ошибка ErrNotFound после удаления")
-
-	// Попытка удалить несуществующую задачу
-	err = repo.Delete("non-existent-id")
-	assert.ErrorIs(t, err, domen.ErrNotFound, "ожидалась ошибка ErrNotFound при удалении несуществующей задачи")
-}
-
 go test -v -run ^TestInMemoryRepo_Delete$
+
+
+func TestCreateTask_UniqueIDs(t *testing.T) {
+	repo := NewInMemoryRepo()
+	uc := usecase.NewTaskUseCase(repo, 1*time.Second)
+
+	task1, err1 := uc.CreateTask()
+	task2, err2 := uc.CreateTask()
+
+	assert.NoError(t, err1)
+	assert.NoError(t, err2)
+	assert.NotEqual(t, task1.ID, task2.ID, "ожидаются уникальные ID")
+}
 
 
 
