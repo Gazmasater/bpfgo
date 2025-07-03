@@ -487,7 +487,7 @@ func TestInMemoryRepo_CreateAndGet_ExactMatch(t *testing.T) {
 
 	expectedTask := &domen.Task{
 		ID:        "task-abc123",
-		CreatedAt: time.Now().Truncate(time.Second), // округляем для сравнения
+		CreatedAt: time.Now().Truncate(time.Second),
 		StartedAt: time.Now().Add(1 * time.Second).Truncate(time.Second),
 		EndedAt:   time.Now().Add(5 * time.Second).Truncate(time.Second),
 		Duration:  "4s",
@@ -508,7 +508,14 @@ func TestInMemoryRepo_CreateAndGet_ExactMatch(t *testing.T) {
 	assert.Equal(t, expectedTask.Duration, got.Duration)
 	assert.Equal(t, expectedTask.Status, got.Status)
 	assert.Equal(t, expectedTask.Result, got.Result)
+
+	// Проверка получения несуществующей задачи
+	nonExistentID := "task-nonexistent"
+	got, err = repo.Get(nonExistentID)
+	assert.Nil(t, got, "ожидается nil при получении несуществующей задачи")
+	assert.ErrorIs(t, err, domen.ErrNotFound, "ожидалась ошибка ErrNotFound")
 }
+
 
 
 
