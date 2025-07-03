@@ -482,26 +482,11 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
-Curl
-
-curl -X 'GET' \
-  'http://localhost:8080/tasks/all' \
-  -H 'accept: application/json'
-
-Request URL
-
-http://localhost:8080/tasks/all
-
-Server response
-Code	Details
-200	
-Response body
-Download
-
-null
-
-Response headers
-
- content-length: 5  content-type: application/json  date: Thu,03 Jul 2025 11:17:55 GMT 
+func (r *InMemoryRepo) Create(t *domen.Task) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.tasks[t.ID] = t
+	return nil
+} 
 
 
