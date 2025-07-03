@@ -482,75 +482,27 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
- swag init   --generalInfo main.go   --output docs
-
-type TaskRepository interface {
-	Create(*Task) error
-	Update(*Task) error
-	Delete(id string) error
-	Get(id string) (*Task, error)
-	List() ([]*Task, error) // 👈 добавить
-}
-
-
-func (r *InMemoryRepo) List() ([]*domen.Task, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	tasks := make([]*domen.Task, 0, len(r.tasks))
-	for _, t := range r.tasks {
-		tasks = append(tasks, t)
-	}
-	return tasks, nil
-}
-
-
-func (uc *TaskUseCase) ListTasks() ([]*domen.Task, error) {
-	return uc.repo.List()
-}
-
-
-// @Summary      Получить список всех задач
+// @Summary      Удалить задачу по ID
+// @Description  Удаляет задачу из системы по её идентификатору
 // @Tags         tasks
-// @Produce      json
-// @Success      200  {array}  TaskListItem
-// @Failure      500  {object}  ErrorResponse
-// @Router       /tasks/all [get]
-func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
-	tasks, err := h.uc.ListTasks()
-	if err != nil {
-		h.log.Errorw("failed to list tasks", "error", err)
+// @Param        id   path      string            true  "ID задачи"
+// @Success      204  "No Content"
+// @Failure      500  {object}  phttp.ErrorResponse  "Внутренняя ошибка сервера"
+// @Router       /tasks/{id} [delete]
+func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	h.log.Infow("delete task request", "method", r.Method, "path", r.URL.Path, "id", id)
+
+	if err := h.uc.DeleteTask(id); err != nil {
+		h.log.Errorw("failed to delete task", "id", id, "error", err)
 		writeJSON(w, ErrorResponse{Message: err.Error()})
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	var result []map[string]interface{}
-	for _, t := range tasks {
-		item := map[string]interface{}{
-			"id":     t.ID,
-			"status": t.Status,
-		}
-		if t.Status == domen.StatusCompleted {
-			item["duration"] = t.EndedAt.Sub(t.StartedAt).String()
-		}
-		result = append(result, item)
-	}
-
-	writeJSON(w, result)
+	h.log.Infow("task deleted", "id", id)
+	w.WriteHeader(http.StatusNoContent)
 }
-
-
-r.Get("/all", h.list)
-
-// TaskListItem ...
-type TaskListItem struct {
-	ID       string `json:"id"`
-	Status   string `json:"status"`
-	Duration string `json:"duration,omitempty"`
-}
-
-
 
 
 
