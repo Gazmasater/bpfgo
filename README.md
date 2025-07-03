@@ -508,6 +508,9 @@ func TestInMemoryRepo_Delete(t *testing.T) {
 	assert.ErrorIs(t, err, domen.ErrNotFound, "ожидалась ошибка ErrNotFound при удалении несуществующей задачи")
 }
 
+go test -v -run ^TestInMemoryRepo_Delete$
+
+
 
 
 
