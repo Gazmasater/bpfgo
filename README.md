@@ -525,35 +525,131 @@ swag init -g cmd/server/main.go -o cmd/server/docs
 
 
 
-// swagger:model Task
-type Task struct {
-	ID        string    `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	StartedAt time.Time `json:"started_at,omitempty"`
-	EndedAt   time.Time `json:"ended_at,omitempty"`
+// internal/config/config.go
+package config
 
-	// Duration of the task execution
-	// example: 3m0s
-	Duration string `json:"duration,omitempty"`
+import (
+	"log"
+	"os"
+	"strconv"
+	"time"
 
-	Status Status `json:"status"`
-	Result string `json:"result,omitempty"`
+	"github.com/joho/godotenv"
+)
+
+type Config struct {
+	Port            string
+	LogLevel        string
+	TaskDuration    time.Duration
+	ShutdownTimeout time.Duration
+}
+
+func Load() *Config {
+	_ = godotenv.Load()
+
+	return &Config{
+		Port:            getEnv("PORT", "8080"),
+		LogLevel:        getEnv("LOG_LEVEL", "info"),
+		TaskDuration:    getEnvDuration("TASK_DURATION", 180*time.Second),
+		ShutdownTimeout: getEnvDuration("SHUTDOWN_TIMEOUT", 5*time.Second),
+	}
+}
+
+func getEnv(key, defaultVal string) string {
+	if val := os.Getenv(key); val != "" {
+		return val
+	}
+	return defaultVal
+}
+
+func getEnvDuration(key string, defaultVal time.Duration) time.Duration {
+	val := os.Getenv(key)
+	if val == "" {
+		return defaultVal
+	}
+	sec, err := strconv.Atoi(val)
+	if err != nil {
+		log.Printf("invalid %s: %v, using default %v", key, err, defaultVal)
+		return defaultVal
+	}
+	return time.Duration(sec) * time.Second
 }
 
 
 
-func (uc *TaskUseCase) run(task *domen.Task) {
-	task.Status = domen.StatusRunning
-	task.StartedAt = time.Now()
+package main
 
-	time.Sleep(3 * time.Minute)
+import (
+	"context"
+	"net/http"
+	"os"
+	"os/signal"
+	"time"
 
-	task.Status = domen.StatusCompleted
-	task.EndedAt = time.Now()
-	task.Duration = task.EndedAt.Sub(task.StartedAt).String()
-	task.Result = "OK"
+	"github.com/gaz358/myprog/workmate/internal/config"
+	"github.com/gaz358/myprog/workmate/internal/delivery/phttp"
+	"github.com/gaz358/myprog/workmate/pkg/logger"
+	"github.com/gaz358/myprog/workmate/repository/memory"
+	"github.com/gaz358/myprog/workmate/usecase"
+	"github.com/go-chi/chi/v5"
+	httpSwagger "github.com/swaggo/http-swagger"
 
-	_ = uc.repo.Update(task)
+	_ "github.com/gaz358/myprog/workmate/cmd/server/docs"
+)
+
+func main() {
+	cfg := config.Load()
+
+	logger.SetLevel(parseLogLevel(cfg.LogLevel))
+	logg := logger.Global().Named("main")
+
+	repo := memory.NewInMemoryRepo()
+	uc := usecase.NewTaskUseCase(repo, cfg.TaskDuration)
+	handler := phttp.NewHandler(uc)
+
+	r := chi.NewRouter()
+	r.Mount("/tasks", handler.Routes())
+	r.Get("/swagger/*", httpSwagger.WrapHandler)
+
+	srv := &http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: r,
+	}
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt)
+
+	go func() {
+		logg.Infow("Starting HTTP server", "addr", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logg.Fatalw("ListenAndServe failed", "error", err)
+		}
+	}()
+
+	<-quit
+	logg.Infow("Shutting down server…")
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		logg.Fatalw("Server forced to shutdown", "error", err)
+	}
+	logg.Infow("Server exited gracefully")
+}
+
+func parseLogLevel(level string) logger.LogLevel {
+	switch level {
+	case "debug":
+		return logger.DebugLevel
+	case "info":
+		return logger.InfoLevel
+	case "warn":
+		return logger.WarnLevel
+	case "error":
+		return logger.ErrorLevel
+	default:
+		return logger.InfoLevel
+	}
 }
 
 
