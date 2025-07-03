@@ -641,6 +641,32 @@ func parseLogLevel(level string) logger.LogLevel {
 	}
 }
 
+func NewTaskUseCase(repo domen.TaskRepository) *TaskUseCase {
+	return &TaskUseCase{repo: repo}
+}
+
+[{
+	"resource": "/home/gaz358/myprog/workmate/cmd/server/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "WrongArgCount",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "WrongArgCount"
+		}
+	},
+	"severity": 8,
+	"message": "too many arguments in call to usecase.NewTaskUseCase\n\thave (*memory.InMemoryRepo, unknown type)\n\twant (domen.TaskRepository)",
+	"source": "compiler",
+	"startLineNumber": 34,
+	"startColumn": 37,
+	"endLineNumber": 34,
+	"endColumn": 53
+}]
+
 
 
 
