@@ -485,71 +485,94 @@ ________________________________________________________________________________
 go test -v -run ^TestInMemoryRepo_Delete$
 
 
-package memory
+
+package phttp_test
 
 import (
-	"testing"
-	"time"
+    "encoding/json"
+    "io"
+    "net/http"
+    "net/http/httptest"
+    "testing"
+    "time"
 
-	"github.com/gaz358/myprog/workmate/domen"
-	"github.com/stretchr/testify/assert"
+    "github.com/gaz358/myprog/workmate/domen"
+    "github.com/gaz358/myprog/workmate/internal/delivery/phttp"
+    "github.com/gaz358/myprog/workmate/repository/memory"
+    "github.com/gaz358/myprog/workmate/usecase"
+    "github.com/stretchr/testify/assert"
 )
 
-func TestInMemoryRepo_Update(t *testing.T) {
-	repo := NewInMemoryRepo()
-
-	// Создание и добавление задачи
-	task := &domen.Task{
-		ID:        "task-1",
-		CreatedAt: time.Now(),
-		Status:    domen.StatusPending,
-	}
-	err := repo.Create(task)
-	assert.NoError(t, err, "ошибка при создании задачи")
-
-	// Обновление задачи
-	task.Status = domen.StatusCompleted
-	task.Result = "done"
-	err = repo.Update(task)
-	assert.NoError(t, err, "ошибка при обновлении задачи")
-
-	updated, err := repo.Get(task.ID)
-	assert.NoError(t, err)
-	assert.Equal(t, domen.StatusCompleted, updated.Status)
-	assert.Equal(t, "done", updated.Result)
-
-	// Попытка обновить несуществующую задачу
-	nonexistent := &domen.Task{
-		ID:     "nonexistent",
-		Status: domen.StatusFailed,
-	}
-	err = repo.Update(nonexistent)
-	assert.ErrorIs(t, err, domen.ErrNotFound)
+func setupTestServer() *httptest.Server {
+    repo := memory.NewInMemoryRepo()
+    uc := usecase.NewTaskUseCase(repo, 200*time.Millisecond)
+    handler := phttp.NewHandler(uc)
+    return httptest.NewServer(handler.Routes())
 }
 
-func TestInMemoryRepo_List(t *testing.T) {
-	repo := NewInMemoryRepo()
+func TestTaskHandler_FullCycle(t *testing.T) {
+    server := setupTestServer()
+    defer server.Close()
 
-	// Пустой список
-	tasks, err := repo.List()
-	assert.NoError(t, err)
-	assert.Empty(t, tasks, "список должен быть пуст при отсутствии задач")
+    // Create task
+    resp, err := http.Post(server.URL+"/", "application/json", nil)
+    assert.NoError(t, err)
+    defer resp.Body.Close()
+    assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	// Добавим несколько задач
-	task1 := &domen.Task{ID: "id1", CreatedAt: time.Now(), Status: domen.StatusPending}
-	task2 := &domen.Task{ID: "id2", CreatedAt: time.Now(), Status: domen.StatusCompleted}
+    body, _ := io.ReadAll(resp.Body)
+    var created domen.Task
+    err = json.Unmarshal(body, &created)
+    assert.NoError(t, err)
+    assert.NotEmpty(t, created.ID)
 
-	_ = repo.Create(task1)
-	_ = repo.Create(task2)
+    // Wait for task to complete
+    time.Sleep(300 * time.Millisecond)
 
-	tasks, err = repo.List()
-	assert.NoError(t, err)
-	assert.Len(t, tasks, 2)
+    // Get task by ID
+    getResp, err := http.Get(server.URL + "/" + created.ID)
+    assert.NoError(t, err)
+    defer getResp.Body.Close()
+    assert.Equal(t, http.StatusOK, getResp.StatusCode)
 
-	ids := map[string]bool{tasks[0].ID: true, tasks[1].ID: true}
-	assert.True(t, ids["id1"])
-	assert.True(t, ids["id2"])
+    body, _ = io.ReadAll(getResp.Body)
+    var fetched domen.Task
+    err = json.Unmarshal(body, &fetched)
+    assert.NoError(t, err)
+    assert.Equal(t, created.ID, fetched.ID)
+    assert.Equal(t, domen.StatusCompleted, fetched.Status)
+
+    // List all tasks
+    listResp, err := http.Get(server.URL + "/all")
+    assert.NoError(t, err)
+    defer listResp.Body.Close()
+    assert.Equal(t, http.StatusOK, listResp.StatusCode)
+
+    body, _ = io.ReadAll(listResp.Body)
+    var list []map[string]interface{}
+    err = json.Unmarshal(body, &list)
+    assert.NoError(t, err)
+    assert.Len(t, list, 1)
+    assert.Equal(t, created.ID, list[0]["id"])
+
+    // Delete task
+    req, err := http.NewRequest(http.MethodDelete, server.URL+"/"+created.ID, nil)
+    assert.NoError(t, err)
+    delResp, err := http.DefaultClient.Do(req)
+    assert.NoError(t, err)
+    defer delResp.Body.Close()
+    assert.Equal(t, http.StatusNoContent, delResp.StatusCode)
+
+    // Get deleted task
+    getDeletedResp, err := http.Get(server.URL + "/" + created.ID)
+    assert.NoError(t, err)
+    defer getDeletedResp.Body.Close()
+    assert.Equal(t, http.StatusNotFound, getDeletedResp.StatusCode)
 }
+
+
+
+
 
 
 
