@@ -549,14 +549,27 @@ func (uc *TaskUseCase) run(task *domen.Task) {
 	_ = uc.repo.Update(task)
 }
 
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ swag init -g cmd/server/main.go -o cmd/server/docs
-2025/07/03 02:56:13 Generate swagger docs....
-2025/07/03 02:56:13 Generate general API Info, search dir:./
-2025/07/03 02:56:13 warning: failed to get package name in dir: ./, error: execute go list command, exit status 1, stdout:, stderr:no Go files in /home/gaz358/myprog/workmate
-2025/07/03 02:56:13 Generating domen.Task
-2025/07/03 02:56:13 Error parsing type definition 'domen.Task': [duration]: cannot find type definition: time.Duration
-2025/07/03 02:56:13 ParseComment error in file /home/gaz358/myprog/workmate/internal/delivery/phttp/task_handler.go :domen.Task: [duration]: cannot find type definition: time.Duration
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+
+
+// swagger:model Task
+type Task struct {
+	ID        string    `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	StartedAt time.Time `json:"started_at,omitempty"`
+	EndedAt   time.Time `json:"ended_at,omitempty"`
+
+	// Duration of the task execution
+	// example: 3m0s
+	Duration string `json:"duration,omitempty"`
+
+	Status Status `json:"status"`
+	Result string `json:"result,omitempty"`
+}
+
+
+
+task.Duration = time.Since(task.StartedAt).String()
+
 
 
 
