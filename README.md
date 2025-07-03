@@ -484,26 +484,10 @@ ________________________________________________________________________________
 
  swag init   --generalInfo main.go   --output docs
 
-🔧 Измени task_usecase.go так:
-go
-Копировать код
-type TaskUseCase struct {
-	repo     domen.TaskRepository
-	duration time.Duration
-}
-
-func NewTaskUseCase(repo domen.TaskRepository, duration time.Duration) *TaskUseCase {
-	return &TaskUseCase{
-		repo:     repo,
-		duration: duration,
-	}
-}
-Затем в методе run замени time.Sleep(3 * time.Minute) на:
-
-go
-Копировать код
-time.Sleep(uc.duration)
-
+PORT=8080
+LOG_LEVEL=info
+TASK_DURATION=180
+SHUTDOWN_TIMEOUT=5
 
 
 
