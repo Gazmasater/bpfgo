@@ -553,67 +553,52 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 }
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-package memory
+Создать экспортируемую ошибку в domen/errors.go (если ещё не сделал):
 
-import (
-	"errors"
-	"sync"
+go
+Копировать код
+package domen
 
-	"github.com/gaz358/myprog/workmate/domen"
-)
+import "errors"
 
-type InMemoryRepo struct {
-	mu    sync.RWMutex
-	tasks map[string]*domen.Task
+var ErrNotFound = errors.New("not found")
+Заменить во всех методах, где возвращается "not found":
+
+🔁 Update:
+go
+Копировать код
+if _, ok := r.tasks[t.ID]; !ok {
+	return domen.ErrNotFound
 }
+🔁 Delete:
+Сейчас:
 
-func NewInMemoryRepo() *InMemoryRepo {
-	return &InMemoryRepo{tasks: make(map[string]*domen.Task)}
+go
+Копировать код
+delete(r.tasks, id)
+return nil
+Нужно:
+
+go
+Копировать код
+if _, ok := r.tasks[id]; !ok {
+	return domen.ErrNotFound
 }
-
-func (r *InMemoryRepo) Create(t *domen.Task) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.tasks[t.ID] = t
-	return nil
+delete(r.tasks, id)
+return nil
+🔁 Get:
+go
+Копировать код
+if !ok {
+	return nil, domen.ErrNotFound
 }
+✨ В итоге:
+Обработчики смогут делать:
 
-func (r *InMemoryRepo) Update(t *domen.Task) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, ok := r.tasks[t.ID]; !ok {
-		return errors.New("not found")
-	}
-	r.tasks[t.ID] = t
-	return nil
-}
-
-func (r *InMemoryRepo) Delete(id string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.tasks, id)
-	return nil
-}
-
-func (r *InMemoryRepo) Get(id string) (*domen.Task, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	t, ok := r.tasks[id]
-	if !ok {
-		return nil, errors.New("not found")
-	}
-	return t, nil
-}
-
-func (r *InMemoryRepo) List() ([]*domen.Task, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	tasks := make([]*domen.Task, 0, len(r.tasks))
-	for _, t := range r.tasks {
-		tasks = append(tasks, t)
-	}
-	return tasks, nil
+go
+Копировать код
+if errors.Is(err, domen.ErrNotFound) {
+	// вернуть 404
 }
 
 
