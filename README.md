@@ -524,5 +524,27 @@ func TestInMemoryRepo_CreateAndGet_ExactMatch(t *testing.T) {
 	assert.Equal(t, expectedTask.Result, got.Result)
 }
 
+[{
+	"resource": "/home/gaz358/myprog/workmate/repository/memory/test.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "UndeclaredName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: memory",
+	"source": "compiler",
+	"startLineNumber": 12,
+	"startColumn": 10,
+	"endLineNumber": 12,
+	"endColumn": 16
+}]
+
 
 
