@@ -570,7 +570,17 @@ type Task struct {
 
 task.Duration = time.Since(task.StartedAt).String()
 
-
+[{
+	"resource": "/home/gaz358/myprog/workmate/usecase/task_usecase.go",
+	"owner": "go-staticcheck",
+	"severity": 4,
+	"message": "cannot use time.Since(task.StartedAt).String() (value of type string) as time.Duration value in assignment (compile)",
+	"source": "go-staticcheck",
+	"startLineNumber": 39,
+	"startColumn": 18,
+	"endLineNumber": 39,
+	"endColumn": 53
+}]
 
 
 
