@@ -482,18 +482,66 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
+✅ 1. В domen/errors.go (новый файл):
+go
+Копировать код
+package domen
+
+import "errors"
+
+var ErrNotFound = errors.New("not found")
+✅ 2. В task_repo.go (InMemoryRepo):
+Заменить:
+
+go
+Копировать код
+if _, ok := r.tasks[id]; !ok {
+    return errors.New("not found")
+}
+на:
+
+go
+Копировать код
+if _, ok := r.tasks[id]; !ok {
+    return domen.ErrNotFound
+}
+Так же — в Get() и Delete().
+
+✅ 3. В usecase/task_usecase.go
+Ошибки просто пробрасываются:
+
+go
+Копировать код
+func (uc *TaskUseCase) DeleteTask(id string) error {
+	return uc.repo.Delete(id)
+}
+(оставляем как есть)
+
+✅ 4. В task_handler.go → метод delete:
+Полностью обновлённый:
+
+go
+Копировать код
 // @Summary      Удалить задачу по ID
 // @Description  Удаляет задачу из системы по её идентификатору
 // @Tags         tasks
 // @Param        id   path      string            true  "ID задачи"
 // @Success      204  "No Content"
-// @Failure      500  {object}  phttp.ErrorResponse  "Внутренняя ошибка сервера"
+// @Failure      404  {object}  ErrorResponse  "Задача не найдена"
+// @Failure      500  {object}  ErrorResponse  "Внутренняя ошибка сервера"
 // @Router       /tasks/{id} [delete]
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	h.log.Infow("delete task request", "method", r.Method, "path", r.URL.Path, "id", id)
 
-	if err := h.uc.DeleteTask(id); err != nil {
+	err := h.uc.DeleteTask(id)
+	if err != nil {
+		if errors.Is(err, domen.ErrNotFound) {
+			h.log.Warnw("task not found", "id", id)
+			writeJSON(w, ErrorResponse{Message: "task not found"})
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		h.log.Errorw("failed to delete task", "id", id, "error", err)
 		writeJSON(w, ErrorResponse{Message: err.Error()})
 		w.WriteHeader(http.StatusInternalServerError)
@@ -503,6 +551,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	h.log.Infow("task deleted", "id", id)
 	w.WriteHeader(http.StatusNoContent)
 }
+
 
 
 
