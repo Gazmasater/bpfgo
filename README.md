@@ -484,51 +484,78 @@ ________________________________________________________________________________
 
  swag init   --generalInfo main.go   --output docs
 
- swag init -g cmd/server/main.go
+// internal/config/config.go
+package config
 
+import (
+	"log"
+	"os"
+	"strconv"
+	"time"
 
+	"github.com/joho/godotenv"
+)
 
+// Config содержит все переменные окружения, необходимые приложению
+// Значения берутся из файла .env (если он есть) или из текущего окружения
+//
+// Пример .env:
+// PORT=8080
+// LOG_LEVEL=info
+// TASK_DURATION=180
+// SHUTDOWN_TIMEOUT=5
 
-swag init \
-  --parseInternal \
-  --parseDependency \
-  --moduleName $(grep '^module ' go.mod | awk '{print $2}') \
-  -g ./cmd/server/main.go \
-  -o ./cmd/server/docs
+type Config struct {
+	Port            string        // PORT — порт сервера
+	LogLevel        string        // LOG_LEVEL — уровень логирования
+	TaskDuration    time.Duration // TASK_DURATION — продолжительность задачи в секундах
+	ShutdownTimeout time.Duration // SHUTDOWN_TIMEOUT — таймаут на graceful shutdown в секундах
+}
 
+// Load загружает переменные окружения из .env файла и возвращает структуру конфигурации.
+// Если файл .env отсутствует, используются переменные окружения системы или значения по умолчанию.
+func Load() *Config {
+	if err := godotenv.Load(); err != nil {
+		log.Println("[config] .env не найден, используются переменные окружения по умолчанию")
+	}
 
-swag init \
-  --parseInternal \
-  --parseDependency \
-  -g ./cmd/server/main.go \
-  -o ./cmd/server/docs
+	cfg := &Config{
+		Port:            getEnv("PORT", "8080"),
+		LogLevel:        getEnv("LOG_LEVEL", "info"),
+		TaskDuration:    getEnvAsDuration("TASK_DURATION", 180*time.Second),
+		ShutdownTimeout: getEnvAsDuration("SHUTDOWN_TIMEOUT", 5*time.Second),
+	}
 
+	log.Printf("[config] PORT=%s", cfg.Port)
+	log.Printf("[config] LOG_LEVEL=%s", cfg.LogLevel)
+	log.Printf("[config] TASK_DURATION=%s", cfg.TaskDuration)
+	log.Printf("[config] SHUTDOWN_TIMEOUT=%s", cfg.ShutdownTimeout)
 
-swag init --parseInternal  --parseDependency   -g ./main.go -o ./docs
+	return cfg
+}
 
-go mod download golang.org/x/text
-go mod tidy
+// getEnv возвращает значение переменной окружения или значение по умолчанию
+func getEnv(key string, def string) string {
+	val := os.Getenv(key)
+	if val == "" {
+		return def
+	}
+	return val
+}
 
-
-swag init \
-  -g main.go \
-  -d cmd/server,internal/delivery/phttp \
-  -o docs
-
-swag init \
-  -g main.go \
-  -d cmd/server,internal/delivery/phttp \
-  -o cmd/server/docs
-  ___________________________________________________________________
-
-swag init -g cmd/server/main.go -o cmd/server/docs
-
-
-
-PORT=8080
-LOG_LEVEL=info
-TASK_DURATION=180
-SHUTDOWN_TIMEOUT=5
+// getEnvAsDuration возвращает значение переменной окружения как time.Duration в секундах
+func getEnvAsDuration(key string, def time.Duration) time.Duration {
+	val := os.Getenv(key)
+	if val == "" {
+		return def
+	}
+	i, err := strconv.Atoi(val)
+	if err != nil {
+		log.Printf("[config] неверное значение %s=%q: %v, используется по умолчанию: %v", key, val, err, def)
+		return def
+	}
+	return time.Duration(i) * time.Second
+}
 
 
 
