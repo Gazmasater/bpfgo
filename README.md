@@ -570,6 +570,11 @@ func TestTaskHandler_FullCycle(t *testing.T) {
     assert.Equal(t, http.StatusNotFound, getDeletedResp.StatusCode)
 }
 
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate/internal/delivery$ go test
+# .
+no Go files in /home/gaz358/myprog/workmate/internal/delivery
+FAIL    . [setup failed]
+
 
 
 
