@@ -482,19 +482,18 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
-package memory_test
+package memory
 
 import (
 	"testing"
 	"time"
 
 	"github.com/gaz358/myprog/workmate/domen"
-	"github.com/gaz358/myprog/workmate/repository/memory"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestInMemoryRepo_CreateAndGet_ExactMatch(t *testing.T) {
-	repo := memory.NewInMemoryRepo()
+	repo := NewInMemoryRepo()
 
 	expectedTask := &domen.Task{
 		ID:        "task-abc123",
@@ -524,27 +523,6 @@ func TestInMemoryRepo_CreateAndGet_ExactMatch(t *testing.T) {
 	assert.Equal(t, expectedTask.Result, got.Result)
 }
 
-[{
-	"resource": "/home/gaz358/myprog/workmate/repository/memory/test.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "UndeclaredName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredName"
-		}
-	},
-	"severity": 8,
-	"message": "undefined: memory",
-	"source": "compiler",
-	"startLineNumber": 12,
-	"startColumn": 10,
-	"endLineNumber": 12,
-	"endColumn": 16
-}]
 
 
 
