@@ -490,12 +490,7 @@ TASK_DURATION=180
 SHUTDOWN_TIMEOUT=5
 
 
-cfg := &Config{
-		Port:            getEnv("PORT", "8080"),
-		LogLevel:        getEnv("LOG_LEVEL", "info"),
-		TaskDuration:    getEnvAsDuration("TASK_DURATION", 60*time.Second),
-		ShutdownTimeout: getEnvAsDuration("SHUTDOWN_TIMEOUT", 5*time.Second),
-	}
+godotenv.Load(".env", "../.env", "../../.env")
 
 
 
