@@ -488,23 +488,33 @@ go test -v -run ^TestInMemoryRepo_Delete$
 
 golangci-lint run
 
-1. 🔄 exportloopref — Устаревший линтер
-csharp
-Копировать код
-WARN The linter 'exportloopref' is deprecated...
-✅ Просто удали его из .golangci.yaml — он больше не нужен.
+name: Go Test & Lint
 
-srv := &http.Server{
-    Addr:              ":" + cfg.Port,
-    Handler:           r,
-    ReadHeaderTimeout: 5 * time.Second,
-}
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
+jobs:
+  check:
+    runs-on: ubuntu-latest
 
-const (
-    DefaultTaskDuration    = 60 * time.Second
-    DefaultShutdownTimeout = 5 * time.Second
-)
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.21
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+
+      - name: Run tests
+        run: go test ./... -v
 
 
 
