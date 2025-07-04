@@ -498,25 +498,9 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 ________________________________________________________________________________________________
 
 
-  Checking for go.mod: go.mod
-  Warning: Failed to restore: getCacheEntry failed: Cache service responded with 503
-  Cache not found for input keys: golangci-lint.cache-2896-0f5eafd64b6e2f2c2107b8ac49d555ca92bdb93d, golangci-lint.cache-2896-
-  Finding needed golangci-lint version...
-  Requested golangci-lint 'latest', using 'v1.64.8', calculation took 34ms
-  Installation mode: binary
-  Installing golangci-lint binary v1.64.8...
-  Downloading binary https://github.com/golangci/golangci-lint/releases/download/v1.64.8/golangci-lint-1.64.8-linux-amd64.tar.gz ...
-  /usr/bin/tar xz --overwrite --warning=no-unknown-keyword --overwrite -C /home/runner -f /home/runner/work/_temp/9e0487a4-5236-4142-8b8a-19714a851c68
-  Installed golangci-lint into /home/runner/golangci-lint-1.64.8-linux-amd64/golangci-lint in 772ms
-  Prepared env in 10963ms
-run golangci-lint
-  Running [/home/runner/golangci-lint-1.64.8-linux-amd64/golangci-lint run --out-format=github-actions] in [] ...
-  Error: Error return value of `uc.repo.Update` is not checked (errcheck)
-  Error: Error return value of `uc.repo.Update` is not checked (errcheck)
-  level=warning msg="[config_reader] The output format `github-actions` is deprecated, please use `colored-line-number`"
-  Error: issues found
-  Ran golangci-lint in 4880ms
-
+ if err := uc.repo.Update(task); err != nil {
+        return
+    }
 
 
 
