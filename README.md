@@ -498,19 +498,24 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 ________________________________________________________________________________________________
 
 
-func (r *InMemoryRepo) Update(task *domen.Task) error {
-    r.mu.Lock()
-    defer r.mu.Unlock()
-    if _, exists := r.tasks[task.ID]; !exists {
-        return domen.ErrNotFound // ИСПРАВЛЕНО
-    }
-    tCopy := *task
-    r.tasks[task.ID] = &tCopy
-    return nil
+
+
+
+
+import (
+	_ "net/http/pprof"
+	"log"
+	"net/http"
+)
+
+func main() {
+	// Запускаем pprof-сервер в отдельной горутине
+	go func() {
+		log.Println("pprof listening on :6060")
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+	
+	// ...твоя остальная инициализация...
 }
-
-
-
-
 
 
