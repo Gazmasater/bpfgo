@@ -498,28 +498,22 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 ________________________________________________________________________________________________
 
 
-import "github.com/gaz358/myprog/workmate/domen"
-
-func (r *InMemoryRepo) Get(id string) (*domen.Task, error) {
-    r.mu.RLock()
-    defer r.mu.RUnlock()
-    t, ok := r.tasks[id]
-    if !ok {
-        return nil, domen.ErrNotFound // <--- используем общую ошибку!
-    }
-    tCopy := *t
-    return &tCopy, nil
-}
-
-func (r *InMemoryRepo) Delete(id string) error {
-    r.mu.Lock()
-    defer r.mu.Unlock()
-    if _, ok := r.tasks[id]; !ok {
-        return domen.ErrNotFound // <--- и тут тоже
-    }
-    delete(r.tasks, id)
-    return nil
-}
+  Checking for go.mod: go.mod
+  Warning: Failed to restore: getCacheEntry failed: Cache service responded with 503
+  Cache not found for input keys: golangci-lint.cache-2896-0f5eafd64b6e2f2c2107b8ac49d555ca92bdb93d, golangci-lint.cache-2896-
+  Finding needed golangci-lint version...
+  Requested golangci-lint 'latest', using 'v1.64.8', calculation took 31ms
+  Installation mode: binary
+  Installing golangci-lint binary v1.64.8...
+  Downloading binary https://github.com/golangci/golangci-lint/releases/download/v1.64.8/golangci-lint-1.64.8-linux-amd64.tar.gz ...
+  /usr/bin/tar xz --overwrite --warning=no-unknown-keyword --overwrite -C /home/runner -f /home/runner/work/_temp/4a1dc534-0c79-40a7-baeb-6bf38d4f53d1
+  Installed golangci-lint into /home/runner/golangci-lint-1.64.8-linux-amd64/golangci-lint in 391ms
+  Prepared env in 10598ms
+run golangci-lint
+  Running [/home/runner/golangci-lint-1.64.8-linux-amd64/golangci-lint run --out-format=github-actions] in [] ...
+  level=warning msg="[config_reader] The output format `github-actions` is deprecated, please use `colored-line-number`"
+  golangci-lint found no issues
+  Ran golangci-lint in 4765ms
 
 
 
