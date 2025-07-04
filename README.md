@@ -5,6 +5,21 @@
 package main
 
 import (
+Gazmasater
+bpfgo
+
+Code
+Issues
+Pull requests 2
+Actions
+Projects
+Wiki
+
+    bpfgo
+
+/
+in
+main
 	"context"
 	"fmt"
 	"log"
@@ -487,6 +502,17 @@ golangci-lint run
 swag init -g cmd/server/main.go -o internal/delivery/phttp/docs
 
 go test ./... -cover
+
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ go test ./... -cover
+        github.com/gaz358/myprog/workmate/cmd/server            coverage: 0.0% of statements
+        github.com/gaz358/myprog/workmate/cmd/server/docs               coverage: 0.0% of statements
+        github.com/gaz358/myprog/workmate/config                coverage: 0.0% of statements
+?       github.com/gaz358/myprog/workmate/domen [no test files]
+ok      github.com/gaz358/myprog/workmate/internal/delivery/phttp       0.010s  coverage: 50.6% of statements
+        github.com/gaz358/myprog/workmate/pkg/logger            coverage: 0.0% of statements
+ok      github.com/gaz358/myprog/workmate/repository/memory     0.006s  coverage: 100.0% of statements
+        github.com/gaz358/myprog/workmate/usecase               coverage: 0.0% of statements
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
 
 
 
