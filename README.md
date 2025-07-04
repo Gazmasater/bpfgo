@@ -550,13 +550,7 @@ func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
 // r.Put("/{id}/cancel", h.cancel)
 
 
-az358@gaz358-BOD-WXX9:~/myprog/workmate/cmd/server$ swag init -g cmd/server/main.go -o cmd/server/docs
-2025/07/04 03:05:51 Generate swagger docs....
-2025/07/04 03:05:51 Generate general API Info, search dir:./
-2025/07/04 03:05:51 cannot parse source files /home/gaz358/myprog/workmate/cmd/server/cmd/server/main.go: open /home/gaz358/myprog/workmate/cmd/server/cmd/server/main.go: no such file or directory
-
-
-
+swag init -g cmd/server/main.go -o internal/delivery/phttp/docs
 
 
 
