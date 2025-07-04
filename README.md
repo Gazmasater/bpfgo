@@ -497,22 +497,17 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
-=== RUN   TestInMemoryRepo_Update
-    updatelist_test.go:40: 
-        	Error Trace:	/home/runner/work/workmate/workmate/repository/memory/updatelist_test.go:40
-        	Error:      	Target error should be in err chain:
-        	            	expected: "not found"
-        	            	in chain: "not found"
-        	Test:       	TestInMemoryRepo_Update
---- FAIL: TestInMemoryRepo_Update (0.00s)
-=== RUN   TestInMemoryRepo_List
---- PASS: TestInMemoryRepo_List (0.00s)
-FAIL
-FAIL	github.com/gaz358/myprog/workmate/repository/memory	0.021s
-?   	github.com/gaz358/myprog/workmate/usecase	[no test files]
-FAIL
-Error: Process completed with exit code 1.
 
+func (r *InMemoryRepo) Update(task *domen.Task) error {
+    r.mu.Lock()
+    defer r.mu.Unlock()
+    if _, exists := r.tasks[task.ID]; !exists {
+        return domen.ErrNotFound // ИСПРАВЛЕНО
+    }
+    tCopy := *task
+    r.tasks[task.ID] = &tCopy
+    return nil
+}
 
 
 
