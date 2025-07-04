@@ -498,8 +498,172 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 ________________________________________________________________________________________________
 
 
-taskCopy := *task // поверхностная копия
-json.NewEncoder(w).Encode(taskCopy)
+package domen
+
+type TaskRepository interface {
+    Create(task *Task) error
+    Update(task *Task) error
+    Get(id string) (*Task, error)
+    List() ([]*Task, error)
+    Delete(id string) error
+}
+
+
+package repo
+
+import (
+    "errors"
+    "sync"
+
+    "github.com/gaz358/myprog/workmate/domen"
+)
+
+type InMemoryRepo struct {
+    mu    sync.RWMutex
+    tasks map[string]*domen.Task
+}
+
+func NewInMemoryRepo() *InMemoryRepo {
+    return &InMemoryRepo{
+        tasks: make(map[string]*domen.Task),
+    }
+}
+
+func (r *InMemoryRepo) Create(task *domen.Task) error {
+    r.mu.Lock()
+    defer r.mu.Unlock()
+    if _, exists := r.tasks[task.ID]; exists {
+        return errors.New("task already exists")
+    }
+    // Копируем задачу
+    tCopy := *task
+    r.tasks[task.ID] = &tCopy
+    return nil
+}
+
+func (r *InMemoryRepo) Update(task *domen.Task) error {
+    r.mu.Lock()
+    defer r.mu.Unlock()
+    if _, exists := r.tasks[task.ID]; !exists {
+        return errors.New("task not found")
+    }
+    tCopy := *task
+    r.tasks[task.ID] = &tCopy
+    return nil
+}
+
+func (r *InMemoryRepo) Get(id string) (*domen.Task, error) {
+    r.mu.RLock()
+    defer r.mu.RUnlock()
+    task, exists := r.tasks[id]
+    if !exists {
+        return nil, errors.New("task not found")
+    }
+    tCopy := *task
+    return &tCopy, nil
+}
+
+func (r *InMemoryRepo) List() ([]*domen.Task, error) {
+    r.mu.RLock()
+    defer r.mu.RUnlock()
+    result := make([]*domen.Task, 0, len(r.tasks))
+    for _, task := range r.tasks {
+        tCopy := *task
+        result = append(result, &tCopy)
+    }
+    return result, nil
+}
+
+func (r *InMemoryRepo) Delete(id string) error {
+    r.mu.Lock()
+    defer r.mu.Unlock()
+    if _, exists := r.tasks[id]; !exists {
+        return errors.New("task not found")
+    }
+    delete(r.tasks, id)
+    return nil
+}
+
+
+package usecase
+
+import (
+    "time"
+
+    "github.com/gaz358/myprog/workmate/domen"
+    "github.com/google/uuid"
+)
+
+type TaskUseCase struct {
+    repo     domen.TaskRepository
+    duration time.Duration
+}
+
+func NewTaskUseCase(repo domen.TaskRepository, duration time.Duration) *TaskUseCase {
+    return &TaskUseCase{
+        repo:     repo,
+        duration: duration,
+    }
+}
+
+func (uc *TaskUseCase) CreateTask() (*domen.Task, error) {
+    task := &domen.Task{
+        ID:        uuid.NewString(),
+        CreatedAt: time.Now(),
+        Status:    domen.StatusPending,
+    }
+    if err := uc.repo.Create(task); err != nil {
+        return nil, err
+    }
+    go uc.run(task.ID)
+    // Сразу вернем копию из репозитория, чтобы не светить исходный объект
+    return uc.repo.Get(task.ID)
+}
+
+func (uc *TaskUseCase) run(id string) {
+    // Получаем задачу, меняем статус, обновляем в репозитории
+    task, err := uc.repo.Get(id)
+    if err != nil {
+        return
+    }
+    task.Status = domen.StatusRunning
+    task.StartedAt = time.Now()
+    uc.repo.Update(task)
+
+    time.Sleep(uc.duration)
+
+    task.Status = domen.StatusCompleted
+    task.EndedAt = time.Now()
+    task.Duration = task.EndedAt.Sub(task.StartedAt).String()
+    task.Result = "OK"
+    uc.repo.Update(task)
+}
+
+func (uc *TaskUseCase) GetTask(id string) (*domen.Task, error) {
+    return uc.repo.Get(id)
+}
+
+func (uc *TaskUseCase) DeleteTask(id string) error {
+    return uc.repo.Delete(id)
+}
+
+func (uc *TaskUseCase) ListTasks() ([]*domen.Task, error) {
+    return uc.repo.List()
+}
+
+func (uc *TaskUseCase) CancelTask(id string) error {
+    task, err := uc.repo.Get(id)
+    if err != nil {
+        return err
+    }
+    if task.Status == domen.StatusCompleted || task.Status == domen.StatusFailed || task.Status == domen.StatusCancelled {
+        return nil
+    }
+    task.Status = domen.StatusCancelled
+    task.Result = "Canceled"
+    return uc.repo.Update(task)
+}
+
 
 
 
