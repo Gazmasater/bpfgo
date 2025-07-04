@@ -497,22 +497,53 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
-go test -v -run ^TestInMemoryRepo_Delete$
-golangci-lint run
-swag init -g cmd/server/main.go -o internal/delivery/phttp/docs
+func main() {
+	cfg := config.Load()
 
-go test ./... -cover
+	logger.SetLevel(parseLogLevel(cfg.LogLevel))
+	logg := logger.Global().Named("main")
 
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ go test ./... -cover
-        github.com/gaz358/myprog/workmate/cmd/server            coverage: 0.0% of statements
-        github.com/gaz358/myprog/workmate/cmd/server/docs               coverage: 0.0% of statements
-        github.com/gaz358/myprog/workmate/config                coverage: 0.0% of statements
-?       github.com/gaz358/myprog/workmate/domen [no test files]
-ok      github.com/gaz358/myprog/workmate/internal/delivery/phttp       0.010s  coverage: 50.6% of statements
-        github.com/gaz358/myprog/workmate/pkg/logger            coverage: 0.0% of statements
-ok      github.com/gaz358/myprog/workmate/repository/memory     0.006s  coverage: 100.0% of statements
-        github.com/gaz358/myprog/workmate/usecase               coverage: 0.0% of statements
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+	repo := memory.NewInMemoryRepo()
+	uc := usecase.NewTaskUseCase(repo, cfg.TaskDuration)
+	handler := phttp.NewHandler(uc)
+
+	r := chi.NewRouter()
+	r.Mount("/tasks", handler.Routes())
+	r.Get("/swagger/*", httpSwagger.WrapHandler)
+
+	// === Healthcheck endpoint ===
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+
+	srv := &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           r,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt)
+
+	go func() {
+		logg.Infow("Starting HTTP server", "addr", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logg.Fatalw("ListenAndServe failed", "error", err)
+		}
+	}()
+
+	<-quit
+	logg.Infow("Shutting down server…")
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		logg.Fatalw("Server forced to shutdown", "error", err)
+	}
+	logg.Infow("Server exited gracefully")
+}
+
 
 
 
