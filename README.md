@@ -498,28 +498,8 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 ________________________________________________________________________________________________
 
 
-func (r *InMemoryRepo) Get(id string) (*domen.Task, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	t, ok := r.tasks[id]
-	if !ok {
-		return nil, domen.ErrNotFound
-	}
-	tCopy := *t // поверхностная копия!
-	return &tCopy, nil
-}
+	w.Write([]byte("ok"))
 
-func (r *InMemoryRepo) List() ([]*domen.Task, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	tasks := make([]*domen.Task, 0, len(r.tasks))
-	for _, t := range r.tasks {
-		tCopy := *t // поверхностная копия!
-		tasks = append(tasks, &tCopy)
-	}
-	return tasks, nil
-}
 
 
 
