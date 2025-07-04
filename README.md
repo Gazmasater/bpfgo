@@ -497,52 +497,23 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
-func main() {
-	cfg := config.Load()
-
-	logger.SetLevel(parseLogLevel(cfg.LogLevel))
-	logg := logger.Global().Named("main")
-
-	repo := memory.NewInMemoryRepo()
-	uc := usecase.NewTaskUseCase(repo, cfg.TaskDuration)
-	handler := phttp.NewHandler(uc)
-
-	r := chi.NewRouter()
-	r.Mount("/tasks", handler.Routes())
-	r.Get("/swagger/*", httpSwagger.WrapHandler)
-
-	// === Healthcheck endpoint ===
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	})
-
-	srv := &http.Server{
-		Addr:              ":" + cfg.Port,
-		Handler:           r,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt)
-
-	go func() {
-		logg.Infow("Starting HTTP server", "addr", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logg.Fatalw("ListenAndServe failed", "error", err)
-		}
-	}()
-
-	<-quit
-	logg.Infow("Shutting down server…")
-
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
-	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		logg.Fatalw("Server forced to shutdown", "error", err)
-	}
-	logg.Infow("Server exited gracefully")
+// @Summary      Healthcheck
+// @Description  Проверка доступности сервиса
+// @Tags         health
+// @Produce      plain
+// @Success      200 {string} string "ok"
+// @Router       /health [get]
+func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
 }
+
+
+r := chi.NewRouter()
+r.Mount("/tasks", handler.Routes())
+r.Get("/swagger/*", httpSwagger.WrapHandler)
+r.Get("/health", phttp.HealthHandler) // health на корне API
+
 
 
 
