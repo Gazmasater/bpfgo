@@ -498,7 +498,9 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 ________________________________________________________________________________________________
 
 
-	w.Write([]byte("ok"))
+if _, err := w.Write([]byte("ok")); err != nil {
+    log.Printf("error writing response: %v", err)
+}
 
 
 
