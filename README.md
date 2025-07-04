@@ -497,6 +497,25 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
+import (
+	_ "net/http/pprof"
+	"log"
+	"net/http"
+)
+
+func main() {
+	// Запускаем pprof-сервер в отдельной горутине
+	go func() {
+		log.Println("pprof listening on :6060")
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+	
+	// ...твоя остальная инициализация...
+}
+
+
+
+
 Запусти своё приложение как обычно (например, go run main.go или через свой способ запуска).
 
 Открой браузер и перейди по адресу:
