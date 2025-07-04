@@ -498,40 +498,28 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 ________________________________________________________________________________________________
 
 
-?   	github.com/gaz358/myprog/workmate/cmd/server	[no test files]
-?   	github.com/gaz358/myprog/workmate/cmd/server/docs	[no test files]
-?   	github.com/gaz358/myprog/workmate/config	[no test files]
-?   	github.com/gaz358/myprog/workmate/domen	[no test files]
-=== RUN   TestTaskHandler_FullCycleWithCancel
-{"lvl":"error","ts":"2025-07-04T22:29:09.511Z","log-of":"http","msg":"failed to get task","id":"78604ee8-adb8-4b83-8eb9-ee71d5cbf40b","error":"task not found"}
-    fullcycle_test.go:79: 
-        	Error Trace:	/home/runner/work/workmate/workmate/internal/delivery/phttp/fullcycle_test.go:79
-        	Error:      	Not equal: 
-        	            	expected: 404
-        	            	actual  : 500
-        	Test:       	TestTaskHandler_FullCycleWithCancel
---- FAIL: TestTaskHandler_FullCycleWithCancel (0.00s)
-FAIL
-FAIL	github.com/gaz358/myprog/workmate/internal/delivery/phttp	0.014s
-?   	github.com/gaz358/myprog/workmate/pkg/logger	[no test files]
-=== RUN   TestInMemoryRepo_CreateAndGet_ExactMatch
-    creareget_test.go:42: 
-        	Error Trace:	/home/runner/work/workmate/workmate/repository/memory/creareget_test.go:42
-        	Error:      	Target error should be in err chain:
-        	            	expected: "not found"
-        	            	in chain: "task not found"
-        	Test:       	TestInMemoryRepo_CreateAndGet_ExactMatch
-        	Messages:   	ожидалась ошибка ErrNotFound
---- FAIL: TestInMemoryRepo_CreateAndGet_ExactMatch (0.00s)
-=== RUN   TestInMemoryRepo_Delete
-    del_test.go:30: 
-        	Error Trace:	/home/runner/work/workmate/workmate/repository/memory/del_test.go:30
-        	Error:      	Target error should be in err chain:
-        	            	expected: "not found"
-        	            	in chain: "task not found"
-        	Test:       	TestInMemoryRepo_Delete
-        	Messages:   	ожидалась ошибка ErrNotFound после удаления
---- FAIL: TestInMemoryRepo_Delete (0.00s)
+import "github.com/gaz358/myprog/workmate/domen"
+
+func (r *InMemoryRepo) Get(id string) (*domen.Task, error) {
+    r.mu.RLock()
+    defer r.mu.RUnlock()
+    t, ok := r.tasks[id]
+    if !ok {
+        return nil, domen.ErrNotFound // <--- используем общую ошибку!
+    }
+    tCopy := *t
+    return &tCopy, nil
+}
+
+func (r *InMemoryRepo) Delete(id string) error {
+    r.mu.Lock()
+    defer r.mu.Unlock()
+    if _, ok := r.tasks[id]; !ok {
+        return domen.ErrNotFound // <--- и тут тоже
+    }
+    delete(r.tasks, id)
+    return nil
+}
 
 
 
