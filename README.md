@@ -579,6 +579,11 @@ func TestInMemoryRepo_Concurrency(t *testing.T) {
     }
 }
 
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate/repository/memory$ go test -race
+PASS
+ok      github.com/gaz358/myprog/workmate/repository/memory     1.025s
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate/repository/memory$ 
+
 
 
 
