@@ -483,74 +483,91 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 ________________________________________________________________________________________________
 
 go test -v -run ^TestInMemoryRepo_Delete$
-
-
-
 golangci-lint run
+swag init -g cmd/server/main.go -o internal/delivery/phttp/docs
 
+package phttp_test
 
+import (
+    "encoding/json"
+    "io"
+    "net/http"
+    "net/http/httptest"
+    "testing"
+    "time"
 
-// В пакете domen/model.go (добавим статус)
-
-const (
-    StatusCancelled Status = "CANCELLED"
+    "github.com/gaz358/myprog/workmate/domen"
+    "github.com/gaz358/myprog/workmate/internal/delivery/phttp"
+    "github.com/gaz358/myprog/workmate/repository/memory"
+    "github.com/gaz358/myprog/workmate/usecase"
+    "github.com/stretchr/testify/assert"
 )
 
-
-// В пакете usecase/task_usecase.go (метод CancelTask)
-
-// CancelTask помечает задачу как отменённую, если она ещё не завершена
-func (uc *TaskUseCase) CancelTask(id string) error {
-    task, err := uc.repo.Get(id)
-    if err != nil {
-        return err
-    }
-    if task.Status == domen.StatusCompleted || task.Status == domen.StatusFailed || task.Status == domen.StatusCancelled {
-        return nil
-    }
-    task.Status = domen.StatusCancelled
-    task.Result = "Cancelled"
-    return uc.repo.Update(task)
+func setupTestServer() *httptest.Server {
+    repo := memory.NewInMemoryRepo()
+    uc := usecase.NewTaskUseCase(repo, 200*time.Millisecond)
+    handler := phttp.NewHandler(uc)
+    return httptest.NewServer(handler.Routes())
 }
 
+func TestTaskHandler_FullCycleWithCancel(t *testing.T) {
+    server := setupTestServer()
+    defer server.Close()
 
-// В пакете delivery/phttp/task_handler.go
+    // Create task
+    resp, err := http.Post(server.URL+"/", "application/json", nil)
+    assert.NoError(t, err)
+    defer resp.Body.Close()
+    assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-// @Summary      Отменить задачу
-// @Description  Прерывает выполнение задачи, если она ещё не завершена
-// @Tags         tasks
-// @Param        id   path      string  true  "ID задачи"
-// @Success      200  {object}  map[string]string  "Задача отменена"
-// @Failure      404  {object}  ErrorResponse       "Задача не найдена"
-// @Failure      500  {object}  ErrorResponse       "Внутренняя ошибка"
-// @Router       /tasks/{id}/cancel [put]
-func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
-    id := chi.URLParam(r, "id")
-    h.log.Infow("cancel task request", "method", r.Method, "path", r.URL.Path, "id", id)
+    body, _ := io.ReadAll(resp.Body)
+    var created domen.Task
+    err = json.Unmarshal(body, &created)
+    assert.NoError(t, err)
+    assert.NotEmpty(t, created.ID)
 
-    err := h.uc.CancelTask(id)
-    if err != nil {
-        if errors.Is(err, domen.ErrNotFound) {
-            h.log.Warnw("task not found", "id", id)
-            w.WriteHeader(http.StatusNotFound)
-            writeJSON(w, ErrorResponse{Message: "task not found"})
-            return
-        }
-        h.log.Errorw("failed to cancel task", "id", id, "error", err)
-        w.WriteHeader(http.StatusInternalServerError)
-        writeJSON(w, ErrorResponse{Message: err.Error()})
-        return
-    }
+    // Cancel task
+    cancelReq, err := http.NewRequest(http.MethodPut, server.URL+"/"+created.ID+"/cancel", nil)
+    assert.NoError(t, err)
+    cancelResp, err := http.DefaultClient.Do(cancelReq)
+    assert.NoError(t, err)
+    defer cancelResp.Body.Close()
+    assert.Equal(t, http.StatusOK, cancelResp.StatusCode)
 
-    h.log.Infow("task cancelled", "id", id)
-    writeJSON(w, map[string]string{"status": "cancelled"})
+    body, _ = io.ReadAll(cancelResp.Body)
+    var cancelResult map[string]string
+    err = json.Unmarshal(body, &cancelResult)
+    assert.NoError(t, err)
+    assert.Equal(t, "cancelled", cancelResult["status"])
+
+    // Get task by ID
+    getResp, err := http.Get(server.URL + "/" + created.ID)
+    assert.NoError(t, err)
+    defer getResp.Body.Close()
+    assert.Equal(t, http.StatusOK, getResp.StatusCode)
+
+    body, _ = io.ReadAll(getResp.Body)
+    var fetched domen.Task
+    err = json.Unmarshal(body, &fetched)
+    assert.NoError(t, err)
+    assert.Equal(t, created.ID, fetched.ID)
+    assert.Equal(t, domen.StatusCancelled, fetched.Status)
+
+    // Delete task
+    req, err := http.NewRequest(http.MethodDelete, server.URL+"/"+created.ID, nil)
+    assert.NoError(t, err)
+    delResp, err := http.DefaultClient.Do(req)
+    assert.NoError(t, err)
+    defer delResp.Body.Close()
+    assert.Equal(t, http.StatusNoContent, delResp.StatusCode)
+
+    // Get deleted task
+    getDeletedResp, err := http.Get(server.URL + "/" + created.ID)
+    assert.NoError(t, err)
+    defer getDeletedResp.Body.Close()
+    assert.Equal(t, http.StatusNotFound, getDeletedResp.StatusCode)
 }
 
-// Добавь в хендлер роутер:
-// r.Put("/{id}/cancel", h.cancel)
-
-
-swag init -g cmd/server/main.go -o internal/delivery/phttp/docs
 
 
 
