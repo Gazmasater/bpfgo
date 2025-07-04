@@ -586,4 +586,24 @@ Block — где тормозит на блокировках.
 Готов помочь с любым шагом!
 
 
+File: server
+Build ID: 4b1f835ec0aa2a6c01819ee39b906d557900482d
+Type: cpu
+Time: 2025-07-05 02:42:18 MSK
+Duration: 90s, Total samples = 10ms (0.011%)
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 10ms, 100% of 10ms total
+      flat  flat%   sum%        cum   cum%
+      10ms   100%   100%       10ms   100%  runtime.(*mspan).base (inline)
+         0     0%   100%       10ms   100%  runtime.findObject
+         0     0%   100%       10ms   100%  runtime.gcBgMarkWorker
+         0     0%   100%       10ms   100%  runtime.gcBgMarkWorker.func2
+         0     0%   100%       10ms   100%  runtime.gcDrain
+         0     0%   100%       10ms   100%  runtime.gcDrainMarkWorkerDedicated (inline)
+         0     0%   100%       10ms   100%  runtime.scanobject
+         0     0%   100%       10ms   100%  runtime.systemstack
+(pprof) 
+
+
 
