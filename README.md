@@ -520,8 +520,8 @@ func TestInMemoryRepo_Concurrency(t *testing.T) {
             defer wg.Done()
             tid := fmt.Sprintf("task-%d", id)
             task := &domen.Task{
-                ID:   tid,
-                Name: fmt.Sprintf("Task #%d", id),
+                ID:     tid,
+                Status: domen.StatusPending,
             }
             if err := repo.Create(task); err != nil {
                 t.Errorf("create err: %v", err)
@@ -546,8 +546,8 @@ func TestInMemoryRepo_Concurrency(t *testing.T) {
             defer wg.Done()
             tid := fmt.Sprintf("task-%d", id)
             task := &domen.Task{
-                ID:   tid,
-                Name: fmt.Sprintf("Updated Task #%d", id),
+                ID:     tid,
+                Status: domen.StatusCompleted,
             }
             if err := repo.Update(task); err != nil {
                 t.Errorf("update err: %v", err)
@@ -578,67 +578,6 @@ func TestInMemoryRepo_Concurrency(t *testing.T) {
         t.Fatalf("want 0, got %d", len(tasks))
     }
 }
-
-[{
-	"resource": "/home/gaz358/myprog/workmate/repository/memory/concurency.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingLitField",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingLitField"
-		}
-	},
-	"severity": 8,
-	"message": "unknown field Name in struct literal of type domen.Task",
-	"source": "compiler",
-	"startLineNumber": 24,
-	"startColumn": 5,
-	"endLineNumber": 24,
-	"endColumn": 9
-}]
-
-
-package domen
-
-import "time"
-
-type Status string
-
-const (
-	StatusPending   Status = "PENDING"
-	StatusRunning   Status = "RUNNING"
-	StatusCompleted Status = "COMPLETED"
-	StatusFailed    Status = "FAILED"
-	StatusCancelled Status = "CANCELLED"
-)
-
-// swagger:model Task
-type Task struct {
-	ID        string    `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	StartedAt time.Time `json:"started_at,omitempty"`
-	EndedAt   time.Time `json:"ended_at,omitempty"`
-
-	// Duration of the task execution
-	// example: 3m0s
-	Duration string `json:"duration,omitempty"`
-
-	Status Status `json:"status"`
-	Result string `json:"result,omitempty"`
-}
-
-// swagger:model TaskListItem
-type TaskListItem struct {
-	ID       string `json:"id"`
-	Status   string `json:"status"`
-	Duration string `json:"duration,omitempty"`
-}
-
-
 
 
 
