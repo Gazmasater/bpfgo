@@ -497,25 +497,74 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
+Запусти своё приложение как обычно (например, go run main.go или через свой способ запуска).
 
+Открой браузер и перейди по адресу:
+http://localhost:6060/debug/pprof/
+Там увидишь ссылки на разные профили (heap, goroutine, threadcreate, block, mutex и т.д.).
 
+Снять CPU-профиль (пример):
+В консоли выполни:
 
+sh
+Копировать код
+go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
+Это снимет 30 секундный CPU-профиль, откроет интерактивный pprof-терминал.
 
+Примеры команд в pprof:
 
-import (
-	_ "net/http/pprof"
-	"log"
-	"net/http"
-)
+top — самые тяжёлые функции
 
-func main() {
-	// Запускаем pprof-сервер в отдельной горутине
-	go func() {
-		log.Println("pprof listening on :6060")
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
-	
-	// ...твоя остальная инициализация...
-}
+list <имя_функции> — разбор конкретной функции
+
+web — SVG-граф вызовов (требует graphviz/dot)
+
+help — справка по командам
+
+Heap-профиль:
+
+sh
+Копировать код
+go tool pprof http://localhost:6060/debug/pprof/heap
+Flamegraph (если хочешь красиво):
+
+Установи go-torch
+
+Выполни:
+
+sh
+Копировать код
+go-torch http://localhost:6060
+Откроется flamegraph в браузере.
+
+Если хочешь визуально — так тоже можно:
+Сохрани профиль в файл:
+
+sh
+Копировать код
+go tool pprof -png http://localhost:6060/debug/pprof/profile?seconds=15 > cpu.png
+(или просто go tool pprof -http=:8081 http://localhost:6060/debug/pprof/profile?seconds=15 чтобы открыть UI в браузере)
+
+Что смотреть?
+CPU — что жрёт процессор.
+
+Heap — что жрёт память, нет ли утечек.
+
+Goroutine — сколько горутин, чем заняты.
+
+Block — где тормозит на блокировках.
+
+Если надо расшифровать результаты — скинь сюда вывод/график, помогу понять!
+
+Кратко:
+
+Запускаешь приложение с этим кодом.
+
+Снимаешь профиль через go tool pprof ....
+
+Анализируешь результат.
+
+Готов помочь с любым шагом!
+
 
 
