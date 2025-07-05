@@ -500,147 +500,282 @@ ________________________________________________________________________________
 ctx := context.Background() // Можно объявить в начале теста, если его ещё нет
 
 
-package usecase
+package phttp
 
 import (
-	"context"
-	"sync"
-	"time"
+	"encoding/json"
+	"errors"
+	"log"
+	"net/http"
+	"strconv"
 
 	"github.com/gaz358/myprog/workmate/domain"
-	"github.com/gaz358/myprog/workmate/logger" // Импорт логгера
-	"github.com/google/uuid"
+	"github.com/gaz358/myprog/workmate/pkg/logger"
+	"github.com/gaz358/myprog/workmate/usecase"
+	"github.com/go-chi/chi/v5"
 )
 
-type TaskUseCase struct {
-	repo      domain.TaskRepository
-	duration  time.Duration
-	cancelMap map[string]context.CancelFunc
-	mu        sync.Mutex
+type ErrorResponse struct {
+	Message string `json:"message" example:"something went wrong"`
 }
 
-func NewTaskUseCase(repo domain.TaskRepository, duration time.Duration) *TaskUseCase {
-	return &TaskUseCase{
-		repo:      repo,
-		duration:  duration,
-		cancelMap: make(map[string]context.CancelFunc),
+var _ = domain.Task{}
+
+type Handler struct {
+	uc  *usecase.TaskUseCase
+	log logger.TypeOfLogger
+}
+
+func NewHandler(uc *usecase.TaskUseCase) *Handler {
+	l := logger.Global().Named("http")
+	return &Handler{
+		uc:  uc,
+		log: l,
 	}
 }
 
-func (uc *TaskUseCase) CreateTask() (*domain.Task, error) {
-	ctx := context.Background()
-	task := &domain.Task{
-		ID:        uuid.NewString(),
-		CreatedAt: time.Now(),
-		Status:    domain.StatusPending,
-	}
+func (h *Handler) Routes() http.Handler {
+	r := chi.NewRouter()
+	r.Post("/", h.create)
+	r.Get("/{id}", h.get)
+	r.Get("/all", h.list)
 
-	logger.InfoKV(ctx, "creating task", "task_id", task.ID)
+	r.Delete("/{id}", h.delete)
+	r.Put("/{id}/cancel", h.cancel)
+	r.Get("/health", h.Health) // health на корне API
+	r.Get("/filter", h.filter)
 
-	if err := uc.repo.Create(ctx, task); err != nil {
-		logger.ErrorKV(ctx, "failed to create task", "task_id", task.ID, "err", err)
-		return nil, err
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	uc.mu.Lock()
-	uc.cancelMap[task.ID] = cancel
-	uc.mu.Unlock()
-
-	copy := *task
-	go uc.run(ctx, &copy)
-
-	logger.InfoKV(ctx, "task created", "task_id", task.ID)
-	return task, nil
+	return r
 }
 
-func (uc *TaskUseCase) run(ctx context.Context, task *domain.Task) {
-	logger.InfoKV(ctx, "running task", "task_id", task.ID)
-	task.Status = domain.StatusRunning
-	task.StartedAt = time.Now()
-	if err := uc.repo.Update(ctx, task); err != nil {
-		logger.ErrorKV(ctx, "failed to update task status to running", "task_id", task.ID, "err", err)
+// @Summary      Создать новую задачу
+// @Description  Инициализирует задачу со статусом Pending и возвращает её с сгенерированным ID
+// @Tags         tasks
+// @Produce      json
+// @Success      200  {object}  domain.Task         "Задача успешно создана"
+// @Failure      500  {object}  ErrorResponse  "Внутренняя ошибка сервера"
+// @Router       /tasks [post]
+func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
+	h.log.Infow("create task request", "method", r.Method, "path", r.URL.Path)
+
+	task, err := h.uc.CreateTask()
+	if err != nil {
+		h.log.Errorw("failed to create task", "error", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
-	select {
-	case <-ctx.Done():
-		task.Status = domain.StatusCanceled
-		task.Result = "Canceled"
-		task.EndedAt = time.Now()
-		task.Duration = task.EndedAt.Sub(task.StartedAt).String()
-		if err := uc.repo.Update(ctx, task); err != nil {
-			logger.ErrorKV(ctx, "failed to update canceled task", "task_id", task.ID, "err", err)
+	h.log.Infow("task created", "id", task.ID)
+	taskCopy := *task
+	writeJSON(w, taskCopy)
+}
+
+// @Summary      Получить задачу по ID
+// @Description  Возвращает задачу по её идентификатору
+// @Tags         tasks
+// @Produce      json
+// @Param        id   path      string            true  "ID задачи"
+// @Success      200  {object}  domain.Task        "Задача найдена"
+// @Failure      404  {object}  phttp.ErrorResponse  "Задача не найдена"
+// @Failure      500  {object}  phttp.ErrorResponse  "Внутренняя ошибка сервера"
+// @Router       /tasks/{id} [get]
+func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	h.log.Infow("get task request", "method", r.Method, "path", r.URL.Path, "id", id)
+
+	task, err := h.uc.GetTask(id)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			h.log.Warnw("not found", "id", id)
+			w.WriteHeader(http.StatusNotFound)
+			writeJSON(w, ErrorResponse{Message: "not found"})
+			return
 		}
-		logger.InfoKV(ctx, "task canceled", "task_id", task.ID)
-	case <-time.After(uc.duration):
-		task.Status = domain.StatusCompleted
-		task.EndedAt = time.Now()
-		task.Duration = task.EndedAt.Sub(task.StartedAt).String()
-		task.Result = "OK"
-		if err := uc.repo.Update(ctx, task); err != nil {
-			logger.ErrorKV(ctx, "failed to update completed task", "task_id", task.ID, "err", err)
+
+		h.log.Errorw("failed to get task", "id", id, "error", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		writeJSON(w, ErrorResponse{Message: err.Error()})
+		return
+	}
+
+	h.log.Infow("task retrieved", "id", task.ID)
+	taskCopy := *task
+	writeJSON(w, taskCopy)
+}
+
+// @Summary      Удалить задачу по ID
+// @Description  Удаляет задачу из системы по её идентификатору
+// @Tags         tasks
+// @Param        id   path      string            true  "ID задачи"
+// @Success      204  "No Content"
+// @Failure      500  {object}  phttp.ErrorResponse  "Внутренняя ошибка сервера"
+// @Router       /tasks/{id} [delete]
+func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	h.log.Infow("delete task request", "method", r.Method, "path", r.URL.Path, "id", id)
+
+	err := h.uc.DeleteTask(id)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			h.log.Warnw("not found", "id", id)
+			w.WriteHeader(http.StatusNotFound)
+			writeJSON(w, ErrorResponse{Message: "not found"})
+			return
 		}
-		logger.InfoKV(ctx, "task completed", "task_id", task.ID)
+
+		h.log.Errorw("failed to delete task", "id", id, "error", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		writeJSON(w, ErrorResponse{Message: err.Error()})
+		return
 	}
 
-	uc.mu.Lock()
-	delete(uc.cancelMap, task.ID)
-	uc.mu.Unlock()
-	logger.DebugKV(ctx, "removed task from cancelMap", "task_id", task.ID)
+	h.log.Infow("task deleted", "id", id)
+	w.WriteHeader(http.StatusNoContent)
 }
 
-func (uc *TaskUseCase) GetTask(id string) (*domain.Task, error) {
-	ctx := context.Background()
-	logger.DebugKV(ctx, "get task", "task_id", id)
-	task, err := uc.repo.Get(ctx, id)
+func writeJSON(w http.ResponseWriter, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+// @Summary      Получить список всех задач
+// @Tags         tasks
+// @Produce      json
+// @Success      200  {array}  domain.TaskListItem
+// @Failure      500  {object}  ErrorResponse
+// @Router       /tasks/all [get]
+func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
+	tasks, err := h.uc.ListTasks()
 	if err != nil {
-		logger.ErrorKV(ctx, "failed to get task", "task_id", id, "err", err)
+		h.log.Errorw("failed to list tasks", "error", err)
+		writeJSON(w, ErrorResponse{Message: err.Error()})
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
-	return task, err
+
+	var result []map[string]interface{}
+	for _, t := range tasks {
+		item := map[string]interface{}{
+			"id":     t.ID,
+			"status": t.Status,
+		}
+		if t.Status == domain.StatusCompleted {
+			item["duration"] = t.EndedAt.Sub(t.StartedAt).String()
+		}
+		result = append(result, item)
+	}
+
+	writeJSON(w, result)
 }
 
-func (uc *TaskUseCase) DeleteTask(id string) error {
-	ctx := context.Background()
-	logger.InfoKV(ctx, "delete task", "task_id", id)
-	uc.mu.Lock()
-	if cancel, ok := uc.cancelMap[id]; ok {
-		cancel()
-		delete(uc.cancelMap, id)
-		logger.InfoKV(ctx, "task canceled via delete", "task_id", id)
-	}
-	uc.mu.Unlock()
-	err := uc.repo.Delete(ctx, id)
+// @Summary      Отменить задачу
+// @Description  Прерывает выполнение задачи, если она ещё не завершена
+// @Tags         tasks
+// @Param        id   path      string  true  "ID задачи"
+// @Success      200  {object}  map[string]string  "Задача отменена"
+// @Failure      404  {object}  ErrorResponse       "Задача не найдена"
+// @Failure      500  {object}  ErrorResponse       "Внутренняя ошибка"
+// @Router       /tasks/{id}/cancel [put]
+func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	h.log.Infow("cancel task request", "method", r.Method, "path", r.URL.Path, "id", id)
+
+	err := h.uc.CancelTask(id)
 	if err != nil {
-		logger.ErrorKV(ctx, "failed to delete task", "task_id", id, "err", err)
+		if errors.Is(err, domain.ErrNotFound) {
+			h.log.Warnw("not found", "id", id)
+			w.WriteHeader(http.StatusNotFound)
+			writeJSON(w, ErrorResponse{Message: "not found"})
+			return
+		}
+		h.log.Errorw("failed to cancel task", "id", id, "error", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		writeJSON(w, ErrorResponse{Message: err.Error()})
+		return
 	}
-	return err
+
+	h.log.Infow("task canceled", "id", id)
+	writeJSON(w, map[string]string{"status": "canceled"})
 }
 
-func (uc *TaskUseCase) ListTasks() ([]*domain.Task, error) {
-	ctx := context.Background()
-	logger.Debug(ctx, "list tasks")
-	tasks, err := uc.repo.List(ctx)
+// @Summary      Healthcheck
+// @Description  Проверка доступности сервиса
+// @Tags         health
+// @Produce      plain
+// @Success      200 {string} string "ok"
+// @Router       /health [get]
+func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write([]byte("ok")); err != nil {
+		log.Printf("error writing response: %v", err)
+	}
+}
+
+// filter godoc
+// @Summary      Фильтр и пагинация задач
+// @Description  Фильтрует задачи по id, status, возвращает пагинацию
+// @Tags         tasks
+// @Produce      json
+// @Param        id     query     string  false  "ID задачи (точное совпадение)"
+// @Param        status query     string  false  "Статус задачи" Enums(pending, running, completed, failed, canceled)
+// @Param        limit  query     int     false  "Максимум задач в ответе (default=10)"
+// @Param        offset query     int     false  "Сдвиг (default=0)"
+// @Success      200    {array}   domain.TaskListItem
+// @Failure      500    {object}  ErrorResponse
+// @Router       /tasks/filter [get]
+func (h *Handler) filter(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	status := r.URL.Query().Get("status")
+
+	// Дефолтные значения
+	limit := 10
+	offset := 0
+
+	// Разбор параметров с обработкой ошибок
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil && v > 0 {
+			limit = v
+		}
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if v, err := strconv.Atoi(o); err == nil && v >= 0 {
+			offset = v
+		}
+	}
+
+	tasks, err := h.uc.ListTasks()
 	if err != nil {
-		logger.ErrorKV(ctx, "failed to list tasks", "err", err)
+		h.log.Errorw("failed to list tasks", "error", err)
+		writeJSON(w, ErrorResponse{Message: err.Error()})
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
-	return tasks, err
-}
 
-func (uc *TaskUseCase) CancelTask(id string) error {
-	ctx := context.Background()
-	uc.mu.Lock()
-	cancel, ok := uc.cancelMap[id]
-	uc.mu.Unlock()
-	if !ok {
-		logger.WarnKV(ctx, "cancel called but task not found in cancelMap", "task_id", id)
-		return domain.ErrNotFound
+	// Фильтрация
+	filtered := make([]*domain.Task, 0)
+	for _, t := range tasks {
+		if id != "" && t.ID != id {
+			continue
+		}
+		if status != "" && string(t.Status) != status {
+			continue
+		}
+		filtered = append(filtered, t)
 	}
-	logger.InfoKV(ctx, "cancel task", "task_id", id)
-	cancel()
-	return nil
+
+	// Пагинация
+	if offset > len(filtered) {
+		offset = len(filtered)
+	}
+	end := offset + limit
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+	paged := filtered[offset:end]
+
+	// Можно преобразовать к TaskListItem, если требуется
+	writeJSON(w, paged)
 }
-
-
 
 
 
