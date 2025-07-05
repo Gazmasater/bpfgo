@@ -192,14 +192,16 @@ git push --force origin ProcNet_monitor
 ____________________________________________________________________________________________
 
 
- func newServer(cfg *config.Config, handler http.Handler) *http.Server {
-	return &http.Server{
-		Addr:              ":" + cfg.Port,
-		Handler:           handler,
-		ReadHeaderTimeout: 5 * time.Second, // 👈 защита от Slowloris
-	}
-}
+az358@gaz358-BOD-WXX9:~/myprog/workmate/cmd/server$ git commit -m "app"
+On branch iter1
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+        modified:   ../../internal/delivery/health/handler.go
+        modified:   ../../internal/delivery/phttp/task_handler.go
 
+no changes added to commit (use "git add" and/or "git commit -a")
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate/cmd/server$ 
 
 
 
