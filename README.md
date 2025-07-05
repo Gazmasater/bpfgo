@@ -498,8 +498,33 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 ________________________________________________________________________________________________
 
 ctx := context.Background() // Можно объявить в начале теста, если его ещё нет
-err := repo.Create(ctx, task)
 
+
+repo := memory.NewInMemoryRepo()
+	uc := usecase.NewTaskUseCase(repo, cfg.TaskDuration)
+	handler := phttp.NewHandler(uc)
+
+ [{
+	"resource": "/home/gaz358/myprog/workmate/cmd/server/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "InvalidIfaceAssign",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "InvalidIfaceAssign"
+		}
+	},
+	"severity": 8,
+	"message": "cannot use repo (variable of type *memory.InMemoryRepo) as domain.TaskRepository value in argument to usecase.NewTaskUseCase: *memory.InMemoryRepo does not implement domain.TaskRepository (wrong type for method Create)\n\t\thave Create(context.Context, *domain.Task) error\n\t\twant Create(*domain.Task) error",
+	"source": "compiler",
+	"startLineNumber": 44,
+	"startColumn": 31,
+	"endLineNumber": 44,
+	"endColumn": 35
+}]
 
 
 
