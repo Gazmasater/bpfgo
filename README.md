@@ -497,105 +497,28 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
-package usecase
+curl -X 'GET' \
+  'http://localhost:8080/health' \
+  -H 'accept: text/plain'
 
-import (
-	"context"
-	"sync"
-	"time"
+Request URL
 
-	"github.com/gaz358/myprog/workmate/domen"
-	"github.com/google/uuid"
-)
+http://localhost:8080/health
 
-type TaskUseCase struct {
-	repo      domen.TaskRepository
-	duration  time.Duration
-	cancelMap map[string]context.CancelFunc
-	mu        sync.Mutex
-}
+Server response
+Code	Details
+404
+Undocumented
+	
 
-func NewTaskUseCase(repo domen.TaskRepository, duration time.Duration) *TaskUseCase {
-	return &TaskUseCase{
-		repo:      repo,
-		duration:  duration,
-		cancelMap: make(map[string]context.CancelFunc),
-	}
-}
+Error: Not Found
+Response body
+Download
 
-func (uc *TaskUseCase) CreateTask() (*domen.Task, error) {
-	task := &domen.Task{
-		ID:        uuid.NewString(),
-		CreatedAt: time.Now(),
-		Status:    domen.StatusPending,
-	}
-	if err := uc.repo.Create(task); err != nil {
-		return nil, err
-	}
+404 page not found
 
-	ctx, cancel := context.WithCancel(context.Background())
-	uc.mu.Lock()
-	uc.cancelMap[task.ID] = cancel
-	uc.mu.Unlock()
 
-	go uc.run(ctx, task)
-	return task, nil
-}
 
-func (uc *TaskUseCase) run(ctx context.Context, task *domen.Task) {
-	task.Status = domen.StatusRunning
-	task.StartedAt = time.Now()
-	_ = uc.repo.Update(task)
-
-	select {
-	case <-ctx.Done():
-		task.Status = domen.StatusCancelled
-		task.Result = "Canceled"
-		task.EndedAt = time.Now()
-		task.Duration = task.EndedAt.Sub(task.StartedAt).String()
-		_ = uc.repo.Update(task)
-	case <-time.After(uc.duration):
-		task.Status = domen.StatusCompleted
-		task.EndedAt = time.Now()
-		task.Duration = task.EndedAt.Sub(task.StartedAt).String()
-		task.Result = "OK"
-		_ = uc.repo.Update(task)
-	}
-
-	// Чистим cancelMap
-	uc.mu.Lock()
-	delete(uc.cancelMap, task.ID)
-	uc.mu.Unlock()
-}
-
-func (uc *TaskUseCase) GetTask(id string) (*domen.Task, error) {
-	return uc.repo.Get(id)
-}
-
-func (uc *TaskUseCase) DeleteTask(id string) error {
-	uc.mu.Lock()
-	if cancel, ok := uc.cancelMap[id]; ok {
-		cancel() // отменим если есть
-		delete(uc.cancelMap, id)
-	}
-	uc.mu.Unlock()
-	return uc.repo.Delete(id)
-}
-
-func (uc *TaskUseCase) ListTasks() ([]*domen.Task, error) {
-	return uc.repo.List()
-}
-
-func (uc *TaskUseCase) CancelTask(id string) error {
-	uc.mu.Lock()
-	cancel, ok := uc.cancelMap[id]
-	uc.mu.Unlock()
-	if !ok {
-		return domen.ErrNotFound
-	}
-	cancel()
-	return nil
-}
 
 
 
