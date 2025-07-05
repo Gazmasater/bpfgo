@@ -500,79 +500,97 @@ ________________________________________________________________________________
 ctx := context.Background() // Можно объявить в начале теста, если его ещё нет
 
 
-package config
+// @title           Tasks API
+// @version         1.0
+// @description     Сервис управления задачами
+// @host            localhost:8080
+// @BasePath        /
+package main
 
 import (
+	//_ "net/http/pprof"
+
+	"context"
+	"net/http"
 	"os"
-	"strconv"
+	"os/signal"
 	"time"
 
+	"github.com/gaz358/myprog/workmate/internal/delivery/health"
+
+	"github.com/gaz358/myprog/workmate/config"
+	"github.com/gaz358/myprog/workmate/internal/delivery/phttp"
 	"github.com/gaz358/myprog/workmate/pkg/logger"
-	"github.com/joho/godotenv"
+	"github.com/gaz358/myprog/workmate/repository/memory"
+	"github.com/gaz358/myprog/workmate/usecase"
+
+	httpSwagger "github.com/swaggo/http-swagger"
+
+	_ "github.com/gaz358/myprog/workmate/cmd/server/docs"
+
+	"github.com/go-chi/chi/v5"
 )
 
-const (
-	defaultTaskDuration    = 60 * time.Second
-	defaultShutdownTimeout = 5 * time.Second
-)
+func main() {
+	//go func() {
+	//	log.Println("pprof listening on :6060")
+	//	log.Println(http.ListenAndServe("localhost:6060", nil))
+	//}()
 
-type Config struct {
-	Port            string
-	LogLevel        string
-	TaskDuration    time.Duration
-	ShutdownTimeout time.Duration
+	cfg := config.Load()
+
+	logger.SetLevel(parseLogLevel(cfg.LogLevel))
+	logg := logger.Global().Named("main")
+
+	repo := memory.NewInMemoryRepo()
+	uc := usecase.NewTaskUseCase(repo, cfg.TaskDuration)
+	handler := phttp.NewHandler(uc)
+
+	r := chi.NewRouter()
+	r.Mount("/tasks", handler.Routes())
+	r.Get("/swagger/*", httpSwagger.WrapHandler)
+	r.Get("/health", health.Handler)
+
+	srv := &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           r,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt)
+
+	go func() {
+		logg.Infow("Starting HTTP server", "addr", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logg.Fatalw("ListenAndServe failed", "error", err)
+		}
+	}()
+
+	<-quit
+	logg.Infow("Shutting down server…")
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		logg.Fatalw("Server forced to shutdown", "error", err)
+	}
+	logg.Infow("Server exited gracefully")
 }
 
-func Load() *Config {
-	log := logger.Global().Named("config")
-	log.Info("loading config...")
-
-	if err := godotenv.Load(); err != nil {
-		log.Warn("[config] .env не найден, используются переменные окружения по умолчанию")
-	} else {
-		log.Info("[config] .env успешно загружен")
+func parseLogLevel(level string) logger.LogLevel {
+	switch level {
+	case "debug":
+		return logger.DebugLevel
+	case "info":
+		return logger.InfoLevel
+	case "warn":
+		return logger.WarnLevel
+	case "error":
+		return logger.ErrorLevel
+	default:
+		return logger.InfoLevel
 	}
-
-	cfg := &Config{
-		Port:            getEnv(log, "PORT", "8080"),
-		LogLevel:        getEnv(log, "LOG_LEVEL", "info"),
-		TaskDuration:    getEnvAsDuration(log, "TASK_DURATION", defaultTaskDuration),
-		ShutdownTimeout: getEnvAsDuration(log, "SHUTDOWN_TIMEOUT", defaultShutdownTimeout),
-	}
-
-	log.Infow("[config] итоговая конфигурация",
-		"PORT", cfg.Port,
-		"LOG_LEVEL", cfg.LogLevel,
-		"TASK_DURATION", cfg.TaskDuration,
-		"SHUTDOWN_TIMEOUT", cfg.ShutdownTimeout,
-	)
-
-	return cfg
-}
-
-func getEnv(log logger.TypeOfLogger, key string, def string) string {
-	val := os.Getenv(key)
-	if val == "" {
-		log.Infow("[config] переменная не установлена, используется по умолчанию", "key", key, "default", def)
-		return def
-	}
-	log.Debugw("[config] переменная окружения", "key", key, "value", val)
-	return val
-}
-
-func getEnvAsDuration(log logger.TypeOfLogger, key string, def time.Duration) time.Duration {
-	val := os.Getenv(key)
-	if val == "" {
-		log.Infow("[config] переменная не установлена, используется значение по умолчанию", "key", key, "default", def)
-		return def
-	}
-	i, err := strconv.Atoi(val)
-	if err != nil {
-		log.Warnw("[config] неверное значение, используется по умолчанию", "key", key, "value", val, "err", err, "default", def)
-		return def
-	}
-	log.Debugw("[config] переменная окружения (duration)", "key", key, "seconds", i)
-	return time.Duration(i) * time.Second
 }
 
 
