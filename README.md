@@ -586,24 +586,14 @@ Block — где тормозит на блокировках.
 Готов помочь с любым шагом!
 
 
-File: server
-Build ID: 4b1f835ec0aa2a6c01819ee39b906d557900482d
-Type: cpu
-Time: 2025-07-05 02:42:18 MSK
-Duration: 90s, Total samples = 10ms (0.011%)
-Entering interactive mode (type "help" for commands, "o" for options)
-(pprof) top
-Showing nodes accounting for 10ms, 100% of 10ms total
-      flat  flat%   sum%        cum   cum%
-      10ms   100%   100%       10ms   100%  runtime.(*mspan).base (inline)
-         0     0%   100%       10ms   100%  runtime.findObject
-         0     0%   100%       10ms   100%  runtime.gcBgMarkWorker
-         0     0%   100%       10ms   100%  runtime.gcBgMarkWorker.func2
-         0     0%   100%       10ms   100%  runtime.gcDrain
-         0     0%   100%       10ms   100%  runtime.gcDrainMarkWorkerDedicated (inline)
-         0     0%   100%       10ms   100%  runtime.scanobject
-         0     0%   100%       10ms   100%  runtime.systemstack
-(pprof) 
+ Running [/home/runner/golangci-lint-1.64.8-linux-amd64/golangci-lint run --out-format=github-actions] in [] ...
+  ::high file=cmd/server/main.go,line=10,col=2::G108: Profiling endpoint is automatically exposed on /debug/pprof (gosec)
+  ::medium file=cmd/server/main.go,line=34,col=15::G114: Use of net/http serve function that has no support for setting timeouts (gosec)
+  
+  level=warning msg="[config_reader] The output format `github-actions` is deprecated, please use `colored-line-number`"
+  
+  Error: issues found
+  Ran golangci-lint in 5133ms
 
 
 
