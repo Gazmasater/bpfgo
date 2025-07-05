@@ -586,6 +586,141 @@ func (r *InMemoryRepo) List(ctx context.Context) ([]*domain.Task, error) {
 
 
 
+package usecase
+
+import (
+	"context"
+	"sync"
+	"time"
+
+	"github.com/gaz358/myprog/workmate/domain"
+	"github.com/google/uuid"
+	"your_project/logger" // Укажи актуальный импорт логгера
+)
+
+type TaskUseCase struct {
+	repo      domain.TaskRepository
+	duration  time.Duration
+	cancelMap map[string]context.CancelFunc
+	mu        sync.Mutex
+}
+
+func NewTaskUseCase(repo domain.TaskRepository, duration time.Duration) *TaskUseCase {
+	return &TaskUseCase{
+		repo:      repo,
+		duration:  duration,
+		cancelMap: make(map[string]context.CancelFunc),
+	}
+}
+
+func (uc *TaskUseCase) CreateTask(ctx context.Context) (*domain.Task, error) {
+	task := &domain.Task{
+		ID:        uuid.NewString(),
+		CreatedAt: time.Now(),
+		Status:    domain.StatusPending,
+	}
+	if err := uc.repo.Create(ctx, task); err != nil {
+		logger.ErrorKV(ctx, "[usecase] CreateTask: failed to create", "err", err, "task_id", task.ID)
+		return nil, err
+	}
+	logger.InfoKV(ctx, "[usecase] CreateTask: created", "task_id", task.ID)
+
+	taskCtx, cancel := context.WithCancel(context.Background())
+	uc.mu.Lock()
+	uc.cancelMap[task.ID] = cancel
+	uc.mu.Unlock()
+
+	copy := *task
+	go uc.run(taskCtx, &copy)
+
+	return task, nil
+}
+
+func (uc *TaskUseCase) run(ctx context.Context, task *domain.Task) {
+	task.Status = domain.StatusRunning
+	task.StartedAt = time.Now()
+	_ = uc.repo.Update(ctx, task)
+
+	logger.InfoKV(ctx, "[usecase] run: started", "task_id", task.ID)
+	select {
+	case <-ctx.Done():
+		task.Status = domain.StatusCancelled
+		task.Result = "Canceled"
+		task.EndedAt = time.Now()
+		task.Duration = task.EndedAt.Sub(task.StartedAt).String()
+		_ = uc.repo.Update(ctx, task)
+		logger.InfoKV(ctx, "[usecase] run: canceled", "task_id", task.ID)
+	case <-time.After(uc.duration):
+		task.Status = domain.StatusCompleted
+		task.EndedAt = time.Now()
+		task.Duration = task.EndedAt.Sub(task.StartedAt).String()
+		task.Result = "OK"
+		_ = uc.repo.Update(ctx, task)
+		logger.InfoKV(ctx, "[usecase] run: completed", "task_id", task.ID)
+	}
+
+	uc.mu.Lock()
+	delete(uc.cancelMap, task.ID)
+	uc.mu.Unlock()
+}
+
+func (uc *TaskUseCase) GetTask(ctx context.Context, id string) (*domain.Task, error) {
+	task, err := uc.repo.Get(ctx, id)
+	if err != nil {
+		logger.WarnKV(ctx, "[usecase] GetTask: not found", "task_id", id, "err", err)
+		return nil, err
+	}
+	logger.InfoKV(ctx, "[usecase] GetTask: found", "task_id", id)
+	return task, nil
+}
+
+func (uc *TaskUseCase) DeleteTask(ctx context.Context, id string) error {
+	uc.mu.Lock()
+	if cancel, ok := uc.cancelMap[id]; ok {
+		cancel()
+		delete(uc.cancelMap, id)
+		logger.InfoKV(ctx, "[usecase] DeleteTask: canceled before delete", "task_id", id)
+	}
+	uc.mu.Unlock()
+	err := uc.repo.Delete(ctx, id)
+	if err != nil {
+		logger.WarnKV(ctx, "[usecase] DeleteTask: not found", "task_id", id, "err", err)
+		return err
+	}
+	logger.InfoKV(ctx, "[usecase] DeleteTask: deleted", "task_id", id)
+	return nil
+}
+
+func (uc *TaskUseCase) ListTasks(ctx context.Context) ([]*domain.Task, error) {
+	tasks, err := uc.repo.List(ctx)
+	if err != nil {
+		logger.ErrorKV(ctx, "[usecase] ListTasks: failed", "err", err)
+		return nil, err
+	}
+	logger.InfoKV(ctx, "[usecase] ListTasks: listed", "count", len(tasks))
+	return tasks, nil
+}
+
+func (uc *TaskUseCase) CancelTask(ctx context.Context, id string) error {
+	uc.mu.Lock()
+	cancel, ok := uc.cancelMap[id]
+	uc.mu.Unlock()
+	if !ok {
+		logger.WarnKV(ctx, "[usecase] CancelTask: not found", "task_id", id)
+		return domain.ErrNotFound
+	}
+	cancel()
+	logger.InfoKV(ctx, "[usecase] CancelTask: canceled", "task_id", id)
+	return nil
+}
+
+
+
+
+
+
+
+
 
 
 
