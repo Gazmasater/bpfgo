@@ -506,57 +506,18 @@ func (uc *TaskUseCase) CreateTask() (*domain.Task, error) {
 	if err := uc.repo.Create(task); err != nil {
 		return nil, err
 	}
-	go uc.run(*task) // <- копия, а не указатель!
+
+	ctx, cancel := context.WithCancel(context.Background())
+	uc.mu.Lock()
+	uc.cancelMap[task.ID] = cancel
+	uc.mu.Unlock()
+
+	// Делаем копию задачи и передаём по указателю (чтобы не было race)
+	copy := *task
+	go uc.run(ctx, &copy)
 	return task, nil
 }
 
-func (uc *TaskUseCase) run(ctx context.Context, task *domain.Task) {
-	task.Status = domain.StatusRunning
-	task.StartedAt = time.Now()
-	_ = uc.repo.Update(task)
-
-	select {
-	case <-ctx.Done():
-		task.Status = domain.StatusCancelled
-		task.Result = "Canceled"
-		task.EndedAt = time.Now()
-		task.Duration = task.EndedAt.Sub(task.StartedAt).String()
-		_ = uc.repo.Update(task)
-	case <-time.After(uc.duration):
-		task.Status = domain.StatusCompleted
-		task.EndedAt = time.Now()
-		task.Duration = task.EndedAt.Sub(task.StartedAt).String()
-		task.Result = "OK"
-		_ = uc.repo.Update(task)
-	}
-
-	// Чистим cancelMap
-	uc.mu.Lock()
-	delete(uc.cancelMap, task.ID)
-	uc.mu.Unlock()
-}
-
-[{
-	"resource": "/home/gaz358/myprog/workmate/usecase/task_usecase.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "WrongArgCount",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "WrongArgCount"
-		}
-	},
-	"severity": 8,
-	"message": "not enough arguments in call to uc.run\n\thave (domain.Task)\n\twant (context.Context, *domain.Task)",
-	"source": "compiler",
-	"startLineNumber": 36,
-	"startColumn": 17,
-	"endLineNumber": 36,
-	"endColumn": 17
-}]
 
 
 
