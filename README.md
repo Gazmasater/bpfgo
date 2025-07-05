@@ -192,24 +192,11 @@ git push --force origin ProcNet_monitor
 ____________________________________________________________________________________________
 
 
-package health
-
-import (
-	"net/http"
-
-	"github.com/gaz358/myprog/workmate/pkg/logger"
-)
-
-func Handler(w http.ResponseWriter, r *http.Request) {
-	log := logger.Global().Named("health")
-	log.Debugw("health check request", "method", r.Method, "path", r.URL.Path, "remote", r.RemoteAddr)
-
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write([]byte("ok")); err != nil {
-		log.Warnw("failed to write health response", "err", err)
-	}
-}
-
+ Running [/home/runner/golangci-lint-1.64.8-linux-amd64/golangci-lint run --out-format=github-actions] in [] ...
+  ::medium file=internal/app/app.go,line=63,col=10::G112: Potential Slowloris Attack because ReadHeaderTimeout is not configured in the http.Server (gosec)
+  level=warning msg="[config_reader] The output format `github-actions` is deprecated, please use `colored-line-number`"
+  Error: issues found
+  Ran golangci-lint in 5009ms
 
 
 
