@@ -573,6 +573,97 @@ internal/app/router.go (опционально):
 
 
 
+package app
+
+import (
+	"github.com/gaz358/myprog/workmate/config"
+	"github.com/gaz358/myprog/workmate/internal/delivery/phttp"
+	"github.com/gaz358/myprog/workmate/repository/memory"
+	"github.com/gaz358/myprog/workmate/usecase"
+)
+
+func Run() {
+	cfg := config.Load()
+	logg := initLogger(cfg)
+	repo := memory.NewInMemoryRepo()
+	uc := usecase.NewTaskUseCase(repo, cfg.TaskDuration)
+	handler := phttp.NewHandler(uc)
+	router := setupRouter(handler)
+	server := newServer(cfg, router)
+	runServer(server, logg, cfg.ShutdownTimeout)
+}
+
+
+[{
+	"resource": "/home/gaz358/myprog/workmate/internal/app/app.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "UndeclaredName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: initLogger",
+	"source": "compiler",
+	"startLineNumber": 12,
+	"startColumn": 10,
+	"endLineNumber": 12,
+	"endColumn": 20
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/workmate/internal/app/app.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "UndeclaredName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: newServer",
+	"source": "compiler",
+	"startLineNumber": 17,
+	"startColumn": 12,
+	"endLineNumber": 17,
+	"endColumn": 21
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/workmate/internal/app/app.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "UndeclaredName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: runServer",
+	"source": "compiler",
+	"startLineNumber": 18,
+	"startColumn": 2,
+	"endLineNumber": 18,
+	"endColumn": 11
+}]
+
+
+
+
+
 
 
 
