@@ -497,8 +497,28 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
-ctx context.Context
-
+	err := repo.Create(task)
+[{
+	"resource": "/home/gaz358/myprog/workmate/repository/memory/updatelist_test.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "WrongArgCount",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "WrongArgCount"
+		}
+	},
+	"severity": 8,
+	"message": "not enough arguments in call to repo.Create\n\thave (*domain.Task)\n\twant (context.Context, *domain.Task)",
+	"source": "compiler",
+	"startLineNumber": 20,
+	"startColumn": 25,
+	"endLineNumber": 20,
+	"endColumn": 25
+}]
 
 
 
