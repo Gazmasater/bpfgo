@@ -497,11 +497,66 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
-Error: Error return value of `fmt.Sscanf` is not checked (errcheck)
-Error: Error return value of `fmt.Sscanf` is not checked (errcheck)
-level=warning msg="[config_reader] The output format `github-actions` is deprecated, please use `colored-line-number`"
-Error: issues found
-Ran golangci-lint in 4705ms
+import (
+	"net/http"
+	"strconv"
+	"github.com/gaz358/myprog/workmate/domain"
+)
+
+func (h *Handler) filter(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	status := r.URL.Query().Get("status")
+
+	// Дефолтные значения
+	limit := 10
+	offset := 0
+
+	// Разбор параметров с обработкой ошибок
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil && v > 0 {
+			limit = v
+		}
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if v, err := strconv.Atoi(o); err == nil && v >= 0 {
+			offset = v
+		}
+	}
+
+	tasks, err := h.uc.ListTasks()
+	if err != nil {
+		h.log.Errorw("failed to list tasks", "error", err)
+		writeJSON(w, ErrorResponse{Message: err.Error()})
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Фильтрация
+	filtered := make([]*domain.Task, 0)
+	for _, t := range tasks {
+		if id != "" && t.ID != id {
+			continue
+		}
+		if status != "" && string(t.Status) != status {
+			continue
+		}
+		filtered = append(filtered, t)
+	}
+
+	// Пагинация
+	if offset > len(filtered) {
+		offset = len(filtered)
+	}
+	end := offset + limit
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+	paged := filtered[offset:end]
+
+	// Можно преобразовать к TaskListItem, если требуется
+	writeJSON(w, paged)
+}
+
 
 
 
