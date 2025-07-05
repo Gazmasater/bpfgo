@@ -497,24 +497,11 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
-package health
-
-import "net/http"
-
-func Handler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("ok"))
-}
-
-
-import health "github.com/gaz358/myprog/workmate/internal/delivery/health"
-
-// ...
-
-r.Get("/health", health.Handler)
-
-
-Положи этот файл, например, в internal/delivery/health/handler.go.
+Error: Error return value of `fmt.Sscanf` is not checked (errcheck)
+Error: Error return value of `fmt.Sscanf` is not checked (errcheck)
+level=warning msg="[config_reader] The output format `github-actions` is deprecated, please use `colored-line-number`"
+Error: issues found
+Ran golangci-lint in 4705ms
 
 
 
