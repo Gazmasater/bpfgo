@@ -497,25 +497,21 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
-curl -X 'GET' \
-  'http://localhost:8080/health' \
-  -H 'accept: text/plain'
+package health
 
-Request URL
+import "net/http"
 
-http://localhost:8080/health
+func Handler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("ok"))
+}
 
-Server response
-Code	Details
-404
-Undocumented
-	
 
-Error: Not Found
-Response body
-Download
+import health "github.com/gaz358/myprog/workmate/internal/delivery/health"
 
-404 page not found
+// ...
+
+r.Get("/health", health.Handler)
 
 
 
