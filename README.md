@@ -514,6 +514,10 @@ import health "github.com/gaz358/myprog/workmate/internal/delivery/health"
 r.Get("/health", health.Handler)
 
 
+Положи этот файл, например, в internal/delivery/health/handler.go.
+
+
+
 
 
 
