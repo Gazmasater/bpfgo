@@ -497,26 +497,22 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
-func (uc *TaskUseCase) CreateTask() (*domain.Task, error) {
-	task := &domain.Task{
-		ID:        uuid.NewString(),
-		CreatedAt: time.Now(),
-		Status:    domain.StatusPending,
-	}
-	if err := uc.repo.Create(task); err != nil {
-		return nil, err
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	uc.mu.Lock()
-	uc.cancelMap[task.ID] = cancel
-	uc.mu.Unlock()
-
-	// Делаем копию задачи и передаём по указателю (чтобы не было race)
-	copy := *task
-	go uc.run(ctx, &copy)
-	return task, nil
+// filter godoc
+// @Summary      Фильтр и пагинация задач
+// @Description  Фильтрует задачи по id, status, возвращает пагинацию
+// @Tags         tasks
+// @Produce      json
+// @Param        id     query     string  false  "ID задачи (точное совпадение)"
+// @Param        status query     string  false  "Статус задачи" Enums(pending, running, completed, failed, cancelled)
+// @Param        limit  query     int     false  "Максимум задач в ответе (default=10)"
+// @Param        offset query     int     false  "Сдвиг (default=0)"
+// @Success      200    {array}   domain.TaskListItem
+// @Failure      500    {object}  ErrorResponse
+// @Router       /tasks/filter [get]
+func (h *Handler) filter(w http.ResponseWriter, r *http.Request) {
+    // ...
 }
+
 
 
 
