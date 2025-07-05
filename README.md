@@ -497,103 +497,68 @@ curl -X DELETE http://localhost:8080/88b5c9cf-2f4d-4a0d-871a-fc10c3b3ff82
 
 ________________________________________________________________________________________________
 
-import (
-	_ "net/http/pprof"
-	"log"
-	"net/http"
-)
+r.Get("/filter", h.filter)
 
-func main() {
-	// Запускаем pprof-сервер в отдельной горутине
-	go func() {
-		log.Println("pprof listening on :6060")
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
-	
-	// ...твоя остальная инициализация...
+
+// filter godoc
+// @Summary      Фильтр и пагинация задач
+// @Description  Фильтрует задачи по id, status, возвращает пагинацию
+// @Tags         tasks
+// @Produce      json
+// @Param        id     query     string  false  "ID задачи (точное совпадение)"
+// @Param        status query     string  false  "Статус задачи (pending/completed/failed/...)"
+// @Param        limit  query     int     false  "Максимум задач в ответе (default=10)"
+// @Param        offset query     int     false  "Сдвиг (default=0)"
+// @Success      200    {array}   domain.TaskListItem
+// @Failure      500    {object}  ErrorResponse
+// @Router       /tasks/filter [get]
+func (h *Handler) filter(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	status := r.URL.Query().Get("status")
+	limit := 10
+	offset := 0
+
+	if l := r.URL.Query().Get("limit"); l != "" {
+		fmt.Sscanf(l, "%d", &limit)
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		fmt.Sscanf(o, "%d", &offset)
+	}
+
+	tasks, err := h.uc.ListTasks()
+	if err != nil {
+		h.log.Errorw("failed to list tasks", "error", err)
+		writeJSON(w, ErrorResponse{Message: err.Error()})
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Фильтрация
+	filtered := make([]*domain.Task, 0)
+	for _, t := range tasks {
+		if id != "" && t.ID != id {
+			continue
+		}
+		if status != "" && string(t.Status) != status {
+			continue
+		}
+		filtered = append(filtered, t)
+	}
+
+	// Пагинация
+	end := offset + limit
+	if offset > len(filtered) {
+		offset = len(filtered)
+	}
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+	result := filtered[offset:end]
+
+	// Возврат
+	writeJSON(w, result)
 }
 
-
-
-
-Запусти своё приложение как обычно (например, go run main.go или через свой способ запуска).
-
-Открой браузер и перейди по адресу:
-http://localhost:6060/debug/pprof/
-Там увидишь ссылки на разные профили (heap, goroutine, threadcreate, block, mutex и т.д.).
-
-Снять CPU-профиль (пример):
-В консоли выполни:
-
-sh
-Копировать код
-go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
-Это снимет 30 секундный CPU-профиль, откроет интерактивный pprof-терминал.
-
-Примеры команд в pprof:
-
-top — самые тяжёлые функции
-
-list <имя_функции> — разбор конкретной функции
-
-web — SVG-граф вызовов (требует graphviz/dot)
-
-help — справка по командам
-
-Heap-профиль:
-
-sh
-Копировать код
-go tool pprof http://localhost:6060/debug/pprof/heap
-Flamegraph (если хочешь красиво):
-
-Установи go-torch
-
-Выполни:
-
-sh
-Копировать код
-go-torch http://localhost:6060
-Откроется flamegraph в браузере.
-
-Если хочешь визуально — так тоже можно:
-Сохрани профиль в файл:
-
-sh
-Копировать код
-go tool pprof -png http://localhost:6060/debug/pprof/profile?seconds=15 > cpu.png
-(или просто go tool pprof -http=:8081 http://localhost:6060/debug/pprof/profile?seconds=15 чтобы открыть UI в браузере)
-
-Что смотреть?
-CPU — что жрёт процессор.
-
-Heap — что жрёт память, нет ли утечек.
-
-Goroutine — сколько горутин, чем заняты.
-
-Block — где тормозит на блокировках.
-
-Если надо расшифровать результаты — скинь сюда вывод/график, помогу понять!
-
-Кратко:
-
-Запускаешь приложение с этим кодом.
-
-Снимаешь профиль через go tool pprof ....
-
-Анализируешь результат.
-
-Готов помочь с любым шагом!
-
-
- Running [/home/runner/golangci-lint-1.64.8-linux-amd64/golangci-lint run --out-format=github-actions] in [] ...
-  ::high file=cmd/server/main.go,line=10,col=2::G108: Profiling endpoint is automatically exposed on /debug/pprof (gosec)
-  ::medium file=cmd/server/main.go,line=34,col=15::G114: Use of net/http serve function that has no support for setting timeouts (gosec)
-  
-  level=warning msg="[config_reader] The output format `github-actions` is deprecated, please use `colored-line-number`"
-  
-  Error: issues found
-  Ran golangci-lint in 5133ms
 
 
 
