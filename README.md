@@ -337,13 +337,28 @@ go test -cover ./...
 
 go test -coverprofile=coverage.out ./...
 
-az358@gaz358-BOD-WXX9:~/myprog/workmate$ swag --version
-swag version v1.16.4
+# Путь к основному файлу приложения для генерации Swagger
+SWAG_MAIN = cmd/server/main.go
 
-which swag
-# например: /home/vasya/go/bin/swag
-rm -f $(which swag)
-go install github.com/swaggo/swag/cmd/swag@v1.16.3
+# Папка, куда будут сгенерированы файлы документации
+SWAG_OUT  = cmd/server/docs
+
+.PHONY: swagger
+
+swagger:
+	@echo "Генерируем Swagger..."
+	swag init -g $(SWAG_MAIN) -o $(SWAG_OUT)
+	@echo "Корректируем docs.go — удаляем LeftDelim и RightDelim..."
+	# Для Linux (GNU sed):
+	sed -i '/LeftDelim:/d; /RightDelim:/d' $(SWAG_OUT)/docs.go
+	@echo "Готово."
+
+
+sudo apt update
+sudo apt install build-essential
+
+make --version
+
 
 
 
