@@ -335,6 +335,12 @@ go test -coverprofile=coverage.out ./...
 az358@gaz358-BOD-WXX9:~/myprog/workmate$ swag --version
 swag version v1.16.4
 
+which swag
+# например: /home/vasya/go/bin/swag
+rm -f $(which swag)
+go install github.com/swaggo/swag/cmd/swag@v1.16.3
+
+
 
 
 
