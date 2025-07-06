@@ -234,109 +234,28 @@ Showing top 10 nodes out of 157
 (pprof) 
 
 
-package memory
-
-import (
-    "context"
-    "errors"
-    "hash/fnv"
-    "sync"
-
-    "github.com/gaz358/myprog/workmate/domain"
-)
-
-const shardCount = 16
-
-type shard struct {
-    mu    sync.RWMutex
-    tasks map[string]*domain.Task
-}
-
-type InMemoryRepo struct {
-    shards [shardCount]shard
-}
-
-func NewInMemoryRepo() *InMemoryRepo {
-    repo := &InMemoryRepo{}
-    for i := range repo.shards {
-        repo.shards[i].tasks = make(map[string]*domain.Task)
-    }
-    return repo
-}
-
-// Хэш-функция для распределения ID по шардам
-func fnvHash(s string) uint32 {
-    h := fnv.New32a()
-    h.Write([]byte(s))
-    return h.Sum32()
-}
-
-// Возвращает нужный shard по id задачи
-func (r *InMemoryRepo) getShard(id string) *shard {
-    idx := fnvHash(id) % uint32(shardCount)
-    return &r.shards[idx]
-}
-
-func (r *InMemoryRepo) Create(ctx context.Context, task *domain.Task) error {
-    sh := r.getShard(task.ID)
-    sh.mu.Lock()
-    defer sh.mu.Unlock()
-    if _, exists := sh.tasks[task.ID]; exists {
-        return errors.New("task already exists")
-    }
-    tCopy := *task
-    sh.tasks[task.ID] = &tCopy
-    return nil
-}
-
-func (r *InMemoryRepo) Update(ctx context.Context, task *domain.Task) error {
-    sh := r.getShard(task.ID)
-    sh.mu.Lock()
-    defer sh.mu.Unlock()
-    if _, exists := sh.tasks[task.ID]; !exists {
-        return domain.ErrNotFound
-    }
-    tCopy := *task
-    sh.tasks[task.ID] = &tCopy
-    return nil
-}
-
-func (r *InMemoryRepo) Delete(ctx context.Context, id string) error {
-    sh := r.getShard(id)
-    sh.mu.Lock()
-    defer sh.mu.Unlock()
-    if _, ok := sh.tasks[id]; !ok {
-        return domain.ErrNotFound
-    }
-    delete(sh.tasks, id)
-    return nil
-}
-
-func (r *InMemoryRepo) Get(ctx context.Context, id string) (*domain.Task, error) {
-    sh := r.getShard(id)
-    sh.mu.RLock()
-    defer sh.mu.RUnlock()
-    t, ok := sh.tasks[id]
-    if !ok {
-        return nil, domain.ErrNotFound
-    }
-    tCopy := *t
-    return &tCopy, nil
-}
-
-func (r *InMemoryRepo) List(ctx context.Context) ([]*domain.Task, error) {
-    result := make([]*domain.Task, 0)
-    for i := 0; i < shardCount; i++ {
-        sh := &r.shards[i]
-        sh.mu.RLock()
-        for _, task := range sh.tasks {
-            tCopy := *task
-            result = append(result, &tCopy)
-        }
-        sh.mu.RUnlock()
-    }
-    return result, nil
-}
-
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate/repository/memory$ go tool pprof cpu.out
+File: memory.test
+Build ID: 15a16dd8b0e468d66fe1cb84fe795405a625d0b4
+Type: cpu
+Time: 2025-07-06 07:21:45 MSK
+Duration: 5.03s, Total samples = 25.54s (507.39%)
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 8130ms, 31.83% of 25540ms total
+Dropped 203 nodes (cum <= 127.70ms)
+Showing top 10 nodes out of 137
+      flat  flat%   sum%        cum   cum%
+    1260ms  4.93%  4.93%     1530ms  5.99%  runtime.casgstatus
+    1020ms  3.99%  8.93%     3790ms 14.84%  runtime.scanobject
+     870ms  3.41% 12.33%      870ms  3.41%  runtime.memmove
+     860ms  3.37% 15.70%      860ms  3.37%  internal/runtime/maps.ctrlGroup.matchH2
+     860ms  3.37% 19.07%     1000ms  3.92%  runtime.findObject
+     690ms  2.70% 21.77%      690ms  2.70%  runtime.(*mspan).base (inline)
+     660ms  2.58% 24.35%      950ms  3.72%  runtime.runqgrab
+     650ms  2.55% 26.90%      650ms  2.55%  runtime.(*mspan).heapBitsSmallForAddr
+     650ms  2.55% 29.44%      650ms  2.55%  sync/atomic.(*Int32).Add
+     610ms  2.39% 31.83%      610ms  2.39%  sync/atomic.(*Uint64).Add
+(pprof) 
 
 
