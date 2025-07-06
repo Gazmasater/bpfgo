@@ -285,3 +285,68 @@ Dropped 16 nodes (cum <= 4.35MB)
 
 
 
+
+Пример секции для README.md
+markdown
+Копировать код
+## Профилирование и оптимизация
+
+- В проекте поддерживается профилирование с помощью [pprof](https://pkg.go.dev/net/http/pprof).  
+  Для анализа производительности используются стандартные инструменты Go:  
+  `go test -run TestInMemoryRepo_Concurrency -cpuprofile=cpu.out -memprofile=mem.out`
+- Для просмотра профилей:
+  ```sh
+  go tool pprof cpu.out
+  go tool pprof mem.out
+Архитектурные решения
+In-memory репозиторий реализован с использованием шардинга (sharded map, 16-32 shard’а), что существенно уменьшает lock contention при высокой конкурентной нагрузке.
+
+Оптимизация позволила снизить время выполнения теста в ~5 раз по сравнению с вариантом с одним mutex.
+
+Результаты профилирования
+CPU профилирование:
+После внедрения шардинга основное время выполнения теста распределяется между атомарными операциями, работой с памятью и стандартными функциями рантайма Go. Затраты на блокировки (mutex) перестали быть bottleneck:
+
+matlab
+Копировать код
+flat  flat%   sum%        cum   cum%
+1260ms  4.93%  ... runtime.casgstatus
+1020ms  3.99%  ... runtime.scanobject
+650ms   2.55%  ... sync/atomic.(*Int32).Add
+Memory profile:
+Основные затраты по памяти приходятся на создание и копирование задач, а также генерацию id. После удаления задач память корректно освобождается.
+
+matlab
+Копировать код
+flat      flat%   sum%   cum%
+237MB     27.25%  ... github.com/your-repo/memory.(*InMemoryRepo).Create
+188MB     21.59%  ... github.com/your-repo/memory.(*InMemoryRepo).List
+144MB     16.56%  ... github.com/your-repo/memory.(*InMemoryRepo).Update
+47MB      5.40%   ... fmt.Sprintf
+Профили подтверждают:
+
+Реализация эффективна при высокой конкуренции.
+
+Нет утечек памяти после массовых операций Create/Update/Delete.
+
+Как запустить профилирование
+sh
+Копировать код
+# CPU
+go test -run TestInMemoryRepo_Concurrency -cpuprofile=cpu.out
+go tool pprof cpu.out
+
+# Memory
+go test -run TestInMemoryRepo_Concurrency -memprofile=mem.out
+go tool pprof mem.out
+Результаты оптимизации
+Время выполнения параллельных операций уменьшилось более чем в 5 раз.
+
+Удалось устранить “узкое место” по mutex.
+
+Решение масштабируется при увеличении количества шардов (обычно 16-32 достаточно).
+
+
+
+
+
