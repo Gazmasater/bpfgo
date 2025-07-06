@@ -332,69 +332,53 @@ go test -cover ./...
 
 go test -coverprofile=coverage.out ./...
 
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ go test -cover ./...
-        github.com/gaz358/myprog/workmate/cmd/server            coverage: 0.0% of statements
-        github.com/gaz358/myprog/workmate/cmd/server/docs               coverage: 0.0% of statements
-        github.com/gaz358/myprog/workmate/config                coverage: 0.0% of statements
-?       github.com/gaz358/myprog/workmate/domain        [no test files]
-        github.com/gaz358/myprog/workmate/internal/app          coverage: 0.0% of statements
-        github.com/gaz358/myprog/workmate/internal/delivery/health              coverage: 0.0% of statements
-ok      github.com/gaz358/myprog/workmate/internal/delivery/phttp       0.011s  coverage: 37.7% of statements
-        github.com/gaz358/myprog/workmate/pkg/logger            coverage: 0.0% of statements
-ok      github.com/gaz358/myprog/workmate/repository/memory     4.453s  coverage: 98.0% of statements
-ok      github.com/gaz358/myprog/workmate/usecase       0.008s  coverage: 71.2% of statements
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ go test -coverprofile=coverage.out ./...
-        github.com/gaz358/myprog/workmate/cmd/server            coverage: 0.0% of statements
-        github.com/gaz358/myprog/workmate/cmd/server/docs               coverage: 0.0% of statements
-        github.com/gaz358/myprog/workmate/config                coverage: 0.0% of statements
-?       github.com/gaz358/myprog/workmate/domain        [no test files]
-        github.com/gaz358/myprog/workmate/internal/app          coverage: 0.0% of statements
-        github.com/gaz358/myprog/workmate/internal/delivery/health              coverage: 0.0% of statements
-ok      github.com/gaz358/myprog/workmate/internal/delivery/phttp       0.014s  coverage: 37.7% of statements
-        github.com/gaz358/myprog/workmate/pkg/logger            coverage: 0.0% of statements
-ok      github.com/gaz358/myprog/workmate/repository/memory     4.550s  coverage: 98.0% of statements
-ok      github.com/gaz358/myprog/workmate/usecase       0.009s  coverage: 71.2% of statements
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+func TestTaskHandler_ListAndFilterAndHealth(t *testing.T) {
+    server := setupTestServer()
+    defer server.Close()
 
+    // Create two задачи
+    resp, err := http.Post(server.URL+"/", "application/json", nil)
+    assert.NoError(t, err)
+    defer resp.Body.Close()
+    var task1 domain.Task
+    _ = json.NewDecoder(resp.Body).Decode(&task1)
 
+    resp2, err := http.Post(server.URL+"/", "application/json", nil)
+    assert.NoError(t, err)
+    defer resp2.Body.Close()
+    var task2 domain.Task
+    _ = json.NewDecoder(resp2.Body).Decode(&task2)
 
-name: Go Test & Lint
+    // Список всех задач
+    listResp, err := http.Get(server.URL + "/")
+    assert.NoError(t, err)
+    defer listResp.Body.Close()
+    assert.Equal(t, http.StatusOK, listResp.StatusCode)
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    var list []map[string]interface{}
+    err = json.NewDecoder(listResp.Body).Decode(&list)
+    assert.NoError(t, err)
+    assert.True(t, len(list) >= 2)
 
-jobs:
-  check:
-    runs-on: ubuntu-latest
+    // Фильтр по id
+    filterResp, err := http.Get(server.URL + "/filter?id=" + task1.ID)
+    assert.NoError(t, err)
+    defer filterResp.Body.Close()
+    assert.Equal(t, http.StatusOK, filterResp.StatusCode)
 
-    steps:
-      - uses: actions/checkout@v3
+    var filtered []map[string]interface{}
+    err = json.NewDecoder(filterResp.Body).Decode(&filtered)
+    assert.NoError(t, err)
+    assert.Equal(t, 1, len(filtered))
+    assert.Equal(t, task1.ID, filtered[0]["id"])
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.21
-
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v3
-        with:
-          version: latest
-
-      - name: Run tests and generate coverage
-        run: go test -race -v -coverprofile=coverage.out ./...
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          files: coverage.out
-          # Для публичного репозитория token не нужен!
-          # token: ${{ secrets.CODECOV_TOKEN }}
-
-
-codecov.io
+    // Health
+    healthResp, err := http.Get(server.URL + "/health")
+    assert.NoError(t, err)
+    defer healthResp.Body.Close()
+    body, _ := io.ReadAll(healthResp.Body)
+    assert.Equal(t, "ok", string(body))
+}
 
 
 
