@@ -1,3 +1,8 @@
+swag init -g cmd/server/main.go -o cmd/server/docs
+
+LeftDelim:        "{{",
+RightDelim:       "}}",
+
 ./chromedriver-linux64/chromedriver --browser-binary=./chrome-linux64/chrome
 
 
