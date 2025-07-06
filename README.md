@@ -209,6 +209,30 @@ go tool pprof http://localhost:6060/debug/pprof/goroutine
 go test -run TestInMemoryRepo_Concurrency -cpuprofile=cpu.out -memprofile=mem.out
 go tool pprof cpu.out
 
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate/repository/memory$ go tool pprof cpu.out
+File: memory.test
+Build ID: 2f6c1199a29a5976356fbe59410e4e2dff661832
+Type: cpu
+Time: 2025-07-06 07:10:00 MSK
+Duration: 9.23s, Total samples = 43.01s (465.85%)
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 17630ms, 40.99% of 43010ms total
+Dropped 246 nodes (cum <= 215.05ms)
+Showing top 10 nodes out of 157
+      flat  flat%   sum%        cum   cum%
+    6450ms 15.00% 15.00%     6450ms 15.00%  runtime.procyield
+    2950ms  6.86% 21.86%     2950ms  6.86%  runtime.futex
+    1530ms  3.56% 25.41%     5990ms 13.93%  runtime.lock2
+    1490ms  3.46% 28.88%     1820ms  4.23%  runtime.casgstatus
+    1060ms  2.46% 31.34%    10310ms 23.97%  internal/sync.(*Mutex).lockSlow
+    1010ms  2.35% 33.69%     1010ms  2.35%  internal/runtime/maps.ctrlGroup.matchH2
+     880ms  2.05% 35.74%     1100ms  2.56%  runtime.findObject
+     790ms  1.84% 37.57%      790ms  1.84%  runtime.memmove
+     740ms  1.72% 39.29%      740ms  1.72%  runtime.cansemacquire (inline)
+     730ms  1.70% 40.99%     2930ms  6.81%  runtime.scanobject
+(pprof) 
+
 
 
 
