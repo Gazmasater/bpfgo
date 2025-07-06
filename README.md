@@ -332,6 +332,30 @@ go test -cover ./...
 
 go test -coverprofile=coverage.out ./...
 
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ go test -cover ./...
+        github.com/gaz358/myprog/workmate/cmd/server            coverage: 0.0% of statements
+        github.com/gaz358/myprog/workmate/cmd/server/docs               coverage: 0.0% of statements
+        github.com/gaz358/myprog/workmate/config                coverage: 0.0% of statements
+?       github.com/gaz358/myprog/workmate/domain        [no test files]
+        github.com/gaz358/myprog/workmate/internal/app          coverage: 0.0% of statements
+        github.com/gaz358/myprog/workmate/internal/delivery/health              coverage: 0.0% of statements
+ok      github.com/gaz358/myprog/workmate/internal/delivery/phttp       0.011s  coverage: 37.7% of statements
+        github.com/gaz358/myprog/workmate/pkg/logger            coverage: 0.0% of statements
+ok      github.com/gaz358/myprog/workmate/repository/memory     4.453s  coverage: 98.0% of statements
+ok      github.com/gaz358/myprog/workmate/usecase       0.008s  coverage: 71.2% of statements
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ go test -coverprofile=coverage.out ./...
+        github.com/gaz358/myprog/workmate/cmd/server            coverage: 0.0% of statements
+        github.com/gaz358/myprog/workmate/cmd/server/docs               coverage: 0.0% of statements
+        github.com/gaz358/myprog/workmate/config                coverage: 0.0% of statements
+?       github.com/gaz358/myprog/workmate/domain        [no test files]
+        github.com/gaz358/myprog/workmate/internal/app          coverage: 0.0% of statements
+        github.com/gaz358/myprog/workmate/internal/delivery/health              coverage: 0.0% of statements
+ok      github.com/gaz358/myprog/workmate/internal/delivery/phttp       0.014s  coverage: 37.7% of statements
+        github.com/gaz358/myprog/workmate/pkg/logger            coverage: 0.0% of statements
+ok      github.com/gaz358/myprog/workmate/repository/memory     4.550s  coverage: 98.0% of statements
+ok      github.com/gaz358/myprog/workmate/usecase       0.009s  coverage: 71.2% of statements
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+
 
 
 
