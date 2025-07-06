@@ -259,3 +259,8 @@ Showing top 10 nodes out of 137
 (pprof) 
 
 
+go test -run TestInMemoryRepo_Concurrency -memprofile=mem.out
+go tool pprof mem.out
+
+
+
