@@ -358,5 +358,43 @@ gaz358@gaz358-BOD-WXX9:~/myprog/workmate$
 
 
 
+name: Go Test & Lint
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.21
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+
+      - name: Run tests and generate coverage
+        run: go test -race -v -coverprofile=coverage.out ./...
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: coverage.out
+          # Для публичного репозитория token не нужен!
+          # token: ${{ secrets.CODECOV_TOKEN }}
+
+
+codecov.io
+
 
 
