@@ -537,6 +537,31 @@ NB:
 Для production можно заменить на sync.WaitGroup или event-каналы для более точного ожидания.
 
 
+[{
+	"resource": "/home/gaz358/myprog/workmate/usecase/taskusecase_test.go",
+	"owner": "_generated_diagnostic_collection_name_#2",
+	"code": {
+		"value": "default",
+		"target": {
+			"$mid": 1,
+			"path": "/docs/checks/",
+			"scheme": "https",
+			"authority": "staticcheck.dev",
+			"fragment": "SA4001"
+		}
+	},
+	"severity": 4,
+	"message": "&*x will be simplified to x. It will not copy x.",
+	"source": "SA4001",
+	"startLineNumber": 33,
+	"startColumn": 18,
+	"endLineNumber": 33,
+	"endColumn": 23
+}]
+
+
+
+
 
 
 
