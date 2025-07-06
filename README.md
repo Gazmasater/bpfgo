@@ -332,23 +332,8 @@ go test -cover ./...
 
 go test -coverprofile=coverage.out ./...
 
-## Покрытие тестами
-
-Текущие показатели покрытия для ключевых пакетов:
-
-| Пакет                                      | Покрытие  |
-|--------------------------------------------|----------:|
-| `internal/delivery/phttp`                  |  64.0%    |
-| `repository/memory`                        |  98.0%    |
-| `usecase`                                  |  71.2%    |
-
-Запустить локально проверку покрытия можно командой:
-
-```sh
-go test -cover ./internal/delivery/phttp
-go test -cover ./repository/memory
-go test -cover ./usecase
-
+az358@gaz358-BOD-WXX9:~/myprog/workmate$ swag --version
+swag version v1.16.4
 
 
 
