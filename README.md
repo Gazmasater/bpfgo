@@ -329,6 +329,11 @@ flat      flat%   sum%   cum%
 
 - Для проекта настроен Continuous Integration (например, с помощью GitHub Actions).
 
+## Линтинг
+
+В проекте используется [golangci-lint](https://golangci-lint.run/) для статического анализа и поддержания качества кода.  
+Конфигурация линтера хранится в файле `.golangci.yaml` в корне репозитория.
+
 
 
 
