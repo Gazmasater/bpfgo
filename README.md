@@ -325,26 +325,10 @@ flat      flat%   sum%   cum%
 47MB      5.40%   ... fmt.Sprintf
 Профили подтверждают:
 
-Реализация эффективна при высокой конкуренции.
+## CI/CD
 
-Нет утечек памяти после массовых операций Create/Update/Delete.
+- Для проекта настроен Continuous Integration (например, с помощью GitHub Actions).
 
-Как запустить профилирование
-sh
-Копировать код
-# CPU
-go test -run TestInMemoryRepo_Concurrency -cpuprofile=cpu.out
-go tool pprof cpu.out
-
-# Memory
-go test -run TestInMemoryRepo_Concurrency -memprofile=mem.out
-go tool pprof mem.out
-Результаты оптимизации
-Время выполнения параллельных операций уменьшилось более чем в 5 раз.
-
-Удалось устранить “узкое место” по mutex.
-
-Решение масштабируется при увеличении количества шардов (обычно 16-32 достаточно).
 
 
 
