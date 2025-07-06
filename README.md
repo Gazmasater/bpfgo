@@ -262,5 +262,26 @@ Showing top 10 nodes out of 137
 go test -run TestInMemoryRepo_Concurrency -memprofile=mem.out
 go tool pprof mem.out
 
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate/repository/memory$ go tool pprof mem.out
+File: memory.test
+Build ID: 60b88d25411cc64e42284368b18d7593c2476995
+Type: alloc_space
+Time: 2025-07-06 07:45:24 MSK
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 865.82MB, 99.54% of 869.83MB total
+Dropped 16 nodes (cum <= 4.35MB)
+      flat  flat%   sum%        cum   cum%
+  237.04MB 27.25% 27.25%   237.04MB 27.25%  github.com/gaz358/myprog/workmate/repository/memory.(*InMemoryRepo).Create
+  221.51MB 25.47% 52.72%   409.26MB 47.05%  github.com/gaz358/myprog/workmate/repository/memory.TestInMemoryRepo_Concurrency
+  187.75MB 21.59% 74.30%   187.75MB 21.59%  github.com/gaz358/myprog/workmate/repository/memory.(*InMemoryRepo).List
+  144.02MB 16.56% 90.86%   144.02MB 16.56%  github.com/gaz358/myprog/workmate/repository/memory.(*InMemoryRepo).Update
+      47MB  5.40% 96.26%       47MB  5.40%  fmt.Sprintf
+      11MB  1.26% 97.53%   170.02MB 19.55%  github.com/gaz358/myprog/workmate/repository/memory.TestInMemoryRepo_Concurrency.func2
+    9.50MB  1.09% 98.62%   260.04MB 29.90%  github.com/gaz358/myprog/workmate/repository/memory.TestInMemoryRepo_Concurrency.func1
+       8MB  0.92% 99.54%    26.50MB  3.05%  github.com/gaz358/myprog/workmate/repository/memory.TestInMemoryRepo_Concurrency.func3
+         0     0% 99.54%   409.26MB 47.05%  testing.tRunner
+(pprof) 
+
 
 
