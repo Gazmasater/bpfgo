@@ -337,52 +337,62 @@ go test -cover ./...
 go test -coverprofile=coverage.out ./...
 
 
-SWAG_OUT   = cmd/server/docs
-SWAG_MAIN  = cmd/server/main.go
+.PHONY: docker-remove
 
-.PHONY: swag-install docker-install swagger
-
-# Устанавливаем swag CLI, если его нет
-swag-install:
-	@echo "Проверяем наличие swag..."
-	@if command -v swag >/dev/null 2>&1; then \
-	  echo "swag уже установлен: $$(swag --version)"; \
-	else \
-	  echo "swag не найден. Ставим через go install..."; \
-	  go install github.com/swaggo/swag/cmd/swag@latest; \
-	  echo "Установили swag: $$(swag --version)"; \
-	fi
-
-# Цель для проверки/установки Docker
-docker-install:
-	@echo "Проверяем наличие Docker..."
-	@if command -v docker >/dev/null 2>&1; then \
-	  echo "Docker уже установлен: $$(docker --version)"; \
-	else \
-	  echo "Docker не найден. Устанавливаем…"; \
-	  if [ -r /etc/os-release ]; then . /etc/os-release; else echo "Не удалось определить дистрибутив"; exit 1; fi; \
-	  case "$$ID" in \
-	    ubuntu|debian) sudo apt update && sudo apt install -y docker.io ;; \
-	    centos|rhel)   sudo yum install -y docker ;; \
-	    fedora)        sudo dnf install -y docker ;; \
-	    arch)          sudo pacman -Sy --noconfirm docker ;; \
-	    *) echo "Автоустановка не поддерживается для дистрибутива $$ID"; exit 1 ;; \
-	  esac; \
-	  sudo systemctl enable --now docker; \
-	  echo "Docker установлен: $$(docker --version)"; \
-	fi
-
-# Генерация Swagger локально, а затем установка Docker
-swagger: swag-install  docker-install
-	@echo "Генерируем Swagger локально..."
-	swag init -g $(SWAG_MAIN) -o $(SWAG_OUT)
-	@echo "Корректируем docs.go — удаляем LeftDelim и RightDelim..."
-	sed -i '/LeftDelim:/d; /RightDelim:/d' $(SWAG_OUT)/docs.go
-	@echo "Swagger-сборка завершена."
-	@$(MAKE) docker-install
+docker-remove:
+	@echo "Останавливаем и отключаем Docker…" && \
+	sudo systemctl stop docker || true && \
+	sudo systemctl disable docker || true
+	@echo "Удаляем все контейнеры, образы, тома и сети…" && \
+	sudo docker container prune -af || true && \
+	sudo docker image prune -af   || true && \
+	sudo docker volume prune -af  || true && \
+	sudo docker network prune -f  || true
+	@echo "Определяем дистрибутив…" && \
+	if [ -r /etc/os-release ]; then . /etc/os-release; else echo "Не удалось определить дистрибутив" >&2; exit 1; fi; \
+	case "$$ID" in \
+	  ubuntu|debian) \
+	    sudo apt purge -y docker-ce docker-ce-cli containerd.io docker.io docker-compose-plugin && \
+	    sudo apt autoremove -y ;; \
+	  centos|rhel) \
+	    sudo yum remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine containerd.io ;; \
+	  fedora) \
+	    sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine containerd.io ;; \
+	  arch) \
+	    sudo pacman -Rns --noconfirm docker docker-compose ;; \
+	  *) \
+	    echo "Автоудаление не поддерживается для дистрибутива $$ID" >&2; exit 1;; \
+	esac
+	@echo "Удаляем системные файлы и конфиги Docker…" && \
+	sudo rm -rf /var/lib/docker /var/lib/containerd /etc/docker /etc/systemd/system/docker.service.d /var/run/docker.sock || true
+	@echo "Удаляем группу docker и пользовательские настройки…" && \
+	sudo groupdel docker      || true && \
+	rm -rf $$HOME/.docker     || true
+	@echo "Готово: Docker и всё связанное удалено."
 
 
-
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ make
+Останавливаем и отключаем Docker…
+[sudo] password for gaz358: 
+Stopping 'docker.service', but its triggering units are still active:
+docker.socket
+Disabling 'docker.service', but its triggering units are still active:
+docker.socket
+Удаляем все контейнеры, образы, тома и сети…
+unknown shorthand flag: 'a' in -af
+See 'docker container prune --help'.
+Total reclaimed space: 0B
+Total reclaimed space: 0B
+Определяем дистрибутив…
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+Package 'docker-ce' is not installed, so not removed
+Package 'docker-ce-cli' is not installed, so not removed
+E: Unable to locate package containerd.io
+E: Couldn't find any package by glob 'containerd.io'
+E: Unable to locate package docker-compose-plugin
+make: *** [Makefile:6: docker-remove] Error 100
 
 
 
