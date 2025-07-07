@@ -337,38 +337,21 @@ go test -cover ./...
 go test -coverprofile=coverage.out ./...
 
 
-.PHONY: docker-remove
+SWAG_OUT  = cmd/server/docs
+SWAG_MAIN  = cmd/server/main.go
 
-docker-remove:
-	@echo "Останавливаем и отключаем Docker…" && \
-	sudo systemctl stop docker || true && \
-	sudo systemctl disable docker || true
-	@echo "Удаляем все контейнеры, образы, тома и сети…" && \
-	sudo docker container prune -af || true && \
-	sudo docker image prune -af   || true && \
-	sudo docker volume prune -af  || true && \
-	sudo docker network prune -f  || true
-	@echo "Определяем дистрибутив…" && \
-	if [ -r /etc/os-release ]; then . /etc/os-release; else echo "Не удалось определить дистрибутив" >&2; exit 1; fi; \
-	case "$$ID" in \
-	  ubuntu|debian) \
-	    sudo apt purge -y docker-ce docker-ce-cli containerd.io docker.io docker-compose-plugin && \
-	    sudo apt autoremove -y ;; \
-	  centos|rhel) \
-	    sudo yum remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine containerd.io ;; \
-	  fedora) \
-	    sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine containerd.io ;; \
-	  arch) \
-	    sudo pacman -Rns --noconfirm docker docker-compose ;; \
-	  *) \
-	    echo "Автоудаление не поддерживается для дистрибутива $$ID" >&2; exit 1;; \
-	esac
-	@echo "Удаляем системные файлы и конфиги Docker…" && \
-	sudo rm -rf /var/lib/docker /var/lib/containerd /etc/docker /etc/systemd/system/docker.service.d /var/run/docker.sock || true
-	@echo "Удаляем группу docker и пользовательские настройки…" && \
-	sudo groupdel docker      || true && \
-	rm -rf $$HOME/.docker     || true
-	@echo "Готово: Docker и всё связанное удалено."
+
+.PHONY: swagger
+
+swagger:
+	@echo "Генерируем Swagger..."
+	swag init -g $(SWAG_MAIN) -o $(SWAG_OUT)
+	@echo "Корректируем docs.go — удаляем LeftDelim и RightDelim..."
+	# Для Linux (GNU sed):
+	sed -i '/LeftDelim:/d; /RightDelim:/d' $(SWAG_OUT)/docs.go
+	@echo "Готово."
+
+
 
 
 
