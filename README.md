@@ -498,6 +498,7 @@ sudo docker run -d --name workmate_app -p 8080:8080 workmate:latest
 http://localhost:8080/docs/index.html
 
 ___________________________________________________
+sudo docker build -t workmate:latest .
 
 sudo systemctl start docker
 
@@ -520,17 +521,7 @@ http://localhost:8080/docs/index.html
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo systemctl start docker
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker rm -f workmate_app || true
-Error response from daemon: No such container: workmate_app
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker run -d \
-  --name workmate_app \
-  -p 8080:8080 \
-  workmate:latest
-Unable to find image 'workmate:latest' locally
-docker: Error response from daemon: pull access denied for workmate, repository does not exist or may require 'docker login': denied: requested access to the resource is denied.
-See 'docker run --help'.
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+
 
 
 
