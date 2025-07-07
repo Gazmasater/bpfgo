@@ -337,39 +337,101 @@ go test -cover ./...
 go test -coverprofile=coverage.out ./...
 
 
-.PHONY: docker-remove
+На основе вашей структуры (главный пакет — cmd/server/main.go, Swagger-доки внутри cmd/server/docs) можно сделать так:
 
-docker-remove:
-	@echo "Останавливаем и отключаем Docker…" && \
-	sudo systemctl stop docker || true && \
-	sudo systemctl disable docker || true
-	@echo "Удаляем все контейнеры, образы, тома и сети…" && \
-	sudo docker container prune -f || true && \
-	sudo docker image prune -af || true && \
-	sudo docker volume prune -f || true && \
-	sudo docker network prune -f || true
-	@echo "Определяем дистрибутив…" && \
-	if [ -r /etc/os-release ]; then . /etc/os-release; else echo "Не удалось определить дистрибутив" >&2; exit 1; fi; \
-	case "$$ID" in \
-	  ubuntu|debian) \
-	    sudo apt purge -y docker-ce docker-ce-cli docker.io || true && \
-	    sudo apt purge -y containerd containerd.io docker-compose-plugin || true && \
-	    sudo apt autoremove -y ;; \
-	  centos|rhel) \
-	    sudo yum remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine containerd.io ;; \
-	  fedora) \
-	    sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine containerd.io ;; \
-	  arch) \
-	    sudo pacman -Rns --noconfirm docker docker-compose ;; \
-	  *) \
-	    echo "Автоудаление не поддерживается для дистрибутива $$ID" >&2; exit 1;; \
-	esac
-	@echo "Удаляем системные файлы и конфиги Docker…" && \
-	sudo rm -rf /var/lib/docker /var/lib/containerd /etc/docker /etc/systemd/system/docker.service.d /var/run/docker.sock || true
-	@echo "Удаляем группу docker и пользовательские настройки…" && \
-	sudo groupdel docker || true && \
-	rm -rf $$HOME/.docker || true
-	@echo "Готово: Docker и всё связанное удалено."
+1. Dockerfile
+Поместите его в корень репозитория рядом с go.mod.
+
+dockerfile
+Копировать код
+# ===== STAGE 1: builder =====
+FROM golang:1.21-alpine AS builder
+
+# необходимые системные утилиты для swag
+RUN apk add --no-cache git
+
+# устанавливаем swag
+RUN go install github.com/swaggo/swag/cmd/swag@latest
+
+WORKDIR /app
+
+# подтягиваем зависимости
+COPY go.mod go.sum ./
+RUN go mod download
+
+# копируем весь проект
+COPY . .
+
+# генерируем swagger-доки
+RUN swag init -g cmd/server/main.go -o cmd/server/docs
+
+# собираем бинарник
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-s -w" -o workmate cmd/server/main.go
+
+# ===== STAGE 2: runtime =====
+FROM scratch
+
+# если нужны CA-сертификаты (для https)
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# копируем наш бинарник и доки
+COPY --from=builder /app/workmate /workmate
+COPY --from=builder /app/cmd/server/docs /docs
+
+EXPOSE 8080
+
+ENTRYPOINT ["/workmate", "--swagger-dir", "/docs"]
+2. Обновлённый Makefile
+makefile
+Копировать код
+IMAGE_NAME     ?= workmate:latest
+CONTAINER_NAME ?= workmate_app
+HOST_PORT      ?= 8080
+CONTAINER_PORT ?= 8080
+
+.PHONY: swag-install swagger docker-build docker-run
+
+# проверка/установка swag
+swag-install:
+	@command -v swag >/dev/null 2>&1 || \
+	go install github.com/swaggo/swag/cmd/swag@latest
+
+# генерим доки локально, если нужно
+swagger: swag-install
+	swag init -g cmd/server/main.go -o cmd/server/docs
+	@echo "Swagger-доки в cmd/server/docs"
+
+# собираем образ (включая swagger-доки из предыдущей цели)
+docker-build: swagger
+	@echo "🐳 Собираем Docker-образ $(IMAGE_NAME)…"
+	docker build -t $(IMAGE_NAME) .
+
+# запускаем контейнер, пробрасываем порт 8080→8080
+docker-run: docker-build
+	@echo "🚀 Запускаем контейнер $(CONTAINER_NAME)…"
+	-docker rm -f $(CONTAINER_NAME)
+	docker run -d \
+	  --name $(CONTAINER_NAME) \
+	  -p $(HOST_PORT):$(CONTAINER_PORT) \
+	  $(IMAGE_NAME)
+	@echo "Готово! http://localhost:$(HOST_PORT)"
+Как пользоваться
+Сборка образа + Swagger
+
+bash
+Копировать код
+make docker-build
+Запуск контейнера
+
+bash
+Копировать код
+make docker-run
+(Опционально) просто одной командой всё сразу:
+
+bash
+Копировать код
+make docker-run
+— сначала прогенерит Swagger, соберёт образ и запустит контейнер.
 
 
 
