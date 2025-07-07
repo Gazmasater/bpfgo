@@ -449,57 +449,70 @@ docker logs workmate_app — смотрим логи запуска.
 В браузере открываем http://localhost:8080/docs/index.html (или curl http://localhost:8080/health).
 
 
-# Copyright 2022 Linka Cloud  All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# syntax=docker/dockerfile:1.4
 
-FROM golang:1.20 as builder
+################################################################################
+# === СТАДИЯ 1: Сборка на Ubuntu 20.04 с Go и Swagger CLI                     ===
+################################################################################
+FROM ubuntu:20.04 AS builder
 
-WORKDIR /d2vm
+ENV DEBIAN_FRONTEND=noninteractive
 
-COPY go.mod go.mod
-COPY go.sum go.sum
+# Устанавливаем Go, git, make и зависимости для HTTPS
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      golang-go \
+      git \
+      make \
+      ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
+WORKDIR /app
+
+# 1) Копируем go.mod/go.sum и скачиваем зависимости
+COPY go.mod go.sum ./
 RUN go mod download
 
+# 2) Копируем весь исходник
 COPY . .
 
-RUN make .build
+# 3) Устанавливаем Swagger CLI
+RUN go install github.com/swaggo/swag/cmd/swag@latest
 
+# 4) Генерируем Swagger-доки
+RUN swag init -g cmd/server/main.go -o cmd/server/docs
+
+# 5) Удаляем из docs.go строки LeftDelim и RightDelim
+RUN sed -i '/LeftDelim:/d; /RightDelim:/d' cmd/server/docs/docs.go
+
+# 6) Собираем статический бинарник
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o workmate cmd/server/main.go
+
+
+################################################################################
+# === СТАДИЯ 2: Рантайм на Ubuntu 20.04                                        ===
+################################################################################
 FROM ubuntu:20.04
 
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Устанавливаем только сертификаты для HTTPS
 RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends \
-        ca-certificates \
-        util-linux \
-        udev \
-        parted \
-        kpartx \
-        e2fsprogs \
-        dosfstools \
-        mount \
-        tar \
-        "$([ "$(uname -m)" = "x86_64" ] && echo extlinux)" \
-        cryptsetup-bin \
-        qemu-utils && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends \
+      ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY --from=docker:dind /usr/local/bin/docker /usr/local/bin/
+WORKDIR /
 
-COPY --from=builder /d2vm/d2vm /usr/local/bin/
+# Копируем бинарник и сгенерированные Swagger-доки из билд-стадии
+COPY --from=builder /app/workmate /usr/local/bin/workmate
+COPY --from=builder /app/cmd/server/docs /docs
 
-ENTRYPOINT ["/usr/local/bin/d2vm"]
+# Пробрасываем порт приложения
+EXPOSE 8080
+
+# Запускаем приложение
+ENTRYPOINT ["/usr/local/bin/workmate", "--swagger-dir", "/docs"]
 
 
 
