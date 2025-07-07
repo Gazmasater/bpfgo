@@ -361,6 +361,7 @@ bash
 docker logs workmate_app
 В браузере откройте
 
+
 bash
 Копировать код
 http://localhost:8080/docs/index.html
@@ -373,7 +374,17 @@ bash
 curl http://localhost:8080/health
 Если всё прошло без ошибок — вы успешно запустили Go-приложение со Swagger UI в одном контейнере на Ubuntu.
 
-docker exec -it workmate_app sh -c "ls -R /app/cmd/server/docs && head -n 20 /app/cmd/server/docs/index.html"
+sudo docker exec -it workmate_app sh -c "ls -R /app/cmd/server/docs && head -n 20 /app/cmd/server/docs/index.html"
+
+
+az358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker ps
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker logs workmate_app
+{"lvl":"info","ts":"2025-07-07T06:41:04.957Z","log-of":"main","msg":"starting server","addr":":8080"}
+
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker exec -it workmate_app sh -c "ls -R 
+/app/cmd/server/docs && head -n 20 /app/cmd/server/docs/index.html"
+Error response from daemon: container a43eb83830755aba25f50941bd899bdb9072a0a20d71386c45e3a3ca5b8b29d5 is not running
 
 
 
