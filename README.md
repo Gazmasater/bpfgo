@@ -337,123 +337,54 @@ go test -cover ./...
 go test -coverprofile=coverage.out ./...
 
 
-На основе вашей структуры (главный пакет — cmd/server/main.go, Swagger-доки внутри cmd/server/docs) можно сделать так:
+# syntax=docker/dockerfile:1.4
 
-1. Dockerfile
-Поместите его в корень репозитория рядом с go.mod.
+# ===== Стадия сборки =====
+FROM golang:1.21.7-alpine3.18 AS builder
 
-dockerfile
-Копировать код
-# ===== STAGE 1: builder =====
-FROM golang:1.21-alpine AS builder
-
-# необходимые системные утилиты для swag
-RUN apk add --no-cache git
-
-# устанавливаем swag
-RUN go install github.com/swaggo/swag/cmd/swag@latest
+# 1) Обновляем индекс и пакеты, ставим git
+RUN apk update && \
+    apk upgrade --no-cache && \
+    apk add --no-cache git
 
 WORKDIR /app
 
-# подтягиваем зависимости
+# 2) Копируем go.mod/go.sum и загружаем зависимости
 COPY go.mod go.sum ./
 RUN go mod download
 
-# копируем весь проект
+# 3) Копируем весь код проекта
 COPY . .
 
-# генерируем swagger-доки
+# 4) Устанавливаем swag CLI
+RUN go install github.com/swaggo/swag/cmd/swag@latest
+
+# 5) Генерируем Swagger-доки
 RUN swag init -g cmd/server/main.go -o cmd/server/docs
 
-# собираем бинарник
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-s -w" -o workmate cmd/server/main.go
+# 6) Удаляем из cmd/server/docs/docs.go строки LeftDelim и RightDelim
+RUN sed -i '/LeftDelim:/d; /RightDelim:/d' cmd/server/docs/docs.go
 
-# ===== STAGE 2: runtime =====
+# 7) Сборка статического бинарника
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o workmate cmd/server/main.go
+
+# ===== Финальная стадия =====
 FROM scratch
 
-# если нужны CA-сертификаты (для https)
+# (Опционально) Сертификаты для HTTPS
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
-# копируем наш бинарник и доки
+# Копируем бинарник и сгенерированные доки
 COPY --from=builder /app/workmate /workmate
 COPY --from=builder /app/cmd/server/docs /docs
 
+# Открываем порт приложения
 EXPOSE 8080
 
+# Запускаем приложение и указываем директорию с доками
 ENTRYPOINT ["/workmate", "--swagger-dir", "/docs"]
-2. Обновлённый Makefile
-makefile
-Копировать код
-IMAGE_NAME     ?= workmate:latest
-CONTAINER_NAME ?= workmate_app
-HOST_PORT      ?= 8080
-CONTAINER_PORT ?= 8080
-
-.PHONY: swag-install swagger docker-build docker-run
-
-# проверка/установка swag
-swag-install:
-	@command -v swag >/dev/null 2>&1 || \
-	go install github.com/swaggo/swag/cmd/swag@latest
-
-# генерим доки локально, если нужно
-swagger: swag-install
-	swag init -g cmd/server/main.go -o cmd/server/docs
-	@echo "Swagger-доки в cmd/server/docs"
-
-# собираем образ (включая swagger-доки из предыдущей цели)
-docker-build: swagger
-	@echo "🐳 Собираем Docker-образ $(IMAGE_NAME)…"
-	docker build -t $(IMAGE_NAME) .
-
-# запускаем контейнер, пробрасываем порт 8080→8080
-docker-run: docker-build
-	@echo "🚀 Запускаем контейнер $(CONTAINER_NAME)…"
-	-docker rm -f $(CONTAINER_NAME)
-	docker run -d \
-	  --name $(CONTAINER_NAME) \
-	  -p $(HOST_PORT):$(CONTAINER_PORT) \
-	  $(IMAGE_NAME)
-	@echo "Готово! http://localhost:$(HOST_PORT)"
-Как пользоваться
-Сборка образа + Swagger
-
-bash
-Копировать код
-make docker-build
-Запуск контейнера
-
-bash
-Копировать код
-make docker-run
-(Опционально) просто одной командой всё сразу:
-
-bash
-Копировать код
-make docker-run
-— сначала прогенерит Swagger, соберёт образ и запустит контейнер.
 
 
-[{
-	"resource": "/home/gaz358/myprog/workmate/Dockerfile",
-	"owner": "_generated_diagnostic_collection_name_#4",
-	"code": {
-		"value": "critical_high_vulnerabilities",
-		"target": {
-			"$mid": 1,
-			"path": "/layers/library/golang/1.21-alpine/images/sha256-8ee9b9e11ef79e314a7584040451a6df8e72a66712e741bf75951e05e587404e",
-			"scheme": "https",
-			"authority": "hub.docker.com"
-		}
-	},
-	"severity": 4,
-	"message": "The image contains 1 critical and 5 high vulnerabilities",
-	"source": "Docker DX (docker-language-server)",
-	"startLineNumber": 2,
-	"startColumn": 1,
-	"endLineNumber": 2,
-	"endColumn": 35
-}]
 
 
 
