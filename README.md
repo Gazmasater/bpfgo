@@ -339,73 +339,51 @@ go test -coverprofile=coverage.out ./...
 
 # syntax=docker/dockerfile:1.4
 
-# ===== Стадия сборки =====
-FROM golang:1.21.7-alpine3.18 AS builder
+# ===== Стадия сборки на Debian-slim =====
+FROM golang:1.21.7-slim AS builder
 
-# 1) Обновляем индекс и пакеты, ставим git
-RUN apk update && \
-    apk upgrade --no-cache && \
-    apk add --no-cache git
+# 1) Обновляем пакеты и ставим git + сертификаты
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends \
+      git \
+      ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# 2) Копируем go.mod/go.sum и загружаем зависимости
+# 2) Копируем go.mod/go.sum и подтягиваем зависимости
 COPY go.mod go.sum ./
 RUN go mod download
 
-# 3) Копируем весь код проекта
+# 3) Копируем весь код
 COPY . .
 
-# 4) Устанавливаем swag CLI
+# 4) Устанавливаем CLI swag
 RUN go install github.com/swaggo/swag/cmd/swag@latest
 
 # 5) Генерируем Swagger-доки
 RUN swag init -g cmd/server/main.go -o cmd/server/docs
 
-# 6) Удаляем из cmd/server/docs/docs.go строки LeftDelim и RightDelim
+# 6) Удаляем строки LeftDelim и RightDelim
 RUN sed -i '/LeftDelim:/d; /RightDelim:/d' cmd/server/docs/docs.go
 
-# 7) Сборка статического бинарника
+# 7) Собираем статический бинарник
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o workmate cmd/server/main.go
 
 # ===== Финальная стадия =====
 FROM scratch
 
-# (Опционально) Сертификаты для HTTPS
+# Копируем CA-сертификаты (если нужны HTTPS-запросы из контейнера)
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
-# Копируем бинарник и сгенерированные доки
+# Копируем бинарник и swagger-доки
 COPY --from=builder /app/workmate /workmate
 COPY --from=builder /app/cmd/server/docs /docs
 
-# Открываем порт приложения
 EXPOSE 8080
 
-# Запускаем приложение и указываем директорию с доками
 ENTRYPOINT ["/workmate", "--swagger-dir", "/docs"]
-
-
-[{
-	"resource": "/home/gaz358/myprog/workmate/Dockerfile",
-	"owner": "_generated_diagnostic_collection_name_#3",
-	"code": {
-		"value": "critical_high_vulnerabilities",
-		"target": {
-			"$mid": 1,
-			"path": "/layers/library/golang/1.21.7-alpine3.18/images/sha256-5c23be1940176d5ef9196173f5e88d0f52e42a26c8f695b33d9e47d6209a302e",
-			"scheme": "https",
-			"authority": "hub.docker.com"
-		}
-	},
-	"severity": 4,
-	"message": "The image contains 3 critical and 9 high vulnerabilities",
-	"source": "Docker DX (docker-language-server)",
-	"startLineNumber": 4,
-	"startColumn": 1,
-	"endLineNumber": 4,
-	"endColumn": 41
-}]
-
 
 
 
