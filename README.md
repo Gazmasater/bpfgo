@@ -337,17 +337,40 @@ go test -cover ./...
 go test -coverprofile=coverage.out ./...
 
 
-SWAG_OUT  = cmd/server/docs
+SWAG_OUT   = cmd/server/docs
 SWAG_MAIN  = cmd/server/main.go
 
+.PHONY: docker-install swagger
 
-.PHONY: swagger
+# Цель для проверки/установки Docker
+docker-install:
+	@echo "Проверяем наличие Docker..."
+	@if command -v docker >/dev/null 2>&1; then \
+	  echo "Docker уже установлен: $$(docker --version)"; \
+	else \
+	  echo "Docker не найден. Устанавливаем…"; \
+	  if [ -r /etc/os-release ]; then . /etc/os-release; else echo "Не удалось определить дистрибутив"; exit 1; fi; \
+	  case "$$ID" in \
+	    ubuntu|debian) \
+	      sudo apt update && sudo apt install -y docker.io ;; \
+	    centos|rhel) \
+	      sudo yum install -y docker ;; \
+	    fedora) \
+	      sudo dnf install -y docker ;; \
+	    arch) \
+	      sudo pacman -Sy --noconfirm docker ;; \
+	    *) \
+	      echo "Автоустановка не поддерживается для дистрибутива $$ID"; exit 1 ;; \
+	  esac; \
+	  sudo systemctl enable --now docker; \
+	  echo "Docker установлен: $$(docker --version)"; \
+	fi
 
-swagger:
+# Генерация Swagger с предварительным вызовом docker-install
+swagger: docker-install
 	@echo "Генерируем Swagger..."
 	swag init -g $(SWAG_MAIN) -o $(SWAG_OUT)
 	@echo "Корректируем docs.go — удаляем LeftDelim и RightDelim..."
-	# Для Linux (GNU sed):
 	sed -i '/LeftDelim:/d; /RightDelim:/d' $(SWAG_OUT)/docs.go
 	@echo "Готово."
 
