@@ -375,6 +375,9 @@ go test -coverprofile=coverage.out ./...
  	@echo "Удаляем системные файлы и конфиги Docker…" && \
  	sudo rm -rf /var/lib/docker /var/lib/containerd /etc/docker /etc/systemd/system/docker.service.d /var/run/docker.sock || true
 
+  gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ make
+Makefile:1: *** missing separator.  Stop.
+
 
 
 
