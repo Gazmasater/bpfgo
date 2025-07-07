@@ -434,6 +434,28 @@ make docker-run
 — сначала прогенерит Swagger, соберёт образ и запустит контейнер.
 
 
+[{
+	"resource": "/home/gaz358/myprog/workmate/Dockerfile",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "critical_high_vulnerabilities",
+		"target": {
+			"$mid": 1,
+			"path": "/layers/library/golang/1.21-alpine/images/sha256-8ee9b9e11ef79e314a7584040451a6df8e72a66712e741bf75951e05e587404e",
+			"scheme": "https",
+			"authority": "hub.docker.com"
+		}
+	},
+	"severity": 4,
+	"message": "The image contains 1 critical and 5 high vulnerabilities",
+	"source": "Docker DX (docker-language-server)",
+	"startLineNumber": 2,
+	"startColumn": 1,
+	"endLineNumber": 2,
+	"endColumn": 35
+}]
+
+
 
 
 
