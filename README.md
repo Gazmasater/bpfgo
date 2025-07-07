@@ -379,6 +379,9 @@ sudo docker exec -it workmate_app sh -c "ls -R /app/cmd/server/docs && head -n 2
 
 Запустите контейнер (если он ещё не запущен):
 
+sudo docker rm workmate_app
+
+
 
 docker run -d \
   --name workmate_app \
@@ -423,16 +426,6 @@ arduino
 http://127.0.0.1:8080/docs/
 
 
-az358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker run -d   --name workmate_app   -p 8
-080:8080   workmate:latest
-[sudo] password for gaz358: 
-docker: Error response from daemon: Conflict. The container name "/workmate_app" is already in use by container "a43eb83830755aba25f50941bd899bdb9072a0a20d71386c45e3a3ca5b8b29d5". You have to remove (or rename) that container to be able to reuse that name.
-See 'docker run --help'.
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ docker ps
-permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get "http://%2Fvar%2Frun%2Fdocker.sock/v1.47/containers/json": dial unix /var/run/docker.sock: connect: permission denied
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker ps
-CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
 
 
 
