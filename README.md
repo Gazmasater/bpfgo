@@ -419,5 +419,55 @@ Step 1/16 : FROM golang:1.21.7-slim AS builder
 manifest for golang:1.21.7-slim not found: manifest unknown: manifest unknown
 gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
 
+_____________________________________________________________
+dockerfile
+
+
+
+# syntax=docker/dockerfile:1.4
+
+##### Стадия сборки на Debian Bullseye #####
+FROM golang:1.21-bullseye AS builder
+
+# 1) Обновляем пакеты и ставим git + сертификаты
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends git ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# 2) Копируем зависимости и скачиваем
+COPY go.mod go.sum ./
+RUN go mod download
+
+# 3) Копируем весь код
+COPY . .
+
+# 4) Устанавливаем swag CLI и генерируем доки
+RUN go install github.com/swaggo/swag/cmd/swag@latest && \
+    swag init -g cmd/server/main.go -o cmd/server/docs
+
+# 5) Удаляем LeftDelim/RightDelim из docs.go
+RUN sed -i '/LeftDelim:/d; /RightDelim:/d' cmd/server/docs/docs.go
+
+# 6) Собираем статический бинарник
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o workmate cmd/server/main.go
+
+
+##### Финальная чистая стадия #####
+FROM scratch
+
+# (опционально) CA для HTTPS
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Копируем только бинарник и сгенерированные доки
+COPY --from=builder /app/workmate /workmate
+COPY --from=builder /app/cmd/server/docs /docs
+
+EXPOSE 8080
+
+ENTRYPOINT ["/workmate", "--swagger-dir", "/docs"]
+
 
 
