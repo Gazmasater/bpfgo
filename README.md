@@ -442,6 +442,13 @@ Content-Length: 19
 
 sudo docker exec workmate_app ls -l /app/cmd/server/docs
 
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker exec workmate_app ls -l /app/cmd/server/docs
+total 12
+-rw-rw-r-- 1 root root 885 Jul  7 06:32 docs.go
+-rw-rw-r-- 1 root root 268 Jul  7 06:32 swagger.json
+-rw-rw-r-- 1 root root 180 Jul  7 06:32 swagger.yaml
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+
 
 
 
