@@ -453,72 +453,46 @@ __________________________________________________________
 
 # syntax=docker/dockerfile:1.4
 
-################################################################################
-# === СТАДИЯ 1: Сборка на Ubuntu 20.04 с ручной установкой Go и Swagger CLI   ===
-################################################################################
-FROM ubuntu:20.04 AS builder
+FROM ubuntu:20.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV GOLANG_VERSION=1.21.7
 ENV GOPATH=/go
-# Добавляем в PATH: официальный Go и GOPATH/bin
 ENV PATH="/usr/local/go/bin:${GOPATH}/bin:${PATH}"
+ENV GOLANG_VERSION=1.21.7
 
-# 1) Устанавливаем утилиты, скачиваем и распаковываем Go
+# 1) Ставим всё необходимое: Go, git, make, curl, ca-certificates
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       curl \
       git \
       make \
       ca-certificates && \
+    # Скачиваем и распаковываем Go в /usr/local/go
     curl -fsSL https://go.dev/dl/go${GOLANG_VERSION}.linux-amd64.tar.gz \
-       | tar -C /usr/local -xz && \
+      | tar -C /usr/local -xz && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# 2) Kопируем go.mod/go.sum и подтягиваем зависимости
+# 2) Копируем модули и подтягиваем зависимости
 COPY go.mod go.sum ./
 RUN go mod download
 
-# 3) Копируем весь исходный код
+# 3) Копируем исходники
 COPY . .
 
-# 4) Устанавливаем Swagger CLI
-RUN go install github.com/swaggo/swag/cmd/swag@latest
+# 4) Устанавливаем swag CLI и генерируем доки
+RUN go install github.com/swaggo/swag/cmd/swag@latest && \
+    swag init -g cmd/server/main.go -o cmd/server/docs && \
+    sed -i '/LeftDelim:/d; /RightDelim:/d' cmd/server/docs/docs.go
 
-# 5) Генерируем Swagger-доки
-RUN swag init -g cmd/server/main.go -o cmd/server/docs
-
-# 6) Удаляем из docs.go строки LeftDelim и RightDelim
-RUN sed -i '/LeftDelim:/d; /RightDelim:/d' cmd/server/docs/docs.go
-
-# 7) Сборка статического бинарника
+# 5) Собираем ваш бинарник
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o workmate cmd/server/main.go
 
-
-################################################################################
-# === СТАДИЯ 2: Рантайм на Ubuntu 20.04                                      ===
-################################################################################
-FROM ubuntu:20.04
-
-ENV DEBIAN_FRONTEND=noninteractive
-
-# 1) Устанавливаем только сертификаты для HTTPS
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
-
-WORKDIR /
-
-# 2) Копируем бинарник и Swagger-доки из билд-стадии
-COPY --from=builder /app/workmate /usr/local/bin/workmate
-COPY --from=builder /app/cmd/server/docs /docs
-
-# 3) Пробрасываем порт приложения
+# 6) Пробрасываем порт
 EXPOSE 8080
 
-# 4) Точка входа
-ENTRYPOINT ["/usr/local/bin/workmate", "--swagger-dir", "/docs"]
+# 7) Запускаем приложение
+ENTRYPOINT ["/app/workmate", "--swagger-dir", "/app/cmd/server/docs"]
 
 
