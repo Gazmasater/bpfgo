@@ -337,108 +337,34 @@ go test -cover ./...
 go test -coverprofile=coverage.out ./...
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo apt update && sudo apt install -y docker.io
-[sudo] password for gaz358: 
-Hit:1 http://ru.archive.ubuntu.com/ubuntu noble InRelease
-Get:2 http://ru.archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]              
-Get:3 http://ru.archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB]            
-Get:4 http://archive.ubuntu.com/ubuntu jammy-proposed InRelease [279 kB]                
-Get:5 http://security.ubuntu.com/ubuntu noble-security InRelease [126 kB]
-Get:6 http://ru.archive.ubuntu.com/ubuntu noble-updates/main amd64 Components [162 kB]
-Get:7 http://ru.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Components [212 B]
-Get:8 http://ru.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Components [376 kB]
-Get:9 http://ru.archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Components [940 B]
-Get:10 http://ru.archive.ubuntu.com/ubuntu noble-backports/main amd64 Components [7,064 B]
-Get:11 http://ru.archive.ubuntu.com/ubuntu noble-backports/restricted amd64 Components [216 B]
-Get:12 http://ru.archive.ubuntu.com/ubuntu noble-backports/universe amd64 Components [16.4 kB]
-Get:13 http://ru.archive.ubuntu.com/ubuntu noble-backports/multiverse amd64 Components [212 B]
-Get:14 http://archive.ubuntu.com/ubuntu jammy-proposed/main amd64 Components [5,724 B]  
-Get:15 http://security.ubuntu.com/ubuntu noble-security/main amd64 Components [21.5 kB] 
-Get:16 http://security.ubuntu.com/ubuntu noble-security/restricted amd64 Components [212 B]
-Get:17 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Components [52.2 kB]
-Get:18 http://security.ubuntu.com/ubuntu noble-security/multiverse amd64 Components [208 B]
-Ign:19 https://deb.torproject.org/torproject.org noble InRelease                        
-Ign:19 https://deb.torproject.org/torproject.org noble InRelease
-Ign:19 https://deb.torproject.org/torproject.org noble InRelease
-Err:19 https://deb.torproject.org/torproject.org noble InRelease
-  Could not wait for server fd - select (11: Resource temporarily unavailable) [IP: 95.216.163.36 443]
-Fetched 1,302 kB in 2min 8s (10.2 kB/s)             
-Reading package lists... Done
-Building dependency tree... Done
-Reading state information... Done
-233 packages can be upgraded. Run 'apt list --upgradable' to see them.
-W: Failed to fetch https://deb.torproject.org/torproject.org/dists/noble/InRelease  Could not wait for server fd - select (11: Resource temporarily unavailable) [IP: 95.216.163.36 443]
-W: Some index files failed to download. They have been ignored, or old ones used instead.
-Reading package lists... Done
-Building dependency tree... Done
-Reading state information... Done
-The following packages were automatically installed and are no longer required:
-  amd64-microcode bpfcc-tools bpftrace ieee-data intel-microcode iucode-tool libbpfcc
-  linux-headers-6.11.0-26-generic linux-headers-generic-hwe-24.04
-  linux-hwe-6.11-headers-6.11.0-26 python3-bpfcc python3-netaddr thermald
-  ubuntu-kernel-accessories
-Use 'sudo apt autoremove' to remove them.
-The following additional packages will be installed:
-  bridge-utils containerd pigz runc ubuntu-fan
-Suggested packages:
-  ifupdown aufs-tools btrfs-progs cgroupfs-mount | cgroup-lite debootstrap
-  docker-buildx docker-compose-v2 docker-doc rinse zfs-fuse | zfsutils
-The following NEW packages will be installed:
-  bridge-utils containerd docker.io pigz runc ubuntu-fan
-0 upgraded, 6 newly installed, 0 to remove and 233 not upgraded.
-Need to get 78.9 MB of archives.
-After this operation, 299 MB of additional disk space will be used.
-Get:1 http://ru.archive.ubuntu.com/ubuntu noble/universe amd64 pigz amd64 2.8-1 [65.6 kB]
-Get:2 http://ru.archive.ubuntu.com/ubuntu noble/main amd64 bridge-utils amd64 1.7.1-1ubuntu2 [33.9 kB]
-Get:3 http://ru.archive.ubuntu.com/ubuntu noble-updates/main amd64 runc amd64 1.2.5-0ubuntu1~24.04.1 [8,043 kB]
-Get:4 http://ru.archive.ubuntu.com/ubuntu noble-updates/main amd64 containerd amd64 1.7.27-0ubuntu1~24.04.1 [37.7 MB]
-Get:5 http://ru.archive.ubuntu.com/ubuntu noble-updates/universe amd64 docker.io amd64 27.5.1-0ubuntu3~24.04.2 [33.0 MB]
-Get:6 http://ru.archive.ubuntu.com/ubuntu noble/universe amd64 ubuntu-fan all 0.12.16 [35.2 kB]
-Fetched 78.9 MB in 8s (10.3 MB/s)                                                       
-debconf: unable to initialize frontend: Dialog
-debconf: (Dialog frontend requires a screen at least 13 lines tall and 31 columns wide.)
-debconf: falling back to frontend: Readline
-Preconfiguring packages ...
-Selecting previously unselected package pigz.
-(Reading database ... 234613 files and directories currently installed.)
-Preparing to unpack .../0-pigz_2.8-1_amd64.deb ...
-Unpacking pigz (2.8-1) ...
-Selecting previously unselected package bridge-utils.
-Preparing to unpack .../1-bridge-utils_1.7.1-1ubuntu2_amd64.deb ...
-Unpacking bridge-utils (1.7.1-1ubuntu2) ...
-Selecting previously unselected package runc.
-Preparing to unpack .../2-runc_1.2.5-0ubuntu1~24.04.1_amd64.deb ...
-Unpacking runc (1.2.5-0ubuntu1~24.04.1) ...
-Selecting previously unselected package containerd.
-Preparing to unpack .../3-containerd_1.7.27-0ubuntu1~24.04.1_amd64.deb ...
-Unpacking containerd (1.7.27-0ubuntu1~24.04.1) ...
-Selecting previously unselected package docker.io.
-Preparing to unpack .../4-docker.io_27.5.1-0ubuntu3~24.04.2_amd64.deb ...
-Unpacking docker.io (27.5.1-0ubuntu3~24.04.2) ...
-Selecting previously unselected package ubuntu-fan.
-Preparing to unpack .../5-ubuntu-fan_0.12.16_all.deb ...
-Unpacking ubuntu-fan (0.12.16) ...
-Setting up runc (1.2.5-0ubuntu1~24.04.1) ...
-Setting up bridge-utils (1.7.1-1ubuntu2) ...
-debconf: unable to initialize frontend: Dialog
-debconf: (Dialog frontend requires a screen at least 13 lines tall and 31 columns wide.)
-debconf: falling back to frontend: Readline
-Setting up pigz (2.8-1) ...
-Setting up containerd (1.7.27-0ubuntu1~24.04.1) ...
-Created symlink /etc/systemd/system/multi-user.target.wants/containerd.service → /usr/lib/systemd/system/containerd.service.
-Setting up ubuntu-fan (0.12.16) ...
-Created symlink /etc/systemd/system/multi-user.target.wants/ubuntu-fan.service → /usr/lib/systemd/system/ubuntu-fan.service.
-Setting up docker.io (27.5.1-0ubuntu3~24.04.2) ...
-debconf: unable to initialize frontend: Dialog
-debconf: (Dialog frontend requires a screen at least 13 lines tall and 31 columns wide.)
-debconf: falling back to frontend: Readline
-info: Selecting GID from range 100 to 999 ...
-info: Adding group `docker' (GID 126) ...
-Created symlink /etc/systemd/system/multi-user.target.wants/docker.service → /usr/lib/systemd/system/docker.service.
-Created symlink /etc/systemd/system/sockets.target.wants/docker.socket → /usr/lib/systemd/system/docker.socket.
-Processing triggers for man-db (2.12.0-4build2) ...
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo systemctl enable --now docker
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+	.PHONY: docker-check
+
+
+docker-check:
+	@if command -v docker >/dev/null 2>&1; then \
+	  echo "Docker уже установлен: $$(docker --version)"; \
+	else \
+	  echo "Docker не найден. Устанавливаем…"; \
+	  if [ -r /etc/os-release ]; then \
+	    . /etc/os-release; \
+	  else \
+	    echo "Не удалось определить дистрибутив"; exit 1; \
+	  fi; \
+	  case "$$ID" in \
+	    ubuntu|debian) \
+	      sudo apt update && sudo apt install -y docker.io ;; \
+	    centos|rhel) \
+	      sudo yum install -y docker ;; \
+	    fedora) \
+	      sudo dnf install -y docker ;; \
+	    arch) \
+	      sudo pacman -Sy --noconfirm docker ;; \
+	    *) \
+	      echo "Автоустановка не поддерживается для дистрибутива $$ID"; exit 1 ;; \
+	  esac; \
+	  sudo systemctl enable --now docker; \
+	  echo "Docker установлен: $$(docker --version)"; \
+	fi
 
 
 
