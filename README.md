@@ -340,8 +340,7 @@ go test -coverprofile=coverage.out ./...
 Сборка образа
 В корне проекта (там, где лежит ваш Dockerfile и go.mod) выполните:
 
-bash
-Копировать код
+
 docker build -t workmate:latest .
 Здесь:
 
@@ -370,37 +369,32 @@ workmate:latest — имя и тег образа, который мы толь�
 
 Проверка, что контейнер запущен
 
-bash
-Копировать код
+
 docker ps
 Вы должны увидеть строку с workmate_app, его статус Up, и колонку PORTS вида 0.0.0.0:8080->8080/tcp.
 
 Логи приложения
 Чтобы убедиться, что приложение стартовало без ошибок:
 
-bash
-Копировать код
+
 docker logs workmate_app
 Вы увидите вывод вашего сервера, например:
 
-bash
-Копировать код
+
 2025/07/07 12:34:56 Сервер запущен на :8080, Swagger UI доступен по http://localhost:8080/docs/index.html
 Проверка работоспособности
 
 Через браузер
 Откройте в нём
 
-bash
-Копировать код
+
 http://localhost:8080/docs/index.html
 — должна отобразиться Swagger UI с документацией вашего API.
 
 Через curl
 Например, если у вас есть health-endpoint /health:
 
-bash
-Копировать код
+
 curl http://localhost:8080/health
 Ожидаемый ответ — что-то вроде:
 
@@ -410,10 +404,20 @@ json
 Остановка и удаление контейнера
 Когда закончите проверку, контейнер можно остановить и удалить:
 
-bash
-Копировать код
+
 docker stop workmate_app
 docker rm workmate_app
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker build -t workmate:latest .
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+Sending build context to Docker daemon  10.34MB
+Step 1/16 : FROM golang:1.21.7-slim AS builder
+manifest for golang:1.21.7-slim not found: manifest unknown: manifest unknown
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
 
 
 
