@@ -367,6 +367,13 @@ docker-install:
 	fi
 
 # Генерация Swagger с предварительным вызовом docker-install
+
+SWAG_OUT  = cmd/server/docs
+SWAG_MAIN  = cmd/server/main.go
+
+
+.PHONY: swagger
+
 swagger: docker-install
 	@echo "Генерируем Swagger..."
 	swag init -g $(SWAG_MAIN) -o $(SWAG_OUT)
