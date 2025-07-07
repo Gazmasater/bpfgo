@@ -377,15 +377,51 @@ curl http://localhost:8080/health
 sudo docker exec -it workmate_app sh -c "ls -R /app/cmd/server/docs && head -n 20 /app/cmd/server/docs/index.html"
 
 
-az358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker ps
-CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker logs workmate_app
-{"lvl":"info","ts":"2025-07-07T06:41:04.957Z","log-of":"main","msg":"starting server","addr":":8080"}
+Запустите контейнер (если он ещё не запущен):
 
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker exec -it workmate_app sh -c "ls -R 
-/app/cmd/server/docs && head -n 20 /app/cmd/server/docs/index.html"
-Error response from daemon: container a43eb83830755aba25f50941bd899bdb9072a0a20d71386c45e3a3ca5b8b29d5 is not running
+bash
+Копировать код
+docker run -d \
+  --name workmate_app \
+  -p 8080:8080 \
+  workmate:latest
+Убедитесь, что он запущен:
 
+bash
+Копировать код
+docker ps
+Вы должны увидеть в списке workmate_app со статусом Up и пробросом портов 0.0.0.0:8080->8080/tcp.
+
+Проверьте наличие строк в docs.go:
+
+bash
+Копировать код
+docker exec workmate_app grep -n 'LeftDelim\|RightDelim' /app/cmd/server/docs/docs.go || echo "Строк не найдены"
+— ожидание: Строк не найдены.
+
+Проверьте содержимое папки и index.html:
+
+bash
+Копировать код
+docker exec workmate_app sh -c "ls -R /app/cmd/server/docs && head -n 20 /app/cmd/server/docs/index.html"
+Проверка отдачи статики изнутри контейнера:
+
+bash
+Копировать код
+docker exec workmate_app curl -I http://localhost:8080/docs/index.html
+— должен прийти HTTP 200 и заголовки.
+
+Внешняя проверка в браузере
+Откройте
+
+bash
+Копировать код
+http://localhost:8080/docs/index.html
+или
+
+arduino
+Копировать код
+http://127.0.0.1:8080/docs/
 
 
 
