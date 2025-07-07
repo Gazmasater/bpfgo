@@ -497,7 +497,7 @@ sudo docker run -d --name workmate_app -p 8080:8080 workmate:latest
 
 http://localhost:8080/docs/index.html
 
-
+___________________________________________________ы
 
 
 
