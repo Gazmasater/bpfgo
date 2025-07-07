@@ -337,62 +337,44 @@ go test -cover ./...
 go test -coverprofile=coverage.out ./...
 
 
-.PHONY: docker-remove
+--- a/Makefile
++++ b/Makefile
+@@ -4,7 +4,7 @@ .PHONY: docker-remove
 
-docker-remove:
-	@echo "Останавливаем и отключаем Docker…" && \
-	sudo systemctl stop docker || true && \
-	sudo systemctl disable docker || true
-	@echo "Удаляем все контейнеры, образы, тома и сети…" && \
-	sudo docker container prune -af || true && \
-	sudo docker image prune -af   || true && \
-	sudo docker volume prune -af  || true && \
-	sudo docker network prune -f  || true
-	@echo "Определяем дистрибутив…" && \
-	if [ -r /etc/os-release ]; then . /etc/os-release; else echo "Не удалось определить дистрибутив" >&2; exit 1; fi; \
-	case "$$ID" in \
-	  ubuntu|debian) \
-	    sudo apt purge -y docker-ce docker-ce-cli containerd.io docker.io docker-compose-plugin && \
-	    sudo apt autoremove -y ;; \
-	  centos|rhel) \
-	    sudo yum remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine containerd.io ;; \
-	  fedora) \
-	    sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine containerd.io ;; \
-	  arch) \
-	    sudo pacman -Rns --noconfirm docker docker-compose ;; \
-	  *) \
-	    echo "Автоудаление не поддерживается для дистрибутива $$ID" >&2; exit 1;; \
-	esac
-	@echo "Удаляем системные файлы и конфиги Docker…" && \
-	sudo rm -rf /var/lib/docker /var/lib/containerd /etc/docker /etc/systemd/system/docker.service.d /var/run/docker.sock || true
-	@echo "Удаляем группу docker и пользовательские настройки…" && \
-	sudo groupdel docker      || true && \
-	rm -rf $$HOME/.docker     || true
-	@echo "Готово: Docker и всё связанное удалено."
+ docker-remove:
+ 	@echo "Останавливаем и отключаем Docker…" && \
+@@ -12,10 +12,10 @@ docker-remove:
+ 	@echo "Удаляем все контейнеры, образы, тома и сети…" && \
+-	sudo docker container prune -af || true && \
++	sudo docker container prune -f || true && \
+ 	sudo docker image prune -af   || true && \
+-	sudo docker volume prune -af  || true && \
+-	sudo docker network prune -f  || true
++	sudo docker volume prune -f  || true && \
++	sudo docker network prune -f  || true
 
+ 	@echo "Определяем дистрибутив…" && \
+ 	if [ -r /etc/os-release ]; then . /etc/os-release; else echo "Не удалось определить дистрибутив" >&2; exit 1; fi; \
+@@ -22,14 +22,16 @@ docker-remove:
+ 	  ubuntu|debian) \
+-	    sudo apt purge -y docker-ce docker-ce-cli containerd.io docker.io docker-compose-plugin && \
++	    sudo apt purge -y docker-ce docker-ce-cli docker.io \ 
++	      || true && \
++	    # containerd.io может быть в другом пакете/версии
++	    sudo apt purge -y containerd containerd.io docker-compose-plugin || true && \
+ 	    sudo apt autoremove -y ;; \
+ 	  centos|rhel) \
+ 	    sudo yum remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine containerd.io ;; \
+ 	  fedora) \
+ 	    sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine containerd.io ;; \
+ 	  arch) \
+ 	    sudo pacman -Rns --noconfirm docker docker-compose ;; \
++	  *) \
++	    echo "Автоудаление не поддерживается для дистрибутива $$ID" >&2; exit 1;; \
+ 	esac
+ 	@echo "Удаляем системные файлы и конфиги Docker…" && \
+ 	sudo rm -rf /var/lib/docker /var/lib/containerd /etc/docker /etc/systemd/system/docker.service.d /var/run/docker.sock || true
 
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ make
-Останавливаем и отключаем Docker…
-[sudo] password for gaz358: 
-Stopping 'docker.service', but its triggering units are still active:
-docker.socket
-Disabling 'docker.service', but its triggering units are still active:
-docker.socket
-Удаляем все контейнеры, образы, тома и сети…
-unknown shorthand flag: 'a' in -af
-See 'docker container prune --help'.
-Total reclaimed space: 0B
-Total reclaimed space: 0B
-Определяем дистрибутив…
-Reading package lists... Done
-Building dependency tree... Done
-Reading state information... Done
-Package 'docker-ce' is not installed, so not removed
-Package 'docker-ce-cli' is not installed, so not removed
-E: Unable to locate package containerd.io
-E: Couldn't find any package by glob 'containerd.io'
-E: Unable to locate package docker-compose-plugin
-make: *** [Makefile:6: docker-remove] Error 100
 
 
 
