@@ -492,12 +492,17 @@ ENTRYPOINT ["/app/workmate", "--swagger-dir", "/app/cmd/server/docs"]
 
 
 sudo docker build -t workmate:latest .
-sudo docker rm -f workmate_app  # если старый контейнер мешает
+sudo docker rm -f workmate_app 
 sudo docker run -d --name workmate_app -p 8080:8080 workmate:latest
 
 http://localhost:8080/docs/index.html
 
-___________________________________________________ы
+___________________________________________________
+
+az358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker run -d --name workmate_app -p 8080:8080 workmate:latest
+docker: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?.
+See 'docker run --help'.
+gaz358@gaz358-BOD-WXX9:~/myp
 
 
 
