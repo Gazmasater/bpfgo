@@ -373,9 +373,8 @@ bash
 curl http://localhost:8080/health
 Если всё прошло без ошибок — вы успешно запустили Go-приложение со Swagger UI в одном контейнере на Ubuntu.
 
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker logs workmate_app
-{"lvl":"info","ts":"2025-07-07T06:41:04.957Z","log-of":"main","msg":"starting server","addr":":8080"}
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+docker exec -it workmate_app sh -c "ls -R /app/cmd/server/docs && head -n 20 /app/cmd/server/docs/index.html"
+
 
 
 
