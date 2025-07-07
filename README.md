@@ -385,7 +385,26 @@ EXPOSE 8080
 ENTRYPOINT ["/workmate", "--swagger-dir", "/docs"]
 
 
-
+[{
+	"resource": "/home/gaz358/myprog/workmate/Dockerfile",
+	"owner": "_generated_diagnostic_collection_name_#3",
+	"code": {
+		"value": "critical_high_vulnerabilities",
+		"target": {
+			"$mid": 1,
+			"path": "/layers/library/golang/1.21.7-alpine3.18/images/sha256-5c23be1940176d5ef9196173f5e88d0f52e42a26c8f695b33d9e47d6209a302e",
+			"scheme": "https",
+			"authority": "hub.docker.com"
+		}
+	},
+	"severity": 4,
+	"message": "The image contains 3 critical and 9 high vulnerabilities",
+	"source": "Docker DX (docker-language-server)",
+	"startLineNumber": 4,
+	"startColumn": 1,
+	"endLineNumber": 4,
+	"endColumn": 41
+}]
 
 
 
