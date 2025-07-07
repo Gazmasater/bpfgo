@@ -517,8 +517,27 @@ sudo docker ps
 
 sudo docker logs workmate_app --tail 50
 
-http://localhost:8080/docs/index.html
+http://localhost:8080/swagger/index.html
 
+
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker ps
+CONTAINER ID   IMAGE             COMMAND                  CREATED          STATUS          PORTS                                       NAMES
+7f91e08bcedf   workmate:latest   "/app/workmate --swa…"   16 seconds ago   Up 15 seconds   0.0.0.0:8080->8080/tcp, :::8080->8080/tcp   workmate_app
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker logs workmate_app --tail 50
+{"lvl":"info","ts":"2025-07-07T09:02:42.336Z","log-of":"main","msg":"starting server","addr":":8080"}
+
+http://localhost:8080/swagger/index.html
+
+Tasks API
+
+ 1.0 
+
+[ Base URL: localhost:8080/ ]
+
+doc.json
+
+Сервис управления задачами
+No operations defined in spec!
 
 
 
