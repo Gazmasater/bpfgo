@@ -337,34 +337,40 @@ go test -cover ./...
 go test -coverprofile=coverage.out ./...
 
 
-	.PHONY: docker-check
+.PHONY: docker-remove
+
+docker-remove:
+	@echo "Останавливаем и отключаем Docker…" && \
+	sudo systemctl stop docker || true && \
+	sudo systemctl disable docker || true
+	@echo "Удаляем все контейнеры, образы, тома и сети…" && \
+	sudo docker container prune -af || true && \
+	sudo docker image prune -af   || true && \
+	sudo docker volume prune -af  || true && \
+	sudo docker network prune -f  || true
+	@echo "Определяем дистрибутив…" && \
+	if [ -r /etc/os-release ]; then . /etc/os-release; else echo "Не удалось определить дистрибутив" >&2; exit 1; fi; \
+	case "$$ID" in \
+	  ubuntu|debian) \
+	    sudo apt purge -y docker-ce docker-ce-cli containerd.io docker.io docker-compose-plugin && \
+	    sudo apt autoremove -y ;; \
+	  centos|rhel) \
+	    sudo yum remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine containerd.io ;; \
+	  fedora) \
+	    sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine containerd.io ;; \
+	  arch) \
+	    sudo pacman -Rns --noconfirm docker docker-compose ;; \
+	  *) \
+	    echo "Автоудаление не поддерживается для дистрибутива $$ID" >&2; exit 1;; \
+	esac
+	@echo "Удаляем системные файлы и конфиги Docker…" && \
+	sudo rm -rf /var/lib/docker /var/lib/containerd /etc/docker /etc/systemd/system/docker.service.d /var/run/docker.sock || true
+	@echo "Удаляем группу docker и пользовательские настройки…" && \
+	sudo groupdel docker      || true && \
+	rm -rf $$HOME/.docker     || true
+	@echo "Готово: Docker и всё связанное удалено."
 
 
-docker-check:
-	@if command -v docker >/dev/null 2>&1; then \
-	  echo "Docker уже установлен: $$(docker --version)"; \
-	else \
-	  echo "Docker не найден. Устанавливаем…"; \
-	  if [ -r /etc/os-release ]; then \
-	    . /etc/os-release; \
-	  else \
-	    echo "Не удалось определить дистрибутив"; exit 1; \
-	  fi; \
-	  case "$$ID" in \
-	    ubuntu|debian) \
-	      sudo apt update && sudo apt install -y docker.io ;; \
-	    centos|rhel) \
-	      sudo yum install -y docker ;; \
-	    fedora) \
-	      sudo dnf install -y docker ;; \
-	    arch) \
-	      sudo pacman -Sy --noconfirm docker ;; \
-	    *) \
-	      echo "Автоустановка не поддерживается для дистрибутива $$ID"; exit 1 ;; \
-	  esac; \
-	  sudo systemctl enable --now docker; \
-	  echo "Docker установлен: $$(docker --version)"; \
-	fi
 
 
 
