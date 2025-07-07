@@ -505,18 +505,19 @@ sudo systemctl status docker
 
 sudo docker run -d --name workmate_app -p 8080:8080 workmate:latest
 
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo systemctl status docker
-● docker.service - Docker Application Container Engine
-     Loaded: loaded (/usr/lib/systemd/system/docker.service; enabled; preset: enabled)
-     Active: active (running) since Mon 2025-07-07 11:32:29 MSK; 4min 18s ago
-TriggeredBy: ● docker.socket
-       Docs: https://docs.docker.com
-   Main PID: 2097 (dockerd)
-      Tasks: 14
-     Memory: 103.4M (peak: 106.3M)
-        CPU: 803ms
-lines 1-9
+sudo docker rm -f workmate_app || true
 
+
+sudo docker run -d \
+  --name workmate_app \
+  -p 8080:8080 \
+  workmate:latest
+
+sudo docker ps
+
+sudo docker logs workmate_app --tail 50
+
+http://localhost:8080/docs/index.html
 
 
 
