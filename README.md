@@ -396,20 +396,17 @@ docker ps
 
 Проверьте наличие строк в docs.go:
 
-bash
-Копировать код
+
 docker exec workmate_app grep -n 'LeftDelim\|RightDelim' /app/cmd/server/docs/docs.go || echo "Строк не найдены"
 — ожидание: Строк не найдены.
 
 Проверьте содержимое папки и index.html:
 
-bash
-Копировать код
+
 docker exec workmate_app sh -c "ls -R /app/cmd/server/docs && head -n 20 /app/cmd/server/docs/index.html"
 Проверка отдачи статики изнутри контейнера:
 
-bash
-Копировать код
+
 docker exec workmate_app curl -I http://localhost:8080/docs/index.html
 — должен прийти HTTP 200 и заголовки.
 
@@ -425,6 +422,22 @@ arduino
 Копировать код
 http://127.0.0.1:8080/docs/
 
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker ps
+CONTAINER ID   IMAGE             COMMAND                  CREATED         STATUS         PORTS                                       NAMES
+6c57122b3cff   workmate:latest   "/app/workmate --swa…"   4 seconds ago   Up 3 seconds   0.0.0.0:8080->8080/tcp, :::8080->8080/tcp   workmate_app
+
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker exec workmate_app curl -I http://lo
+calhost:8080/docs/index.html
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0    19    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+HTTP/1.1 404 Not Found
+Content-Type: text/plain; charset=utf-8
+X-Content-Type-Options: nosniff
+Date: Mon, 07 Jul 2025 07:45:48 GMT
+Content-Length: 19
 
 
 
