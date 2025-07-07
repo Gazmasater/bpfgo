@@ -337,89 +337,7 @@ go test -cover ./...
 go test -coverprofile=coverage.out ./...
 
 
-Сборка образа
-В корне проекта (там, где лежит ваш Dockerfile и go.mod) выполните:
 
-
-docker build -t workmate:latest .
-Здесь:
-
--t workmate:latest — задаёт тег образа (workmate:latest),
-
-. — указывает, что контекст сборки — текущая папка.
-
-Запуск контейнера
-После успешной сборки запустите контейнер, пробросив порт 8080:
-
-bash
-Копировать код
-docker run -d \
-  --name workmate_app \
-  -p 8080:8080 \
-  workmate:latest
-Где:
-
--d — запускает контейнер в фоне (detached),
-
---name workmate_app — даёт контейнеру понятное имя,
-
--p 8080:8080 — мапит порт 8080 хоста на 8080 внутри контейнера,
-
-workmate:latest — имя и тег образа, который мы только что собрали.
-
-Проверка, что контейнер запущен
-
-
-docker ps
-Вы должны увидеть строку с workmate_app, его статус Up, и колонку PORTS вида 0.0.0.0:8080->8080/tcp.
-
-Логи приложения
-Чтобы убедиться, что приложение стартовало без ошибок:
-
-
-docker logs workmate_app
-Вы увидите вывод вашего сервера, например:
-
-
-2025/07/07 12:34:56 Сервер запущен на :8080, Swagger UI доступен по http://localhost:8080/docs/index.html
-Проверка работоспособности
-
-Через браузер
-Откройте в нём
-
-
-http://localhost:8080/docs/index.html
-— должна отобразиться Swagger UI с документацией вашего API.
-
-Через curl
-Например, если у вас есть health-endpoint /health:
-
-
-curl http://localhost:8080/health
-Ожидаемый ответ — что-то вроде:
-
-json
-Копировать код
-{"status":"ok"}
-Остановка и удаление контейнера
-Когда закончите проверку, контейнер можно остановить и удалить:
-
-
-docker stop workmate_app
-docker rm workmate_app
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker build -t workmate:latest .
-DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
-            Install the buildx component to build images with BuildKit:
-            https://docs.docker.com/go/buildx/
-
-Sending build context to Docker daemon  10.34MB
-Step 1/16 : FROM golang:1.21.7-slim AS builder
-manifest for golang:1.21.7-slim not found: manifest unknown: manifest unknown
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
-
-_____________________________________________________________
 dockerfile
 
 Отлично, образ собран на Ubuntu-only. Чтобы проверить, что всё работает:
@@ -454,6 +372,10 @@ bash
 Копировать код
 curl http://localhost:8080/health
 Если всё прошло без ошибок — вы успешно запустили Go-приложение со Swagger UI в одном контейнере на Ubuntu.
+
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker logs workmate_app
+{"lvl":"info","ts":"2025-07-07T06:41:04.957Z","log-of":"main","msg":"starting server","addr":":8080"}
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
 
 
 
