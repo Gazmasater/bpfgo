@@ -337,53 +337,83 @@ go test -cover ./...
 go test -coverprofile=coverage.out ./...
 
 
-# syntax=docker/dockerfile:1.4
+Сборка образа
+В корне проекта (там, где лежит ваш Dockerfile и go.mod) выполните:
 
-# ===== Стадия сборки на Debian-slim =====
-FROM golang:1.21.7-slim AS builder
+bash
+Копировать код
+docker build -t workmate:latest .
+Здесь:
 
-# 1) Обновляем пакеты и ставим git + сертификаты
-RUN apt-get update && \
-    apt-get upgrade -y && \
-    apt-get install -y --no-install-recommends \
-      git \
-      ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+-t workmate:latest — задаёт тег образа (workmate:latest),
 
-WORKDIR /app
+. — указывает, что контекст сборки — текущая папка.
 
-# 2) Копируем go.mod/go.sum и подтягиваем зависимости
-COPY go.mod go.sum ./
-RUN go mod download
+Запуск контейнера
+После успешной сборки запустите контейнер, пробросив порт 8080:
 
-# 3) Копируем весь код
-COPY . .
+bash
+Копировать код
+docker run -d \
+  --name workmate_app \
+  -p 8080:8080 \
+  workmate:latest
+Где:
 
-# 4) Устанавливаем CLI swag
-RUN go install github.com/swaggo/swag/cmd/swag@latest
+-d — запускает контейнер в фоне (detached),
 
-# 5) Генерируем Swagger-доки
-RUN swag init -g cmd/server/main.go -o cmd/server/docs
+--name workmate_app — даёт контейнеру понятное имя,
 
-# 6) Удаляем строки LeftDelim и RightDelim
-RUN sed -i '/LeftDelim:/d; /RightDelim:/d' cmd/server/docs/docs.go
+-p 8080:8080 — мапит порт 8080 хоста на 8080 внутри контейнера,
 
-# 7) Собираем статический бинарник
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o workmate cmd/server/main.go
+workmate:latest — имя и тег образа, который мы только что собрали.
 
-# ===== Финальная стадия =====
-FROM scratch
+Проверка, что контейнер запущен
 
-# Копируем CA-сертификаты (если нужны HTTPS-запросы из контейнера)
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+bash
+Копировать код
+docker ps
+Вы должны увидеть строку с workmate_app, его статус Up, и колонку PORTS вида 0.0.0.0:8080->8080/tcp.
 
-# Копируем бинарник и swagger-доки
-COPY --from=builder /app/workmate /workmate
-COPY --from=builder /app/cmd/server/docs /docs
+Логи приложения
+Чтобы убедиться, что приложение стартовало без ошибок:
 
-EXPOSE 8080
+bash
+Копировать код
+docker logs workmate_app
+Вы увидите вывод вашего сервера, например:
 
-ENTRYPOINT ["/workmate", "--swagger-dir", "/docs"]
+bash
+Копировать код
+2025/07/07 12:34:56 Сервер запущен на :8080, Swagger UI доступен по http://localhost:8080/docs/index.html
+Проверка работоспособности
+
+Через браузер
+Откройте в нём
+
+bash
+Копировать код
+http://localhost:8080/docs/index.html
+— должна отобразиться Swagger UI с документацией вашего API.
+
+Через curl
+Например, если у вас есть health-endpoint /health:
+
+bash
+Копировать код
+curl http://localhost:8080/health
+Ожидаемый ответ — что-то вроде:
+
+json
+Копировать код
+{"status":"ok"}
+Остановка и удаление контейнера
+Когда закончите проверку, контейнер можно остановить и удалить:
+
+bash
+Копировать код
+docker stop workmate_app
+docker rm workmate_app
 
 
 
