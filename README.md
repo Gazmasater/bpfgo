@@ -522,12 +522,15 @@ http://localhost:8080/swagger/index.html
 
 sudo docker exec -it workmate_app ls -lR /app/cmd/server
 
-+# 4) Генерация спецификации Swagger из корня, указывая файл main.go
-+WORKDIR /app
-+RUN go install github.com/swaggo/swag/cmd/swag@latest && \
-+    swag init -g cmd/server/main.go -o cmd/server/docs && \
-+    sed -i '/LeftDelim:/d; /RightDelim:/d' cmd/server/docs/docs.go
 
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker run -d \
+  --name workmate_app \
+  -p 8080:8080 \
+  workmate:latest
+Unable to find image 'workmate:latest' locally
+docker: Error response from daemon: pull access denied for workmate, repository does not exist or may require 'docker login': denied: requested access to the resource is denied.
+See 'docker run --help'.
+gaz358@gaz358-BOD-WXX9:~/mypr
 
 
 
