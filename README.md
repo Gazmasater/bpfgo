@@ -499,10 +499,11 @@ http://localhost:8080/docs/index.html
 
 ___________________________________________________
 
-az358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker run -d --name workmate_app -p 8080:8080 workmate:latest
-docker: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?.
-See 'docker run --help'.
-gaz358@gaz358-BOD-WXX9:~/myp
+sudo systemctl start docker
+
+sudo systemctl status docker
+
+sudo docker run -d --name workmate_app -p 8080:8080 workmate:latest
 
 
 
