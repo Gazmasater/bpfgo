@@ -373,14 +373,13 @@ docker-install:
 	fi
 
 # Генерация Swagger локально, а затем установка Docker
-swagger: swag-install
+swagger: swag-install  docker-install
 	@echo "Генерируем Swagger локально..."
 	swag init -g $(SWAG_MAIN) -o $(SWAG_OUT)
 	@echo "Корректируем docs.go — удаляем LeftDelim и RightDelim..."
 	sed -i '/LeftDelim:/d; /RightDelim:/d' $(SWAG_OUT)/docs.go
 	@echo "Swagger-сборка завершена."
 	@$(MAKE) docker-install
-
 
 
 
