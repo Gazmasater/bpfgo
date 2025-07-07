@@ -424,69 +424,79 @@ dockerfile
 
 
 
+Вот единый многоэтапный Dockerfile, который и собирает ваш Go-проект со Swagger-доками, и разворачивает финальный минимальный образ, при этом финальный образ остаётся на scratch без уязвимых пакетов:
+
+dockerfile
+Копировать код
 # syntax=docker/dockerfile:1.4
 
-##### Стадия сборки на Debian Bullseye #####
+################################################################################
+# === СТАДИЯ 1: Сборка на Debian-slim                                        ===
+################################################################################
 FROM golang:1.21-bullseye AS builder
 
-# 1) Обновляем пакеты и ставим git + сертификаты
+# 1) Обновляем систему и ставим только нужное
 RUN apt-get update && \
     apt-get upgrade -y && \
-    apt-get install -y --no-install-recommends git ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends \
+      git \
+      ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# 2) Копируем зависимости и скачиваем
+# 2) Делаем go-модули
 COPY go.mod go.sum ./
 RUN go mod download
 
-# 3) Копируем весь код
+# 3) Копируем весь исходник
 COPY . .
 
-# 4) Устанавливаем swag CLI и генерируем доки
+# 4) Устанавливаем swag и генерируем OpenAPI-доки
 RUN go install github.com/swaggo/swag/cmd/swag@latest && \
     swag init -g cmd/server/main.go -o cmd/server/docs
 
-# 5) Удаляем LeftDelim/RightDelim из docs.go
+# 5) Убираем из docs.go строки с LeftDelim и RightDelim
 RUN sed -i '/LeftDelim:/d; /RightDelim:/d' cmd/server/docs/docs.go
 
-# 6) Собираем статический бинарник
+# 6) Сборка статического бинарника
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o workmate cmd/server/main.go
 
 
-##### Финальная чистая стадия #####
+################################################################################
+# === СТАДИЯ 2: Минимальный финальный образ на scratch                       ===
+################################################################################
 FROM scratch
 
-# (опционально) CA для HTTPS
+# CA-сертификаты (если нужен HTTPS внутри контейнера)
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
-# Копируем только бинарник и сгенерированные доки
+# Сам бинарник и swagger-доки
 COPY --from=builder /app/workmate /workmate
 COPY --from=builder /app/cmd/server/docs /docs
 
 EXPOSE 8080
 
 ENTRYPOINT ["/workmate", "--swagger-dir", "/docs"]
+Как пользоваться
+Сборка образа
 
-[{
-	"resource": "/home/gaz358/myprog/workmate/Dockerfile",
-	"owner": "_generated_diagnostic_collection_name_#2",
-	"code": {
-		"value": "critical_high_vulnerabilities",
-		"target": {
-			"$mid": 1,
-			"path": "/layers/library/golang/1.21-bullseye/images/sha256-301b0f36ff74f5b3b0fcae9a158b6338fd6b6d1ed8231b0fff6460a065cebeb3",
-			"scheme": "https",
-			"authority": "hub.docker.com"
-		}
-	},
-	"severity": 4,
-	"message": "The image contains 7 critical and 28 high vulnerabilities",
-	"source": "Docker DX (docker-language-server)",
-	"startLineNumber": 4,
-	"startColumn": 1,
-	"endLineNumber": 4,
-	"endColumn": 37
-}]
+bash
+Копировать код
+docker build -t workmate:latest .
+Запуск контейнера
+
+bash
+Копировать код
+docker run -d --name workmate_app -p 8080:8080 workmate:latest
+Проверка
+
+docker ps — контейнер должен быть в статусе Up с портом 0.0.0.0:8080->8080/tcp.
+
+docker logs workmate_app — смотрим логи запуска.
+
+В браузере открываем http://localhost:8080/docs/index.html (или curl http://localhost:8080/health).
+
+
+
 
