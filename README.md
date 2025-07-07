@@ -440,6 +440,7 @@ Date: Mon, 07 Jul 2025 07:45:48 GMT
 Content-Length: 19
 
 
+sudo docker exec workmate_app ls -l /app/cmd/server/docs
 
 
 
