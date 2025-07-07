@@ -1,7 +1,6 @@
 swag init -g cmd/server/main.go -o cmd/server/docs
 
-LeftDelim:        "{{",
-RightDelim:       "}}",
+
 
 ./chromedriver-linux64/chromedriver --browser-binary=./chrome-linux64/chrome
 
@@ -337,29 +336,36 @@ go test -cover ./...
 
 go test -coverprofile=coverage.out ./...
 
-# Путь к основному файлу приложения для генерации Swagger
-SWAG_MAIN = cmd/server/main.go
 
-# Папка, куда будут сгенерированы файлы документации
-SWAG_OUT  = cmd/server/docs
+# Makefile
 
-.PHONY: swagger
+.PHONY: docker-check
 
-swagger:
-	@echo "Генерируем Swagger..."
-	swag init -g $(SWAG_MAIN) -o $(SWAG_OUT)
-	@echo "Корректируем docs.go — удаляем LeftDelim и RightDelim..."
-	# Для Linux (GNU sed):
-	sed -i '/LeftDelim:/d; /RightDelim:/d' $(SWAG_OUT)/docs.go
-	@echo "Готово."
-
-
-sudo apt update
-sudo apt install build-essential
-
-make --version
-
-
+docker-check:
+	@if command -v docker >/dev/null 2>&1; then \
+	  echo "Docker уже установлен: $$(docker --version)"; \
+	else \
+	  echo "Docker не найден. Устанавливаем…"; \
+	  if [ -r /etc/os-release ]; then \
+	    . /etc/os-release; \
+	  else \
+	    echo "Не удалось определить дистрибутив"; exit 1; \
+	  fi; \
+	  case "$$ID" in \
+	    ubuntu|debian) \
+	      sudo apt update && sudo apt install -y docker.io ;; \
+	    centos|rhel) \
+	      sudo yum install -y docker ;; \
+	    fedora) \
+	      sudo dnf install -y docker ;; \
+	    arch) \
+	      sudo pacman -Sy --noconfirm docker ;; \
+	    *) \
+	      echo "Автоустановка не поддерживается для дистрибутива $$ID"; exit 1 ;; \
+	  esac; \
+	  sudo systemctl enable --now docker; \
+	  echo "Docker установлен: $$(docker --version)"; \
+	fi
 
 
 
