@@ -442,12 +442,62 @@ Content-Length: 19
 
 sudo docker exec workmate_app ls -l /app/cmd/server/docs
 
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker exec workmate_app ls -l /app/cmd/server/docs
-total 12
--rw-rw-r-- 1 root root 885 Jul  7 06:32 docs.go
--rw-rw-r-- 1 root root 268 Jul  7 06:32 swagger.json
--rw-rw-r-- 1 root root 180 Jul  7 06:32 swagger.yaml
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+
+
+# syntax=docker/dockerfile:1.4
+
+FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    GOPATH=/go \
+    PATH="/usr/local/go/bin:${GOPATH}/bin:${PATH}" \
+    GOLANG_VERSION=1.21.7
+
+# 1) Ставим curl, git, make, ca-certificates, скачиваем Go
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl git make ca-certificates && \
+    curl -fsSL https://go.dev/dl/go${GOLANG_VERSION}.linux-amd64.tar.gz \
+      | tar -C /usr/local -xz && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# 2) Go-модули
+COPY go.mod go.sum ./
+RUN go mod download
+
+# 3) Исходники
+COPY . .
+
+# 4) Генерим спецификации и фронтенд Swagger UI
+WORKDIR /app/cmd/server
+RUN go install github.com/swaggo/swag/cmd/swag@latest && \
+    swag init -g main.go -o docs && \
+    sed -i '/LeftDelim:/d; /RightDelim:/d' docs/docs.go && \
+    mkdir -p docs/swagger-ui && \
+    # Скачиваем статические файлы Swagger UI
+    curl -fsSL https://unpkg.com/swagger-ui-dist@4/swagger-ui.css   -o docs/swagger-ui/swagger-ui.css && \
+    curl -fsSL https://unpkg.com/swagger-ui-dist@4/swagger-ui-bundle.js -o docs/swagger-ui/swagger-ui-bundle.js && \
+    curl -fsSL https://unpkg.com/swagger-ui-dist@4/swagger-ui-standalone-preset.js -o docs/swagger-ui/swagger-ui-standalone-preset.js && \
+    # Генерируем index.html, который подключает swagger.json и UI-ассеты
+    printf '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Swagger UI</title><link rel="stylesheet" href="swagger-ui/swagger-ui.css"></head><body><div id="swagger-ui"></div><script src="swagger-ui/swagger-ui-bundle.js"></script><script src="swagger-ui/swagger-ui-standalone-preset.js"></script><script>window.onload=function(){SwaggerUIBundle({url:"swagger.json",dom_id:"#swagger-ui",presets:[SwaggerUIBundle.presets.apis,SwaggerUIStandalonePreset]});};</script></body></html>' > docs/index.html
+
+# 5) Собираем бинарник
+WORKDIR /app
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o workmate cmd/server/main.go
+
+# 6) Пробрасываем порт и точка входа
+EXPOSE 8080
+ENTRYPOINT ["/app/workmate", "--swagger-dir", "/app/cmd/server/docs"]
+
+
+sudo docker build -t workmate:latest .
+sudo docker rm -f workmate_app  # если старый контейнер мешает
+sudo docker run -d --name workmate_app -p 8080:8080 workmate:latest
+
+http://localhost:8080/docs/index.html
+
+
 
 
 
