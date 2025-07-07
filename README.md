@@ -522,6 +522,27 @@ http://localhost:8080/swagger/index.html
 
 sudo docker exec -it workmate_app ls -lR /app/cmd/server
 
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker run -d \
+  --name workmate_app \
+  -p 8080:8080 \
+  workmate:latest
+c3f85b3b5432890f947f91ab5fdfa2ccd3a29fc6e607aba32e240f8cc587c803
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker ps
+CONTAINER ID   IMAGE             COMMAND                  CREATED          STATUS          PORTS                                       NAMES
+c3f85b3b5432   workmate:latest   "/app/workmate --swa…"   15 seconds ago   Up 14 seconds   0.0.0.0:8080->8080/tcp, :::8080->8080/tcp   workmate_app
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ sudo docker exec -it workmate_app ls -lR /app/cmd/server
+/app/cmd/server:
+total 8
+drwxrwxr-x 1 root root 4096 Jul  7 09:01 docs
+-rw-rw-r-- 1 root root  363 Jul  5 17:49 main.go
+
+/app/cmd/server/docs:
+total 12
+-rw-rw-r-- 1 root root 885 Jul  7 09:01 docs.go
+-rw-rw-r-- 1 root root 268 Jul  7 09:01 swagger.json
+-rw-rw-r-- 1 root root 180 Jul  7 09:01 swagger.yaml
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+
 
 
 
