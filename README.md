@@ -359,6 +359,12 @@ ps2pdf all.ps result.pdf
 rm -rf temp_folder filelist.txt all.ps
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ enscript   --color   --language=go   --pretty-print=all   --font="Courier9"   --line-numbers   --output=all.ps   --files-from=filelist.txt
+enscript: unrecognized option '--files-from=filelist.txt'
+Try `enscript --help' for more information.
+gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+
+
 
 
 
