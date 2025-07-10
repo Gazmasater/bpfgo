@@ -342,27 +342,27 @@ find temp_folder \
   \( -iname '*.go' -o -iname '*.yaml' -o -iname '*.yml' -o -iname '*.json' \) \
   | sort > filelist.txt
 
-# 3. Сконвертировать список в PostScript с подсветкой и номерами строк:
-enscript \
+# 1. Предположим, что filelist.txt уже содержит отсортированный список
+#    абсолютных или относительных путей (по одной строке).
+
+# 2. Передаём файлы в enscript через xargs:
+xargs enscript \
   --color \
   --language=go \
   --pretty-print=all \
   --font="Courier9" \
   --line-numbers \
-  --output=all.ps \
-  --files-from=filelist.txt
+  --output=all.ps < filelist.txt
 
-# 4. PS → PDF:
+# 3. Преобразуем PS → PDF:
 ps2pdf all.ps result.pdf
 
-# 5. Убрать временные файлы:
-rm -rf temp_folder filelist.txt all.ps
+# 4. Очистка (если нужно):
+rm temp_folder all.ps filelist.txt
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ enscript   --color   --language=go   --pretty-print=all   --font="Courier9"   --line-numbers   --output=all.ps   --files-from=filelist.txt
-enscript: unrecognized option '--files-from=filelist.txt'
-Try `enscript --help' for more information.
-gaz358@gaz358-BOD-WXX9:~/myprog/workmate$ 
+
+
 
 
 
