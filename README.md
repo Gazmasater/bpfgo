@@ -333,30 +333,30 @@ sudo docker run -d \
 
   ___________________________________________________________________________________________
 
-Распаковка
+# 1. Распаковать
+unzip archive.zip -d temp_folder
 
+# 2. Собрать все нужные файлы из любых подпапок:
+find temp_folder \
+  -type f \
+  \( -iname '*.go' -o -iname '*.yaml' -o -iname '*.yml' -o -iname '*.json' \) \
+  | sort > filelist.txt
 
-unzip archive.zip -d ./temp_folder
-Конвертация всех изображений и документов
+# 3. Сконвертировать список в PostScript с подсветкой и номерами строк:
+enscript \
+  --color \
+  --language=go \
+  --pretty-print=all \
+  --font="Courier9" \
+  --line-numbers \
+  --output=all.ps \
+  --files-from=filelist.txt
 
-Если в папке только изображения (.jpg, .png):
+# 4. PS → PDF:
+ps2pdf all.ps result.pdf
 
-
-convert temp_folder/*.{jpg,png} individual_%03d.pdf
-(требуется ImageMagick)
-
-Если есть разные форматы (.docx, .pptx, .txt и т.д.), можно сначала через [LibreOffice CLI]:
-
-
-libreoffice --headless --convert-to pdf --outdir pdfs temp_folder/*
-Слияние PDF в один
-
-
-pdfunite pdfs/*.pdf result.pdf
-или (если установлен pdftk):
-
-pdftk pdfs/*.pdf cat output result.pdf
-
+# 5. Убрать временные файлы:
+rm -rf temp_folder filelist.txt all.ps
 
 
 
