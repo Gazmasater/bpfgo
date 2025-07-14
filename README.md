@@ -333,7 +333,25 @@ sudo docker run -d \
 
   ___________________________________________________________________________________________
 
-package models
+package main
+
+import (
+	"fmt"
+	"tg/interf"
+	"tg/models"
+)
+
+func main() {
+
+	var f interf.Figure = models.Rectangle{a: 5, b: 6}
+	var r interf.Figure = models.Circle{r: 5}
+
+	fmt.Println("Area Rect=", f.Area())
+	fmt.Println("Area Circle=", r.Area())
+
+}
+
+kage models
 
 import "math"
 
@@ -365,24 +383,28 @@ func (r Circle) Perimetr() float64 {
 	return 2 * math.Pi * r.r
 }
 
-
-package main
-
-import (
-	"fmt"
-	"tg/interf"
-	"tg/models"
-)
-
-func main() {
-
-	var f interf.Figure = models.Rectangle{a: 5, b: 6}
-	var r interf.Figure = models.Circle{R: 5}
-
-	fmt.Println("Area Rect=", f.Area())
-	fmt.Println("Area Circle=", r.Area())
-
-}
+[{
+	"resource": "/home/gaz358/myprog/TG/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "MissingLitField",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingLitField"
+		}
+	},
+	"severity": 8,
+	"message": "cannot refer to unexported field a in struct literal of type models.Rectangle",
+	"source": "compiler",
+	"startLineNumber": 11,
+	"startColumn": 41,
+	"endLineNumber": 11,
+	"endColumn": 42,
+	"origin": "extHost1"
+}]
 
 
 
