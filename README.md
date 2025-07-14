@@ -333,26 +333,13 @@ sudo docker run -d \
 
   ___________________________________________________________________________________________
 
-package main
 
-import (
-	"fmt"
-	"tg/interf"
-	"tg/models"
-)
+package interf
 
-func main() {
-
-	var f interf.Figure = models.NewRectangle(5, 6)
-	var r interf.Figure = models.NewCircle(5)
-
-	fmt.Println("Area Rect=", f.Area())
-	fmt.Println("Perimetr Rect", f.Perimetr())
-	fmt.Println("Area Circle=", r.Area())
-	fmt.Println("Length Circle", r.Perimetr())
-
+type Figure interface {
+	Area() float64
+	Perimetr() float64
 }
-
 
 package models
 
@@ -386,35 +373,32 @@ func (r Circle) Perimetr() float64 {
 	return 2 * math.Pi * r.r
 }
 
-func NewRectangle(a, b float64) Rectangle {
+func NewRectangle(a, b float64) *Rectangle {
 
-	return Rectangle{a: a, b: b}
+	return &Rectangle{a: a, b: b}
 }
 
-func NewCircle(r float64) Circle {
+func NewCircle(r float64) *Circle {
 
-	return Circle{r: r}
+	return &Circle{r: r}
 }
 
+package main
 
+import (
+	"fmt"
+	"tg/interf"
+	"tg/models"
+)
 
+func main() {
 
+	var f interf.Figure = models.NewRectangle(5, 6)
+	var r interf.Figure = models.NewCircle(5)
 
+	fmt.Println("Area Rect=", f.Area())
+	fmt.Println("Perimetr Rect", f.Perimetr())
+	fmt.Println("Area Circle=", r.Area())
+	fmt.Println("Length Circle", r.Perimetr())
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+}
