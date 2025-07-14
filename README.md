@@ -335,15 +335,23 @@ sudo docker run -d \
 
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+)
 
 type figure interface {
 	Area() float64
+	Perimetr() float64
 }
 
 type Rectangle struct {
 	a float64
 	b float64
+}
+
+type Circle struct {
+	r float64
 }
 
 func (r Rectangle) Area() float64 {
@@ -352,8 +360,18 @@ func (r Rectangle) Area() float64 {
 
 }
 
+func (r Circle) Area() float64 {
+	return math.Pi * r.r * r.r
+}
+
 func main() {
-	fmt.Println("Area Rect=", figure.Area())
+
+	var f figure = Rectangle{a: 5, b: 6}
+	var r figure = Circle{r: 5}
+
+	fmt.Println("Area Rect=", f.Area())
+	fmt.Println("Area Circle=", r.Area())
+
 }
 
 
