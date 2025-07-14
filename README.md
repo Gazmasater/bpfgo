@@ -343,15 +343,18 @@ import (
 
 func main() {
 
-	var f interf.Figure = models.Rectangle{a: 5, b: 6}
-	var r interf.Figure = models.Circle{r: 5}
+	var f interf.Figure = models.NewRectangle(5, 6)
+	var r interf.Figure = models.NewCircle(5)
 
 	fmt.Println("Area Rect=", f.Area())
+	fmt.Println("Perimetr Rect", f.Perimetr())
 	fmt.Println("Area Circle=", r.Area())
+	fmt.Println("Length Circle", r.Perimetr())
 
 }
 
-kage models
+
+package models
 
 import "math"
 
@@ -383,28 +386,16 @@ func (r Circle) Perimetr() float64 {
 	return 2 * math.Pi * r.r
 }
 
-[{
-	"resource": "/home/gaz358/myprog/TG/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingLitField",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingLitField"
-		}
-	},
-	"severity": 8,
-	"message": "cannot refer to unexported field a in struct literal of type models.Rectangle",
-	"source": "compiler",
-	"startLineNumber": 11,
-	"startColumn": 41,
-	"endLineNumber": 11,
-	"endColumn": 42,
-	"origin": "extHost1"
-}]
+func NewRectangle(a, b float64) Rectangle {
+
+	return Rectangle{a: a, b: b}
+}
+
+func NewCircle(r float64) Circle {
+
+	return Circle{r: r}
+}
+
 
 
 
