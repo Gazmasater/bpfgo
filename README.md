@@ -333,32 +333,29 @@ sudo docker run -d \
 
   ___________________________________________________________________________________________
 
-# 1. Распаковать
-unzip archive.zip -d temp_folder
+package main
 
-# 2. Собрать все нужные файлы из любых подпапок:
-find temp_folder \
-  -type f \
-  \( -iname '*.go' -o -iname '*.yaml' -o -iname '*.yml' -o -iname '*.json' \) \
-  | sort > filelist.txt
+import "fmt"
 
-# 1. Предположим, что filelist.txt уже содержит отсортированный список
-#    абсолютных или относительных путей (по одной строке).
+type figure interface {
+	Area() float64
+}
 
-# 2. Передаём файлы в enscript через xargs:
-xargs enscript \
-  --color \
-  --language=go \
-  --pretty-print=all \
-  --font="Courier9" \
-  --line-numbers \
-  --output=all.ps < filelist.txt
+type Rectangle struct {
+	a float64
+	b float64
+}
 
-# 3. Преобразуем PS → PDF:
-ps2pdf all.ps result.pdf
+func (r Rectangle) Area() float64 {
 
-# 4. Очистка (если нужно):
-rm temp_folder all.ps filelist.txt
+	return r.a * r.b
+
+}
+
+func main() {
+	fmt.Println("Area Rect=", figure.Area())
+}
+
 
 
 
