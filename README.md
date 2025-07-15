@@ -334,33 +334,45 @@ sudo docker run -d \
   ___________________________________________________________________________________________
 
 
-package main
-
-import (
-	"fmt"
-)
+package interf
 
 type Figure interface {
-	Rectangle()
+	Area()
+	Perimetr()
 }
+package models
 
 type Rectangle struct {
 	width  float64
 	length float64
 }
 
-func (a *Rectangle) Area() float64 {
+func (a Rectangle) Area() float64 {
 
 	return a.length * a.width
 }
 
+func (a Rectangle) Perimetr() float64 {
+
+	return (a.length + a.width) * 2
+}
+
 func NewRectangle(a, b float64) *Rectangle {
 
-	return &Rectangle{a: Rectangle.width, b: Rectangle.length}
+	return &Rectangle{width: a, length: b}
 }
+package main
+
+import (
+	"fmt"
+	"tg/models"
+)
 
 func main() {
 
-	fmt.Printf("Area Rectangle=%d", NewRectangle(6, 7))
+	f := models.NewRectangle(6, 7)
+
+	fmt.Println("Area Rectangle1=", f.Area())
+	fmt.Println("Perimetr Rectangle=", f.Perimetr())
 }
 
