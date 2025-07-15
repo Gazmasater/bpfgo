@@ -348,9 +348,10 @@ func main() {
 
 	f = models.NewRectangle(6, 7)
 
-	fmt.Printf("Area Rectangle1=%f", f.Area())
-	fmt.Println("Perimetr Rectangle=", f.Perimetr())
+	fmt.Printf("Area Rectangle1=%f\n", f.Area())
+	fmt.Printf("Perimetr Rectangle=%f\n", f.Perimetr())
 }
+
 [{
 	"resource": "/home/gaz358/myprog/TG/main.go",
 	"owner": "go-staticcheck",
