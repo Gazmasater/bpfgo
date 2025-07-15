@@ -348,52 +348,18 @@ func main() {
 
 	f = models.NewRectangle(6, 7)
 
-	fmt.Println("Area Rectangle1=", f.Area())
+	fmt.Printf("Area Rectangle1=%f", f.Area())
 	fmt.Println("Perimetr Rectangle=", f.Perimetr())
 }
-
-
 [{
 	"resource": "/home/gaz358/myprog/TG/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "InvalidIfaceAssign",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "InvalidIfaceAssign"
-		}
-	},
-	"severity": 8,
-	"message": "cannot use models.NewRectangle(6, 7) (value of type *models.Rectangle) as interf.Figure value in assignment: *models.Rectangle does not implement interf.Figure (wrong type for method Area)\n\t\thave Area() float64\n\t\twant Area()",
-	"source": "compiler",
-	"startLineNumber": 13,
-	"startColumn": 6,
-	"endLineNumber": 13,
-	"endColumn": 31,
-	"origin": "extHost1"
-}]
-[{
-	"resource": "/home/gaz358/myprog/TG/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "TooManyValues",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "TooManyValues"
-		}
-	},
-	"severity": 8,
-	"message": "f.Area() (no value) used as value",
-	"source": "compiler",
-	"startLineNumber": 15,
-	"startColumn": 34,
-	"endLineNumber": 15,
-	"endColumn": 42,
+	"owner": "go-staticcheck",
+	"severity": 4,
+	"message": "should merge variable declaration with assignment on next line (S1021)",
+	"source": "go-staticcheck",
+	"startLineNumber": 11,
+	"startColumn": 2,
+	"endLineNumber": 11,
+	"endColumn": 21,
 	"origin": "extHost1"
 }]
