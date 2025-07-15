@@ -334,71 +334,41 @@ sudo docker run -d \
   ___________________________________________________________________________________________
 
 
-package interf
-
-type Figure interface {
-	Area() float64
-	Perimetr() float64
-}
-
-package models
-
-import "math"
-
-type Rectangle struct {
-	a float64
-	b float64
-}
-
-type Circle struct {
-	r float64
-}
-
-func (r Rectangle) Area() float64 {
-
-	return r.a * r.b
-
-}
-
-func (r Rectangle) Perimetr() float64 {
-
-	return (r.a + r.b) * 2
-}
-
-func (r Circle) Area() float64 {
-	return math.Pi * r.r * r.r
-}
-
-func (r Circle) Perimetr() float64 {
-	return 2 * math.Pi * r.r
-}
-
-func NewRectangle(a, b float64) *Rectangle {
-
-	return &Rectangle{a: a, b: b}
-}
-
-func NewCircle(r float64) *Circle {
-
-	return &Circle{r: r}
-}
-
 package main
 
 import (
 	"fmt"
-	"tg/interf"
-	"tg/models"
 )
 
 func main() {
+	// Входные каналы
+	c1 := make(chan int)
+	c2 := make(chan int)
 
-	var f interf.Figure = models.NewRectangle(5, 6)
-	var r interf.Figure = models.NewCircle(5)
+	// Промежуточный канал для сбора результатов
+	resultChan := make(chan int)
 
-	fmt.Println("Area Rect=", f.Area())
-	fmt.Println("Perimetr Rect", f.Perimetr())
-	fmt.Println("Area Circle=", r.Area())
-	fmt.Println("Length Circle", r.Perimetr())
+	// Первая горутина — читает из c1
+	go func() {
+		val := <-c1
+		resultChan <- val
+	}()
 
+	// Вторая горутина — читает из c2
+	go func() {
+		val := <-c2
+		resultChan <- val
+	}()
+
+	// Отправка значений
+	c1 <- 5
+	c2 <- 3
+
+	// Сбор результатов из обеих горутин
+	x := <-resultChan
+	y := <-resultChan
+	sum := x + y
+
+	fmt.Println("Сумма:", sum)
 }
+
