@@ -336,18 +336,31 @@ sudo docker run -d \
 
 package main
 
-import "fmt"
+import (
+	"fmt"
+)
 
-type ST string
+type Figure interface {
+	Rectangle()
+}
 
-func (s *ST) Set(v string) {
-	*s = ST(v)
+type Rectangle struct {
+	width  float64
+	length float64
+}
+
+func (a *Rectangle) Area() float64 {
+
+	return a.length * a.width
+}
+
+func NewRectangle(a, b float64) *Rectangle {
+
+	return &Rectangle{a: Rectangle.width, b: Rectangle.length}
 }
 
 func main() {
-	A := make([]ST, 1) // Инициализируем срез и выделяем память
-	A[0] = "123"       // Присваиваем значение элементу с индексом 0
-	A[0].Set("abc")    // Вызываем метод Set
-	fmt.Println(A)     // Выводим срез
+
+	fmt.Printf("Area Rectangle=%d", NewRectangle(6, 7))
 }
 
