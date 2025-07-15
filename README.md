@@ -334,45 +334,39 @@ sudo docker run -d \
   ___________________________________________________________________________________________
 
 
-package interf
-
-type Figure interface {
-	Area()
-	Perimetr()
-}
-package models
-
-type Rectangle struct {
-	width  float64
-	length float64
-}
-
-func (a Rectangle) Area() float64 {
-
-	return a.length * a.width
-}
-
-func (a Rectangle) Perimetr() float64 {
-
-	return (a.length + a.width) * 2
-}
-
-func NewRectangle(a, b float64) *Rectangle {
-
-	return &Rectangle{width: a, length: b}
-}
 package main
 
 import (
 	"fmt"
+	"reflect"
+	"tg/interf"
 	"tg/models"
 )
 
+func printFields(f interf.Figure) {
+	v := reflect.ValueOf(f)
+
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
+	t := v.Type()
+
+	fmt.Printf("Тип: %s\n", t.Name())
+	fmt.Println("Поля:")
+	for i := 0; i < v.NumField(); i++ {
+		field := t.Field(i)
+		value := v.Field(i).Interface()
+		fmt.Printf("  %s = %v\n", field.Name, value)
+	}
+}
+
 func main() {
+	var fig interf.Figure = models.NewRectangle(8, 4)
 
-	f := models.NewRectangle(6, 7)
+	printFields(fig)
 
-	fmt.Println("Area Rectangle1=", f.Area())
-	fmt.Println("Perimetr Rectangle=", f.Perimetr())
+	fmt.Printf("Площадь: %.2f\n", fig.Area())
+	fmt.Printf("Периметр: %.2f\n", fig.Perimetr())
 }
 
