@@ -336,39 +336,18 @@ sudo docker run -d \
 
 package main
 
-import (
-	"fmt"
-)
+import "fmt"
+
+type ST string
+
+func (s *ST) Set(v string) {
+	*s = ST(v)
+}
 
 func main() {
-	// Входные каналы
-	c1 := make(chan int)
-	c2 := make(chan int)
-
-	// Промежуточный канал для сбора результатов
-	resultChan := make(chan int)
-
-	// Первая горутина — читает из c1
-	go func() {
-		val := <-c1
-		resultChan <- val
-	}()
-
-	// Вторая горутина — читает из c2
-	go func() {
-		val := <-c2
-		resultChan <- val
-	}()
-
-	// Отправка значений
-	c1 <- 5
-	c2 <- 3
-
-	// Сбор результатов из обеих горутин
-	x := <-resultChan
-	y := <-resultChan
-	sum := x + y
-
-	fmt.Println("Сумма:", sum)
+	A := make([]ST, 1) // Инициализируем срез и выделяем память
+	A[0] = "123"       // Присваиваем значение элементу с индексом 0
+	A[0].Set("abc")    // Вызываем метод Set
+	fmt.Println(A)     // Выводим срез
 }
 
