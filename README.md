@@ -338,35 +338,62 @@ package main
 
 import (
 	"fmt"
-	"reflect"
 	"tg/interf"
 	"tg/models"
 )
 
-func printFields(f interf.Figure) {
-	v := reflect.ValueOf(f)
-
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
-	}
-
-	t := v.Type()
-
-	fmt.Printf("Тип: %s\n", t.Name())
-	fmt.Println("Поля:")
-	for i := 0; i < v.NumField(); i++ {
-		field := t.Field(i)
-		value := v.Field(i).Interface()
-		fmt.Printf("  %s = %v\n", field.Name, value)
-	}
-}
-
 func main() {
-	var fig interf.Figure = models.NewRectangle(8, 4)
 
-	printFields(fig)
+	var f interf.Figure
 
-	fmt.Printf("Площадь: %.2f\n", fig.Area())
-	fmt.Printf("Периметр: %.2f\n", fig.Perimetr())
+	f = models.NewRectangle(6, 7)
+
+	fmt.Println("Area Rectangle1=", f.Area())
+	fmt.Println("Perimetr Rectangle=", f.Perimetr())
 }
 
+
+[{
+	"resource": "/home/gaz358/myprog/TG/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "InvalidIfaceAssign",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "InvalidIfaceAssign"
+		}
+	},
+	"severity": 8,
+	"message": "cannot use models.NewRectangle(6, 7) (value of type *models.Rectangle) as interf.Figure value in assignment: *models.Rectangle does not implement interf.Figure (wrong type for method Area)\n\t\thave Area() float64\n\t\twant Area()",
+	"source": "compiler",
+	"startLineNumber": 13,
+	"startColumn": 6,
+	"endLineNumber": 13,
+	"endColumn": 31,
+	"origin": "extHost1"
+}]
+[{
+	"resource": "/home/gaz358/myprog/TG/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "TooManyValues",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "TooManyValues"
+		}
+	},
+	"severity": 8,
+	"message": "f.Area() (no value) used as value",
+	"source": "compiler",
+	"startLineNumber": 15,
+	"startColumn": 34,
+	"endLineNumber": 15,
+	"endColumn": 42,
+	"origin": "extHost1"
+}]
