@@ -351,7 +351,120 @@ func main() {
 	var figures []interf.Figure = []interf.Figure{rect, circ}
 
 	for i, f := range figures {
-		fmt.Printf("Figure #%d: Area = %.2f, Perimeter = %.2f\n", i+1, f.Area(), f.Perimetr())
+		fmt.Printf("Figure #%d: Area = %.2f, Perimeter = %.2f, Name=%s\n", i+1, f.Area(), f.Perimetr(), f.Name())
 	}
 }
+
+package models
+
+import "math"
+
+type Rectangle struct {
+	width  float64
+	length float64
+}
+
+type Circle struct {
+	radius float64
+}
+
+func (r *Circle) Area() float64 {
+	return math.Pi * r.radius * r.radius
+}
+
+func (r *Circle) Perimetr() float64 {
+
+	return 2 * math.Pi * r.radius
+}
+
+func (r *Circle) Name() string {
+
+	return "Circle"
+}
+
+func NewCircle(r float64) *Circle {
+
+	return &Circle{radius: r}
+}
+
+func (a *Rectangle) Area() float64 {
+
+	return a.length * a.width
+}
+
+func (a *Rectangle) Perimetr() float64 {
+
+	return (a.length + a.width) * 2
+}
+
+func (a *Rectangle) Name() string {
+
+	return "Rectangle"
+}
+
+func NewRectangle(a, b float64) *Rectangle {
+
+	return &Rectangle{width: a, length: b}
+}package models
+
+import "math"
+
+type Rectangle struct {
+	width  float64
+	length float64
+}
+
+type Circle struct {
+	radius float64
+}
+
+func (r *Circle) Area() float64 {
+	return math.Pi * r.radius * r.radius
+}
+
+func (r *Circle) Perimetr() float64 {
+
+	return 2 * math.Pi * r.radius
+}
+
+func (r *Circle) Name() string {
+
+	return "Circle"
+}
+
+func NewCircle(r float64) *Circle {
+
+	return &Circle{radius: r}
+}
+
+func (a *Rectangle) Area() float64 {
+
+	return a.length * a.width
+}
+
+func (a *Rectangle) Perimetr() float64 {
+
+	return (a.length + a.width) * 2
+}
+
+func (a *Rectangle) Name() string {
+
+	return "Rectangle"
+}
+
+func NewRectangle(a, b float64) *Rectangle {
+
+	return &Rectangle{width: a, length: b}
+}
+
+package interf
+
+type Figure interface {
+	Area() float64
+	Perimetr() float64
+	Name() string
+}
+
+
+
 
