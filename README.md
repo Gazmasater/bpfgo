@@ -355,3 +355,69 @@ func main() {
 	}
 }
 
+package models
+
+import "math"
+
+type Rectangle struct {
+	width  float64
+	length float64
+}
+
+type Circle struct {
+	radius float64
+}
+
+func (r *Circle) Area() float64 {
+	return math.Pi * r.radius * r.radius
+}
+
+func NewCircle(r float64) *Circle {
+
+	return &Circle{radius: r}
+}
+
+func (a *Rectangle) Area() float64 {
+
+	return a.length * a.width
+}
+
+func (a *Rectangle) Perimetr() float64 {
+
+	return (a.length + a.width) * 2
+}
+
+func NewRectangle(a, b float64) *Rectangle {
+
+	return &Rectangle{width: a, length: b}
+}
+
+package interf
+
+type Figure interface {
+	Area() float64
+	Perimetr() float64
+}
+
+[{
+	"resource": "/home/gaz358/myprog/TG/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "InvalidIfaceAssign",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "InvalidIfaceAssign"
+		}
+	},
+	"severity": 8,
+	"message": "cannot use circ (variable of type *models.Circle) as interf.Figure value in array or slice literal: *models.Circle does not implement interf.Figure (missing method Perimetr)",
+	"source": "compiler",
+	"startLineNumber": 15,
+	"startColumn": 54,
+	"endLineNumber": 15,
+	"endColumn": 58,
+	"origin": "extHost1"
+}]
