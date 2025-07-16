@@ -336,31 +336,75 @@ sudo docker run -d \
 
 package models
 
+import (
+	"fmt"
+	"math"
+)
+
 type BaseFigure struct{}
 
 func (b *BaseFigure) Describe(name string, area, perim float64) string {
 	return fmt.Sprintf("Фигура: %s | Площадь: %.2f | Периметр: %.2f", name, area, perim)
 }
 
-type Figure interface {
-	Area() float64
-	Perimetr() float64
-	Name() string
-	Describe() string
+type Rectangle struct {
+	BaseFigure
+	width  float64
+	length float64
 }
 
+type Circle struct {
+	BaseFigure
+	radius float64
+}
 
-for i, f := range figures {
-	fmt.Printf("Figure #%d: %s\n", i+1, f.Describe())
+func (r *Circle) Area() float64 {
+	return math.Pi * r.radius * r.radius
+}
+
+func (r *Circle) Perimetr() float64 {
+
+	return 2 * math.Pi * r.radius
+}
+
+func (r *Circle) Name() string {
+
+	return "Circle"
+}
+
+func (c *Circle) Describe() string {
+	return c.BaseFigure.Describe(c.Name(), c.Area(), c.Perimetr())
+}
+
+func NewCircle(r float64) *Circle {
+
+	return &Circle{radius: r}
+}
+
+func (a *Rectangle) Area() float64 {
+
+	return a.length * a.width
+}
+
+func (a *Rectangle) Perimetr() float64 {
+
+	return (a.length + a.width) * 2
+}
+
+func (a *Rectangle) Name() string {
+
+	return "Rectangle"
 }
 
 func (r *Rectangle) Describe() string {
 	return r.BaseFigure.Describe(r.Name(), r.Area(), r.Perimetr())
 }
 
-func (c *Circle) Describe() string {
-	return c.BaseFigure.Describe(c.Name(), c.Area(), c.Perimetr())
+func NewRectangle(a, b float64) *Rectangle {
+
+	return &Rectangle{width: a, length: b}
 }
+
 
 
 
