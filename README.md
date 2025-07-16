@@ -354,6 +354,14 @@ for i, f := range figures {
 	fmt.Printf("Figure #%d: %s\n", i+1, f.Describe())
 }
 
+func (r *Rectangle) Describe() string {
+	return r.BaseFigure.Describe(r.Name(), r.Area(), r.Perimetr())
+}
+
+func (c *Circle) Describe() string {
+	return c.BaseFigure.Describe(c.Name(), c.Area(), c.Perimetr())
+}
+
 
 
 
