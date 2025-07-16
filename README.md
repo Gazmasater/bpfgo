@@ -344,23 +344,53 @@ import (
 
 func main() {
 
-	var f interf.Figure
-
-	f = models.NewRectangle(6, 7)
+	var f []interf.Figure = models.NewRectangle(6, 7)
 
 	fmt.Printf("Area Rectangle1=%f\n", f.Area())
 	fmt.Printf("Perimetr Rectangle=%f\n", f.Perimetr())
+	fmt.Printf("Area Circle=%f\n", r.Area())
 }
 
-[{
-	"resource": "/home/gaz358/myprog/TG/main.go",
-	"owner": "go-staticcheck",
-	"severity": 4,
-	"message": "should merge variable declaration with assignment on next line (S1021)",
-	"source": "go-staticcheck",
-	"startLineNumber": 11,
-	"startColumn": 2,
-	"endLineNumber": 11,
-	"endColumn": 21,
-	"origin": "extHost1"
-}]
+package models
+
+import "math"
+
+type Rectangle struct {
+	width  float64
+	length float64
+}
+
+type Circle struct {
+	radius float64
+}
+
+func (r Circle) Area() float64 {
+	return math.Pi*r.radius*r.radius
+}
+
+func NewCircle (r float64) *Circle {
+
+	return &Circle{radius: r}
+}
+
+func (a Rectangle) Area() float64 {
+
+	return a.length * a.width
+}
+
+func (a Rectangle) Perimetr() float64 {
+
+	return (a.length + a.width) * 2
+}
+
+func NewRectangle(a, b float64) *Rectangle {
+
+	return &Rectangle{width: a, length: b}
+}
+
+package interf
+
+type Figure interface {
+	Area() float64
+	Perimetr() float64
+}
