@@ -575,6 +575,20 @@ func main() {
 }
 
 
+[{
+	"resource": "/home/gaz358/myprog/crypt/main.go",
+	"owner": "go-staticcheck",
+	"severity": 4,
+	"message": "var lastUpdate is unused (U1000)",
+	"source": "go-staticcheck",
+	"startLineNumber": 27,
+	"startColumn": 2,
+	"endLineNumber": 27,
+	"endColumn": 37,
+	"origin": "extHost1"
+}]
+
+
 
 
 
