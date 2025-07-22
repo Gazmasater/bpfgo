@@ -334,7 +334,7 @@ sudo docker run -d \
   ___________________________________________________________________________________________
 
 
-// Go-бот: 7 треугольников + deals + ping-pong + тайминг сборки треугольника
+// Go-бот: 7 треугольников + deals + ping-pong + детальное логирование + тайминг сборки треугольника
 package main
 
 import (
@@ -344,25 +344,18 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
-type Triangle struct {
-	A string `json:"a"`
-	B string `json:"b"`
-	C string `json:"c"`
-}
+type Triangle struct{ A, B, C string }
 
-type SymbolInfo struct {
-	Symbol string `json:"symbol"`
-}
+type SymbolInfo struct{ Symbol string }
 
-type ExchangeInfo struct {
-	Symbols []SymbolInfo `json:"symbols"`
-}
+type ExchangeInfo struct{ Symbols []SymbolInfo }
 
 type DealsMsg struct {
 	Symbol string `json:"symbol"`
@@ -376,7 +369,7 @@ type DealsMsg struct {
 
 var (
 	priceLock  sync.Mutex
-	lastUpdate = map[string]time.Time{}
+	lastUpdate = map[string]time.Time{} // время последнего тика для каждой пары
 )
 
 func ensureTrianglesFile() error {
@@ -397,69 +390,75 @@ func loadTriangles() ([]Triangle, error) {
 	if err := ensureTrianglesFile(); err != nil {
 		return nil, fmt.Errorf("не удалось создать triangles.json: %v", err)
 	}
-	data, err := ioutil.ReadFile("triangles.json")
+	b, err := ioutil.ReadFile("triangles.json")
 	if err != nil {
 		return nil, err
 	}
-	var triangles []Triangle
-	err = json.Unmarshal(data, &triangles)
-	return triangles, err
+	var ts []Triangle
+	if err := json.Unmarshal(b, &ts); err != nil {
+		return nil, err
+	}
+	return ts, nil
 }
 
 func fetchAvailableSymbols() map[string]bool {
-	symbolSet := map[string]bool{}
+	out := make(map[string]bool, 0)
 	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
-		log.Println("⚠️ Не удалось загрузить список символов с биржи:", err)
-		return symbolSet
+		log.Println("⚠️ Ошибка fetching symbols:", err)
+		return out
 	}
 	defer resp.Body.Close()
-
-	body, _ := ioutil.ReadAll(resp.Body)
+	b, _ := ioutil.ReadAll(resp.Body)
 	var info ExchangeInfo
-	if err := json.Unmarshal(body, &info); err != nil {
+	if err := json.Unmarshal(b, &info); err != nil {
 		log.Println("⚠️ Ошибка парсинга exchangeInfo:", err)
-		return symbolSet
+		return out
 	}
-
 	for _, s := range info.Symbols {
-		symbolSet[s.Symbol] = true
+		out[s.Symbol] = true
 	}
-	return symbolSet
+	return out
 }
 
-func tryAddSymbol(a, b string, valid map[string]bool, out map[string]bool) {
-	p1 := a + b
-	p2 := b + a
-	if valid[p1] {
-		out[p1] = true
-	} else if valid[p2] {
-		out[p2] = true
-		log.Printf("🔁 Переворачиваем %s → %s", p1, p2)
-	} else {
-		log.Printf("❌ Пара %s/%s не найдена на бирже", a, b)
-	}
-}
-
-func buildValidSymbols(triangles []Triangle, valid map[string]bool) []string {
-	pairSet := map[string]bool{}
+func buildChannels(triangles []Triangle, valid map[string]bool) []string {
+	set := map[string]bool{}
 	for _, t := range triangles {
-		tryAddSymbol(t.A, t.B, valid, pairSet)
-		tryAddSymbol(t.B, t.C, valid, pairSet)
-		tryAddSymbol(t.A, t.C, valid, pairSet)
+		pairs := [][2]string{{t.A, t.B}, {t.B, t.C}, {t.A, t.C}}
+		for _, pr := range pairs {
+			a, b := pr[0], pr[1]
+			p1, p2 := a+b, b+a
+			switch {
+			case valid[p1]:
+				set[p1] = true
+				log.Printf("✅ Пара %s найдена", p1)
+			case valid[p2]:
+				set[p2] = true
+				log.Printf("🔁 Переворачиваем %s → %s", p1, p2)
+			default:
+				log.Printf("❌ Пара %s/%s не найдена на бирже", a, b)
+			}
+		}
 	}
-	result := []string{}
-	for p := range pairSet {
-		result = append(result, p)
+	list := make([]string, 0, len(set))
+	for s := range set {
+		list = append(list, s)
 	}
-	return result
+	sort.Strings(list)
+	channels := make([]string, len(list))
+	for i, s := range list {
+		channels[i] = fmt.Sprintf("spot@public.deals.v3.api@%s", s)
+	}
+	return channels
 }
 
-func findActualPairKey(a, b string) string {
-	if _, ok := lastUpdate[a+b]; ok {
-		return a + b
-	}
-	return b + a
+func reversePair(s string) string {
+	n := len(s) / 2
+	return s[n:] + s[:n]
+}
+
+func logPriceUpdate(symbol, side, price string) {
+	log.Printf("📊 %s | side=%s | price=%s", symbol, side, price)
 }
 
 func checkTriangleTimings(triangles []Triangle) {
@@ -467,95 +466,84 @@ func checkTriangleTimings(triangles []Triangle) {
 	defer priceLock.Unlock()
 	now := time.Now()
 	for _, t := range triangles {
-		p1 := findActualPairKey(t.A, t.B)
-		p2 := findActualPairKey(t.B, t.C)
-		p3 := findActualPairKey(t.A, t.C)
-		pairs := []string{p1, p2, p3}
-
-		latest := time.Time{}
-		oldest := now
-		complete := true
-		for _, pair := range pairs {
-			ts, ok := lastUpdate[pair]
-			if !ok {
-				complete = false
+		ps := []string{t.A + t.B, t.B + t.C, t.A + t.C}
+		times := make([]time.Time, 0, 3)
+		missing := false
+		for _, p := range ps {
+			if ts, ok := lastUpdate[p]; ok {
+				times = append(times, ts)
+				log.Printf("⏱ Пара %s обновлена в %v", p, ts)
+			} else {
+				log.Printf("⚠️ Пара %s ещё не получила тиков", p)
+				missing = true
 				break
 			}
-			if ts.After(latest) {
-				latest = ts
-			}
-			if ts.Before(oldest) {
-				oldest = ts
-			}
 		}
-		if complete {
-			delta := latest.Sub(oldest)
-			log.Printf("⏱ Треугольник %s/%s/%s собран за %v", t.A, t.B, t.C, delta)
+		if missing {
+			continue
 		}
+		sort.Slice(times, func(i, j int) bool { return times[i].Before(times[j]) })
+		delta := times[2].Sub(times[0])
+		log.Printf("✅ Треугольник %s/%s/%s собран за %v", t.A, t.B, t.C, delta)
 	}
-}
-
-func reversePair(s string) string {
-	n := len(s)
-	return s[n/2:] + s[:n/2]
 }
 
 func runBot(logFile *os.File) error {
 	triangles, err := loadTriangles()
 	if err != nil {
-		return fmt.Errorf("не удалось загрузить triangles.json: %v", err)
+		return err
 	}
-
-	validSymbols := fetchAvailableSymbols()
-	symbols := buildValidSymbols(triangles, validSymbols)
-	channels := []string{}
-	for _, s := range symbols {
-		ch := fmt.Sprintf("spot@public.deals.v3.api@%s", s)
-		channels = append(channels, ch)
-		log.Println("📡 Подписка на:", ch)
+	valid := fetchAvailableSymbols()
+	channels := buildChannels(triangles, valid)
+	for _, ch := range channels {
+		log.Println("📡 Subscribe:", ch)
 	}
 
 	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", nil)
 	if err != nil {
-		return fmt.Errorf("ошибка подключения к WebSocket: %v", err)
+		return err
 	}
 	defer conn.Close()
 
-	lastPing := time.Now()
-	conn.SetPongHandler(func(appData string) error {
-		delta := time.Since(lastPing)
-		log.Printf("📶 Получен pong от сервера (через %v)", delta)
-		lastPing = time.Now()
+	// pong handler
+	var lastPing time.Time
+	conn.SetPongHandler(func(string) error {
+		d := time.Since(lastPing)
+		log.Printf("📶 Pong received after %v", d)
 		return nil
 	})
 
+	// subscribe
 	sub := map[string]interface{}{
 		"method": "SUBSCRIPTION",
 		"params": channels,
 		"id":     time.Now().Unix(),
 	}
 	if err := conn.WriteJSON(sub); err != nil {
-		return fmt.Errorf("ошибка подписки: %v", err)
+		return err
 	}
-	log.Println("✅ Подписка на пары отправлена")
+	log.Println("✅ Subscription sent")
 
-	encoder := json.NewEncoder(logFile)
-	pingTicker := time.NewTicker(15 * time.Second)
-	checkTicker := time.NewTicker(5 * time.Second)
-	defer pingTicker.Stop()
-	defer checkTicker.Stop()
+	// JSONL writer
+	enc := json.NewEncoder(logFile)
 
+	// ping ticker
+	pingT := time.NewTicker(15 * time.Second)
+	defer pingT.Stop()
 	go func() {
-		for range pingTicker.C {
+		for range pingT.C {
 			lastPing = time.Now()
-			if err := conn.WriteMessage(websocket.PingMessage, []byte("keepalive")); err != nil {
-				log.Println("⚠️ Ошибка отправки ping:", err)
+			if err := conn.WriteMessage(websocket.PingMessage, []byte("hb")); err != nil {
+				log.Println("⚠️ Ping error:", err)
 			}
 		}
 	}()
 
+	// check timings ticker
+	checkT := time.NewTicker(5 * time.Second)
+	defer checkT.Stop()
 	go func() {
-		for range checkTicker.C {
+		for range checkT.C {
 			checkTriangleTimings(triangles)
 		}
 	}()
@@ -563,48 +551,45 @@ func runBot(logFile *os.File) error {
 	for {
 		_, raw, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("⚠️ Ошибка чтения WebSocket:", err)
-			if websocket.IsUnexpectedCloseError(err) {
-				break
-			}
-			time.Sleep(time.Second)
+			log.Println("⚠️ Read error:", err)
+			return err
+		}
+		var m DealsMsg
+		if err := json.Unmarshal(raw, &m); err != nil || m.Symbol == "" || len(m.Data) == 0 {
 			continue
 		}
+		now := time.Now()
+		side, price := m.Data[0].Side, m.Data[0].Price
 
-		var msg DealsMsg
-		if err := json.Unmarshal(raw, &msg); err == nil && msg.Symbol != "" && len(msg.Data) > 0 {
-			now := time.Now()
-			priceLock.Lock()
-			lastUpdate[msg.Symbol] = now
-			lastUpdate[reversePair(msg.Symbol)] = now
-			priceLock.Unlock()
+		priceLock.Lock()
+		lastUpdate[m.Symbol] = now
+		lastUpdate[reversePair(m.Symbol)] = now
+		priceLock.Unlock()
 
-			log.Printf("📊 %s → %s %s", msg.Symbol, msg.Data[0].Side, msg.Data[0].Price)
-			entry := map[string]interface{}{
-				"symbol": msg.Symbol,
-				"price":  msg.Data[0].Price,
-				"side":   msg.Data[0].Side,
-				"time":   now.Format(time.RFC3339Nano),
-			}
-			encoder.Encode(entry)
-		}
+		logPriceUpdate(m.Symbol, side, price)
+
+		enc.Encode(map[string]interface{}{
+			"symbol": m.Symbol,
+			"side":   side,
+			"price":  price,
+			"time":   now.Format(time.RFC3339Nano),
+		})
 	}
-	return nil
 }
 
 func main() {
 	log.SetOutput(os.Stdout)
-
-	logFile, err := os.OpenFile("prices_log.jsonl", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	f, err := os.OpenFile("prices_log.jsonl", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
-		log.Fatal("Не удалось создать файл лога:", err)
+		log.Fatal(err)
 	}
-	defer logFile.Close()
+	defer f.Close()
 
 	for {
-		err := runBot(logFile)
-		log.Printf("🔄 Переподключение через 5 сек... (%v)", err)
-		time.Sleep(5 * time.Second)
+		if err := runBot(f); err != nil {
+			log.Printf("🔄 Reconnect in 5s: %v", err)
+			time.Sleep(5 * time.Second)
+		}
 	}
 }
 
