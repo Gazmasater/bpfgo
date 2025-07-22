@@ -333,76 +333,68 @@ sudo docker run -d \
 
   ___________________________________________________________________________________________
 
-
-package models
+package main
 
 import (
+	"encoding/json"
 	"fmt"
-	"math"
+	"io/ioutil"
+	"net/http"
 )
 
-type BaseFigure struct{}
-
-func (b *BaseFigure) Describe(name string, area, perim float64) string {
-	return fmt.Sprintf("Фигура: %s | Площадь: %.2f | Периметр: %.2f", name, area, perim)
+type SymbolInfo struct {
+	Symbol     string `json:"symbol"`
+	BaseAsset  string `json:"baseAsset"`
+	QuoteAsset string `json:"quoteAsset"`
 }
 
-type Rectangle struct {
-	BaseFigure
-	width  float64
-	length float64
+type ExchangeInfo struct {
+	Symbols []SymbolInfo `json:"symbols"`
 }
 
-type Circle struct {
-	BaseFigure
-	radius float64
-}
+func main() {
+	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
 
-func (r *Circle) Area() float64 {
-	return math.Pi * r.radius * r.radius
-}
+	body, _ := ioutil.ReadAll(resp.Body)
 
-func (r *Circle) Perimetr() float64 {
+	var info ExchangeInfo
+	if err := json.Unmarshal(body, &info); err != nil {
+		panic(err)
+	}
 
-	return 2 * math.Pi * r.radius
-}
+	// Мапа: base → [quotes]
+	pairs := map[string]map[string]bool{}
+	exists := map[string]bool{}
 
-func (r *Circle) Name() string {
+	for _, s := range info.Symbols {
+		if pairs[s.BaseAsset] == nil {
+			pairs[s.BaseAsset] = map[string]bool{}
+		}
+		pairs[s.BaseAsset][s.QuoteAsset] = true
+		exists[s.Symbol] = true
+	}
 
-	return "Circle"
-}
+	// Ищем треугольники
+	count := 0
+	for a := range pairs {
+		for b := range pairs[a] {
+			for c := range pairs[b] {
+				if c == a {
+					continue
+				}
+				if pairs[c][a] {
+					count++
+					fmt.Printf("🔺 %s → %s → %s → %s\n", a, b, c, a)
+				}
+			}
+		}
+	}
 
-func (c *Circle) Describe() string {
-	return c.BaseFigure.Describe(c.Name(), c.Area(), c.Perimetr())
-}
-
-func NewCircle(r float64) *Circle {
-
-	return &Circle{radius: r}
-}
-
-func (a *Rectangle) Area() float64 {
-
-	return a.length * a.width
-}
-
-func (a *Rectangle) Perimetr() float64 {
-
-	return (a.length + a.width) * 2
-}
-
-func (a *Rectangle) Name() string {
-
-	return "Rectangle"
-}
-
-func (r *Rectangle) Describe() string {
-	return r.BaseFigure.Describe(r.Name(), r.Area(), r.Perimetr())
-}
-
-func NewRectangle(a, b float64) *Rectangle {
-
-	return &Rectangle{width: a, length: b}
+	fmt.Printf("\nНайдено треугольников: %d\n", count)
 }
 
 
