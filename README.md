@@ -333,27 +333,19 @@ sudo docker run -d \
 
   ___________________________________________________________________________________________
 
-// Расширенный бот: поиск треугольников на MEXC и сохранение в файл
+// Go-бот: подписка на нужные пары из triangles.json и логирование цен
 package main
 
 import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net/http"
+	"log"
 	"os"
-	"sort"
+	"time"
+
+	"github.com/gorilla/websocket"
 )
-
-type SymbolInfo struct {
-	Symbol     string `json:"symbol"`
-	BaseAsset  string `json:"baseAsset"`
-	QuoteAsset string `json:"quoteAsset"`
-}
-
-type ExchangeInfo struct {
-	Symbols []SymbolInfo `json:"symbols"`
-}
 
 type Triangle struct {
 	A string `json:"a"`
@@ -361,120 +353,81 @@ type Triangle struct {
 	C string `json:"c"`
 }
 
-func main() {
-	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-
-	body, _ := ioutil.ReadAll(resp.Body)
-
-	var info ExchangeInfo
-	if err := json.Unmarshal(body, &info); err != nil {
-		panic(err)
-	}
-
-	// Граф: from → to
-	graph := map[string]map[string]bool{}
-	for _, s := range info.Symbols {
-		base := s.BaseAsset
-		quote := s.QuoteAsset
-
-		if graph[base] == nil {
-			graph[base] = map[string]bool{}
-		}
-		graph[base][quote] = true
-
-		if graph[quote] == nil {
-			graph[quote] = map[string]bool{}
-		}
-		graph[quote][base] = true
-	}
-
-	// Фильтр по ликвидным валютам
-	popular := map[string]bool{
-		"USDT": true, "BTC": true, "ETH": true, "BNB": true,
-		"SOL": true, "TRX": true, "XRP": true, "ADA": true,
-		"DOGE": true, "SHIB": true,
-	}
-
-	// Поиск треугольников
-	triangles := []Triangle{}
-	seen := map[string]bool{}
-
-	for a := range graph {
-		for b := range graph[a] {
-			for c := range graph[b] {
-				if c == a || !graph[c][a] {
-					continue
-				}
-
-				// Только ликвидные
-				if !(popular[a] && popular[b] && popular[c]) {
-					continue
-				}
-
-				// Уникальный ключ
-				slice := []string{a, b, c}
-				sort.Strings(slice)
-				key := slice[0] + slice[1] + slice[2]
-				if seen[key] {
-					continue
-				}
-				seen[key] = true
-
-				triangles = append(triangles, Triangle{A: a, B: b, C: c})
-			}
-		}
-	}
-
-	fmt.Printf("Найдено ликвидных треугольников: %d\n", len(triangles))
-
-	// Сохраняем в файл
-	data, _ := json.MarshalIndent(triangles, "", "  ")
-	_ = ioutil.WriteFile("triangles.json", data, 0644)
-	fmt.Println("Список сохранён в triangles.json")
+type TickerMsg struct {
+	Symbol string `json:"symbol"`
+	Data   struct {
+		Bid string `json:"b"`
+		Ask string `json:"a"`
+	} `json:"data"`
 }
 
+func loadTriangles() ([]Triangle, error) {
+	data, err := ioutil.ReadFile("triangles.json")
+	if err != nil {
+		return nil, err
+	}
+	var triangles []Triangle
+	err = json.Unmarshal(data, &triangles)
+	return triangles, err
+}
 
-[
-  {
-    "a": "XRP",
-    "b": "USDT",
-    "c": "ETH"
-  },
-  {
-    "a": "XRP",
-    "b": "USDT",
-    "c": "BTC"
-  },
-  {
-    "a": "XRP",
-    "b": "BTC",
-    "c": "ETH"
-  },
-  {
-    "a": "TRX",
-    "b": "BTC",
-    "c": "USDT"
-  },
-  {
-    "a": "ADA",
-    "b": "USDT",
-    "c": "BTC"
-  },
-  {
-    "a": "ETH",
-    "b": "USDT",
-    "c": "BTC"
-  },
-  {
-    "a": "BTC",
-    "b": "SOL",
-    "c": "USDT"
-  }
-]
+func buildSymbolList(triangles []Triangle) []string {
+	pairs := map[string]bool{}
+	for _, t := range triangles {
+		pairs[t.A+t.B] = true
+		pairs[t.B+t.C] = true
+		pairs[t.C+t.A] = true
+	}
+	result := []string{}
+	for p := range pairs {
+		result = append(result, p)
+	}
+	return result
+}
+
+func main() {
+	log.SetOutput(os.Stdout)
+
+	triangles, err := loadTriangles()
+	if err != nil {
+		log.Fatal("Не удалось загрузить triangles.json:", err)
+	}
+
+	symbols := buildSymbolList(triangles)
+	channels := []string{}
+	for _, s := range symbols {
+		channels = append(channels, fmt.Sprintf("spot@public.ticker.v3.api@%s", s))
+	}
+
+	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", nil)
+	if err != nil {
+		log.Fatal("Ошибка подключения к WebSocket:", err)
+	}
+	defer conn.Close()
+
+	sub := map[string]interface{}{
+		"method": "SUBSCRIPTION",
+		"params": channels,
+		"id":     time.Now().Unix(),
+	}
+	if err := conn.WriteJSON(sub); err != nil {
+		log.Fatal("Ошибка подписки:", err)
+	}
+	log.Println("Подписка на пары отправлена")
+
+	for {
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			log.Println("Ошибка чтения WebSocket:", err)
+			continue
+		}
+
+		var tick TickerMsg
+		if err := json.Unmarshal(msg, &tick); err == nil && tick.Symbol != "" {
+			log.Printf("%s → Bid: %s | Ask: %s", tick.Symbol, tick.Data.Bid, tick.Data.Ask)
+		}
+	}
+}
 
 
 
