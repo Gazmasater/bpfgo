@@ -345,6 +345,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -357,9 +358,8 @@ type SymbolInfo struct{ Symbol string }
 type ExchangeInfo struct{ Symbols []SymbolInfo }
 
 var (
-	priceLock  sync.Mutex
-	latest     = map[string]float64{}
-	lastUpdate = map[string]time.Time{}
+	priceLock sync.Mutex
+	latest    = map[string]float64{}
 )
 
 func ensureTrianglesFile() error {
@@ -371,6 +371,14 @@ func ensureTrianglesFile() error {
 		{"BTC", "SOL", "USDT"},
 		{"XRP", "USDT", "ETH"},
 		{"XRP", "BTC", "ETH"},
+		{"LTC", "BTC", "USDT"},
+		{"DOGE", "BTC", "USDT"},
+		{"MATIC", "USDT", "BTC"},
+		{"DOT", "BTC", "USDT"},
+		{"AVAX", "BTC", "USDT"},
+		{"BCH", "BTC", "USDT"},
+		{"LINK", "BTC", "USDT"},
+		{"ETC", "BTC", "USDT"},
 	}
 	b, _ := json.MarshalIndent(t, "", "  ")
 	return ioutil.WriteFile("triangles.json", b, 0644)
@@ -453,20 +461,26 @@ func checkTriangleProfit(triangles []Triangle) {
 	priceLock.Lock()
 	defer priceLock.Unlock()
 
+	commission := 0.001
+	netFactor := (1 - commission) * (1 - commission) * (1 - commission)
+
 	for _, t := range triangles {
 		ab := findActualPairKey(t.A, t.B)
 		bc := findActualPairKey(t.B, t.C)
 		ac := findActualPairKey(t.A, t.C)
-		
+
 		p1, ok1 := latest[ab]
 		p2, ok2 := latest[bc]
 		p3, ok3 := latest[ac]
 		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
 			continue
 		}
-		
-		profit := (p1 * p2 / p3 - 1) * 100
-		log.Printf("🔺 %s/%s/%s | profit: %.3f%%", t.A, t.B, t.C, profit)
+
+		profit := (p1*p2/p3*netFactor - 1) * 100
+		if profit > 0.2 {
+			log.Printf("🔺 %s/%s/%s | profit: %.3f%%", t.A, t.B, t.C, profit)
+		}
+
 	}
 }
 
@@ -501,7 +515,7 @@ func runBot(logFile *os.File) error {
 	}
 
 	enc := json.NewEncoder(logFile)
-	pingT := time.NewTicker(15 * time.Second)
+	pingT := time.NewTicker(60 * time.Second)
 	defer pingT.Stop()
 	go func() {
 		for range pingT.C {
@@ -527,8 +541,8 @@ func runBot(logFile *os.File) error {
 			Channel string `json:"c"`
 			Data    struct {
 				Deals []struct {
-					Price     string `json:"p"`
-					Side      int    `json:"S"`
+					Price string `json:"p"`
+					Side  int    `json:"S"`
 				} `json:"deals"`
 			} `json:"d"`
 			Symbol string `json:"s"`
@@ -573,57 +587,6 @@ func main() {
 		}
 	}
 }
-
-
-func checkTriangleProfit(triangles []Triangle) {
-	priceLock.Lock()
-	defer priceLock.Unlock()
-
-	commission := 0.001
-	netFactor := (1 - commission) * (1 - commission) * (1 - commission)
-
-	for _, t := range triangles {
-		ab := findActualPairKey(t.A, t.B)
-		bc := findActualPairKey(t.B, t.C)
-		ac := findActualPairKey(t.A, t.C)
-
-		p1, ok1 := latest[ab]
-		p2, ok2 := latest[bc]
-		p3, ok3 := latest[ac]
-		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
-			continue
-		}
-
-		profit := (p1 * p2 / p3 * netFactor - 1) * 100
-		log.Printf("🔺 %s/%s/%s | profit: %.3f%%", t.A, t.B, t.C, profit)
-	}
-}
-
-
-
-func ensureTrianglesFile() error {
-	t := []Triangle{
-		{"XRP", "BTC", "USDT"},
-		{"ETH", "BTC", "USDT"},
-		{"TRX", "BTC", "USDT"},
-		{"ADA", "USDT", "BTC"},
-		{"BTC", "SOL", "USDT"},
-		{"XRP", "USDT", "ETH"},
-		{"XRP", "BTC", "ETH"},
-		{"LTC", "BTC", "USDT"},
-		{"DOGE", "BTC", "USDT"},
-		{"MATIC", "USDT", "BTC"},
-		{"DOT", "BTC", "USDT"},
-		{"AVAX", "BTC", "USDT"},
-		{"BCH", "BTC", "USDT"},
-		{"LINK", "BTC", "USDT"},
-		{"ETC", "BTC", "USDT"},
-	}
-	b, _ := json.MarshalIndent(t, "", "  ")
-	return ioutil.WriteFile("triangles.json", b, 0644)
-}
-
-
 
 
 
