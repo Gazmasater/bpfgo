@@ -334,7 +334,7 @@ sudo docker run -d \
   ___________________________________________________________________________________________
 
 
-// Go-бот: добавлен второй треугольник ETH/BTC/USDT
+// Go-бот: использует поток сделок (deals.v3.api) для устойчивости
 package main
 
 import (
@@ -451,7 +451,7 @@ func runBot(logFile *os.File) error {
 	symbols := buildValidSymbols(triangles, validSymbols)
 	channels := []string{}
 	for _, s := range symbols {
-		ch := fmt.Sprintf("spot@public.ticker.v3.api@%s", s)
+		ch := fmt.Sprintf("spot@public.deals.v3.api@%s", s) // заменили ticker → deals
 		channels = append(channels, ch)
 		log.Println("📡 Подписка на:", ch)
 	}
@@ -530,42 +530,6 @@ func main() {
 		time.Sleep(5 * time.Second)
 	}
 }
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go run .
-2025/07/22 17:52:25 📡 Подписка на: spot@public.ticker.v3.api@BTCUSDT
-2025/07/22 17:52:25 📡 Подписка на: spot@public.ticker.v3.api@XRPUSDT
-2025/07/22 17:52:25 📡 Подписка на: spot@public.ticker.v3.api@ETHBTC
-2025/07/22 17:52:25 📡 Подписка на: spot@public.ticker.v3.api@ETHUSDT
-2025/07/22 17:52:25 📡 Подписка на: spot@public.ticker.v3.api@XRPBTC
-2025/07/22 17:52:25 ✅ Подписка на пары отправлена
-2025/07/22 17:52:41 📶 Получен pong от сервера
-2025/07/22 17:52:56 📶 Получен pong от сервера
-2025/07/22 17:52:58 ⚠️ Ошибка чтения WebSocket: websocket: close 1005 (no status)
-2025/07/22 17:52:58 🔄 Переподключение через 5 сек... (<nil>)
-2025/07/22 17:53:04 📡 Подписка на: spot@public.ticker.v3.api@ETHUSDT
-2025/07/22 17:53:04 📡 Подписка на: spot@public.ticker.v3.api@XRPBTC
-2025/07/22 17:53:04 📡 Подписка на: spot@public.ticker.v3.api@BTCUSDT
-2025/07/22 17:53:04 📡 Подписка на: spot@public.ticker.v3.api@XRPUSDT
-2025/07/22 17:53:04 📡 Подписка на: spot@public.ticker.v3.api@ETHBTC
-2025/07/22 17:53:04 ✅ Подписка на пары отправлена
-2025/07/22 17:53:19 📶 Получен pong от сервера
-
-
-[
-  {
-    "a": "XRP",
-    "b": "BTC",
-    "c": "USDT"
-  },
-  {
-    "a": "ETH",
-    "b": "BTC",
-    "c": "USDT"
-  }
-]
-
-
 
 
 
