@@ -438,6 +438,45 @@ func main() {
 }
 
 
+[
+  {
+    "a": "XRP",
+    "b": "USDT",
+    "c": "ETH"
+  },
+  {
+    "a": "XRP",
+    "b": "USDT",
+    "c": "BTC"
+  },
+  {
+    "a": "XRP",
+    "b": "BTC",
+    "c": "ETH"
+  },
+  {
+    "a": "TRX",
+    "b": "BTC",
+    "c": "USDT"
+  },
+  {
+    "a": "ADA",
+    "b": "USDT",
+    "c": "BTC"
+  },
+  {
+    "a": "ETH",
+    "b": "USDT",
+    "c": "BTC"
+  },
+  {
+    "a": "BTC",
+    "b": "SOL",
+    "c": "USDT"
+  }
+]
+
+
 
 
 
