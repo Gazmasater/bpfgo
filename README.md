@@ -613,28 +613,16 @@ func main() {
 
 
 
-[{
-	"resource": "/home/gaz358/myprog/crypt/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "UndeclaredName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredName"
-		}
-	},
-	"severity": 8,
-	"message": "undefined: findActualPairKey",
-	"source": "compiler",
-	"startLineNumber": 137,
-	"startColumn": 4,
-	"endLineNumber": 137,
-	"endColumn": 21,
-	"origin": "extHost1"
-}]
+// выбирает правильный ключ для пары: если у нас уже есть обновление по "AB",
+// возвращаем "AB", иначе "BA"
+func findActualPairKey(a, b string) string {
+    key := a + b
+    if _, ok := lastUpdate[key]; ok {
+        return key
+    }
+    return b + a
+}
+
 
 
 
