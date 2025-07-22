@@ -575,18 +575,61 @@ func main() {
 }
 
 
-[{
-	"resource": "/home/gaz358/myprog/crypt/main.go",
-	"owner": "go-staticcheck",
-	"severity": 4,
-	"message": "var lastUpdate is unused (U1000)",
-	"source": "go-staticcheck",
-	"startLineNumber": 27,
-	"startColumn": 2,
-	"endLineNumber": 27,
-	"endColumn": 37,
-	"origin": "extHost1"
-}]
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go run .
+2025/07/22 23:39:49 🔺 XRP/BTC/USDT | profit: -0.101%
+2025/07/22 23:39:49 🔺 ETH/BTC/USDT | profit: -0.092%
+2025/07/22 23:39:49 🔺 ADA/USDT/BTC | profit: 0.036%
+2025/07/22 23:39:49 🔺 XRP/USDT/ETH | profit: -0.081%
+2025/07/22 23:39:49 🔺 XRP/BTC/ETH | profit: -0.090%
+2025/07/22 23:39:54 🔺 XRP/BTC/USDT | profit: 0.019%
+2025/07/22 23:39:54 🔺 ETH/BTC/USDT | profit: -0.031%
+2025/07/22 23:39:54 🔺 ADA/USDT/BTC | profit: -0.083%
+2025/07/22 23:39:54 🔺 XRP/USDT/ETH | profit: 0.158%
+2025/07/22 23:39:54 🔺 XRP/BTC/ETH | profit: 0.208%
+2025/07/22 23:39:59 🔺 XRP/BTC/USDT | profit: 0.044%
+2025/07/22 23:39:59 🔺 ETH/BTC/USDT | profit: -0.016%
+2025/07/22 23:39:59 🔺 TRX/BTC/USDT | profit: 0.103%
+2025/07/22 23:39:59 🔺 ADA/USDT/BTC | profit: -0.068%
+2025/07/22 23:39:59 🔺 BTC/SOL/USDT | profit: -0.033%
+2025/07/22 23:39:59 🔺 XRP/USDT/ETH | profit: 0.045%
+2025/07/22 23:39:59 🔺 XRP/BTC/ETH | profit: 0.104%
+2025/07/22 23:39:59 📶 Pong after 259.319028ms
+2025/07/22 23:40:04 🔺 XRP/BTC/USDT | profit: 0.027%
+2025/07/22 23:40:04 🔺 ETH/BTC/USDT | profit: 0.012%
+2025/07/22 23:40:04 🔺 TRX/BTC/USDT | profit: 0.103%
+2025/07/22 23:40:04 🔺 ADA/USDT/BTC | profit: -0.008%
+2025/07/22 23:40:04 🔺 BTC/SOL/USDT | profit: 0.017%
+2025/07/22 23:40:04 🔺 XRP/USDT/ETH | profit: 0.126%
+2025/07/22 23:40:04 🔺 XRP/BTC/ETH | profit: 0.142%
+2025/07/22 23:40:09 🔺 XRP/BTC/USDT | profit: 0.008%
+2025/07/22 23:40:09 🔺 ETH/BTC/USDT | profit: 0.012%
+2025/07/22 23:40:09 🔺 TRX/BTC/USDT | profit: -0.088%
+2025/07/22 23:40:09 🔺 ADA/USDT/BTC | profit: -0.041%
+2025/07/22 23:40:09 🔺 BTC/SOL/USDT | profit: 0.032%
+2025/07/22 23:40:09 🔺 XRP/USDT/ETH | profit: 0.162%
+2025/07/22 23:40:09 🔺 XRP/BTC/ETH | profit: 0.158%
+2025/07/22 23:40:14 🔺 XRP/BTC/USDT | profit: 0.018%
+2025/07/22 23:40:14 🔺 ETH/BTC/USDT | profit: -0.019%
+2025/07/22 23:40:14 🔺 TRX/BTC/USDT | profit: 0.065%
+2025/07/22 23:40:14 🔺 ADA/USDT/BTC | profit: 0.091%
+2025/07/22 23:40:14 🔺 BTC/SOL/USDT | profit: 0.017%
+2025/07/22 23:40:14 🔺 XRP/USDT/ETH | profit: -0.078%
+2025/07/22 23:40:14 🔺 XRP/BTC/ETH | profit: -0.041%
+2025/07/22 23:40:14 📶 Pong after 219.575111ms
+2025/07/22 23:40:19 🔺 XRP/BTC/USDT | profit: 0.018%
+2025/07/22 23:40:19 🔺 ETH/BTC/USDT | profit: -0.019%
+2025/07/22 23:40:19 🔺 TRX/BTC/USDT | profit: 0.065%
+2025/07/22 23:40:19 🔺 ADA/USDT/BTC | profit: -0.016%
+2025/07/22 23:40:19 🔺 BTC/SOL/USDT | profit: 0.045%
+2025/07/22 23:40:19 🔺 XRP/USDT/ETH | profit: -0.078%
+2025/07/22 23:40:19 🔺 XRP/BTC/ETH | profit: -0.041%
+2025/07/22 23:40:24 🔺 XRP/BTC/USDT | profit: 0.015%
+2025/07/22 23:40:24 🔺 ETH/BTC/USDT | profit: -0.055%
+2025/07/22 23:40:24 🔺 TRX/BTC/USDT | profit: -0.005%
+2025/07/22 23:40:24 🔺 ADA/USDT/BTC | profit: -0.132%
+2025/07/22 23:40:24 🔺 BTC/SOL/USDT | profit: 0.069%
+2025/07/22 23:40:24 🔺 XRP/USDT/ETH | profit: -0.055%
+2025/07/22 23:40:24 🔺 XRP/BTC/ETH | profit: 0.015%
 
 
 
