@@ -600,27 +600,31 @@ func checkTriangleProfit(triangles []Triangle) {
 }
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go run .
-2025/07/23 00:44:54 🔺 XRP/BTC/ETH | profit: 0.094%
-2025/07/23 00:45:39 📶 Pong after 228.888796ms
-2025/07/23 00:45:54 🔺 XRP/BTC/ETH | profit: 0.058%
-2025/07/23 00:46:39 📶 Pong after 250.975416ms
-2025/07/23 00:46:49 🔺 XRP/BTC/ETH | profit: 0.060%
-2025/07/23 00:46:54 🔺 XRP/BTC/ETH | profit: 0.114%
-2025/07/23 00:47:04 🔺 XRP/BTC/ETH | profit: 0.053%
-2025/07/23 00:47:09 🔺 XRP/BTC/ETH | profit: 0.092%
-2025/07/23 00:47:19 🔺 XRP/BTC/ETH | profit: 0.165%
-2025/07/23 00:47:39 📶 Pong after 263.777032ms
-2025/07/23 00:48:39 📶 Pong after 273.519174ms
-2025/07/23 00:49:24 🔺 XRP/BTC/ETH | profit: 0.143%
-2025/07/23 00:49:39 📶 Pong after 276.641291ms
-2025/07/23 00:50:39 📶 Pong after 275.500473ms
-2025/07/23 00:51:39 📶 Pong after 277.022558ms
-2025/07/23 00:52:39 📶 Pong after 279.750668ms
-2025/07/23 00:53:39 📶 Pong after 283.255118ms
-2025/07/23 00:54:39 📶 Pong after 287.831114ms
-2025/07/23 00:55:14 🔺 XRP/BTC/ETH | profit: 0.146%
-2025/07/23 00:55:39 📶 Pong after 223.27906ms
+
+func ensureTrianglesFile() error {
+	t := []Triangle{
+		{"XRP", "BTC", "USDT"},
+		{"ETH", "BTC", "USDT"},
+		{"TRX", "BTC", "USDT"},
+		{"ADA", "USDT", "BTC"},
+		{"BTC", "SOL", "USDT"},
+		{"XRP", "USDT", "ETH"},
+		{"XRP", "BTC", "ETH"},
+		{"LTC", "BTC", "USDT"},
+		{"DOGE", "BTC", "USDT"},
+		{"MATIC", "USDT", "BTC"},
+		{"DOT", "BTC", "USDT"},
+		{"AVAX", "BTC", "USDT"},
+		{"BCH", "BTC", "USDT"},
+		{"LINK", "BTC", "USDT"},
+		{"ETC", "BTC", "USDT"},
+	}
+	b, _ := json.MarshalIndent(t, "", "  ")
+	return ioutil.WriteFile("triangles.json", b, 0644)
+}
+
+
+
 
 
 
