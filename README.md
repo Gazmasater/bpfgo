@@ -464,29 +464,36 @@ func logPriceUpdate(symbol, side, price string) {
 func checkTriangleTimings(triangles []Triangle) {
 	priceLock.Lock()
 	defer priceLock.Unlock()
-	now := time.Now()
 	for _, t := range triangles {
+		// ключи для трёх сторон треугольника
 		ps := []string{t.A + t.B, t.B + t.C, t.A + t.C}
-		times := make([]time.Time, 0, 3)
+		var times []time.Time
 		missing := false
+
 		for _, p := range ps {
-			if ts, ok := lastUpdate[p]; ok {
-				times = append(times, ts)
-				log.Printf("⏱ Пара %s обновлена в %v", p, ts)
-			} else {
+			ts, ok := lastUpdate[p]
+			if !ok {
 				log.Printf("⚠️ Пара %s ещё не получила тиков", p)
 				missing = true
 				break
 			}
+			times = append(times, ts)
+			log.Printf("⏱ Пара %s обновлена в %v", p, ts)
 		}
+
 		if missing {
 			continue
 		}
+
+		// сортируем три времени, чтобы найти самый ранний и самый поздний
 		sort.Slice(times, func(i, j int) bool { return times[i].Before(times[j]) })
+
+		// разница между последним и первым
 		delta := times[2].Sub(times[0])
 		log.Printf("✅ Треугольник %s/%s/%s собран за %v", t.A, t.B, t.C, delta)
 	}
 }
+
 
 func runBot(logFile *os.File) error {
 	triangles, err := loadTriangles()
