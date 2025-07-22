@@ -334,7 +334,7 @@ sudo docker run -d \
   ___________________________________________________________________________________________
 
 
-// Go-бот: 7 треугольников + deals.v3.api + ping-pong с таймингом
+// Go-бот: 7 треугольников + deals + ping-pong + тайминг сборки треугольника
 package main
 
 import (
@@ -344,6 +344,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
+	"sync"
 	"time"
 	"github.com/gorilla/websocket"
 )
@@ -369,6 +371,11 @@ type TickerMsg struct {
 		Ask string `json:"a"`
 	} `json:"data"`
 }
+
+var (
+	priceLock sync.Mutex
+	lastUpdate = map[string]time.Time{}
+)
 
 func ensureTrianglesFile() error {
 	triangles := []Triangle{
@@ -446,6 +453,45 @@ func buildValidSymbols(triangles []Triangle, valid map[string]bool) []string {
 	return result
 }
 
+func checkTriangleTimings(triangles []Triangle) {
+	priceLock.Lock()
+	defer priceLock.Unlock()
+	now := time.Now()
+	for _, t := range triangles {
+		pairs := []string{
+			sortPair(t.A + t.B),
+			sortPair(t.B + t.C),
+			sortPair(t.A + t.C),
+		}
+		latest := time.Time{}
+		oldest := now
+		complete := true
+		for _, p := range pairs {
+			ts, ok := lastUpdate[p]
+			if !ok {
+				complete = false
+				break
+			}
+			if ts.After(latest) {
+				latest = ts
+			}
+			if ts.Before(oldest) {
+				oldest = ts
+			}
+		}
+		if complete {
+			delta := latest.Sub(oldest)
+			log.Printf("⏱ Треугольник %s/%s/%s собран за %v", t.A, t.B, t.C, delta)
+		}
+	}
+}
+
+func sortPair(s string) string {
+	runes := []rune(s)
+	sort.Slice(runes, func(i, j int) bool { return runes[i] < runes[j] })
+	return string(runes)
+}
+
 func runBot(logFile *os.File) error {
 	triangles, err := loadTriangles()
 	if err != nil {
@@ -487,7 +533,9 @@ func runBot(logFile *os.File) error {
 
 	encoder := json.NewEncoder(logFile)
 	pingTicker := time.NewTicker(15 * time.Second)
+	checkTicker := time.NewTicker(5 * time.Second)
 	defer pingTicker.Stop()
+	defer checkTicker.Stop()
 
 	go func() {
 		for range pingTicker.C {
@@ -495,6 +543,12 @@ func runBot(logFile *os.File) error {
 			if err := conn.WriteMessage(websocket.PingMessage, []byte("keepalive")); err != nil {
 				log.Println("⚠️ Ошибка отправки ping:", err)
 			}
+		}
+	}()
+
+	go func() {
+		for range checkTicker.C {
+			checkTriangleTimings(triangles)
 		}
 	}()
 
@@ -511,6 +565,9 @@ func runBot(logFile *os.File) error {
 
 		var tick TickerMsg
 		if err := json.Unmarshal(msg, &tick); err == nil && tick.Symbol != "" {
+			priceLock.Lock()
+			lastUpdate[tick.Symbol] = time.Now()
+			priceLock.Unlock()
 			log.Printf("📈 %s → Bid: %s | Ask: %s", tick.Symbol, tick.Data.Bid, tick.Data.Ask)
 			entry := map[string]string{
 				"symbol": tick.Symbol,
@@ -540,34 +597,5 @@ func main() {
 	}
 }
 
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go run .
-2025/07/22 18:16:39 🔁 Переворачиваем USDTBTC → BTCUSDT
-2025/07/22 18:16:39 🔁 Переворачиваем BTCSOL → SOLBTC
-2025/07/22 18:16:39 🔁 Переворачиваем USDTETH → ETHUSDT
-2025/07/22 18:16:39 🔁 Переворачиваем BTCETH → ETHBTC
-2025/07/22 18:16:39 📡 Подписка на: spot@public.deals.v3.api@ADABTC
-2025/07/22 18:16:39 📡 Подписка на: spot@public.deals.v3.api@SOLBTC
-2025/07/22 18:16:39 📡 Подписка на: spot@public.deals.v3.api@XRPETH
-2025/07/22 18:16:39 📡 Подписка на: spot@public.deals.v3.api@XRPBTC
-2025/07/22 18:16:39 📡 Подписка на: spot@public.deals.v3.api@BTCUSDT
-2025/07/22 18:16:39 📡 Подписка на: spot@public.deals.v3.api@ETHUSDT
-2025/07/22 18:16:39 📡 Подписка на: spot@public.deals.v3.api@TRXBTC
-2025/07/22 18:16:39 📡 Подписка на: spot@public.deals.v3.api@TRXUSDT
-2025/07/22 18:16:39 📡 Подписка на: spot@public.deals.v3.api@ADAUSDT
-2025/07/22 18:16:39 📡 Подписка на: spot@public.deals.v3.api@SOLUSDT
-2025/07/22 18:16:39 📡 Подписка на: spot@public.deals.v3.api@XRPUSDT
-2025/07/22 18:16:39 📡 Подписка на: spot@public.deals.v3.api@ETHBTC
-2025/07/22 18:16:40 ✅ Подписка на пары отправлена
-2025/07/22 18:16:55 📶 Получен pong от сервера (через 252.495676ms)
-2025/07/22 18:17:10 📶 Получен pong от сервера (через 304.294971ms)
-2025/07/22 18:17:25 📶 Получен pong от сервера (через 253.15553ms)
-2025/07/22 18:17:40 📶 Получен pong от сервера (через 260.860763ms)
-2025/07/22 18:17:55 📶 Получен pong от сервера (через 258.417843ms)
-2025/07/22 18:18:10 📶 Получен pong от сервера (через 312.499289ms)
-2025/07/22 18:18:25 📶 Получен pong от сервера (через 226.167816ms)
-2025/07/22 18:18:40 📶 Получен pong от сервера (через 315.574823ms)
-2025/07/22 18:18:55 📶 Получен pong от сервера (через 264.017523ms)
-2025/07/22 18:19:10 📶 Получен pong от сервера (через 316.951317ms)
 
 
