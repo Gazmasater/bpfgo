@@ -333,6 +333,7 @@ sudo docker run -d \
 
   ___________________________________________________________________________________________
 
+// Расширенный бот: поиск треугольников на MEXC и сохранение в файл
 package main
 
 import (
@@ -340,6 +341,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
+	"sort"
 )
 
 type SymbolInfo struct {
@@ -350,6 +353,12 @@ type SymbolInfo struct {
 
 type ExchangeInfo struct {
 	Symbols []SymbolInfo `json:"symbols"`
+}
+
+type Triangle struct {
+	A string `json:"a"`
+	B string `json:"b"`
+	C string `json:"c"`
 }
 
 func main() {
@@ -366,14 +375,12 @@ func main() {
 		panic(err)
 	}
 
-	// Создаем граф: from → to
+	// Граф: from → to
 	graph := map[string]map[string]bool{}
-
 	for _, s := range info.Symbols {
 		base := s.BaseAsset
 		quote := s.QuoteAsset
 
-		// В обе стороны
 		if graph[base] == nil {
 			graph[base] = map[string]bool{}
 		}
@@ -385,44 +392,50 @@ func main() {
 		graph[quote][base] = true
 	}
 
-	// Выводим все доступные направления
-	fmt.Println("✅ Доступные переходы (всего направлений):")
-	total := 0
-	for from, toList := range graph {
-		for to := range toList {
-			fmt.Printf(" - %s → %s\n", from, to)
-			total++
-		}
+	// Фильтр по ликвидным валютам
+	popular := map[string]bool{
+		"USDT": true, "BTC": true, "ETH": true, "BNB": true,
+		"SOL": true, "TRX": true, "XRP": true, "ADA": true,
+		"DOGE": true, "SHIB": true,
 	}
-	fmt.Printf("\nВсего направлений: %d\n\n", total)
 
 	// Поиск треугольников
-	fmt.Println("🔺 Найденные треугольники:")
-	count := 0
+	triangles := []Triangle{}
 	seen := map[string]bool{}
 
 	for a := range graph {
 		for b := range graph[a] {
 			for c := range graph[b] {
-				if c == a {
+				if c == a || !graph[c][a] {
 					continue
 				}
-				if graph[c][a] {
-					// Формируем уникальный ключ, чтобы не повторять
-					key := fmt.Sprintf("%s>%s>%s", a, b, c)
-					if !seen[key] {
-						fmt.Printf("🔺 %s → %s → %s → %s\n", a, b, c, a)
-						count++
-						seen[key] = true
-					}
+
+				// Только ликвидные
+				if !(popular[a] && popular[b] && popular[c]) {
+					continue
 				}
+
+				// Уникальный ключ
+				slice := []string{a, b, c}
+				sort.Strings(slice)
+				key := slice[0] + slice[1] + slice[2]
+				if seen[key] {
+					continue
+				}
+				seen[key] = true
+
+				triangles = append(triangles, Triangle{A: a, B: b, C: c})
 			}
 		}
 	}
 
-	fmt.Printf("\nВсего треугольников: %d\n", count)
-}
+	fmt.Printf("Найдено ликвидных треугольников: %d\n", len(triangles))
 
+	// Сохраняем в файл
+	data, _ := json.MarshalIndent(triangles, "", "  ")
+	_ = ioutil.WriteFile("triangles.json", data, 0644)
+	fmt.Println("Список сохранён в triangles.json")
+}
 
 
 
