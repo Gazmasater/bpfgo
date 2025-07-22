@@ -366,36 +366,63 @@ func main() {
 		panic(err)
 	}
 
-	// Мапа: base → [quotes]
-	pairs := map[string]map[string]bool{}
-	exists := map[string]bool{}
+	// Создаем граф: from → to
+	graph := map[string]map[string]bool{}
 
 	for _, s := range info.Symbols {
-		if pairs[s.BaseAsset] == nil {
-			pairs[s.BaseAsset] = map[string]bool{}
+		base := s.BaseAsset
+		quote := s.QuoteAsset
+
+		// В обе стороны
+		if graph[base] == nil {
+			graph[base] = map[string]bool{}
 		}
-		pairs[s.BaseAsset][s.QuoteAsset] = true
-		exists[s.Symbol] = true
+		graph[base][quote] = true
+
+		if graph[quote] == nil {
+			graph[quote] = map[string]bool{}
+		}
+		graph[quote][base] = true
 	}
 
-	// Ищем треугольники
+	// Выводим все доступные направления
+	fmt.Println("✅ Доступные переходы (всего направлений):")
+	total := 0
+	for from, toList := range graph {
+		for to := range toList {
+			fmt.Printf(" - %s → %s\n", from, to)
+			total++
+		}
+	}
+	fmt.Printf("\nВсего направлений: %d\n\n", total)
+
+	// Поиск треугольников
+	fmt.Println("🔺 Найденные треугольники:")
 	count := 0
-	for a := range pairs {
-		for b := range pairs[a] {
-			for c := range pairs[b] {
+	seen := map[string]bool{}
+
+	for a := range graph {
+		for b := range graph[a] {
+			for c := range graph[b] {
 				if c == a {
 					continue
 				}
-				if pairs[c][a] {
-					count++
-					fmt.Printf("🔺 %s → %s → %s → %s\n", a, b, c, a)
+				if graph[c][a] {
+					// Формируем уникальный ключ, чтобы не повторять
+					key := fmt.Sprintf("%s>%s>%s", a, b, c)
+					if !seen[key] {
+						fmt.Printf("🔺 %s → %s → %s → %s\n", a, b, c, a)
+						count++
+						seen[key] = true
+					}
 				}
 			}
 		}
 	}
 
-	fmt.Printf("\nНайдено треугольников: %d\n", count)
+	fmt.Printf("\nВсего треугольников: %d\n", count)
 }
+
 
 
 
