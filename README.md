@@ -334,6 +334,264 @@ sudo docker run -d \
   ___________________________________________________________________________________________
 
 
+// Go-бот: 7 треугольников + deals + ping-pong + тайминг сборки треугольника
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
+	"sync"
+	"time"
+
+	"github.com/gorilla/websocket"
+)
+
+type Triangle struct {
+	A string `json:"a"`
+	B string `json:"b"`
+	C string `json:"c"`
+}
+
+type SymbolInfo struct {
+	Symbol string `json:"symbol"`
+}
+
+type ExchangeInfo struct {
+	Symbols []SymbolInfo `json:"symbols"`
+}
+
+type DealsMsg struct {
+	Symbol string `json:"symbol"`
+	Data   []struct {
+		Price     string `json:"p"`
+		Quantity  string `json:"v"`
+		Timestamp int64  `json:"T"`
+		Side      string `json:"S"`
+	} `json:"data"`
+}
+
+var (
+	priceLock  sync.Mutex
+	lastUpdate = map[string]time.Time{}
+)
+
+func ensureTrianglesFile() error {
+	triangles := []Triangle{
+		{"XRP", "BTC", "USDT"},
+		{"ETH", "BTC", "USDT"},
+		{"TRX", "BTC", "USDT"},
+		{"ADA", "USDT", "BTC"},
+		{"BTC", "SOL", "USDT"},
+		{"XRP", "USDT", "ETH"},
+		{"XRP", "BTC", "ETH"},
+	}
+	data, _ := json.MarshalIndent(triangles, "", "  ")
+	return ioutil.WriteFile("triangles.json", data, 0644)
+}
+
+func loadTriangles() ([]Triangle, error) {
+	if err := ensureTrianglesFile(); err != nil {
+		return nil, fmt.Errorf("не удалось создать triangles.json: %v", err)
+	}
+	data, err := ioutil.ReadFile("triangles.json")
+	if err != nil {
+		return nil, err
+	}
+	var triangles []Triangle
+	err = json.Unmarshal(data, &triangles)
+	return triangles, err
+}
+
+func fetchAvailableSymbols() map[string]bool {
+	symbolSet := map[string]bool{}
+	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+	if err != nil {
+		log.Println("⚠️ Не удалось загрузить список символов с биржи:", err)
+		return symbolSet
+	}
+	defer resp.Body.Close()
+
+	body, _ := ioutil.ReadAll(resp.Body)
+	var info ExchangeInfo
+	if err := json.Unmarshal(body, &info); err != nil {
+		log.Println("⚠️ Ошибка парсинга exchangeInfo:", err)
+		return symbolSet
+	}
+
+	for _, s := range info.Symbols {
+		symbolSet[s.Symbol] = true
+	}
+	return symbolSet
+}
+
+func tryAddSymbol(a, b string, valid map[string]bool, out map[string]bool) {
+	p1 := a + b
+	p2 := b + a
+	if valid[p1] {
+		out[p1] = true
+	} else if valid[p2] {
+		out[p2] = true
+		log.Printf("🔁 Переворачиваем %s → %s", p1, p2)
+	} else {
+		log.Printf("❌ Пара %s/%s не найдена на бирже", a, b)
+	}
+}
+
+func buildValidSymbols(triangles []Triangle, valid map[string]bool) []string {
+	pairSet := map[string]bool{}
+	for _, t := range triangles {
+		tryAddSymbol(t.A, t.B, valid, pairSet)
+		tryAddSymbol(t.B, t.C, valid, pairSet)
+		tryAddSymbol(t.A, t.C, valid, pairSet)
+	}
+	result := []string{}
+	for p := range pairSet {
+		result = append(result, p)
+	}
+	return result
+}
+
+func findActualPairKey(a, b string) string {
+	if _, ok := lastUpdate[a+b]; ok {
+		return a + b
+	}
+	return b + a
+}
+
+func checkTriangleTimings(triangles []Triangle) {
+	priceLock.Lock()
+	defer priceLock.Unlock()
+	now := time.Now()
+	for _, t := range triangles {
+		p1 := findActualPairKey(t.A, t.B)
+		p2 := findActualPairKey(t.B, t.C)
+		p3 := findActualPairKey(t.A, t.C)
+		pairs := []string{p1, p2, p3}
+
+		latest := time.Time{}
+		oldest := now
+		complete := true
+		for _, pair := range pairs {
+			ts, ok := lastUpdate[pair]
+			if !ok {
+				complete = false
+				break
+			}
+			if ts.After(latest) {
+				latest = ts
+			}
+			if ts.Before(oldest) {
+				oldest = ts
+			}
+		}
+		if complete {
+			delta := latest.Sub(oldest)
+			log.Printf("⏱ Треугольник %s/%s/%s собран за %v", t.A, t.B, t.C, delta)
+		}
+	}
+}
+
+func reversePair(s string) string {
+	n := len(s)
+	return s[n/2:] + s[:n/2]
+}
+
+func runBot(logFile *os.File) error {
+	triangles, err := loadTriangles()
+	if err != nil {
+		return fmt.Errorf("не удалось загрузить triangles.json: %v", err)
+	}
+
+	validSymbols := fetchAvailableSymbols()
+	symbols := buildValidSymbols(triangles, validSymbols)
+	channels := []string{}
+	for _, s := range symbols {
+		ch := fmt.Sprintf("spot@public.deals.v3.api@%s", s)
+		channels = append(channels, ch)
+		log.Println("📡 Подписка на:", ch)
+	}
+
+	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", nil)
+	if err != nil {
+		return fmt.Errorf("ошибка подключения к WebSocket: %v", err)
+	}
+	defer conn.Close()
+
+	lastPing := time.Now()
+	conn.SetPongHandler(func(appData string) error {
+		delta := time.Since(lastPing)
+		log.Printf("📶 Получен pong от сервера (через %v)", delta)
+		lastPing = time.Now()
+		return nil
+	})
+
+	sub := map[string]interface{}{
+		"method": "SUBSCRIPTION",
+		"params": channels,
+		"id":     time.Now().Unix(),
+	}
+	if err := conn.WriteJSON(sub); err != nil {
+		return fmt.Errorf("ошибка подписки: %v", err)
+	}
+	log.Println("✅ Подписка на пары отправлена")
+
+	encoder := json.NewEncoder(logFile)
+	pingTicker := time.NewTicker(15 * time.Second)
+	checkTicker := time.NewTicker(5 * time.Second)
+	defer pingTicker.Stop()
+	defer checkTicker.Stop()
+
+	go func() {
+		for range pingTicker.C {
+			lastPing = time.Now()
+			if err := conn.WriteMessage(websocket.PingMessage, []byte("keepalive")); err != nil {
+				log.Println("⚠️ Ошибка отправки ping:", err)
+			}
+		}
+	}()
+
+	go func() {
+		for range checkTicker.C {
+			checkTriangleTimings(triangles)
+		}
+	}()
+
+	for {
+		_, raw, err := conn.ReadMessage()
+		if err != nil {
+			log.Println("⚠️ Ошибка чтения WebSocket:", err)
+			if websocket.IsUnexpectedCloseError(err) {
+				break
+			}
+			time.Sleep(time.Second)
+			continue
+		}
+
+		var msg DealsMsg
+		if err := json.Unmarshal(raw, &msg); err == nil && msg.Symbol != "" && len(msg.Data) > 0 {
+			now := time.Now()
+			priceLock.Lock()
+			lastUpdate[msg.Symbol] = now
+			lastUpdate[reversePair(msg.Symbol)] = now
+			priceLock.Unlock()
+
+			log.Printf("📊 %s → %s %s", msg.Symbol, msg.Data[0].Side, msg.Data[0].Price)
+			entry := map[string]interface{}{
+				"symbol": msg.Symbol,
+				"price":  msg.Data[0].Price,
+				"side":   msg.Data[0].Side,
+				"time":   now.Format(time.RFC3339Nano),
+			}
+			encoder.Encode(entry)
+		}
+	}
+	return nil
+}
+
 func main() {
 	log.SetOutput(os.Stdout)
 
@@ -349,53 +607,6 @@ func main() {
 		time.Sleep(5 * time.Second)
 	}
 }
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go run .
-2025/07/22 19:19:26 🔁 Переворачиваем USDTBTC → BTCUSDT
-2025/07/22 19:19:26 🔁 Переворачиваем BTCSOL → SOLBTC
-2025/07/22 19:19:26 🔁 Переворачиваем USDTETH → ETHUSDT
-2025/07/22 19:19:26 🔁 Переворачиваем BTCETH → ETHBTC
-2025/07/22 19:19:26 📡 Подписка на: spot@public.deals.v3.api@ADAUSDT
-2025/07/22 19:19:26 📡 Подписка на: spot@public.deals.v3.api@SOLBTC
-2025/07/22 19:19:26 📡 Подписка на: spot@public.deals.v3.api@XRPBTC
-2025/07/22 19:19:26 📡 Подписка на: spot@public.deals.v3.api@BTCUSDT
-2025/07/22 19:19:26 📡 Подписка на: spot@public.deals.v3.api@XRPUSDT
-2025/07/22 19:19:26 📡 Подписка на: spot@public.deals.v3.api@ETHBTC
-2025/07/22 19:19:26 📡 Подписка на: spot@public.deals.v3.api@ETHUSDT
-2025/07/22 19:19:26 📡 Подписка на: spot@public.deals.v3.api@ADABTC
-2025/07/22 19:19:26 📡 Подписка на: spot@public.deals.v3.api@SOLUSDT
-2025/07/22 19:19:26 📡 Подписка на: spot@public.deals.v3.api@XRPETH
-2025/07/22 19:19:26 📡 Подписка на: spot@public.deals.v3.api@TRXBTC
-2025/07/22 19:19:26 📡 Подписка на: spot@public.deals.v3.api@TRXUSDT
-2025/07/22 19:19:26 ✅ Подписка на пары отправлена
-2025/07/22 19:19:41 📶 Получен pong от сервера (через 254.222437ms)
-2025/07/22 19:19:56 📶 Получен pong от сервера (через 223.677886ms)
-2025/07/22 19:20:11 📶 Получен pong от сервера (через 266.766694ms)
-2025/07/22 19:20:26 📶 Получен pong от сервера (через 321.171687ms)
-2025/07/22 19:20:41 📶 Получен pong от сервера (через 223.724079ms)
-2025/07/22 19:20:56 📶 Получен pong от сервера (через 225.429443ms)
-2025/07/22 19:21:11 📶 Получен pong от сервера (через 276.359552ms)
-2025/07/22 19:21:26 📶 Получен pong от сервера (через 227.997644ms)
-2025/07/22 19:21:41 📶 Получен pong от сервера (через 278.052579ms)
-2025/07/22 19:21:56 📶 Получен pong от сервера (через 232.082897ms)
-2025/07/22 19:22:11 📶 Получен pong от сервера (через 224.656461ms)
-2025/07/22 19:22:26 📶 Получен pong от сервера (через 239.647941ms)
-2025/07/22 19:22:41 📶 Получен pong от сервера (через 295.708858ms)
-2025/07/22 19:22:56 📶 Получен pong от сервера (через 247.25121ms)
-2025/07/22 19:23:11 📶 Получен pong от сервера (через 260.725088ms)
-2025/07/22 19:23:26 📶 Получен pong от сервера (через 252.809435ms)
-2025/07/22 19:23:41 📶 Получен pong от сервера (через 307.208748ms)
-2025/07/22 19:23:56 📶 Получен pong от сервера (через 227.306499ms)
-2025/07/22 19:24:11 📶 Получен pong от сервера (через 224.807844ms)
-2025/07/22 19:24:26 📶 Получен pong от сервера (через 228.252348ms)
-2025/07/22 19:24:41 📶 Получен pong от сервера (через 228.19568ms)
-2025/07/22 19:24:56 📶 Получен pong от сервера (через 222.263154ms)
-2025/07/22 19:25:11 📶 Получен pong от сервера (через 317.355132ms)
-2025/07/22 19:25:26 📶 Получен pong от сервера (через 370.426036ms)
-2025/07/22 19:25:41 📶 Получен pong от сервера (через 322.228373ms)
-2025/07/22 19:25:56 📶 Получен pong от сервера (через 271.179417ms)
-2025/07/22 19:26:11 📶 Получен pong от сервера (через 324.990719ms)
 
 
 
