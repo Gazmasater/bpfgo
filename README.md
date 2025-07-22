@@ -431,5 +431,20 @@ func main() {
 
 
 
+2025/07/22 14:33:04 Ошибка чтения WebSocket: websocket: close 1005 (no status)
+2025/07/22 14:33:04 Ошибка чтения WebSocket: websocket: close 1005 (no status)
+panic: repeated read on failed websocket connection
+
+goroutine 1 [running]:
+github.com/gorilla/websocket.(*Conn).NextReader(0xc000280420)
+        /home/gaz358/go/pkg/mod/github.com/gorilla/websocket@v1.5.3/conn.go:1030 +0x1fb
+github.com/gorilla/websocket.(*Conn).ReadMessage(0xc000126150?)
+        /home/gaz358/go/pkg/mod/github.com/gorilla/websocket@v1.5.3/conn.go:1093 +0x13
+main.main()
+        /home/gaz358/myprog/crypt/main.go:84 +0x7f2
+exit status 2
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ 
+
+
 
 
