@@ -333,7 +333,7 @@ sudo docker run -d \
 
   ___________________________________________________________________________________________
 
-// Go-бот: подписка на нужные пары из triangles.json, логирование в файл и автопереподключение
+// Go-бот: безопасная подписка на проверенные пары из triangles.json, логирование и автопереподключение
 package main
 
 import (
@@ -341,7 +341,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -353,6 +355,14 @@ type Triangle struct {
 	C string `json:"c"`
 }
 
+type SymbolInfo struct {
+	Symbol string `json:"symbol"`
+}
+
+type ExchangeInfo struct {
+	Symbols []SymbolInfo `json:"symbols"`
+}
+
 type TickerMsg struct {
 	Symbol string `json:"symbol"`
 	Data   struct {
@@ -361,7 +371,25 @@ type TickerMsg struct {
 	} `json:"data"`
 }
 
+func ensureTrianglesFile() error {
+	if _, err := os.Stat("triangles.json"); os.IsNotExist(err) {
+		triangles := []Triangle{
+			{A: "ETH", B: "BTC", C: "USDT"},
+			{A: "BTC", B: "SOL", C: "USDT"},
+			{A: "XRP", B: "BTC", C: "USDT"},
+			{A: "TRX", B: "BTC", C: "USDT"},
+			{A: "ADA", B: "BTC", C: "USDT"},
+		}
+		data, _ := json.MarshalIndent(triangles, "", "  ")
+		return ioutil.WriteFile("triangles.json", data, 0644)
+	}
+	return nil
+}
+
 func loadTriangles() ([]Triangle, error) {
+	if err := ensureTrianglesFile(); err != nil {
+		return nil, fmt.Errorf("не удалось создать triangles.json: %v", err)
+	}
 	data, err := ioutil.ReadFile("triangles.json")
 	if err != nil {
 		return nil, err
@@ -371,7 +399,29 @@ func loadTriangles() ([]Triangle, error) {
 	return triangles, err
 }
 
-func buildSymbolList(triangles []Triangle) []string {
+func fetchAvailableSymbols() map[string]bool {
+	symbolSet := map[string]bool{}
+	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+	if err != nil {
+		log.Println("⚠️ Не удалось загрузить список символов с биржи:", err)
+		return symbolSet
+	}
+	defer resp.Body.Close()
+
+	body, _ := ioutil.ReadAll(resp.Body)
+	var info ExchangeInfo
+	if err := json.Unmarshal(body, &info); err != nil {
+		log.Println("⚠️ Ошибка парсинга exchangeInfo:", err)
+		return symbolSet
+	}
+
+	for _, s := range info.Symbols {
+		symbolSet[s.Symbol] = true
+	}
+	return symbolSet
+}
+
+func buildValidSymbols(triangles []Triangle, valid map[string]bool) []string {
 	pairs := map[string]bool{}
 	for _, t := range triangles {
 		pairs[t.A+t.B] = true
@@ -380,7 +430,11 @@ func buildSymbolList(triangles []Triangle) []string {
 	}
 	result := []string{}
 	for p := range pairs {
-		result = append(result, p)
+		if valid[p] {
+			result = append(result, p)
+		} else {
+			log.Printf("❌ Пара %s не найдена на бирже, пропускаем", p)
+		}
 	}
 	return result
 }
@@ -391,10 +445,13 @@ func runBot(logFile *os.File) error {
 		return fmt.Errorf("не удалось загрузить triangles.json: %v", err)
 	}
 
-	symbols := buildSymbolList(triangles)
+	validSymbols := fetchAvailableSymbols()
+	symbols := buildValidSymbols(triangles, validSymbols)
 	channels := []string{}
 	for _, s := range symbols {
-		channels = append(channels, fmt.Sprintf("spot@public.ticker.v3.api@%s", s))
+		ch := fmt.Sprintf("spot@public.ticker.v3.api@%s", s)
+		channels = append(channels, ch)
+		log.Println("📡 Подписка на:", ch)
 	}
 
 	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", nil)
@@ -418,7 +475,7 @@ func runBot(logFile *os.File) error {
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("⚠️  Ошибка чтения WebSocket:", err)
+			log.Println("⚠️ Ошибка чтения WebSocket:", err)
 			if websocket.IsUnexpectedCloseError(err) {
 				break
 			}
