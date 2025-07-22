@@ -461,50 +461,57 @@ func logPriceUpdate(symbol, side, price string) {
 	log.Printf("📊 %s | side=%s | price=%s", symbol, side, price)
 }
 
-func checkTriangleTimings(triangles []Triangle) {
-    priceLock.Lock()
-    defer priceLock.Unlock()
-
-    now := time.Now()
-
-    for _, t := range triangles {
-        // Собираем ключи трёх пар по треугольнику
-        ps := []string{
-            findActualPairKey(t.A, t.B),
-            findActualPairKey(t.B, t.C),
-            findActualPairKey(t.A, t.C),
-        }
-
-        var times []time.Time
-        missing := false
-
-        for _, p := range ps {
-            ts, ok := lastUpdate[p]
-            if !ok {
-                log.Printf("⚠️ Пара %s ещё не получила ни одного тика", p)
-                missing = true
-                break
-            }
-            age := now.Sub(ts)
-            log.Printf("⏱ Пара %s обновлена %v назад (в %s)", p, age.Truncate(time.Millisecond), ts.Format("15:04:05.000"))
-            times = append(times, ts)
-        }
-
-        if missing {
-            continue
-        }
-
-        // Сортируем по времени, чтобы взять самое раннее и самое позднее
-        sort.Slice(times, func(i, j int) bool { return times[i].Before(times[j]) })
-
-        delta := times[len(times)-1].Sub(times[0])
-        log.Printf("✅ Треугольник %s/%s/%s собран за %v\n",
-            t.A, t.B, t.C, delta.Truncate(time.Millisecond),
-        )
-    }
+func findActualPairKey(a, b string) string {
+	key := a + b
+	if _, ok := lastUpdate[key]; ok {
+		return key
+	}
+	return b + a
 }
 
+func checkTriangleTimings(triangles []Triangle) {
+	priceLock.Lock()
+	defer priceLock.Unlock()
 
+	now := time.Now()
+
+	for _, t := range triangles {
+		ps := []string{
+			findActualPairKey(t.A, t.B),
+			findActualPairKey(t.B, t.C),
+			findActualPairKey(t.A, t.C),
+		}
+
+		var times []time.Time
+		missing := false
+
+		for _, p := range ps {
+			ts, ok := lastUpdate[p]
+			if !ok {
+				log.Printf("⚠️ Пара %s ещё не получила ни одного тика", p)
+				missing = true
+				break
+			}
+			age := now.Sub(ts)
+			log.Printf("⏱ Пара %s обновлена %v назад (в %s)",
+				p,
+				age.Truncate(time.Millisecond),
+				ts.Format("15:04:05.000"),
+			)
+			times = append(times, ts)
+		}
+
+		if missing {
+			continue
+		}
+
+		sort.Slice(times, func(i, j int) bool { return times[i].Before(times[j]) })
+		delta := times[len(times)-1].Sub(times[0])
+		log.Printf("✅ Треугольник %s/%s/%s собран за %v",
+			t.A, t.B, t.C, delta.Truncate(time.Millisecond),
+		)
+	}
+}
 
 func runBot(logFile *os.File) error {
 	triangles, err := loadTriangles()
@@ -572,10 +579,32 @@ func runBot(logFile *os.File) error {
 			log.Println("⚠️ Read error:", err)
 			return err
 		}
-		var m DealsMsg
-		if err := json.Unmarshal(raw, &m); err != nil || m.Symbol == "" || len(m.Data) == 0 {
+
+		// 1) Детальное логирование «сырых» месседжей
+		log.Printf("🔴 RAW MSG: %s\n", string(raw))
+
+		// 2) Парсим во «внешнюю» обёртку
+		var wrapper struct {
+			Method string     `json:"method"`
+			Params []DealsMsg `json:"params"`
+		}
+		if err := json.Unmarshal(raw, &wrapper); err != nil {
+			log.Println("⚠️ JSON wrapper unmarshal failed:", err)
 			continue
 		}
+		if wrapper.Method != "push.deals.v3" || len(wrapper.Params) == 0 {
+			log.Printf("⚠️ skipping, method=%s\n", wrapper.Method)
+			continue
+		}
+
+		// 3) Вытаскиваем реальный payload
+		m := wrapper.Params[0]
+		if m.Symbol == "" || len(m.Data) == 0 {
+			log.Println("⚠️ empty Params[0]:", m)
+			continue
+		}
+
+		// 4) Обрабатываем тики
 		now := time.Now()
 		side, price := m.Data[0].Side, m.Data[0].Price
 
@@ -586,6 +615,7 @@ func runBot(logFile *os.File) error {
 
 		logPriceUpdate(m.Symbol, side, price)
 
+		// 5) Dump JSONL
 		enc.Encode(map[string]interface{}{
 			"symbol": m.Symbol,
 			"side":   side,
@@ -609,18 +639,6 @@ func main() {
 			time.Sleep(5 * time.Second)
 		}
 	}
-}
-
-
-
-// выбирает правильный ключ для пары: если у нас уже есть обновление по "AB",
-// возвращаем "AB", иначе "BA"
-func findActualPairKey(a, b string) string {
-    key := a + b
-    if _, ok := lastUpdate[key]; ok {
-        return key
-    }
-    return b + a
 }
 
 
