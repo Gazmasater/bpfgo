@@ -643,6 +643,285 @@ func main() {
 
 
 
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 ⚠️ Пара BTCXRP ещё не получила ни одного тика
+2025/07/22 23:02:53 ⚠️ Пара BTCETH ещё не получила ни одного тика
+2025/07/22 23:02:53 ⚠️ Пара BTCTRX ещё не получила ни одного тика
+2025/07/22 23:02:53 ⚠️ Пара USDTADA ещё не получила ни одного тика
+2025/07/22 23:02:53 ⚠️ Пара SOLBTC ещё не получила ни одного тика
+2025/07/22 23:02:53 ⚠️ Пара USDTXRP ещё не получила ни одного тика
+2025/07/22 23:02:53 ⚠️ Пара BTCXRP ещё не получила ни одного тика
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@BTCUSDT","d":{"deals":[{"p":"119309.18","v":"0.03620555","S":1,"t":1753214573415}],"e":"spot@public.deals.v3.api"},"s":"BTCUSDT","t":1753214573417}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"198.96","v":"0.18","S":1,"t":1753214573416}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753214573420}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@BTCUSDT","d":{"deals":[{"p":"119309.18","v":"0.03430052","S":2,"t":1753214573417}],"e":"spot@public.deals.v3.api"},"s":"BTCUSDT","t":1753214573420}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"198.96","v":"0.65","S":1,"t":1753214573417}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753214573420}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"198.96","v":"1.05","S":2,"t":1753214573417}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753214573420}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@BTCUSDT","d":{"deals":[{"p":"119309.18","v":"0.01588527","S":1,"t":1753214573418}],"e":"spot@public.deals.v3.api"},"s":"BTCUSDT","t":1753214573420}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHUSDT","d":{"deals":[{"p":"3670.80","v":"2.35796","S":1,"t":1753214573455}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDT","t":1753214573458}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHUSDT","d":{"deals":[{"p":"3670.80","v":"3.28673","S":2,"t":1753214573455}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDT","t":1753214573459}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030777","v":"0.013","S":2,"t":1753214573542}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214573544}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030784","v":"0.014","S":2,"t":1753214573542}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214573544}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030781","v":"0.002","S":2,"t":1753214573542}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214573544}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030773","v":"0.004","S":2,"t":1753214573542}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214573544}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030778","v":"0.009","S":1,"t":1753214573542}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214573544}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030775","v":"0.003","S":1,"t":1753214573542}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214573544}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030784","v":"0.008","S":1,"t":1753214573543}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214573547}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030786","v":"0.014","S":2,"t":1753214573543}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214573548}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 📶 Pong received after 262.366173ms
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHUSDT","d":{"deals":[{"p":"3670.80","v":"0.14611","S":2,"t":1753214573581}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDT","t":1753214573584}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5347","v":"0.40","S":2,"t":1753214573749}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214573752}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5347","v":"0.40","S":2,"t":1753214573749}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214573752}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5347","v":"0.40","S":2,"t":1753214573751}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214573755}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5347","v":"0.40","S":2,"t":1753214573751}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214573755}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5347","v":"0.40","S":2,"t":1753214573751}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214573755}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5347","v":"0.40","S":2,"t":1753214573752}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214573755}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5347","v":"0.40","S":2,"t":1753214573752}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214573755}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5347","v":"0.40","S":2,"t":1753214573753}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214573755}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5347","v":"0.40","S":2,"t":1753214573753}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214573755}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5347","v":"0.40","S":2,"t":1753214573754}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214573759}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5347","v":"0.40","S":2,"t":1753214573756}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214573759}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5347","v":"0.40","S":2,"t":1753214573756}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214573759}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5347","v":"0.40","S":2,"t":1753214573759}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214573763}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5347","v":"0.40","S":2,"t":1753214573760}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214573763}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5347","v":"0.40","S":2,"t":1753214573765}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214573768}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:53 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPETH","d":{"deals":[{"p":"0.0009622","v":"0.60","S":2,"t":1753214573838}],"e":"spot@public.deals.v3.api"},"s":"XRPETH","t":1753214573840}
+2025/07/22 23:02:53 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@BTCUSDT","d":{"deals":[{"p":"119309.19","v":"0.00009204","S":2,"t":1753214573916}],"e":"spot@public.deals.v3.api"},"s":"BTCUSDT","t":1753214573919}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@BTCUSDT","d":{"deals":[{"p":"119309.19","v":"0.00024807","S":2,"t":1753214573916}],"e":"spot@public.deals.v3.api"},"s":"BTCUSDT","t":1753214573919}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@BTCUSDT","d":{"deals":[{"p":"119309.19","v":"0.00011584","S":1,"t":1753214573918}],"e":"spot@public.deals.v3.api"},"s":"BTCUSDT","t":1753214573920}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"198.99","v":"1.60","S":1,"t":1753214573923}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753214573926}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"199.01","v":"24.36","S":1,"t":1753214573923}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753214573926}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5346","v":"1.30","S":2,"t":1753214574007}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214574009}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPBTC","d":{"deals":[{"p":"0.000029623","v":"1.22","S":2,"t":1753214574029}],"e":"spot@public.deals.v3.api"},"s":"XRPBTC","t":1753214574033}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030785","v":"0.001","S":1,"t":1753214574042}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214574045}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030778","v":"0.001","S":1,"t":1753214574042}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214574045}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHUSDT","d":{"deals":[{"p":"3670.82","v":"0.17913","S":2,"t":1753214574453}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDT","t":1753214574455}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHUSDT","d":{"deals":[{"p":"3670.81","v":"1.34131","S":1,"t":1753214574454}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDT","t":1753214574458}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHUSDT","d":{"deals":[{"p":"3670.82","v":"2.23530","S":1,"t":1753214574455}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDT","t":1753214574458}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHUSDT","d":{"deals":[{"p":"3670.82","v":"2.44390","S":2,"t":1753214574455}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDT","t":1753214574458}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHUSDT","d":{"deals":[{"p":"3670.81","v":"0.26853","S":1,"t":1753214574456}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDT","t":1753214574458}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHUSDT","d":{"deals":[{"p":"3670.82","v":"0.47712","S":1,"t":1753214574456}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDT","t":1753214574458}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030773","v":"0.009","S":2,"t":1753214574542}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214574544}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030774","v":"0.012","S":2,"t":1753214574543}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214574547}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030775","v":"0.018","S":1,"t":1753214574544}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214574547}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030787","v":"0.015","S":2,"t":1753214574544}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214574547}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030779","v":"0.017","S":1,"t":1753214574545}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214574547}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030780","v":"0.012","S":1,"t":1753214574556}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214574560}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:54 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ADAUSDT","d":{"deals":[{"p":"0.8783","v":"8.70","S":1,"t":1753214574605}],"e":"spot@public.deals.v3.api"},"s":"ADAUSDT","t":1753214574608}
+2025/07/22 23:02:54 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@BTCUSDT","d":{"deals":[{"p":"119309.18","v":"0.00003604","S":1,"t":1753214574916}],"e":"spot@public.deals.v3.api"},"s":"BTCUSDT","t":1753214574918}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5340","v":"9.06","S":2,"t":1753214575012}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214575014}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5340","v":"7.15","S":2,"t":1753214575012}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214575014}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ADAUSDT","d":{"deals":[{"p":"0.8784","v":"6.84","S":2,"t":1753214575104}],"e":"spot@public.deals.v3.api"},"s":"ADAUSDT","t":1753214575107}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ADABTC","d":{"deals":[{"p":"0.000007364","v":"2.331","S":1,"t":1753214575159}],"e":"spot@public.deals.v3.api"},"s":"ADABTC","t":1753214575163}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5338","v":"0.37","S":2,"t":1753214575168}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214575171}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHUSDT","d":{"deals":[{"p":"3670.14","v":"0.00068","S":1,"t":1753214575334}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDT","t":1753214575336}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPETH","d":{"deals":[{"p":"0.0009623","v":"0.44","S":1,"t":1753214575338}],"e":"spot@public.deals.v3.api"},"s":"XRPETH","t":1753214575340}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPETH","d":{"deals":[{"p":"0.0009621","v":"0.68","S":1,"t":1753214575338}],"e":"spot@public.deals.v3.api"},"s":"XRPETH","t":1753214575341}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPETH","d":{"deals":[{"p":"0.0009619","v":"0.34","S":2,"t":1753214575338}],"e":"spot@public.deals.v3.api"},"s":"XRPETH","t":1753214575341}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPETH","d":{"deals":[{"p":"0.0009617","v":"0.21","S":2,"t":1753214575338}],"e":"spot@public.deals.v3.api"},"s":"XRPETH","t":1753214575341}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@BTCUSDT","d":{"deals":[{"p":"119309.19","v":"0.00008192","S":1,"t":1753214575415}],"e":"spot@public.deals.v3.api"},"s":"BTCUSDT","t":1753214575417}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"198.91","v":"2.50","S":2,"t":1753214575415}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753214575418}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"198.91","v":"1.91","S":1,"t":1753214575415}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753214575418}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"198.95","v":"1.81","S":2,"t":1753214575416}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753214575418}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@BTCUSDT","d":{"deals":[{"p":"119309.19","v":"0.00010403","S":2,"t":1753214575416}],"e":"spot@public.deals.v3.api"},"s":"BTCUSDT","t":1753214575420}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@BTCUSDT","d":{"deals":[{"p":"119309.19","v":"0.00019801","S":2,"t":1753214575418}],"e":"spot@public.deals.v3.api"},"s":"BTCUSDT","t":1753214575420}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"198.91","v":"2.87","S":1,"t":1753214575416}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753214575419}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"198.91","v":"1.50","S":1,"t":1753214575416}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753214575419}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"198.91","v":"2.12","S":1,"t":1753214575416}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753214575419}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHUSDT","d":{"deals":[{"p":"3670.13","v":"0.03112","S":2,"t":1753214575454}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDT","t":1753214575458}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHUSDT","d":{"deals":[{"p":"3670.13","v":"0.01572","S":2,"t":1753214575454}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDT","t":1753214575459}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHUSDT","d":{"deals":[{"p":"3670.13","v":"0.02962","S":1,"t":1753214575454}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDT","t":1753214575459}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHUSDT","d":{"deals":[{"p":"3670.13","v":"0.01422","S":1,"t":1753214575455}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDT","t":1753214575459}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHUSDT","d":{"deals":[{"p":"3670.12","v":"0.02624","S":2,"t":1753214575456}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDT","t":1753214575460}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5331","v":"1.86","S":1,"t":1753214575511}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214575513}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5331","v":"75.50","S":2,"t":1753214575511}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214575513}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5331","v":"26.92","S":1,"t":1753214575511}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214575513}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5331","v":"23.12","S":2,"t":1753214575512}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214575516}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPBTC","d":{"deals":[{"p":"0.000029622","v":"1.44","S":1,"t":1753214575530}],"e":"spot@public.deals.v3.api"},"s":"XRPBTC","t":1753214575534}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPBTC","d":{"deals":[{"p":"0.000029618","v":"0.44","S":2,"t":1753214575530}],"e":"spot@public.deals.v3.api"},"s":"XRPBTC","t":1753214575534}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPBTC","d":{"deals":[{"p":"0.000029619","v":"0.78","S":2,"t":1753214575530}],"e":"spot@public.deals.v3.api"},"s":"XRPBTC","t":1753214575534}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPBTC","d":{"deals":[{"p":"0.000029618","v":"1.04","S":1,"t":1753214575530}],"e":"spot@public.deals.v3.api"},"s":"XRPBTC","t":1753214575534}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPBTC","d":{"deals":[{"p":"0.000029618","v":"0.83","S":1,"t":1753214575530}],"e":"spot@public.deals.v3.api"},"s":"XRPBTC","t":1753214575535}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPBTC","d":{"deals":[{"p":"0.000029619","v":"0.55","S":1,"t":1753214575530}],"e":"spot@public.deals.v3.api"},"s":"XRPBTC","t":1753214575535}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPBTC","d":{"deals":[{"p":"0.000029618","v":"0.93","S":2,"t":1753214575531}],"e":"spot@public.deals.v3.api"},"s":"XRPBTC","t":1753214575535}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPBTC","d":{"deals":[{"p":"0.000029621","v":"0.95","S":1,"t":1753214575531}],"e":"spot@public.deals.v3.api"},"s":"XRPBTC","t":1753214575535}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPBTC","d":{"deals":[{"p":"0.000029618","v":"0.65","S":1,"t":1753214575531}],"e":"spot@public.deals.v3.api"},"s":"XRPBTC","t":1753214575535}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPBTC","d":{"deals":[{"p":"0.000029621","v":"1.70","S":2,"t":1753214575532}],"e":"spot@public.deals.v3.api"},"s":"XRPBTC","t":1753214575535}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ADAUSDT","d":{"deals":[{"p":"0.8782","v":"20.49","S":2,"t":1753214575603}],"e":"spot@public.deals.v3.api"},"s":"ADAUSDT","t":1753214575606}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ADAUSDT","d":{"deals":[{"p":"0.8782","v":"7.30","S":2,"t":1753214575605}],"e":"spot@public.deals.v3.api"},"s":"ADAUSDT","t":1753214575609}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ADAUSDT","d":{"deals":[{"p":"0.8782","v":"10.60","S":2,"t":1753214575607}],"e":"spot@public.deals.v3.api"},"s":"ADAUSDT","t":1753214575609}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:55 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ADABTC","d":{"deals":[{"p":"0.000007367","v":"5.759","S":2,"t":1753214575661}],"e":"spot@public.deals.v3.api"},"s":"ADABTC","t":1753214575665}
+2025/07/22 23:02:55 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPETH","d":{"deals":[{"p":"0.0009622","v":"3.65","S":2,"t":1753214575838}],"e":"spot@public.deals.v3.api"},"s":"XRPETH","t":1753214575841}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPETH","d":{"deals":[{"p":"0.0009624","v":"0.51","S":2,"t":1753214575838}],"e":"spot@public.deals.v3.api"},"s":"XRPETH","t":1753214575841}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPETH","d":{"deals":[{"p":"0.0009611","v":"1.33","S":1,"t":1753214575839}],"e":"spot@public.deals.v3.api"},"s":"XRPETH","t":1753214575842}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPETH","d":{"deals":[{"p":"0.0009613","v":"3.82","S":1,"t":1753214575839}],"e":"spot@public.deals.v3.api"},"s":"XRPETH","t":1753214575842}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPETH","d":{"deals":[{"p":"0.0009625","v":"3.43","S":1,"t":1753214575839}],"e":"spot@public.deals.v3.api"},"s":"XRPETH","t":1753214575842}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"198.92","v":"0.08","S":1,"t":1753214575916}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753214575918}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@BTCUSDT","d":{"deals":[{"p":"119309.18","v":"0.00045871","S":2,"t":1753214575927}],"e":"spot@public.deals.v3.api"},"s":"BTCUSDT","t":1753214575932}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@BTCUSDT","d":{"deals":[{"p":"119309.18","v":"0.00275182","S":2,"t":1753214575928}],"e":"spot@public.deals.v3.api"},"s":"BTCUSDT","t":1753214575932}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@BTCUSDT","d":{"deals":[{"p":"119309.18","v":"0.00389836","S":1,"t":1753214575930}],"e":"spot@public.deals.v3.api"},"s":"BTCUSDT","t":1753214575932}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@BTCUSDT","d":{"deals":[{"p":"119309.18","v":"0.00364912","S":1,"t":1753214575930}],"e":"spot@public.deals.v3.api"},"s":"BTCUSDT","t":1753214575935}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHUSDT","d":{"deals":[{"p":"3670.19","v":"0.05865","S":2,"t":1753214575955}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDT","t":1753214575964}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHUSDT","d":{"deals":[{"p":"3670.19","v":"0.78758","S":2,"t":1753214575955}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDT","t":1753214575964}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5333","v":"3.00","S":2,"t":1753214576011}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214576014}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030773","v":"0.002","S":2,"t":1753214576042}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214576044}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030778","v":"0.001","S":2,"t":1753214576042}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214576044}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030787","v":"0.002","S":2,"t":1753214576042}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214576044}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030771","v":"0.004","S":1,"t":1753214576042}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214576045}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030776","v":"0.001","S":1,"t":1753214576043}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214576048}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5337","v":"14.83","S":1,"t":1753214576086}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214576089}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPETH","d":{"deals":[{"p":"0.0009633","v":"0.81","S":2,"t":1753214576338}],"e":"spot@public.deals.v3.api"},"s":"XRPETH","t":1753214576340}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPETH","d":{"deals":[{"p":"0.0009617","v":"0.97","S":1,"t":1753214576339}],"e":"spot@public.deals.v3.api"},"s":"XRPETH","t":1753214576342}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"198.93","v":"1.86","S":1,"t":1753214576415}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753214576419}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@BTCUSDT","d":{"deals":[{"p":"119309.19","v":"0.00006100","S":1,"t":1753214576415}],"e":"spot@public.deals.v3.api"},"s":"BTCUSDT","t":1753214576419}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@BTCUSDT","d":{"deals":[{"p":"119309.19","v":"0.00045153","S":1,"t":1753214576417}],"e":"spot@public.deals.v3.api"},"s":"BTCUSDT","t":1753214576420}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@BTCUSDT","d":{"deals":[{"p":"119309.19","v":"0.00006949","S":2,"t":1753214576417}],"e":"spot@public.deals.v3.api"},"s":"BTCUSDT","t":1753214576420}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"198.93","v":"1.92","S":1,"t":1753214576416}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753214576420}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"198.93","v":"1.88","S":1,"t":1753214576416}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753214576420}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHUSDT","d":{"deals":[{"p":"3670.45","v":"0.21238","S":1,"t":1753214576455}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDT","t":1753214576457}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHUSDT","d":{"deals":[{"p":"3670.45","v":"0.01664","S":2,"t":1753214576455}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDT","t":1753214576457}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHUSDT","d":{"deals":[{"p":"3670.45","v":"0.12539","S":1,"t":1753214576455}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDT","t":1753214576457}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5333","v":"225.72","S":2,"t":1753214576511}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214576513}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPUSDT","d":{"deals":[{"p":"3.5333","v":"191.22","S":1,"t":1753214576511}],"e":"spot@public.deals.v3.api"},"s":"XRPUSDT","t":1753214576513}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@XRPBTC","d":{"deals":[{"p":"0.000029618","v":"1.78","S":1,"t":1753214576530}],"e":"spot@public.deals.v3.api"},"s":"XRPBTC","t":1753214576534}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030780","v":"0.001","S":2,"t":1753214576542}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214576545}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030771","v":"0.001","S":2,"t":1753214576542}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214576545}
+2025/07/22 23:02:56 ⚠️ skipping, method=
+2025/07/22 23:02:56 🔴 RAW MSG: {"c":"spot@public.deals.v3.api@ETHBTC","d":{"deals":[{"p":"0.030780","v":"0.001","S":2,"t":1753214576543}],"e":"spot@public.deals.v3.api"},"s":"ETHBTC","t":1753214576546}
+
+
+
 
 
 
