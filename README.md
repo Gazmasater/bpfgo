@@ -334,7 +334,7 @@ sudo docker run -d \
   ___________________________________________________________________________________________
 
 
-// Go-бот: использует поток сделок (deals.v3.api) для устойчивости
+// Go-бот: 7 треугольников + deals.v3.api + ping-pong с таймингом
 package main
 
 import (
@@ -374,6 +374,11 @@ func ensureTrianglesFile() error {
 	triangles := []Triangle{
 		{A: "XRP", B: "BTC", C: "USDT"},
 		{A: "ETH", B: "BTC", C: "USDT"},
+		{A: "TRX", B: "BTC", C: "USDT"},
+		{A: "ADA", B: "USDT", C: "BTC"},
+		{A: "BTC", B: "SOL", C: "USDT"},
+		{A: "XRP", B: "USDT", C: "ETH"},
+		{A: "XRP", B: "BTC", C: "ETH"},
 	}
 	data, _ := json.MarshalIndent(triangles, "", "  ")
 	return ioutil.WriteFile("triangles.json", data, 0644)
@@ -451,7 +456,7 @@ func runBot(logFile *os.File) error {
 	symbols := buildValidSymbols(triangles, validSymbols)
 	channels := []string{}
 	for _, s := range symbols {
-		ch := fmt.Sprintf("spot@public.deals.v3.api@%s", s) // заменили ticker → deals
+		ch := fmt.Sprintf("spot@public.deals.v3.api@%s", s)
 		channels = append(channels, ch)
 		log.Println("📡 Подписка на:", ch)
 	}
@@ -462,8 +467,11 @@ func runBot(logFile *os.File) error {
 	}
 	defer conn.Close()
 
+	lastPing := time.Now()
 	conn.SetPongHandler(func(appData string) error {
-		log.Println("📶 Получен pong от сервера")
+		delta := time.Since(lastPing)
+		log.Printf("📶 Получен pong от сервера (через %v)", delta)
+		lastPing = time.Now()
 		return nil
 	})
 
@@ -483,6 +491,7 @@ func runBot(logFile *os.File) error {
 
 	go func() {
 		for range pingTicker.C {
+			lastPing = time.Now()
 			if err := conn.WriteMessage(websocket.PingMessage, []byte("keepalive")); err != nil {
 				log.Println("⚠️ Ошибка отправки ping:", err)
 			}
@@ -530,23 +539,6 @@ func main() {
 		time.Sleep(5 * time.Second)
 	}
 }
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go run .
-2025/07/22 18:04:47 📡 Подписка на: spot@public.deals.v3.api@ETHUSDT
-2025/07/22 18:04:47 📡 Подписка на: spot@public.deals.v3.api@XRPBTC
-2025/07/22 18:04:47 📡 Подписка на: spot@public.deals.v3.api@BTCUSDT
-2025/07/22 18:04:47 📡 Подписка на: spot@public.deals.v3.api@XRPUSDT
-2025/07/22 18:04:47 📡 Подписка на: spot@public.deals.v3.api@ETHBTC
-2025/07/22 18:04:47 ✅ Подписка на пары отправлена
-2025/07/22 18:05:03 📶 Получен pong от сервера
-2025/07/22 18:05:18 📶 Получен pong от сервера
-2025/07/22 18:05:33 📶 Получен pong от сервера
-2025/07/22 18:05:48 📶 Получен pong от сервера
-2025/07/22 18:06:03 📶 Получен pong от сервера
-2025/07/22 18:06:18 📶 Получен pong от сервера
-2025/07/22 18:06:33 📶 Получен pong от сервера
-2025/07/22 18:06:48 📶 Получен pong от сервера
 
 
 
