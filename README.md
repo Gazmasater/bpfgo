@@ -333,7 +333,7 @@ sudo docker run -d \
 
   ___________________________________________________________________________________________
 
-// Go-бот: подписка на нужные пары из triangles.json и логирование цен
+// Go-бот: подписка на нужные пары из triangles.json и логирование цен с автопереподключением
 package main
 
 import (
@@ -385,12 +385,10 @@ func buildSymbolList(triangles []Triangle) []string {
 	return result
 }
 
-func main() {
-	log.SetOutput(os.Stdout)
-
+func runBot() error {
 	triangles, err := loadTriangles()
 	if err != nil {
-		log.Fatal("Не удалось загрузить triangles.json:", err)
+		return fmt.Errorf("не удалось загрузить triangles.json: %v", err)
 	}
 
 	symbols := buildSymbolList(triangles)
@@ -401,7 +399,7 @@ func main() {
 
 	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", nil)
 	if err != nil {
-		log.Fatal("Ошибка подключения к WebSocket:", err)
+		return fmt.Errorf("ошибка подключения к WebSocket: %v", err)
 	}
 	defer conn.Close()
 
@@ -411,39 +409,39 @@ func main() {
 		"id":     time.Now().Unix(),
 	}
 	if err := conn.WriteJSON(sub); err != nil {
-		log.Fatal("Ошибка подписки:", err)
+		return fmt.Errorf("ошибка подписки: %v", err)
 	}
-	log.Println("Подписка на пары отправлена")
+	log.Println("✅ Подписка на пары отправлена")
 
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("Ошибка чтения WebSocket:", err)
+			log.Println("⚠️  Ошибка чтения WebSocket:", err)
+			if websocket.IsUnexpectedCloseError(err) {
+				break
+			}
+			time.Sleep(time.Second)
 			continue
 		}
 
 		var tick TickerMsg
 		if err := json.Unmarshal(msg, &tick); err == nil && tick.Symbol != "" {
-			log.Printf("%s → Bid: %s | Ask: %s", tick.Symbol, tick.Data.Bid, tick.Data.Ask)
+			log.Printf("📈 %s → Bid: %s | Ask: %s", tick.Symbol, tick.Data.Bid, tick.Data.Ask)
 		}
+	}
+
+	return nil
+}
+
+func main() {
+	log.SetOutput(os.Stdout)
+	for {
+		err := runBot()
+		log.Printf("🔄 Переподключение через 5 сек... (%v)", err)
+		time.Sleep(5 * time.Second)
 	}
 }
 
-
-
-2025/07/22 14:33:04 Ошибка чтения WebSocket: websocket: close 1005 (no status)
-2025/07/22 14:33:04 Ошибка чтения WebSocket: websocket: close 1005 (no status)
-panic: repeated read on failed websocket connection
-
-goroutine 1 [running]:
-github.com/gorilla/websocket.(*Conn).NextReader(0xc000280420)
-        /home/gaz358/go/pkg/mod/github.com/gorilla/websocket@v1.5.3/conn.go:1030 +0x1fb
-github.com/gorilla/websocket.(*Conn).ReadMessage(0xc000126150?)
-        /home/gaz358/go/pkg/mod/github.com/gorilla/websocket@v1.5.3/conn.go:1093 +0x13
-main.main()
-        /home/gaz358/myprog/crypt/main.go:84 +0x7f2
-exit status 2
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ 
 
 
 
