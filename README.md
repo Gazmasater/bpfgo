@@ -553,7 +553,7 @@ func runBot(logFile *os.File) error {
 
 		var outer struct {
 			Channel string `json:"c"`
-			Data struct {
+			Data    struct {
 				Deals []struct {
 					Price     string `json:"p"`
 					Quantity  string `json:"v"`
