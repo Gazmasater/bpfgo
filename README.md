@@ -333,7 +333,8 @@ sudo docker run -d \
 
   ___________________________________________________________________________________________
 
-// Go-бот: стабильный треугольник XRP/BTC/USDT + ping/pong + исправленный порядок
+
+// Go-бот: финальное исправление — проверка пары и в прямом, и в обратном порядке
 package main
 
 import (
@@ -412,34 +413,31 @@ func fetchAvailableSymbols() map[string]bool {
 	return symbolSet
 }
 
-func buildValidSymbols(triangles []Triangle, valid map[string]bool) []string {
-	pairs := map[string]bool{}
-	for _, t := range triangles {
-		pairs[t.A+t.B] = true
-		pairs[t.B+t.C] = true
-		pairs[t.C+t.A] = true
+func tryAddSymbol(a, b string, valid map[string]bool, out map[string]bool) {
+	p1 := a + b
+	p2 := b + a
+	if valid[p1] {
+		out[p1] = true
+	} else if valid[p2] {
+		out[p2] = true
+		log.Printf("🔁 Переворачиваем %s → %s", p1, p2)
+	} else {
+		log.Printf("❌ Пара %s/%s не найдена на бирже", a, b)
 	}
-	result := []string{}
-	for p := range pairs {
-		if valid[p] {
-			result = append(result, p)
-		} else if valid[reversePair(p)] {
-			result = append(result, reversePair(p))
-			log.Printf("🔁 Переворачиваем %s → %s", p, reversePair(p))
-		} else {
-			log.Printf("❌ Пара %s не найдена на бирже, пропускаем", p)
-		}
-	}
-	return result
 }
 
-func reversePair(s string) string {
-	if len(s)%2 != 0 {
-		return s
+func buildValidSymbols(triangles []Triangle, valid map[string]bool) []string {
+	pairSet := map[string]bool{}
+	for _, t := range triangles {
+		tryAddSymbol(t.A, t.B, valid, pairSet)
+		tryAddSymbol(t.B, t.C, valid, pairSet)
+		tryAddSymbol(t.C, t.A, valid, pairSet)
 	}
-	a := s[:len(s)/2]
-	b := s[len(s)/2:]
-	return b + a
+	result := []string{}
+	for p := range pairSet {
+		result = append(result, p)
+	}
+	return result
 }
 
 func runBot(logFile *os.File) error {
@@ -531,21 +529,6 @@ func main() {
 		time.Sleep(5 * time.Second)
 	}
 }
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go run .
-2025/07/22 17:09:00 ❌ Пара USDTXRP не найдена на бирже, пропускаем
-2025/07/22 17:09:00 📡 Подписка на: spot@public.ticker.v3.api@XRPBTC
-2025/07/22 17:09:00 📡 Подписка на: spot@public.ticker.v3.api@BTCUSDT
-2025/07/22 17:09:00 ✅ Подписка на пары отправлена
-2025/07/22 17:09:15 📶 Получен pong от сервера
-2025/07/22 17:09:30 📶 Получен pong от сервера
-2025/07/22 17:09:32 ⚠️ Ошибка чтения WebSocket: websocket: close 1005 (no status)
-2025/07/22 17:09:32 🔄 Переподключение через 5 сек... (<nil>)
-2025/07/22 17:09:38 ❌ Пара USDTXRP не найдена на бирже, пропускаем
-2025/07/22 17:09:38 📡 Подписка на: spot@public.ticker.v3.api@XRPBTC
-2025/07/22 17:09:38 📡 Подписка на: spot@public.ticker.v3.api@BTCUSDT
-2025/07/22 17:09:38 ✅ Подписка на пары отправлена
 
 
 
