@@ -333,7 +333,7 @@ sudo docker run -d \
 
   ___________________________________________________________________________________________
 
-// Go-бот: подписка на нужные пары из triangles.json и логирование цен с автопереподключением
+// Go-бот: подписка на нужные пары из triangles.json, логирование в файл и автопереподключение
 package main
 
 import (
@@ -385,7 +385,7 @@ func buildSymbolList(triangles []Triangle) []string {
 	return result
 }
 
-func runBot() error {
+func runBot(logFile *os.File) error {
 	triangles, err := loadTriangles()
 	if err != nil {
 		return fmt.Errorf("не удалось загрузить triangles.json: %v", err)
@@ -413,6 +413,8 @@ func runBot() error {
 	}
 	log.Println("✅ Подписка на пары отправлена")
 
+	encoder := json.NewEncoder(logFile)
+
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
@@ -427,6 +429,13 @@ func runBot() error {
 		var tick TickerMsg
 		if err := json.Unmarshal(msg, &tick); err == nil && tick.Symbol != "" {
 			log.Printf("📈 %s → Bid: %s | Ask: %s", tick.Symbol, tick.Data.Bid, tick.Data.Ask)
+			entry := map[string]string{
+				"symbol": tick.Symbol,
+				"bid":    tick.Data.Bid,
+				"ask":    tick.Data.Ask,
+				"time":   time.Now().Format(time.RFC3339Nano),
+			}
+			encoder.Encode(entry)
 		}
 	}
 
@@ -435,8 +444,15 @@ func runBot() error {
 
 func main() {
 	log.SetOutput(os.Stdout)
+
+	logFile, err := os.OpenFile("prices_log.jsonl", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		log.Fatal("Не удалось создать файл лога:", err)
+	}
+	defer logFile.Close()
+
 	for {
-		err := runBot()
+		err := runBot(logFile)
 		log.Printf("🔄 Переподключение через 5 сек... (%v)", err)
 		time.Sleep(5 * time.Second)
 	}
@@ -444,26 +460,8 @@ func main() {
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go run .
-2025/07/22 15:20:11 ✅ Подписка на пары отправлена
-2025/07/22 15:20:43 ⚠️  Ошибка чтения WebSocket: websocket: close 1005 (no status)
-2025/07/22 15:20:43 🔄 Переподключение через 5 сек... (<nil>)
-2025/07/22 15:20:48 ✅ Подписка на пары отправлена
-2025/07/22 15:21:23 ⚠️  Ошибка чтения WebSocket: websocket: close 1005 (no status)
-2025/07/22 15:21:23 🔄 Переподключение через 5 сек... (<nil>)
-2025/07/22 15:21:29 ✅ Подписка на пары отправлена
-2025/07/22 15:22:02 ⚠️  Ошибка чтения WebSocket: websocket: close 1005 (no status)
-2025/07/22 15:22:02 🔄 Переподключение через 5 сек... (<nil>)
-2025/07/22 15:22:07 ✅ Подписка на пары отправлена
-2025/07/22 15:22:41 ⚠️  Ошибка чтения WebSocket: websocket: close 1005 (no status)
-2025/07/22 15:22:41 🔄 Переподключение через 5 сек... (<nil>)
-2025/07/22 15:22:46 ✅ Подписка на пары отправлена
-2025/07/22 15:23:20 ⚠️  Ошибка чтения WebSocket: websocket: close 1005 (no status)
-2025/07/22 15:23:20 🔄 Переподключение через 5 сек... (<nil>)
-2025/07/22 15:23:26 ✅ Подписка на пары отправлена
-2025/07/22 15:23:59 ⚠️  Ошибка чтения WebSocket: websocket: close 1005 (no status)
-2025/07/22 15:23:59 🔄 Переподключение через 5 сек... (<nil>)
-2025/07/22 15:24:05 ✅ Подписка на пары отправлена
+
+
 
 
 
