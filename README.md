@@ -347,6 +347,7 @@ import (
 	"sort"
 	"sync"
 	"time"
+
 	"github.com/gorilla/websocket"
 )
 
@@ -381,13 +382,13 @@ var (
 
 func ensureTrianglesFile() error {
 	triangles := []Triangle{
-		{A: "XRP", B: "BTC", C: "USDT"},
-		{A: "ETH", B: "BTC", C: "USDT"},
-		{A: "TRX", B: "BTC", C: "USDT"},
-		{A: "ADA", B: "USDT", C: "BTC"},
-		{A: "BTC", B: "SOL", C: "USDT"},
-		{A: "XRP", B: "USDT", C: "ETH"},
-		{A: "XRP", B: "BTC", C: "ETH"},
+		{"XRP", "BTC", "USDT"},
+		{"ETH", "BTC", "USDT"},
+		{"TRX", "BTC", "USDT"},
+		{"ADA", "USDT", "BTC"},
+		{"BTC", "SOL", "USDT"},
+		{"XRP", "USDT", "ETH"},
+		{"XRP", "BTC", "ETH"},
 	}
 	data, _ := json.MarshalIndent(triangles, "", "  ")
 	return ioutil.WriteFile("triangles.json", data, 0644)
@@ -455,21 +456,28 @@ func buildValidSymbols(triangles []Triangle, valid map[string]bool) []string {
 	return result
 }
 
+func findActualPairKey(a, b string) string {
+	if _, ok := lastUpdate[a+b]; ok {
+		return a + b
+	}
+	return b + a
+}
+
 func checkTriangleTimings(triangles []Triangle) {
 	priceLock.Lock()
 	defer priceLock.Unlock()
 	now := time.Now()
 	for _, t := range triangles {
-		pairs := []string{
-			sortPair(t.A + t.B),
-			sortPair(t.B + t.C),
-			sortPair(t.A + t.C),
-		}
+		p1 := findActualPairKey(t.A, t.B)
+		p2 := findActualPairKey(t.B, t.C)
+		p3 := findActualPairKey(t.A, t.C)
+		pairs := []string{p1, p2, p3}
+
 		latest := time.Time{}
 		oldest := now
 		complete := true
-		for _, p := range pairs {
-			ts, ok := lastUpdate[p]
+		for _, pair := range pairs {
+			ts, ok := lastUpdate[pair]
 			if !ok {
 				complete = false
 				break
@@ -488,10 +496,9 @@ func checkTriangleTimings(triangles []Triangle) {
 	}
 }
 
-func sortPair(s string) string {
-	runes := []rune(s)
-	sort.Slice(runes, func(i, j int) bool { return runes[i] < runes[j] })
-	return string(runes)
+func reversePair(s string) string {
+	n := len(s)
+	return s[n/2:] + s[:n/2]
 }
 
 func runBot(logFile *os.File) error {
@@ -567,15 +574,18 @@ func runBot(logFile *os.File) error {
 
 		var msg DealsMsg
 		if err := json.Unmarshal(raw, &msg); err == nil && msg.Symbol != "" && len(msg.Data) > 0 {
+			now := time.Now()
 			priceLock.Lock()
-			lastUpdate[msg.Symbol] = time.Now()
+			lastUpdate[msg.Symbol] = now
+			lastUpdate[reversePair(msg.Symbol)] = now
 			priceLock.Unlock()
+
 			log.Printf("📊 %s → %s %s", msg.Symbol, msg.Data[0].Side, msg.Data[0].Price)
 			entry := map[string]interface{}{
 				"symbol": msg.Symbol,
 				"price":  msg.Data[0].Price,
 				"side":   msg.Data[0].Side,
-				"time":   time.Now().Format(time.RFC3339Nano),
+				"time":   now.Format(time.RFC3339Nano),
 			}
 			emcoder.Encode(entry)
 		}
@@ -599,44 +609,6 @@ func main() {
 	}
 }
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go run .
-2025/07/22 18:59:23 🔁 Переворачиваем USDTBTC → BTCUSDT
-2025/07/22 18:59:23 🔁 Переворачиваем BTCSOL → SOLBTC
-2025/07/22 18:59:23 🔁 Переворачиваем USDTETH → ETHUSDT
-2025/07/22 18:59:23 🔁 Переворачиваем BTCETH → ETHBTC
-2025/07/22 18:59:23 📡 Подписка на: spot@public.deals.v3.api@TRXUSDT
-2025/07/22 18:59:23 📡 Подписка на: spot@public.deals.v3.api@ADAUSDT
-2025/07/22 18:59:23 📡 Подписка на: spot@public.deals.v3.api@SOLUSDT
-2025/07/22 18:59:23 📡 Подписка на: spot@public.deals.v3.api@XRPETH
-2025/07/22 18:59:23 📡 Подписка на: spot@public.deals.v3.api@XRPBTC
-2025/07/22 18:59:23 📡 Подписка на: spot@public.deals.v3.api@XRPUSDT
-2025/07/22 18:59:23 📡 Подписка на: spot@public.deals.v3.api@ETHBTC
-2025/07/22 18:59:23 📡 Подписка на: spot@public.deals.v3.api@ETHUSDT
-2025/07/22 18:59:23 📡 Подписка на: spot@public.deals.v3.api@TRXBTC
-2025/07/22 18:59:23 📡 Подписка на: spot@public.deals.v3.api@ADABTC
-2025/07/22 18:59:23 📡 Подписка на: spot@public.deals.v3.api@SOLBTC
-2025/07/22 18:59:23 📡 Подписка на: spot@public.deals.v3.api@BTCUSDT
-2025/07/22 18:59:24 ✅ Подписка на пары отправлена
-2025/07/22 18:59:39 📶 Получен pong от сервера (через 256.556123ms)
-2025/07/22 18:59:54 📶 Получен pong от сервера (через 308.123797ms)
-2025/07/22 19:00:09 📶 Получен pong от сервера (через 361.689157ms)
-2025/07/22 19:00:24 📶 Получен pong от сервера (через 314.260135ms)
-2025/07/22 19:00:39 📶 Получен pong от сервера (через 370.152222ms)
-2025/07/22 19:00:54 📶 Получен pong от сервера (через 321.670391ms)
-2025/07/22 19:01:09 📶 Получен pong от сервера (через 274.34081ms)
-2025/07/22 19:01:24 📶 Получен pong от сервера (через 218.224759ms)
-2025/07/22 19:01:39 📶 Получен pong от сервера (через 273.612473ms)
-2025/07/22 19:01:54 📶 Получен pong от сервера (через 255.14735ms)
-2025/07/22 19:02:09 📶 Получен pong от сервера (через 271.614474ms)
-2025/07/22 19:02:24 📶 Получен pong от сервера (через 323.278312ms)
-2025/07/22 19:02:39 📶 Получен pong от сервера (через 582.095496ms)
-2025/07/22 19:02:54 📶 Получен pong от сервера (через 256.829913ms)
-2025/07/22 19:03:09 📶 Получен pong от сервера (через 218.611492ms)
-2025/07/22 19:03:24 📶 Получен pong от сервера (через 300.008659ms)
-2025/07/22 19:03:39 📶 Получен pong от сервера (через 281.08804ms)
-2025/07/22 19:03:54 📶 Получен pong от сервера (через 334.264382ms)
-2025/07/22 19:04:09 📶 Получен pong от сервера (через 285.832406ms)
-2025/07/22 19:04:24 📶 Получен pong от сервера (через 237.863839ms)
 
 
 
