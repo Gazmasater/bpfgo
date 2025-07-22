@@ -334,7 +334,7 @@ sudo docker run -d \
   ___________________________________________________________________________________________
 
 
-// Go-бот: финальное исправление — проверка пары и в прямом, и в обратном порядке
+// Go-бот: добавлен второй треугольник ETH/BTC/USDT
 package main
 
 import (
@@ -373,6 +373,7 @@ type TickerMsg struct {
 func ensureTrianglesFile() error {
 	triangles := []Triangle{
 		{A: "XRP", B: "BTC", C: "USDT"},
+		{A: "ETH", B: "BTC", C: "USDT"},
 	}
 	data, _ := json.MarshalIndent(triangles, "", "  ")
 	return ioutil.WriteFile("triangles.json", data, 0644)
@@ -431,7 +432,7 @@ func buildValidSymbols(triangles []Triangle, valid map[string]bool) []string {
 	for _, t := range triangles {
 		tryAddSymbol(t.A, t.B, valid, pairSet)
 		tryAddSymbol(t.B, t.C, valid, pairSet)
-		tryAddSymbol(t.C, t.A, valid, pairSet)
+		tryAddSymbol(t.A, t.C, valid, pairSet)
 	}
 	result := []string{}
 	for p := range pairSet {
@@ -530,31 +531,6 @@ func main() {
 	}
 }
 
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go run .
-2025/07/22 17:35:42 🔁 Переворачиваем USDTXRP → XRPUSDT
-2025/07/22 17:35:42 📡 Подписка на: spot@public.ticker.v3.api@XRPBTC
-2025/07/22 17:35:42 📡 Подписка на: spot@public.ticker.v3.api@BTCUSDT
-2025/07/22 17:35:42 📡 Подписка на: spot@public.ticker.v3.api@XRPUSDT
-2025/07/22 17:35:42 ✅ Подписка на пары отправлена
-2025/07/22 17:35:57 📶 Получен pong от сервера
-2025/07/22 17:36:12 📶 Получен pong от сервера
-2025/07/22 17:36:15 ⚠️ Ошибка чтения WebSocket: websocket: close 1005 (no status)
-2025/07/22 17:36:15 🔄 Переподключение через 5 сек... (<nil>)
-2025/07/22 17:36:20 🔁 Переворачиваем USDTXRP → XRPUSDT
-2025/07/22 17:36:20 📡 Подписка на: spot@public.ticker.v3.api@BTCUSDT
-2025/07/22 17:36:20 📡 Подписка на: spot@public.ticker.v3.api@XRPUSDT
-2025/07/22 17:36:20 📡 Подписка на: spot@public.ticker.v3.api@XRPBTC
-2025/07/22 17:36:21 ✅ Подписка на пары отправлена
-2025/07/22 17:36:36 📶 Получен pong от сервера
-2025/07/22 17:36:51 📶 Получен pong от сервера
-2025/07/22 17:36:51 ⚠️ Ошибка чтения WebSocket: websocket: close 1005 (no status)
-2025/07/22 17:36:51 🔄 Переподключение через 5 сек... (<nil>)
-2025/07/22 17:36:56 🔁 Переворачиваем USDTXRP → XRPUSDT
-2025/07/22 17:36:56 📡 Подписка на: spot@public.ticker.v3.api@XRPBTC
-2025/07/22 17:36:56 📡 Подписка на: spot@public.ticker.v3.api@BTCUSDT
-2025/07/22 17:36:56 📡 Подписка на: spot@public.ticker.v3.api@XRPUSDT
-2025/07/22 17:36:57 ✅ Подписка на пары отправлена
 
 
 
