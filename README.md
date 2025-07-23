@@ -626,6 +626,13 @@ gaz358@gaz358-BOD-WXX9:~/myprog/crypt$
 
 git remote add origin https://github.com/Gazmasater/cryp_arbtryang.git
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ git remote add origin https://github.com/Gazmasater/cryp_arbtryang.git
+fatal: detected dubious ownership in repository at '/home/gaz358/myprog/crypt'
+To add an exception for this directory, call:
+
+        git config --global --add safe.directory /home/gaz358/myprog/crypt
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ 
+
 git add .
 git commit -m "Initial import of triangular-arb bot"
 
