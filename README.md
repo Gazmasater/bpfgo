@@ -477,7 +477,7 @@ func checkTriangleProfit(triangles []Triangle) {
 		}
 
 		profit := (p1*p2/p3*netFactor - 1) * 100
-		if profit > 0.2 {
+		if profit > -0.02 {
 			log.Printf("🔺 %s/%s/%s | profit: %.3f%%", t.A, t.B, t.C, profit)
 		}
 
@@ -587,9 +587,6 @@ func main() {
 		}
 	}
 }
-
-
-
 
 
 
