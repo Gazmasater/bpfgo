@@ -623,7 +623,7 @@ hint:   git branch -m <name>
 Initialized empty Git repository in /home/gaz358/myprog/crypt/.git/
 gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ 
 
-
+git config --global --add safe.directory /home/gaz358/myprog/crypt
 git remote add origin https://github.com/Gazmasater/cryp_arbtryang.git
 
 gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ git remote add origin https://github.com/Gazmasater/cryp_arbtryang.git
