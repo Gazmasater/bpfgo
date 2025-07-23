@@ -624,6 +624,17 @@ Initialized empty Git repository in /home/gaz358/myprog/crypt/.git/
 gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ 
 
 
+git remote add origin https://github.com/Gazmasater/cryp_arbtryang.git
+
+git add .
+git commit -m "Initial import of triangular-arb bot"
+
+git push -u origin master
+
+git branch -m main        # переименовать локальную master → main
+git push -u origin main
+
+
 
 
 
