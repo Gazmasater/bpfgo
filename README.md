@@ -607,6 +607,23 @@ app + cmd — оркестратор: подгрузка конфигов, Run()
 Спросить ChatGPT
 
 
+https://github.com/Gazmasater/cryp_arbtryang
+
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ git init
+hint: Using 'master' as the name for the initial branch. This default branch name
+hint: is subject to change. To configure the initial branch name to use in all
+hint: of your new repositories, which will suppress this warning, call:
+hint: 
+hint:   git config --global init.defaultBranch <name>
+hint: 
+hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+hint: 'development'. The just-created branch can be renamed via this command:
+hint: 
+hint:   git branch -m <name>
+Initialized empty Git repository in /home/gaz358/myprog/crypt/.git/
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ 
+
+
 
 
 
