@@ -333,319 +333,6 @@ sudo docker run -d \
 
   ___________________________________________________________________________________________
 
-
-Я разбил бота по принципам чистой архитектуры на три слоя:
-
-go
-Копировать код
-cmd/cryptarb/main.go
-internal/
-  app/
-    arbitrage.go
-  domain/
-    triangle/
-      triangle.go
-  repository/
-    filesystem/
-      loader.go
-    mexc/
-      client.go
-      ws.go
-Вот полный код:
-
-internal/repository/filesystem/loader.go
-go
-Копировать код
-package filesystem
-
-import (
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
-)
-
-type Triangle struct{ A, B, C string }
-
-func LoadTriangles(path string) ([]Triangle, error) {
-	// если файла нет — запишем дефолт
-	t := []Triangle{
-		{"XRP", "BTC", "USDT"}, {"ETH", "BTC", "USDT"},
-		{"TRX", "BTC", "USDT"}, {"ADA", "USDT", "BTC"},
-		{"BTC", "SOL", "USDT"}, {"XRP", "USDT", "ETH"},
-		{"XRP", "BTC", "ETH"}, {"LTC", "BTC", "USDT"},
-		{"DOGE", "BTC", "USDT"}, {"MATIC", "USDT", "BTC"},
-		{"DOT", "BTC", "USDT"}, {"AVAX", "BTC", "USDT"},
-		{"BCH", "BTC", "USDT"}, {"LINK", "BTC", "USDT"},
-		{"ETC", "BTC", "USDT"},
-	}
-	b, _ := json.MarshalIndent(t, "", "  ")
-	_ = ioutil.WriteFile(path, b, 0644)
-
-	b, err := ioutil.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var ts []Triangle
-	if err := json.Unmarshal(b, &ts); err != nil {
-		return nil, fmt.Errorf("unmarshal %s: %w", path, err)
-	}
-	return ts, nil
-}
-internal/repository/mexc/client.go
-go
-Копировать код
-package mexc
-
-import (
-	"encoding/json"
-	"io/ioutil"
-	"net/http"
-)
-
-type SymbolInfo struct{ Symbol string }
-type ExchangeInfo struct{ Symbols []SymbolInfo }
-
-// FetchAvailableSymbols возвращает карту доступных торговых пар
-func FetchAvailableSymbols() map[string]bool {
-	out := make(map[string]bool)
-	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-	if err != nil {
-		return out
-	}
-	defer resp.Body.Close()
-	b, _ := ioutil.ReadAll(resp.Body)
-	var info ExchangeInfo
-	if err := json.Unmarshal(b, &info); err != nil {
-		return out
-	}
-	for _, s := range info.Symbols {
-		out[s.Symbol] = true
-	}
-	return out
-}
-internal/repository/mexc/ws.go
-go
-Копировать код
-package mexc
-
-import (
-	"log"
-	"sync"
-	"time"
-
-	"github.com/gorilla/websocket"
-)
-
-// ListenWS запускает подключение к WS и передаёт каждый raw-сообщение в handler
-func ListenWS(channels []string, handler func(raw []byte)) error {
-	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", nil)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	// подписка
-	sub := map[string]interface{}{
-		"method": "SUBSCRIPTION",
-		"params": channels,
-		"id":     time.Now().Unix(),
-	}
-	if err := conn.WriteJSON(sub); err != nil {
-		return err
-	}
-
-	// пинг
-	var mu sync.Mutex
-	var lastPing time.Time
-	conn.SetPongHandler(func(string) error {
-		log.Printf("📶 Pong after %v\n", time.Since(lastPing))
-		return nil
-	})
-	go func() {
-		t := time.NewTicker(60 * time.Second)
-		defer t.Stop()
-		for range t.C {
-			mu.Lock()
-			lastPing = time.Now()
-			_ = conn.WriteMessage(websocket.PingMessage, []byte("hb"))
-			mu.Unlock()
-		}
-	}()
-
-	// чтение
-	for {
-		_, raw, err := conn.ReadMessage()
-		if err != nil {
-			return err
-		}
-		handler(raw)
-	}
-}
-internal/domain/triangle/triangle.go
-go
-Копировать код
-package triangle
-
-import (
-	"fmt"
-	"sort"
-)
-
-type Triangle struct{ A, B, C string }
-
-// Filter оставляет только те треугольники, пары в которых есть в available
-func Filter(ts []Triangle, available map[string]bool) []Triangle {
-	out := make([]Triangle, 0, len(ts))
-	for _, t := range ts {
-		ok := func(a, b string) bool {
-			return available[a+b] || available[b+a]
-		}
-		if ok(t.A, t.B) && ok(t.B, t.C) && ok(t.A, t.C) {
-			out = append(out, t)
-		}
-	}
-	return out
-}
-
-// BuildChannels возвращает WS-каналы для сделок
-func BuildChannels(ts []Triangle) []string {
-	set := map[string]struct{}{}
-	for _, t := range ts {
-		for _, pr := range [][2]string{{t.A, t.B}, {t.B, t.C}, {t.A, t.C}} {
-			set[pr[0]+pr[1]] = struct{}{}
-		}
-	}
-	list := make([]string, 0, len(set))
-	for k := range set {
-		list = append(list, fmt.Sprintf("spot@public.deals.v3.api@%s", k))
-	}
-	sort.Strings(list)
-	return list
-}
-internal/app/arbitrage.go
-go
-Копировать код
-package app
-
-import (
-	"encoding/json"
-	"log"
-	"strconv"
-	"sync"
-	"time"
-
-	"github.com/Gazmasater/cryp_arbtryang/internal/domain/triangle"
-	"github.com/Gazmasater/cryp_arbtryang/internal/repository/filesystem"
-	"github.com/Gazmasater/cryp_arbtryang/internal/repository/mexc"
-)
-
-type Arbitrager struct {
-	triangles []triangle.Triangle
-	latest    map[string]float64
-	mu        sync.Mutex
-}
-
-func New(dataPath string) (*Arbitrager, error) {
-	// 1) Загружаем все треугольники из FS
-	ts, err := filesystem.LoadTriangles(dataPath)
-	if err != nil {
-		return nil, err
-	}
-	// 2) Фильтруем по доступным парам с API
-	avail := mexc.FetchAvailableSymbols()
-	ts = triangle.Filter(ts, avail)
-
-	return &Arbitrager{
-		triangles: ts,
-		latest:    make(map[string]float64, len(avail)),
-	}, nil
-}
-
-func (a *Arbitrager) HandleRaw(raw []byte) {
-	// парсим, кладём в a.latest
-	var msg struct {
-		Symbol string `json:"s"`
-		Data   struct {
-			Deals []struct {
-				Price string `json:"p"`
-			} `json:"deals"`
-		} `json:"d"`
-	}
-	if err := json.Unmarshal(raw, &msg); err != nil {
-		return
-	}
-	if msg.Symbol == "" || len(msg.Data.Deals) == 0 {
-		return
-	}
-	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
-	if err != nil {
-		return
-	}
-	a.mu.Lock()
-	a.latest[msg.Symbol] = price
-	a.latest[msg.Symbol[len(msg.Symbol)/2:]+msg.Symbol[:len(msg.Symbol)/2]] = 1 / price
-	a.mu.Unlock()
-}
-
-func (a *Arbitrager) CheckLoop() {
-	t := time.NewTicker(5 * time.Second)
-	defer t.Stop()
-	for range t.C {
-		a.mu.Lock()
-		for _, tri := range a.triangles {
-			ab, bc, ac := tri.A+tri.B, tri.B+tri.C, tri.A+tri.C
-			p1, ok1 := a.latest[ab]; p2, ok2 := a.latest[bc]; p3, ok3 := a.latest[ac]
-			if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
-				continue
-			}
-			commission := 0.001
-			nf := (1-commission)*(1-commission)*(1-commission)
-			profit := (p1*p2/p3*nf - 1) * 100
-			if profit > 0.2 {
-				log.Printf("🔺 %s/%s/%s profit %.3f%%", tri.A, tri.B, tri.C, profit)
-			}
-		}
-		a.mu.Unlock()
-	}
-}
-cmd/cryptarb/main.go
-go
-Копировать код
-package main
-
-import (
-	"log"
-	"os"
-
-	"github.com/Gazmasater/cryp_arbtryang/internal/app"
-	"github.com/Gazmasater/cryp_arbtryang/internal/domain/triangle"
-	"github.com/Gazmasater/cryp_arbtryang/internal/repository/mexc"
-)
-
-func main() {
-	arb, err := app.New("triangles.json")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	channels := triangle.BuildChannels(arb.triangles)
-	// WS.Listen — передаём raw-сообщения в HandleRaw
-	go func() {
-		if err := mexc.ListenWS(channels, arb.HandleRaw); err != nil {
-			log.Fatal(err)
-		}
-	}()
-
-	// Запускаем цикл проверки арбитража
-	go arb.CheckLoop()
-
-	// Блокируем main (например, ждем SIGINT)
-	select {}
-}
-Что мы получили:
-
-Полное разделение:
-
 repository — работа с файлы/HTTP/WS.
 
 domain/triangle — чистая бизнес-логика про треугольники.
@@ -656,17 +343,75 @@ app — оркестратор: загружает, передаёт сообщ�
 
 cmd/cryptarb — точка входа, где мы только “собираем” все зависимости.
 
-С этим layout’ом IDE перестанет ругаться на undefined, и код будет легко поддерживать и тестировать.
 
+[{
+	"resource": "/home/gaz358/myprog/crypt/cmd/cryptarb/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "arb.triangles undefined (cannot refer to unexported field triangles)",
+	"source": "compiler",
+	"startLineNumber": 16,
+	"startColumn": 41,
+	"endLineNumber": 16,
+	"endColumn": 50,
+	"origin": "extHost1"
+}]
 
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "WrongArgCount",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "WrongArgCount"
+		}
+	},
+	"severity": 8,
+	"message": "too many arguments in conversion to triangle.Triangle",
+	"source": "compiler",
+	"startLineNumber": 28,
+	"startColumn": 29,
+	"endLineNumber": 28,
+	"endColumn": 34,
+	"origin": "extHost1"
+}]
 
-
-
-
-Источники
-
-Спросить ChatGPT
-
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "IncompatibleAssign",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "IncompatibleAssign"
+		}
+	},
+	"severity": 8,
+	"message": "cannot use ts (variable of type []filesystem.Triangle) as []triangle.Triangle value in struct literal",
+	"source": "compiler",
+	"startLineNumber": 31,
+	"startColumn": 14,
+	"endLineNumber": 31,
+	"endColumn": 16,
+	"origin": "extHost1"
+}]
 
 
 
