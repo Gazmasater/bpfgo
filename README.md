@@ -334,260 +334,277 @@ sudo docker run -d \
   ___________________________________________________________________________________________
 
 
-// Go-бот: 7 треугольников + deals + ping-pong + профит треугольников
+Ниже пример, как тот же бот можно переехать на «чистую» (hexagonal/абстракционно-слойную) архитектуру. Структура проекта:
+
+go
+Копировать код
+├── cmd
+│   └── mexc-arb
+│       └── main.go
+├── internal
+│   ├── app
+│   │   └── arbitrage.go
+│   ├── domain
+│   │   ├── model.go
+│   │   └── service.go
+│   └── infra
+│       ├── mxclient.go
+│       └── wsrepo.go
+├── triangles.json
+└── go.mod
+domain/model.go
+go
+Копировать код
+package domain
+
+// Triangle — три валюты для арбитража.
+type Triangle struct{ A, B, C string }
+
+// PriceRepo описывает источник цен.
+type PriceRepo interface {
+    Subscribe(channels []string) (<-chan PriceUpdate, error)
+    PingLoop()
+}
+
+// HTTPClient описывает минимальный HTTP-интерфейс.
+type HTTPClient interface {
+    Get(url string) ([]byte, error)
+}
+
+// PriceUpdate — обновление цены для пары.
+type PriceUpdate struct {
+    Symbol string
+    Price  float64
+}
+domain/service.go
+go
+Копировать код
+package domain
+
+import "sync"
+
+// Arbitrager считает арбитраж.
+type Arbitrager struct {
+    repo       PriceRepo
+    triangles  []Triangle
+    prices     map[string]float64
+    lock       sync.RWMutex
+    commission float64
+    minProfit  float64
+}
+
+// NewArbitrager создаёт новый экземпляр.
+func NewArbitrager(repo PriceRepo, triangles []Triangle, commission, minProfit float64) *Arbitrager {
+    return &Arbitrager{
+        repo:       repo,
+        triangles:  triangles,
+        prices:     make(map[string]float64),
+        commission: commission,
+        minProfit:  minProfit,
+    }
+}
+
+// Start запускает подписку и вычисления.
+func (a *Arbitrager) Start() error {
+    channels := buildChannels(a.triangles)
+    updates, err := a.repo.Subscribe(channels)
+    if err != nil {
+        return err
+    }
+    go a.repo.PingLoop()
+    go a.processUpdates(updates)
+    return nil
+}
+
+func (a *Arbitrager) processUpdates(upd <-chan PriceUpdate) {
+    netF := (1 - a.commission)
+    for pu := range upd {
+        a.lock.Lock()
+        a.prices[pu.Symbol] = pu.Price
+        a.lock.Unlock()
+        a.checkAll(netF)
+    }
+}
+
+func (a *Arbitrager) checkAll(netF float64) {
+    a.lock.RLock()
+    defer a.lock.RUnlock()
+    for _, t := range a.triangles {
+        p1, ok1 := a.prices[t.A+t.B]
+        p2, ok2 := a.prices[t.B+t.C]
+        p3, ok3 := a.prices[t.A+t.C]
+        if !ok1 || !ok2 || !ok3 { continue }
+        // тройное списание комиссии netF^3
+        profit := (p1*p2/p3*netF*netF*netF - 1) * 100
+        if profit > a.minProfit {
+            log.Printf("🔺 %s/%s/%s | profit: %.3f%%", t.A, t.B, t.C, profit)
+        }
+    }
+}
+infra/mxclient.go
+go
+Копировать код
+package infra
+
+import (
+    "encoding/json"
+    "net/http"
+    "time"
+)
+
+// ExchangeInfo импортируемая модель.
+type ExchangeInfo struct{ Symbols []struct{ Symbol string } }
+
+// FetchSymbols загружает список торговых символов.
+func FetchSymbols(client HTTPClient, url string) (map[string]bool, error) {
+    data, err := client.Get(url)
+    if err != nil {
+        return nil, err
+    }
+    var info ExchangeInfo
+    if err := json.Unmarshal(data, &info); err != nil {
+        return nil, err
+    }
+    out := make(map[string]bool, len(info.Symbols))
+    for _, s := range info.Symbols {
+        out[s.Symbol] = true
+    }
+    return out, nil
+}
+
+// RealHTTPClient — реальный HTTP-клиент.
+type RealHTTPClient struct{}
+
+func (c *RealHTTPClient) Get(url string) ([]byte, error) {
+    resp, err := http.Get(url)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+    return io.ReadAll(resp.Body)
+}
+infra/wsrepo.go
+go
+Копировать код
+package infra
+
+import (
+    "github.com/gorilla/websocket"
+    "time"
+    "internal/domain"
+)
+
+// WSRepo реализует domain.PriceRepo поверх websocket.
+type WSRepo struct {
+    url       string
+    conn      *websocket.Conn
+    lastPong  time.Time
+}
+
+func NewWSRepo(url string) *WSRepo { return &WSRepo{url: url} }
+
+func (r *WSRepo) Subscribe(channels []string) (<-chan domain.PriceUpdate, error) {
+    conn, _, err := websocket.DefaultDialer.Dial(r.url, nil)
+    if err != nil {
+        return nil, err
+    }
+    r.conn = conn
+    // подписка
+    req := map[string]interface{}{"method":"SUBSCRIPTION","params":channels,"id":time.Now().Unix()}
+    if err := conn.WriteJSON(req); err != nil {
+        return nil, err
+    }
+    out := make(chan domain.PriceUpdate)
+    go func() {
+        defer close(out)
+        for {
+            _, msg, err := conn.ReadMessage()
+            if err != nil {
+                return
+            }
+            var u struct {
+                Symbol string `json:"s"`
+                Deals  []struct{ Price string `json:"p"` } `json:"d.deals"`
+            }
+            if err := json.Unmarshal(msg, &u); err != nil {
+                continue
+            }
+            if len(u.Deals)==0 { continue }
+            price, _ := strconv.ParseFloat(u.Deals[0].Price,64)
+            out <- domain.PriceUpdate{Symbol:u.Symbol,Price:price}
+        }
+    }()
+    return out, nil
+}
+
+func (r *WSRepo) PingLoop() {
+    t := time.NewTicker(60*time.Second); defer t.Stop()
+    for range t.C {
+        r.conn.WriteMessage(websocket.PingMessage, []byte("hb"))
+    }
+}
+app/arbitrage.go
+go
+Копировать код
+package app
+
+import (
+    "internal/domain"
+)
+
+// Run запускает всю систему.
+func Run() error {
+    // загрузить triangles.json
+    triangles, _ := loadTriangles("triangles.json")
+    // HTTP → список символов
+    httpClient := &infra.RealHTTPClient{}
+    valid, _ := infra.FetchSymbols(httpClient, "https://api.mexc.com/api/v3/exchangeInfo")
+    // отфильтровать треугольники под доступные пары
+    triangles = filterTriangles(triangles, valid)
+
+    // WebSocket-репозиторий
+    wsRepo := infra.NewWSRepo("wss://wbs.mexc.com/ws")
+    // сервис арбитража с комиссией 0.0005 (0.05%) и порогом 0.3%
+    arb := domain.NewArbitrager(wsRepo, triangles, 0.0005, 0.3)
+    if err := arb.Start(); err != nil {
+        return err
+    }
+    select{} // работа бесконечно
+}
+cmd/mexc-arb/main.go
+go
+Копировать код
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"log"
-	"net/http"
-	"os"
-	"sort"
-	"strconv"
-	"sync"
-	"time"
-
-	"github.com/gorilla/websocket"
+    "log"
+    "internal/app"
 )
-
-type Triangle struct{ A, B, C string }
-
-type SymbolInfo struct{ Symbol string }
-type ExchangeInfo struct{ Symbols []SymbolInfo }
-
-var (
-	priceLock sync.Mutex
-	latest    = map[string]float64{}
-)
-
-func ensureTrianglesFile() error {
-	t := []Triangle{
-		{"XRP", "BTC", "USDT"},
-		{"ETH", "BTC", "USDT"},
-		{"TRX", "BTC", "USDT"},
-		{"ADA", "USDT", "BTC"},
-		{"BTC", "SOL", "USDT"},
-		{"XRP", "USDT", "ETH"},
-		{"XRP", "BTC", "ETH"},
-		{"LTC", "BTC", "USDT"},
-		{"DOGE", "BTC", "USDT"},
-		{"MATIC", "USDT", "BTC"},
-		{"DOT", "BTC", "USDT"},
-		{"AVAX", "BTC", "USDT"},
-		{"BCH", "BTC", "USDT"},
-		{"LINK", "BTC", "USDT"},
-		{"ETC", "BTC", "USDT"},
-	}
-	b, _ := json.MarshalIndent(t, "", "  ")
-	return ioutil.WriteFile("triangles.json", b, 0644)
-}
-
-func loadTriangles() ([]Triangle, error) {
-	if err := ensureTrianglesFile(); err != nil {
-		return nil, fmt.Errorf("не удалось создать triangles.json: %v", err)
-	}
-	b, err := ioutil.ReadFile("triangles.json")
-	if err != nil {
-		return nil, err
-	}
-	var ts []Triangle
-	if err := json.Unmarshal(b, &ts); err != nil {
-		return nil, err
-	}
-	return ts, nil
-}
-
-func fetchAvailableSymbols() map[string]bool {
-	out := make(map[string]bool)
-	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-	if err != nil {
-		return out
-	}
-	defer resp.Body.Close()
-	b, _ := ioutil.ReadAll(resp.Body)
-	var info ExchangeInfo
-	if err := json.Unmarshal(b, &info); err != nil {
-		return out
-	}
-	for _, s := range info.Symbols {
-		out[s.Symbol] = true
-	}
-	return out
-}
-
-func buildChannels(triangles []Triangle, valid map[string]bool) []string {
-	set := map[string]bool{}
-	for _, t := range triangles {
-		pairs := [][2]string{{t.A, t.B}, {t.B, t.C}, {t.A, t.C}}
-		for _, pr := range pairs {
-			a, b := pr[0], pr[1]
-			p1, p2 := a+b, b+a
-			switch {
-			case valid[p1]:
-				set[p1] = true
-			case valid[p2]:
-				set[p2] = true
-			}
-		}
-	}
-	list := make([]string, 0, len(set))
-	for s := range set {
-		list = append(list, s)
-	}
-	sort.Strings(list)
-	channels := make([]string, len(list))
-	for i, s := range list {
-		channels[i] = fmt.Sprintf("spot@public.deals.v3.api@%s", s)
-	}
-	return channels
-}
-
-func reversePair(s string) string {
-	n := len(s) / 2
-	return s[n:] + s[:n]
-}
-
-func findActualPairKey(a, b string) string {
-	k := a + b
-	if _, ok := latest[k]; ok {
-		return k
-	}
-	return b + a
-}
-
-func checkTriangleProfit(triangles []Triangle) {
-	priceLock.Lock()
-	defer priceLock.Unlock()
-
-	commission := 0.001
-	netFactor := (1 - commission) * (1 - commission) * (1 - commission)
-
-	for _, t := range triangles {
-		ab := findActualPairKey(t.A, t.B)
-		bc := findActualPairKey(t.B, t.C)
-		ac := findActualPairKey(t.A, t.C)
-
-		p1, ok1 := latest[ab]
-		p2, ok2 := latest[bc]
-		p3, ok3 := latest[ac]
-		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
-			continue
-		}
-
-		profit := (p1*p2/p3*netFactor - 1) * 100
-		if profit > -0.02 {
-			log.Printf("🔺 %s/%s/%s | profit: %.3f%%", t.A, t.B, t.C, profit)
-		}
-
-	}
-}
-
-func runBot(logFile *os.File) error {
-	triangles, err := loadTriangles()
-	if err != nil {
-		return err
-	}
-	valid := fetchAvailableSymbols()
-	channels := buildChannels(triangles, valid)
-
-	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", nil)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	var lastPing time.Time
-	conn.SetPongHandler(func(string) error {
-		d := time.Since(lastPing)
-		log.Printf("📶 Pong after %v", d)
-		return nil
-	})
-
-	sub := map[string]interface{}{
-		"method": "SUBSCRIPTION",
-		"params": channels,
-		"id":     time.Now().Unix(),
-	}
-	if err := conn.WriteJSON(sub); err != nil {
-		return err
-	}
-
-	enc := json.NewEncoder(logFile)
-	pingT := time.NewTicker(60 * time.Second)
-	defer pingT.Stop()
-	go func() {
-		for range pingT.C {
-			lastPing = time.Now()
-			conn.WriteMessage(websocket.PingMessage, []byte("hb"))
-		}
-	}()
-
-	checkT := time.NewTicker(5 * time.Second)
-	defer checkT.Stop()
-	go func() {
-		for range checkT.C {
-			checkTriangleProfit(triangles)
-		}
-	}()
-
-	for {
-		_, raw, err := conn.ReadMessage()
-		if err != nil {
-			return err
-		}
-		var outer struct {
-			Channel string `json:"c"`
-			Data    struct {
-				Deals []struct {
-					Price string `json:"p"`
-					Side  int    `json:"S"`
-				} `json:"deals"`
-			} `json:"d"`
-			Symbol string `json:"s"`
-		}
-		if err := json.Unmarshal(raw, &outer); err != nil {
-			continue
-		}
-		if outer.Symbol == "" || len(outer.Data.Deals) == 0 {
-			continue
-		}
-
-		price, err := strconv.ParseFloat(outer.Data.Deals[0].Price, 64)
-		if err != nil {
-			continue
-		}
-
-		priceLock.Lock()
-		latest[outer.Symbol] = price
-		latest[reversePair(outer.Symbol)] = 1 / price
-		priceLock.Unlock()
-
-		enc.Encode(map[string]interface{}{
-			"symbol": outer.Symbol,
-			"price":  price,
-			"time":   time.Now().Format(time.RFC3339Nano),
-		})
-	}
-}
 
 func main() {
-	log.SetOutput(os.Stdout)
-	f, err := os.OpenFile("prices_log.jsonl", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer f.Close()
-
-	for {
-		if err := runBot(f); err != nil {
-			log.Printf("🔄 Reconnect in 5s: %v", err)
-			time.Sleep(5 * time.Second)
-		}
-	}
+    log.SetFlags(log.LstdFlags|log.Lmicroseconds)
+    if err := app.Run(); err != nil {
+        log.Fatal(err)
+    }
 }
+Весь «мотор» пересобран в три слоя:
 
+domain — сущности, интерфейсы (PriceRepo, Triangle) и чистая бизнес-логика (Arbitrager).
+
+infra — реализация PriceRepo через WebSocket, HTTP-клиент и всё, что общается с внешними API.
+
+app + cmd — оркестратор: подгрузка конфигов, Run(), сборка зависимостей и запуск.
+
+Теперь задержки в WebSocket, фильтрация HTTP-символов, сам расчёт арбитража и порогов находятся в чётко разделённых модулях — легко тестировать, профилировать и менять по отдельности.
+
+
+
+
+
+
+Источники
+
+Спросить ChatGPT
 
 
 
