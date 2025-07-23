@@ -353,8 +353,7 @@ go
 ├── triangles.json
 └── go.mod
 domain/model.go
-go
-Копировать код
+
 package domain
 
 // Triangle — три валюты для арбитража.
@@ -376,9 +375,10 @@ type PriceUpdate struct {
     Symbol string
     Price  float64
 }
+
+
 domain/service.go
-go
-Копировать код
+
 package domain
 
 import "sync"
@@ -441,9 +441,9 @@ func (a *Arbitrager) checkAll(netF float64) {
         }
     }
 }
+
 infra/mxclient.go
-go
-Копировать код
+
 package infra
 
 import (
@@ -483,9 +483,9 @@ func (c *RealHTTPClient) Get(url string) ([]byte, error) {
     defer resp.Body.Close()
     return io.ReadAll(resp.Body)
 }
+
 infra/wsrepo.go
-go
-Копировать код
+
 package infra
 
 import (
@@ -543,9 +543,10 @@ func (r *WSRepo) PingLoop() {
         r.conn.WriteMessage(websocket.PingMessage, []byte("hb"))
     }
 }
+
+
 app/arbitrage.go
-go
-Копировать код
+
 package app
 
 import (
@@ -571,9 +572,11 @@ func Run() error {
     }
     select{} // работа бесконечно
 }
+
+
+
 cmd/mexc-arb/main.go
-go
-Копировать код
+
 package main
 
 import (
@@ -587,6 +590,9 @@ func main() {
         log.Fatal(err)
     }
 }
+
+
+
 Весь «мотор» пересобран в три слоя:
 
 domain — сущности, интерфейсы (PriceRepo, Triangle) и чистая бизнес-логика (Arbitrager).
@@ -602,44 +608,74 @@ app + cmd — оркестратор: подгрузка конфигов, Run()
 
 
 
-Источники
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "UndeclaredName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: loadTriangles",
+	"source": "compiler",
+	"startLineNumber": 11,
+	"startColumn": 18,
+	"endLineNumber": 11,
+	"endColumn": 31,
+	"origin": "extHost1"
+}]
 
-Спросить ChatGPT
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "UndeclaredName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: filterTriangles",
+	"source": "compiler",
+	"startLineNumber": 16,
+	"startColumn": 14,
+	"endLineNumber": 16,
+	"endColumn": 29,
+	"origin": "extHost1"
+}]
 
-
-https://github.com/Gazmasater/cryp_arbtryang
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ git init
-hint: Using 'master' as the name for the initial branch. This default branch name
-hint: is subject to change. To configure the initial branch name to use in all
-hint: of your new repositories, which will suppress this warning, call:
-hint: 
-hint:   git config --global init.defaultBranch <name>
-hint: 
-hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
-hint: 'development'. The just-created branch can be renamed via this command:
-hint: 
-hint:   git branch -m <name>
-Initialized empty Git repository in /home/gaz358/myprog/crypt/.git/
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ 
-
-git config --global --add safe.directory /home/gaz358/myprog/crypt
-git remote add origin https://github.com/Gazmasater/cryp_arbtryang.git
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ git remote add origin https://github.com/Gazmasater/cryp_arbtryang.git
-fatal: detected dubious ownership in repository at '/home/gaz358/myprog/crypt'
-To add an exception for this directory, call:
-
-        git config --global --add safe.directory /home/gaz358/myprog/crypt
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ 
-
-git add .
-git commit -m "Initial import of triangular-arb bot"
-
-git push -u origin master
-
-git branch -m main        # переименовать локальную master → main
-git push -u origin main
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/domain/service.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "UndeclaredName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: buildChannels",
+	"source": "compiler",
+	"startLineNumber": 31,
+	"startColumn": 14,
+	"endLineNumber": 31,
+	"endColumn": 27,
+	"origin": "extHost1"
+}]
 
 
 
