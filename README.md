@@ -335,19 +335,33 @@ sudo docker run -d \
 
 
 
-type Arbitrager struct {
-	Triangles        []triangle.Triangle
-	latest           map[string]float64
-	trianglesByPair  map[string][]int
-	sumProfit        float64      // ← Сюда будем накапливать
-	mu               sync.Mutex
-}
-
-
-if profit > 0 {
-	a.sumProfit += profit
-	log.Printf("🔺 %s/%s/%s profit %.3f%% total=%.3f%%",
-		tri.A, tri.B, tri.C, profit, a.sumProfit)
+t := []triangle.Triangle{
+    {A: "XRP", B: "BTC", C: "USDT"},
+    {A: "ETH", B: "BTC", C: "USDT"},
+    {A: "TRX", B: "BTC", C: "USDT"},
+    {A: "ADA", B: "USDT", C: "BTC"},
+    {A: "BTC", B: "SOL", C: "USDT"},
+    {A: "XRP", B: "USDT", C: "ETH"},
+    {A: "XRP", B: "BTC", C: "ETH"},
+    {A: "LTC", B: "BTC", C: "USDT"},
+    {A: "DOGE", B: "BTC", C: "USDT"},
+    {A: "MATIC", B: "USDT", C: "BTC"},
+    {A: "DOT", B: "BTC", C: "USDT"},
+    {A: "AVAX", B: "BTC", C: "USDT"},
+    {A: "BCH", B: "BTC", C: "USDT"},
+    {A: "LINK", B: "BTC", C: "USDT"},
+    {A: "ETC", B: "BTC", C: "USDT"},
+    // Новые 10
+    {A: "SOL", B: "USDT", C: "ADA"},
+    {A: "SOL", B: "BTC", C: "ETH"},
+    {A: "ETH", B: "USDT", C: "DOT"},
+    {A: "ADA", B: "BTC", C: "LTC"},
+    {A: "DOGE", B: "USDT", C: "MATIC"},
+    {A: "LINK", B: "ETH", C: "USDT"},
+    {A: "AVAX", B: "USDT", C: "LINK"},
+    {A: "TRX", B: "USDT", C: "ADA"},
+    {A: "BCH", B: "USDT", C: "SOL"},
+    {A: "DOT", B: "USDT", C: "DOGE"},
 }
 
 
