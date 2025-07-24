@@ -352,7 +352,8 @@ import (
 	"cryptarb/internal/domain/triangle"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
+	"os"
 )
 
 func LoadTriangles(path string) ([]triangle.Triangle, error) {
@@ -374,13 +375,24 @@ func LoadTriangles(path string) ([]triangle.Triangle, error) {
 		{A: "LINK", B: "BTC", C: "USDT"},
 		{A: "ETC", B: "BTC", C: "USDT"},
 	}
-	b, _ := json.MarshalIndent(t, "", "  ")
-	_ = ioutil.WriteFile(path, b, 0644)
 
-	b, err := ioutil.ReadFile(path)
+	// сериализуем и записываем в файл, если он не существует
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		b, _ := json.MarshalIndent(t, "", "  ")
+		_ = os.WriteFile(path, b, 0644)
+	}
+
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
+	defer f.Close()
+
+	b, err := io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+
 	var ts []triangle.Triangle
 	if err := json.Unmarshal(b, &ts); err != nil {
 		return nil, fmt.Errorf("unmarshal %s: %w", path, err)
