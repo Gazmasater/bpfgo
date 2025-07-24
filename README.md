@@ -346,14 +346,131 @@ sudo docker run -d \
 бавил у Arbitrager метод Channels() []string, чтобы в main не лезть в неэкспортированные поля.
 
 
-2025/07/24 19:03:03 📶 Pong after 324.148707ms
-2025/07/24 19:03:18 📶 Pong after 211.398802ms
-2025/07/24 19:03:33 📶 Pong after 207.744062ms
-2025/07/24 19:03:48 📶 Pong after 208.072614ms
-2025/07/24 19:04:03 📶 Pong after 428.644815ms
-2025/07/24 19:06:19 read tcp 192.168.1.71:44400->128.75.237.128:443: read: connection reset by peer
-exit status 1
+package main
 
+import (
+    "encoding/json"
+    "fmt"
+    "io"
+    "io/ioutil"
+    "log"
+    "net/http"
+    "os"
+    "sort"
+    "strconv"
+    "sync"
+    "time"
+
+    "github.com/gorilla/websocket"
+)
+
+type Triangle struct{ A, B, C string }
+type SymbolInfo struct{ Symbol string }
+type ExchangeInfo struct{ Symbols []SymbolInfo }
+
+var (
+    priceLock sync.Mutex
+    latest    = map[string]float64{}
+    arbLogger *log.Logger
+)
+
+func init() {
+    // Открываем файл для всех логов
+    f, err := os.OpenFile("arbitrage.log",
+        os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+    if err != nil {
+        log.Fatalf("cannot open arbitrage.log: %v", err)
+    }
+    // Логер пишет и в файл, и в stdout
+    mw := io.MultiWriter(os.Stdout, f)
+    arbLogger = log.New(mw, "", log.LstdFlags|log.Lmicroseconds)
+}
+
+func findActualPairKey(a, b string) string {
+    k := a + b
+    if _, ok := latest[k]; ok {
+        return k
+    }
+    return b + a
+}
+
+func checkTriangleProfit(triangles []Triangle) {
+    priceLock.Lock()
+    defer priceLock.Unlock()
+    commission := 0.001
+    nf := (1 - commission) * (1 - commission) * (1 - commission)
+    for _, t := range triangles {
+        ab, bc, ac := findActualPairKey(t.A, t.B), findActualPairKey(t.B, t.C), findActualPairKey(t.A, t.C)
+        p1, ok1 := latest[ab]; p2, ok2 := latest[bc]; p3, ok3 := latest[ac]
+        if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+            continue
+        }
+        profit := (p1*p2/p3*nf - 1) * 100
+        if profit > 0 {
+            arbLogger.Printf("🔺 %s/%s/%s profit: %.3f%%", t.A, t.B, t.C, profit)
+        }
+    }
+}
+
+func runBot(logFile *os.File) error {
+    // ... ваш код loadTriangles, fetchAvailableSymbols, buildChannels, dial WS ...
+    conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", nil)
+    if err != nil {
+        return err
+    }
+    defer conn.Close()
+
+    var lastPing time.Time
+    conn.SetPongHandler(func(string) error {
+        d := time.Since(lastPing)
+        arbLogger.Printf("📶 Pong after %v", d)
+        return nil
+    })
+
+    // подписка и логика receiving и обновления latest...
+
+    pingT := time.NewTicker(60 * time.Second)
+    defer pingT.Stop()
+    go func() {
+        for range pingT.C {
+            lastPing = time.Now()
+            conn.WriteMessage(websocket.PingMessage, []byte("hb"))
+        }
+    }()
+
+    checkT := time.NewTicker(5 * time.Second)
+    defer checkT.Stop()
+    go func() {
+        for range checkT.C {
+            // triangles переданы в замыкании
+            checkTriangleProfit(triangles)
+        }
+    }()
+
+    for {
+        // чтение из сокета...
+    }
+}
+
+func main() {
+    // открываем файл лога котировок
+    f, err := os.OpenFile("prices_log.jsonl",
+        os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+    if err != nil {
+        arbLogger.Fatalf("cannot open prices_log.jsonl: %v", err)
+    }
+    defer f.Close()
+
+    for {
+        if err := runBot(f); err != nil {
+            arbLogger.Printf("🔄 reconnect in 5s: %v", err)
+            time.Sleep(5 * time.Second)
+            continue
+        }
+        // если runBot вернул nil (маловероятно), просто выходим
+        break
+    }
+}
 
 
 			
