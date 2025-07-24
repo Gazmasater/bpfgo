@@ -346,12 +346,49 @@ sudo docker run -d \
 бавил у Arbitrager метод Channels() []string, чтобы в main не лезть в неэкспортированные поля.
 
 
+package filesystem
 
-			profit := (p1*p2/p3*nf - 1) * 100
-			if profit > 0 {
-				log.Printf("🔺 %s/%s/%s profit %.3f%%", tri.A, tri.B, tri.C, profit)
-			}
+import (
+	"cryptarb/internal/domain/triangle"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+)
 
+func LoadTriangles(path string) ([]triangle.Triangle, error) {
+	// дефолтные треугольники
+	t := []triangle.Triangle{
+		{A: "XRP", B: "BTC", C: "USDT"},
+		{A: "ETH", B: "BTC", C: "USDT"},
+		{A: "TRX", B: "BTC", C: "USDT"},
+		{A: "ADA", B: "USDT", C: "BTC"},
+		{A: "BTC", B: "SOL", C: "USDT"},
+		{A: "XRP", B: "USDT", C: "ETH"},
+		{A: "XRP", B: "BTC", C: "ETH"},
+		{A: "LTC", B: "BTC", C: "USDT"},
+		{A: "DOGE", B: "BTC", C: "USDT"},
+		{A: "MATIC", B: "USDT", C: "BTC"},
+		{A: "DOT", B: "BTC", C: "USDT"},
+		{A: "AVAX", B: "BTC", C: "USDT"},
+		{A: "BCH", B: "BTC", C: "USDT"},
+		{A: "LINK", B: "BTC", C: "USDT"},
+		{A: "ETC", B: "BTC", C: "USDT"},
+	}
+	b, _ := json.MarshalIndent(t, "", "  ")
+	_ = ioutil.WriteFile(path, b, 0644)
+
+	b, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var ts []triangle.Triangle
+	if err := json.Unmarshal(b, &ts); err != nil {
+		return nil, fmt.Errorf("unmarshal %s: %w", path, err)
+	}
+	return ts, nil
+}
+
+			
 
 
 
