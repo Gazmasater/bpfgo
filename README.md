@@ -346,59 +346,36 @@ sudo docker run -d \
 бавил у Arbitrager метод Channels() []string, чтобы в main не лезть в неэкспортированные поля.
 
 
-package filesystem
+package mexc
 
 import (
-	"cryptarb/internal/domain/triangle"
 	"encoding/json"
-	"fmt"
-	"io"
-	"os"
+	"io/ioutil"
+	"net/http"
 )
 
-func LoadTriangles(path string) ([]triangle.Triangle, error) {
-	// дефолтные треугольники
-	t := []triangle.Triangle{
-		{A: "XRP", B: "BTC", C: "USDT"},
-		{A: "ETH", B: "BTC", C: "USDT"},
-		{A: "TRX", B: "BTC", C: "USDT"},
-		{A: "ADA", B: "USDT", C: "BTC"},
-		{A: "BTC", B: "SOL", C: "USDT"},
-		{A: "XRP", B: "USDT", C: "ETH"},
-		{A: "XRP", B: "BTC", C: "ETH"},
-		{A: "LTC", B: "BTC", C: "USDT"},
-		{A: "DOGE", B: "BTC", C: "USDT"},
-		{A: "MATIC", B: "USDT", C: "BTC"},
-		{A: "DOT", B: "BTC", C: "USDT"},
-		{A: "AVAX", B: "BTC", C: "USDT"},
-		{A: "BCH", B: "BTC", C: "USDT"},
-		{A: "LINK", B: "BTC", C: "USDT"},
-		{A: "ETC", B: "BTC", C: "USDT"},
-	}
+type SymbolInfo struct{ Symbol string }
+type ExchangeInfo struct{ Symbols []SymbolInfo }
 
-	// сериализуем и записываем в файл, если он не существует
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		b, _ := json.MarshalIndent(t, "", "  ")
-		_ = os.WriteFile(path, b, 0644)
-	}
-
-	f, err := os.Open(path)
+// FetchAvailableSymbols возвращает карту доступных торговых пар
+func FetchAvailableSymbols() map[string]bool {
+	out := make(map[string]bool)
+	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
-		return nil, err
+		return out
 	}
-	defer f.Close()
-
-	b, err := io.ReadAll(f)
-	if err != nil {
-		return nil, err
+	defer resp.Body.Close()
+	b, _ := ioutil.ReadAll(resp.Body)
+	var info ExchangeInfo
+	if err := json.Unmarshal(b, &info); err != nil {
+		return out
 	}
-
-	var ts []triangle.Triangle
-	if err := json.Unmarshal(b, &ts); err != nil {
-		return nil, fmt.Errorf("unmarshal %s: %w", path, err)
+	for _, s := range info.Symbols {
+		out[s.Symbol] = true
 	}
-	return ts, nil
+	return out
 }
+
 
 			
 
