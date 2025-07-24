@@ -346,40 +346,13 @@ sudo docker run -d \
 бавил у Arbitrager метод Channels() []string, чтобы в main не лезть в неэкспортированные поля.
 
 
-func (a *Arbitrager) CheckLoop() {
-	var sum float64 // ← обнуляется один раз при запуске
-	t := time.NewTicker(5 * time.Second)
-	defer t.Stop()
-
-	for range t.C {
-		a.mu.Lock()
-		for _, tri := range a.Triangles {
-			ab := tri.A + tri.B
-			bc := tri.B + tri.C
-			ac := tri.A + tri.C
-
-			p1, ok1 := a.latest[ab]
-			p2, ok2 := a.latest[bc]
-			p3, ok3 := a.latest[ac]
-
-			if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
-				continue
-			}
-
-			const commission = 0.001
-			const minProfitPercent = 0.02
-
-			nf := (1 - commission) * (1 - commission) * (1 - commission)
-			profit := (p1 * p2 / p3 * nf - 1) * 100
-
-			if profit > minProfitPercent {
-				sum += profit // ← суммируется каждый положительный profit
-				log.Printf("🔺 %s/%s/%s profit %.3f%% sum=%.3f", tri.A, tri.B, tri.C, profit, sum)
-			}
-		}
-		a.mu.Unlock()
-	}
-}
+2025/07/24 19:03:03 📶 Pong after 324.148707ms
+2025/07/24 19:03:18 📶 Pong after 211.398802ms
+2025/07/24 19:03:33 📶 Pong after 207.744062ms
+2025/07/24 19:03:48 📶 Pong after 208.072614ms
+2025/07/24 19:04:03 📶 Pong after 428.644815ms
+2025/07/24 19:06:19 read tcp 192.168.1.71:44400->128.75.237.128:443: read: connection reset by peer
+exit status 1
 
 
 
