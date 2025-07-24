@@ -343,27 +343,38 @@ sudo docker run -d \
 
 Добавил у Arbitrager метод Channels() []string, чтобы в main не лезть в неэкспортированные поля.
 
-[{
-	"resource": "/home/gaz358/myprog/crypt/internal/repository/filesystem/loader.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "default",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/go/analysis/passes/composite",
-			"scheme": "https",
-			"authority": "pkg.go.dev"
-		}
-	},
-	"severity": 4,
-	"message": "cryptarb/internal/domain/triangle.Triangle struct literal uses unkeyed fields",
-	"source": "composites",
-	"startLineNumber": 13,
-	"startColumn": 3,
-	"endLineNumber": 13,
-	"endColumn": 25,
-	"origin": "extHost1"
-}]
+func LoadTriangles(path string) ([]triangle.Triangle, error) {
+    // дефолтные треугольники
+    t := []triangle.Triangle{
+        {A: "XRP", B: "BTC", C: "USDT"},
+        {A: "ETH", B: "BTC", C: "USDT"},
+        {A: "TRX", B: "BTC", C: "USDT"},
+        {A: "ADA", B: "USDT", C: "BTC"},
+        {A: "BTC", B: "SOL", C: "USDT"},
+        {A: "XRP", B: "USDT", C: "ETH"},
+        {A: "XRP", B: "BTC", C: "ETH"},
+        {A: "LTC", B: "BTC", C: "USDT"},
+        {A: "DOGE", B: "BTC", C: "USDT"},
+        {A: "MATIC", B: "USDT", C: "BTC"},
+        {A: "DOT", B: "BTC", C: "USDT"},
+        {A: "AVAX", B: "BTC", C: "USDT"},
+        {A: "BCH", B: "BTC", C: "USDT"},
+        {A: "LINK", B: "BTC", C: "USDT"},
+        {A: "ETC", B: "BTC", C: "USDT"},
+    }
+    b, _ := json.MarshalIndent(t, "", "  ")
+    _ = ioutil.WriteFile(path, b, 0644)
+
+    b, err := ioutil.ReadFile(path)
+    if err != nil {
+        return nil, err
+    }
+    var ts []triangle.Triangle
+    if err := json.Unmarshal(b, &ts); err != nil {
+        return nil, fmt.Errorf("unmarshal %s: %w", path, err)
+    }
+    return ts, nil
+}
 
 
 
