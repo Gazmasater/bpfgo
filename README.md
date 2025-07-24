@@ -335,32 +335,6 @@ sudo docker run -d \
 
 
 
-package main
-
-import (
-	"cryptarb/internal/app"
-	"cryptarb/internal/repository/mexc"
-	"log"
-)
-
-func main() {
-	arb, err := app.New("triangles.json")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// 1) Запускаем WS-подписку
-	go func() {
-		if err := mexc.ListenWS(arb.Channels(), arb.HandleRaw); err != nil {
-			log.Fatal(err)
-		}
-	}()
-
-	// 2) Цикл поиска профитов
-	arb.CheckLoop()
-}
-
-
 package app
 
 import (
@@ -371,13 +345,13 @@ import (
 	"log"
 	"strconv"
 	"sync"
-	"time"
 )
 
 type Arbitrager struct {
-	Triangles []triangle.Triangle // ЭКСПОРТИРОВАНО
-	latest    map[string]float64
-	mu        sync.Mutex
+	Triangles        []triangle.Triangle
+	latest           map[string]float64
+	trianglesByPair  map[string][]int
+	mu               sync.Mutex
 }
 
 func New(dataPath string) (*Arbitrager, error) {
@@ -390,9 +364,26 @@ func New(dataPath string) (*Arbitrager, error) {
 	avail := mexc.FetchAvailableSymbols()
 	ts = triangle.Filter(ts, avail)
 
+	// 3) Индексация треугольников по парам
+	trianglesByPair := make(map[string][]int)
+	for i, tri := range ts {
+		pairs := []string{
+			tri.A + tri.B,
+			tri.B + tri.C,
+			tri.A + tri.C,
+			tri.B + tri.A,
+			tri.C + tri.B,
+			tri.C + tri.A,
+		}
+		for _, p := range pairs {
+			trianglesByPair[p] = append(trianglesByPair[p], i)
+		}
+	}
+
 	return &Arbitrager{
-		Triangles: ts,
-		latest:    make(map[string]float64),
+		Triangles:       ts,
+		latest:          make(map[string]float64),
+		trianglesByPair: trianglesByPair,
 	}, nil
 }
 
@@ -423,235 +414,42 @@ func (a *Arbitrager) HandleRaw(raw []byte) {
 	rev := msg.Symbol[len(msg.Symbol)/2:] + msg.Symbol[:len(msg.Symbol)/2]
 	a.latest[rev] = 1 / price
 	a.mu.Unlock()
+
+	a.Check(msg.Symbol)
 }
 
-func (a *Arbitrager) CheckLoop() {
-	var sum float64 // ← обнуляется один раз при запуске
-	t := time.NewTicker(5 * time.Second)
-	defer t.Stop()
+func (a *Arbitrager) Check(symbol string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 
-	for range t.C {
-		a.mu.Lock()
-		for _, tri := range a.Triangles {
-			ab := tri.A + tri.B
-			bc := tri.B + tri.C
-			ac := tri.A + tri.C
-
-			p1, ok1 := a.latest[ab]
-			p2, ok2 := a.latest[bc]
-			p3, ok3 := a.latest[ac]
-
-			if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
-				continue
-			}
-
-			const commission = 0.001
-			const minProfitPercent = 0.0
-
-			nf := (1 - commission) * (1 - commission) * (1 - commission)
-			profit := (p1*p2/p3*nf - 1) * 100
-
-			if profit > minProfitPercent {
-				sum += profit // ← суммируется каждый положительный profit
-				log.Printf("🔺 %s/%s/%s profit %.3f%% sum=%.3f", tri.A, tri.B, tri.C, profit, sum)
-			}
-		}
-		a.mu.Unlock()
+	indices := a.trianglesByPair[symbol]
+	if len(indices) == 0 {
+		return
 	}
-}
 
+	const commission = 0.001
+	const nf = (1 - commission) * (1 - commission) * (1 - commission)
 
-package triangle
+	for _, i := range indices {
+		tri := a.Triangles[i]
+		ab := tri.A + tri.B
+		bc := tri.B + tri.C
+		ac := tri.A + tri.C
 
-import (
-	"fmt"
-	"sort"
-)
+		p1, ok1 := a.latest[ab]
+		p2, ok2 := a.latest[bc]
+		p3, ok3 := a.latest[ac]
 
-type Triangle struct{ A, B, C string }
-
-// Filter оставляет только те треугольники, пары в которых есть в available
-func Filter(ts []Triangle, available map[string]bool) []Triangle {
-	out := make([]Triangle, 0, len(ts))
-	for _, t := range ts {
-		ok := func(a, b string) bool {
-			return available[a+b] || available[b+a]
+		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+			continue
 		}
-		if ok(t.A, t.B) && ok(t.B, t.C) && ok(t.A, t.C) {
-			out = append(out, t)
+
+		profit := (p1 * p2 / p3 * nf - 1) * 100
+		if profit > 0 {
+			log.Printf("🔺 %s/%s/%s profit %.3f%%", tri.A, tri.B, tri.C, profit)
 		}
 	}
-	return out
 }
-
-// BuildChannels возвращает WS-каналы для сделок
-func BuildChannels(ts []Triangle) []string {
-	set := map[string]struct{}{}
-	for _, t := range ts {
-		for _, pr := range [][2]string{{t.A, t.B}, {t.B, t.C}, {t.A, t.C}} {
-			set[pr[0]+pr[1]] = struct{}{}
-		}
-	}
-	list := make([]string, 0, len(set))
-	for k := range set {
-		list = append(list, fmt.Sprintf("spot@public.deals.v3.api@%s", k))
-	}
-	sort.Strings(list)
-	return list
-}
-
-
-
-package filesystem
-
-import (
-	"cryptarb/internal/domain/triangle"
-	"encoding/json"
-	"fmt"
-	"io"
-	"os"
-)
-
-func LoadTriangles(path string) ([]triangle.Triangle, error) {
-	// дефолтные треугольники
-	t := []triangle.Triangle{
-		{A: "XRP", B: "BTC", C: "USDT"},
-		{A: "ETH", B: "BTC", C: "USDT"},
-		{A: "TRX", B: "BTC", C: "USDT"},
-		{A: "ADA", B: "USDT", C: "BTC"},
-		{A: "BTC", B: "SOL", C: "USDT"},
-		{A: "XRP", B: "USDT", C: "ETH"},
-		{A: "XRP", B: "BTC", C: "ETH"},
-		{A: "LTC", B: "BTC", C: "USDT"},
-		{A: "DOGE", B: "BTC", C: "USDT"},
-		{A: "MATIC", B: "USDT", C: "BTC"},
-		{A: "DOT", B: "BTC", C: "USDT"},
-		{A: "AVAX", B: "BTC", C: "USDT"},
-		{A: "BCH", B: "BTC", C: "USDT"},
-		{A: "LINK", B: "BTC", C: "USDT"},
-		{A: "ETC", B: "BTC", C: "USDT"},
-	}
-
-	// сериализуем и записываем в файл, если он не существует
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		b, _ := json.MarshalIndent(t, "", "  ")
-		_ = os.WriteFile(path, b, 0644)
-	}
-
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	b, err := io.ReadAll(f)
-	if err != nil {
-		return nil, err
-	}
-
-	var ts []triangle.Triangle
-	if err := json.Unmarshal(b, &ts); err != nil {
-		return nil, fmt.Errorf("unmarshal %s: %w", path, err)
-	}
-	return ts, nil
-}
-
-
-package mexc
-
-import (
-	"encoding/json"
-	"io"
-	"net/http"
-)
-
-type SymbolInfo struct{ Symbol string }
-type ExchangeInfo struct{ Symbols []SymbolInfo }
-
-// FetchAvailableSymbols возвращает карту доступных торговых пар
-func FetchAvailableSymbols() map[string]bool {
-	out := make(map[string]bool)
-
-	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-	if err != nil {
-		return out
-	}
-	defer resp.Body.Close()
-
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return out
-	}
-
-	var info ExchangeInfo
-	if err := json.Unmarshal(b, &info); err != nil {
-		return out
-	}
-
-	for _, s := range info.Symbols {
-		out[s.Symbol] = true
-	}
-	return out
-}
-
-package mexc
-
-import (
-	"log"
-	"sync"
-	"time"
-
-	"github.com/gorilla/websocket"
-)
-
-// ListenWS запускает подключение к WS и передаёт каждый raw-сообщение в handler
-func ListenWS(channels []string, handler func(raw []byte)) error {
-	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", nil)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	// подписка
-	sub := map[string]interface{}{
-		"method": "SUBSCRIPTION",
-		"params": channels,
-		"id":     time.Now().Unix(),
-	}
-	if err := conn.WriteJSON(sub); err != nil {
-		return err
-	}
-
-	var mu sync.Mutex
-	var lastPing time.Time
-	conn.SetPongHandler(func(string) error {
-		log.Printf("📶 Pong after %v\n", time.Since(lastPing))
-		return nil
-	})
-	go func() {
-		t := time.NewTicker(15 * time.Second)
-		defer t.Stop()
-		for range t.C {
-			mu.Lock()
-			lastPing = time.Now()
-			_ = conn.WriteMessage(websocket.PingMessage, []byte("hb"))
-			mu.Unlock()
-		}
-	}()
-
-	// чтение
-	for {
-		_, raw, err := conn.ReadMessage()
-		if err != nil {
-			return err
-		}
-		handler(raw)
-	}
-}
-
-
-
-
 
 
 
