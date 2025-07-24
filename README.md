@@ -347,30 +347,40 @@ sudo docker run -d \
 
 
 func (a *Arbitrager) CheckLoop() {
+	var sum float64 // ← обнуляется один раз при запуске
 	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
+
 	for range t.C {
 		a.mu.Lock()
 		for _, tri := range a.Triangles {
-			ab, bc, ac := tri.A+tri.B, tri.B+tri.C, tri.A+tri.C
+			ab := tri.A + tri.B
+			bc := tri.B + tri.C
+			ac := tri.A + tri.C
+
 			p1, ok1 := a.latest[ab]
 			p2, ok2 := a.latest[bc]
 			p3, ok3 := a.latest[ac]
+
 			if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
 				continue
 			}
-			commission := 0.001
+
+			const commission = 0.001
+			const minProfitPercent = 0.02
+
 			nf := (1 - commission) * (1 - commission) * (1 - commission)
-			sum:=0
-			profit := (p1*p2/p3*nf - 1) * 100
-			if profit > 0.02 {
-				sum+=profit
-				log.Printf("🔺 %s/%s/%s profit %.3f%% sum=%.3f", tri.A, tri.B, tri.C, profit,sum)
+			profit := (p1 * p2 / p3 * nf - 1) * 100
+
+			if profit > minProfitPercent {
+				sum += profit // ← суммируется каждый положительный profit
+				log.Printf("🔺 %s/%s/%s profit %.3f%% sum=%.3f", tri.A, tri.B, tri.C, profit, sum)
 			}
 		}
 		a.mu.Unlock()
 	}
 }
+
 
 
 			
