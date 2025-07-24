@@ -452,6 +452,30 @@ func (a *Arbitrager) Check(symbol string) {
 }
 
 
+[{
+	"resource": "/home/gaz358/myprog/crypt/cmd/cryptarb/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "WrongArgCount",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "WrongArgCount"
+		}
+	},
+	"severity": 8,
+	"message": "not enough arguments in call to arb.Check\n\thave ()\n\twant (string)",
+	"source": "compiler",
+	"startLineNumber": 23,
+	"startColumn": 12,
+	"endLineNumber": 23,
+	"endColumn": 12,
+	"origin": "extHost1"
+}]
+
+
 
 			
 
