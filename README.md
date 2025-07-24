@@ -346,41 +346,30 @@ sudo docker run -d \
 бавил у Arbitrager метод Channels() []string, чтобы в main не лезть в неэкспортированные поля.
 
 
-package mexc
-
-import (
-	"encoding/json"
-	"io"
-	"net/http"
-)
-
-type SymbolInfo struct{ Symbol string }
-type ExchangeInfo struct{ Symbols []SymbolInfo }
-
-// FetchAvailableSymbols возвращает карту доступных торговых пар
-func FetchAvailableSymbols() map[string]bool {
-	out := make(map[string]bool)
-
-	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-	if err != nil {
-		return out
+func (a *Arbitrager) CheckLoop() {
+	t := time.NewTicker(5 * time.Second)
+	defer t.Stop()
+	for range t.C {
+		a.mu.Lock()
+		for _, tri := range a.Triangles {
+			ab, bc, ac := tri.A+tri.B, tri.B+tri.C, tri.A+tri.C
+			p1, ok1 := a.latest[ab]
+			p2, ok2 := a.latest[bc]
+			p3, ok3 := a.latest[ac]
+			if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+				continue
+			}
+			commission := 0.001
+			nf := (1 - commission) * (1 - commission) * (1 - commission)
+			sum:=0
+			profit := (p1*p2/p3*nf - 1) * 100
+			if profit > 0.02 {
+				sum+=profit
+				log.Printf("🔺 %s/%s/%s profit %.3f%% sum=%.3f", tri.A, tri.B, tri.C, profit,sum)
+			}
+		}
+		a.mu.Unlock()
 	}
-	defer resp.Body.Close()
-
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return out
-	}
-
-	var info ExchangeInfo
-	if err := json.Unmarshal(b, &info); err != nil {
-		return out
-	}
-
-	for _, s := range info.Symbols {
-		out[s.Symbol] = true
-	}
-	return out
 }
 
 
