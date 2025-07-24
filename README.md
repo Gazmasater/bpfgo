@@ -452,29 +452,31 @@ func (a *Arbitrager) Check(symbol string) {
 }
 
 
-[{
-	"resource": "/home/gaz358/myprog/crypt/cmd/cryptarb/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "WrongArgCount",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "WrongArgCount"
-		}
-	},
-	"severity": 8,
-	"message": "not enough arguments in call to arb.Check\n\thave ()\n\twant (string)",
-	"source": "compiler",
-	"startLineNumber": 23,
-	"startColumn": 12,
-	"endLineNumber": 23,
-	"endColumn": 12,
-	"origin": "extHost1"
-}]
 
+package main
+
+import (
+	"cryptarb/internal/app"
+	"cryptarb/internal/repository/mexc"
+	"log"
+)
+
+func main() {
+	arb, err := app.New("triangles.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// 1) Запускаем WS-подписку
+	go func() {
+		if err := mexc.ListenWS(arb.Channels(), arb.HandleRaw); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	// 2) Больше ничего не нужно — Check вызывается внутри HandleRaw
+	select {} // ← чтобы main не завершался
+}
 
 
 			
