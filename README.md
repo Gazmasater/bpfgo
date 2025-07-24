@@ -350,7 +350,7 @@ package mexc
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 )
 
@@ -360,16 +360,23 @@ type ExchangeInfo struct{ Symbols []SymbolInfo }
 // FetchAvailableSymbols возвращает карту доступных торговых пар
 func FetchAvailableSymbols() map[string]bool {
 	out := make(map[string]bool)
+
 	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
 		return out
 	}
 	defer resp.Body.Close()
-	b, _ := ioutil.ReadAll(resp.Body)
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return out
+	}
+
 	var info ExchangeInfo
 	if err := json.Unmarshal(b, &info); err != nil {
 		return out
 	}
+
 	for _, s := range info.Symbols {
 		out[s.Symbol] = true
 	}
