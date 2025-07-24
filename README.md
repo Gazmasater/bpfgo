@@ -349,127 +349,313 @@ sudo docker run -d \
 package main
 
 import (
-    "encoding/json"
-    "fmt"
-    "io"
-    "io/ioutil"
-    "log"
-    "net/http"
-    "os"
-    "sort"
-    "strconv"
-    "sync"
-    "time"
+	"cryptarb/internal/app"
+	"cryptarb/internal/repository/mexc"
+	"log"
+)
 
-    "github.com/gorilla/websocket"
+func main() {
+	arb, err := app.New("triangles.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// 1) Запускаем WS-подписку
+	go func() {
+		if err := mexc.ListenWS(arb.Channels(), arb.HandleRaw); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	// 2) Цикл поиска профитов
+	arb.CheckLoop()
+}
+
+package app
+
+import (
+	"cryptarb/internal/domain/triangle"
+	"cryptarb/internal/repository/filesystem"
+	"cryptarb/internal/repository/mexc"
+	"encoding/json"
+	"log"
+	"strconv"
+	"sync"
+	"time"
+)
+
+type Arbitrager struct {
+	Triangles []triangle.Triangle // ЭКСПОРТИРОВАНО
+	latest    map[string]float64
+	mu        sync.Mutex
+}
+
+func New(dataPath string) (*Arbitrager, error) {
+	// 1) Загружаем все треугольники
+	ts, err := filesystem.LoadTriangles(dataPath)
+	if err != nil {
+		return nil, err
+	}
+	// 2) Фильтруем по доступным парам
+	avail := mexc.FetchAvailableSymbols()
+	ts = triangle.Filter(ts, avail)
+
+	return &Arbitrager{
+		Triangles: ts,
+		latest:    make(map[string]float64),
+	}, nil
+}
+
+// Channels отдаёт WS-каналы на основе отфильтрованных треугольников
+func (a *Arbitrager) Channels() []string {
+	return triangle.BuildChannels(a.Triangles)
+}
+
+func (a *Arbitrager) HandleRaw(raw []byte) {
+	var msg struct {
+		Symbol string `json:"s"`
+		Data   struct {
+			Deals []struct {
+				Price string `json:"p"`
+			} `json:"deals"`
+		} `json:"d"`
+	}
+	if json.Unmarshal(raw, &msg) != nil || msg.Symbol == "" || len(msg.Data.Deals) == 0 {
+		return
+	}
+	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
+	if err != nil {
+		return
+	}
+
+	a.mu.Lock()
+	a.latest[msg.Symbol] = price
+	rev := msg.Symbol[len(msg.Symbol)/2:] + msg.Symbol[:len(msg.Symbol)/2]
+	a.latest[rev] = 1 / price
+	a.mu.Unlock()
+}
+
+func (a *Arbitrager) CheckLoop() {
+	var sum float64 // ← обнуляется один раз при запуске
+	t := time.NewTicker(5 * time.Second)
+	defer t.Stop()
+
+	for range t.C {
+		a.mu.Lock()
+		for _, tri := range a.Triangles {
+			ab := tri.A + tri.B
+			bc := tri.B + tri.C
+			ac := tri.A + tri.C
+
+			p1, ok1 := a.latest[ab]
+			p2, ok2 := a.latest[bc]
+			p3, ok3 := a.latest[ac]
+
+			if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+				continue
+			}
+
+			const commission = 0.001
+			const minProfitPercent = 0.0
+
+			nf := (1 - commission) * (1 - commission) * (1 - commission)
+			profit := (p1*p2/p3*nf - 1) * 100
+
+			if profit > minProfitPercent {
+				sum += profit // ← суммируется каждый положительный profit
+				log.Printf("🔺 %s/%s/%s profit %.3f%% sum=%.3f", tri.A, tri.B, tri.C, profit, sum)
+			}
+		}
+		a.mu.Unlock()
+	}
+}
+
+
+package triangle
+
+import (
+	"fmt"
+	"sort"
 )
 
 type Triangle struct{ A, B, C string }
+
+// Filter оставляет только те треугольники, пары в которых есть в available
+func Filter(ts []Triangle, available map[string]bool) []Triangle {
+	out := make([]Triangle, 0, len(ts))
+	for _, t := range ts {
+		ok := func(a, b string) bool {
+			return available[a+b] || available[b+a]
+		}
+		if ok(t.A, t.B) && ok(t.B, t.C) && ok(t.A, t.C) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// BuildChannels возвращает WS-каналы для сделок
+func BuildChannels(ts []Triangle) []string {
+	set := map[string]struct{}{}
+	for _, t := range ts {
+		for _, pr := range [][2]string{{t.A, t.B}, {t.B, t.C}, {t.A, t.C}} {
+			set[pr[0]+pr[1]] = struct{}{}
+		}
+	}
+	list := make([]string, 0, len(set))
+	for k := range set {
+		list = append(list, fmt.Sprintf("spot@public.deals.v3.api@%s", k))
+	}
+	sort.Strings(list)
+	return list
+}
+
+
+package filesystem
+
+import (
+	"cryptarb/internal/domain/triangle"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+)
+
+func LoadTriangles(path string) ([]triangle.Triangle, error) {
+	// дефолтные треугольники
+	t := []triangle.Triangle{
+		{A: "XRP", B: "BTC", C: "USDT"},
+		{A: "ETH", B: "BTC", C: "USDT"},
+		{A: "TRX", B: "BTC", C: "USDT"},
+		{A: "ADA", B: "USDT", C: "BTC"},
+		{A: "BTC", B: "SOL", C: "USDT"},
+		{A: "XRP", B: "USDT", C: "ETH"},
+		{A: "XRP", B: "BTC", C: "ETH"},
+		{A: "LTC", B: "BTC", C: "USDT"},
+		{A: "DOGE", B: "BTC", C: "USDT"},
+		{A: "MATIC", B: "USDT", C: "BTC"},
+		{A: "DOT", B: "BTC", C: "USDT"},
+		{A: "AVAX", B: "BTC", C: "USDT"},
+		{A: "BCH", B: "BTC", C: "USDT"},
+		{A: "LINK", B: "BTC", C: "USDT"},
+		{A: "ETC", B: "BTC", C: "USDT"},
+	}
+
+	// сериализуем и записываем в файл, если он не существует
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		b, _ := json.MarshalIndent(t, "", "  ")
+		_ = os.WriteFile(path, b, 0644)
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	b, err := io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+
+	var ts []triangle.Triangle
+	if err := json.Unmarshal(b, &ts); err != nil {
+		return nil, fmt.Errorf("unmarshal %s: %w", path, err)
+	}
+	return ts, nil
+}
+
+
+package mexc
+
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+)
+
 type SymbolInfo struct{ Symbol string }
 type ExchangeInfo struct{ Symbols []SymbolInfo }
 
-var (
-    priceLock sync.Mutex
-    latest    = map[string]float64{}
-    arbLogger *log.Logger
+// FetchAvailableSymbols возвращает карту доступных торговых пар
+func FetchAvailableSymbols() map[string]bool {
+	out := make(map[string]bool)
+
+	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+	if err != nil {
+		return out
+	}
+	defer resp.Body.Close()
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return out
+	}
+
+	var info ExchangeInfo
+	if err := json.Unmarshal(b, &info); err != nil {
+		return out
+	}
+
+	for _, s := range info.Symbols {
+		out[s.Symbol] = true
+	}
+	return out
+}
+
+package mexc
+
+import (
+	"log"
+	"sync"
+	"time"
+
+	"github.com/gorilla/websocket"
 )
 
-func init() {
-    // Открываем файл для всех логов
-    f, err := os.OpenFile("arbitrage.log",
-        os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-    if err != nil {
-        log.Fatalf("cannot open arbitrage.log: %v", err)
-    }
-    // Логер пишет и в файл, и в stdout
-    mw := io.MultiWriter(os.Stdout, f)
-    arbLogger = log.New(mw, "", log.LstdFlags|log.Lmicroseconds)
-}
+// ListenWS запускает подключение к WS и передаёт каждый raw-сообщение в handler
+func ListenWS(channels []string, handler func(raw []byte)) error {
+	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
 
-func findActualPairKey(a, b string) string {
-    k := a + b
-    if _, ok := latest[k]; ok {
-        return k
-    }
-    return b + a
-}
+	// подписка
+	sub := map[string]interface{}{
+		"method": "SUBSCRIPTION",
+		"params": channels,
+		"id":     time.Now().Unix(),
+	}
+	if err := conn.WriteJSON(sub); err != nil {
+		return err
+	}
 
-func checkTriangleProfit(triangles []Triangle) {
-    priceLock.Lock()
-    defer priceLock.Unlock()
-    commission := 0.001
-    nf := (1 - commission) * (1 - commission) * (1 - commission)
-    for _, t := range triangles {
-        ab, bc, ac := findActualPairKey(t.A, t.B), findActualPairKey(t.B, t.C), findActualPairKey(t.A, t.C)
-        p1, ok1 := latest[ab]; p2, ok2 := latest[bc]; p3, ok3 := latest[ac]
-        if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
-            continue
-        }
-        profit := (p1*p2/p3*nf - 1) * 100
-        if profit > 0 {
-            arbLogger.Printf("🔺 %s/%s/%s profit: %.3f%%", t.A, t.B, t.C, profit)
-        }
-    }
-}
+	var mu sync.Mutex
+	var lastPing time.Time
+	conn.SetPongHandler(func(string) error {
+		log.Printf("📶 Pong after %v\n", time.Since(lastPing))
+		return nil
+	})
+	go func() {
+		t := time.NewTicker(15 * time.Second)
+		defer t.Stop()
+		for range t.C {
+			mu.Lock()
+			lastPing = time.Now()
+			_ = conn.WriteMessage(websocket.PingMessage, []byte("hb"))
+			mu.Unlock()
+		}
+	}()
 
-func runBot(logFile *os.File) error {
-    // ... ваш код loadTriangles, fetchAvailableSymbols, buildChannels, dial WS ...
-    conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", nil)
-    if err != nil {
-        return err
-    }
-    defer conn.Close()
-
-    var lastPing time.Time
-    conn.SetPongHandler(func(string) error {
-        d := time.Since(lastPing)
-        arbLogger.Printf("📶 Pong after %v", d)
-        return nil
-    })
-
-    // подписка и логика receiving и обновления latest...
-
-    pingT := time.NewTicker(60 * time.Second)
-    defer pingT.Stop()
-    go func() {
-        for range pingT.C {
-            lastPing = time.Now()
-            conn.WriteMessage(websocket.PingMessage, []byte("hb"))
-        }
-    }()
-
-    checkT := time.NewTicker(5 * time.Second)
-    defer checkT.Stop()
-    go func() {
-        for range checkT.C {
-            // triangles переданы в замыкании
-            checkTriangleProfit(triangles)
-        }
-    }()
-
-    for {
-        // чтение из сокета...
-    }
-}
-
-func main() {
-    // открываем файл лога котировок
-    f, err := os.OpenFile("prices_log.jsonl",
-        os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-    if err != nil {
-        arbLogger.Fatalf("cannot open prices_log.jsonl: %v", err)
-    }
-    defer f.Close()
-
-    for {
-        if err := runBot(f); err != nil {
-            arbLogger.Printf("🔄 reconnect in 5s: %v", err)
-            time.Sleep(5 * time.Second)
-            continue
-        }
-        // если runBot вернул nil (маловероятно), просто выходим
-        break
-    }
+	// чтение
+	for {
+		_, raw, err := conn.ReadMessage()
+		if err != nil {
+			return err
+		}
+		handler(raw)
+	}
 }
 
 
