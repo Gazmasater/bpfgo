@@ -393,26 +393,44 @@ sudo apt install docker-compose-plugin -y
 docker compose version
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ sudo apt update
-Hit:1 http://ru.archive.ubuntu.com/ubuntu noble InRelease
-Hit:2 http://ru.archive.ubuntu.com/ubuntu noble-updates InRelease                               
-Hit:3 http://ru.archive.ubuntu.com/ubuntu noble-backports InRelease                             
-Ign:4 https://deb.torproject.org/torproject.org noble InRelease                                 
-Hit:5 http://security.ubuntu.com/ubuntu noble-security InRelease                                
-Hit:6 http://archive.ubuntu.com/ubuntu jammy-proposed InRelease           
-Get:4 https://deb.torproject.org/torproject.org noble InRelease [2,812 B]
-Get:7 https://deb.torproject.org/torproject.org noble/main amd64 Packages [2,424 B]
-Fetched 5,236 B in 2s (2,826 B/s)     
-Reading package lists... Done
-Building dependency tree... Done
-Reading state information... Done
-278 packages can be upgraded. Run 'apt list --upgradable' to see them.
-W: https://deb.torproject.org/torproject.org/dists/noble/InRelease: Key is stored in legacy trusted.gpg keyring (/etc/apt/trusted.gpg), see the DEPRECATION section in apt-key(8) for details.
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ sudo apt install docker-compose-plugin -y
-Reading package lists... Done
-Building dependency tree... Done
-Reading state information... Done
-E: Unable to locate package docker-compose-plugin
+
+🔧 1. Установи зависимости
+bash
+Копировать код
+sudo apt update
+sudo apt install ca-certificates curl gnupg -y
+🔑 2. Добавь GPG-ключ Docker
+bash
+Копировать код
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+📦 3. Добавь Docker-репозиторий для noble
+bash
+Копировать код
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu noble stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+🔄 4. Обнови список пакетов
+bash
+Копировать код
+sudo apt update
+✅ 5. Установи плагин Docker Compose
+bash
+Копировать код
+sudo apt install docker-compose-plugin -y
+🧪 6. Проверь
+bash
+Копировать код
+docker compose version
+Ожидаемый результат:
+
+mathematica
+Копировать код
+Docker Compose version v2.x.x
+
 
 
 
