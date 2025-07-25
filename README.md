@@ -333,12 +333,46 @@ sudo docker run -d \
 
   ___________________________________________________________________________________________
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ git add .
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ git commit -a -m "cleanarh"
-[cleanarh 8ceba85] cleanarh
- 2 files changed, 62 insertions(+), 31 deletions(-)
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ git push origin master
-Everything up-to-date
+# syntax=docker/dockerfile:1.4
+
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    GOPATH=/go \
+    PATH="/usr/local/go/bin:${GOPATH}/bin:${PATH}" \
+    GOLANG_VERSION=1.22.4
+
+# Установка зависимостей и Go
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl git make ca-certificates && \
+    curl -fsSL https://go.dev/dl/go${GOLANG_VERSION}.linux-amd64.tar.gz \
+        | tar -C /usr/local -xz && \
+    rm -rf /var/lib/apt/lists/*
+
+# Рабочая директория
+WORKDIR /app
+
+# Клонируем проект с GitHub (ветка cleanarh)
+RUN git clone --branch cleanarh https://github.com/Gazmasater/cryp_arbtryang.git .
+
+# Загружаем зависимости
+RUN go mod download
+
+# Сборка бинарника
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" \
+    -o cryptarb ./cmd/cryptarb/main.go
+
+# Запуск бинарника
+ENTRYPOINT ["/app/cryptarb"]
+
+
+docker build -t cryptarb .
+docker run cryptarb
+
+docker run -d --name arb cryptarb
+docker logs arb
+docker logs -f arb
+docker stop arb
 
 
 
