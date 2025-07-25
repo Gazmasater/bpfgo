@@ -333,47 +333,177 @@ sudo docker run -d \
 
   ___________________________________________________________________________________________
 
-# syntax=docker/dockerfile:1.4
+package main
 
-FROM ubuntu:24.04
+import (
+	"log"
+	"os"
+	"path/filepath"
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    GOPATH=/go \
-    PATH="/usr/local/go/bin:${GOPATH}/bin:${PATH}" \
-    GOLANG_VERSION=1.22.4
+	"cryptarb/internal/app"
+	"cryptarb/internal/repository/mexc"
+)
 
-# Установка зависимостей и Go
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl git make ca-certificates && \
-    curl -fsSL https://go.dev/dl/go${GOLANG_VERSION}.linux-amd64.tar.gz \
-        | tar -C /usr/local -xz && \
-    rm -rf /var/lib/apt/lists/*
+func main() {
+	// Путь к директории с данными (можно заменить через переменную окружения)
+	dataDir := "/app/data"
+	trianglesPath := filepath.Join(dataDir, "triangles.json")
 
-# Рабочая директория
-WORKDIR /app
+	// Убедимся, что директория существует
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		log.Fatalf("failed to create data directory: %v", err)
+	}
 
-# Клонируем проект с GitHub (ветка cleanarh)
-RUN git clone --branch cleanarh https://github.com/Gazmasater/cryp_arbtryang.git .
+	arb, err := app.New(trianglesPath)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-# Загружаем зависимости
-RUN go mod download
+	// Запускаем обработку WebSocket
+	go func() {
+		if err := mexc.ListenWS(arb.Channels(), arb.HandleRaw); err != nil {
+			log.Fatal(err)
+		}
+	}()
 
-# Сборка бинарника
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" \
-    -o cryptarb ./cmd/cryptarb/main.go
-
-# Запуск бинарника
-ENTRYPOINT ["/app/cryptarb"]
+	// Не выходим
+	select {}
+}
 
 
-docker build -t cryptarb .
-docker run cryptarb
 
-docker run -d --name arb cryptarb
-docker logs arb
-docker logs -f arb
-docker stop arb
+package app
 
+import (
+	"cryptarb/internal/domain/triangle"
+	"cryptarb/internal/repository/filesystem"
+	"cryptarb/internal/repository/mexc"
+	"encoding/json"
+	"io/ioutil"
+	"log"
+	"os"
+	"strconv"
+	"sync"
+)
+
+type Arbitrager struct {
+	Triangles       []triangle.Triangle
+	latest          map[string]float64
+	trianglesByPair map[string][]int
+	sumProfit       float64
+	profitFile      string
+	mu              sync.Mutex
+}
+
+func New(dataPath string) (*Arbitrager, error) {
+	ts, err := filesystem.LoadTriangles(dataPath)
+	if err != nil {
+		return nil, err
+	}
+
+	avail := mexc.FetchAvailableSymbols()
+	ts = triangle.Filter(ts, avail)
+
+	trianglesByPair := make(map[string][]int)
+	for i, tri := range ts {
+		pairs := []string{
+			tri.A + tri.B, tri.B + tri.C, tri.A + tri.C,
+			tri.B + tri.A, tri.C + tri.B, tri.C + tri.A,
+		}
+		for _, p := range pairs {
+			trianglesByPair[p] = append(trianglesByPair[p], i)
+		}
+	}
+
+	// Читаем сохранённую прибыль (если есть)
+	profitFile := "profit.txt"
+	var sumProfit float64
+	if content, err := ioutil.ReadFile(profitFile); err == nil {
+		if val, err := strconv.ParseFloat(string(content), 64); err == nil {
+			sumProfit = val
+		}
+	}
+
+	return &Arbitrager{
+		Triangles:       ts,
+		latest:          make(map[string]float64),
+		trianglesByPair: trianglesByPair,
+		sumProfit:       sumProfit,
+		profitFile:      profitFile,
+	}, nil
+}
+
+func (a *Arbitrager) Channels() []string {
+	return triangle.BuildChannels(a.Triangles)
+}
+
+func (a *Arbitrager) HandleRaw(raw []byte) {
+	var msg struct {
+		Symbol string `json:"s"`
+		Data   struct {
+			Deals []struct {
+				Price string `json:"p"`
+			} `json:"deals"`
+		} `json:"d"`
+	}
+	if json.Unmarshal(raw, &msg) != nil || msg.Symbol == "" || len(msg.Data.Deals) == 0 {
+		return
+	}
+	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
+	if err != nil {
+		return
+	}
+
+	a.mu.Lock()
+	a.latest[msg.Symbol] = price
+	rev := msg.Symbol[len(msg.Symbol)/2:] + msg.Symbol[:len(msg.Symbol)/2]
+	a.latest[rev] = 1 / price
+	a.mu.Unlock()
+
+	a.Check(msg.Symbol)
+}
+
+func (a *Arbitrager) Check(symbol string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	indices := a.trianglesByPair[symbol]
+	if len(indices) == 0 {
+		return
+	}
+
+	const commission = 0.001
+	const nf = (1 - commission) * (1 - commission) * (1 - commission)
+
+	for _, i := range indices {
+		tri := a.Triangles[i]
+		ab := tri.A + tri.B
+		bc := tri.B + tri.C
+		ac := tri.A + tri.C
+
+		p1, ok1 := a.latest[ab]
+		p2, ok2 := a.latest[bc]
+		p3, ok3 := a.latest[ac]
+
+		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+			continue
+		}
+
+		profit := (p1*p2/p3*nf - 1) * 100
+		if profit > 0 {
+			a.sumProfit += profit
+			log.Printf("🔺 %s/%s/%s profit %.3f%% total=%.3f%%",
+				tri.A, tri.B, tri.C, profit, a.sumProfit)
+
+			// сохраняем в файл
+			_ = os.WriteFile(a.profitFile, []byte(strconv.FormatFloat(a.sumProfit, 'f', 6, 64)), 0644)
+		}
+	}
+}
+
+
+
+profitFile := filepath.Join(filepath.Dir(dataPath), "profit.txt")
 
 
 
