@@ -335,17 +335,7 @@ sudo docker run -d \
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd$ git add .
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd$ git commit -m "cleanarh"
-On branch cleanarh
-Changes not staged for commit:
-  (use "git add <file>..." to update what will be committed)
-  (use "git restore <file>..." to discard changes in working directory)
-        modified:   ../internal/app/arbitrage.go
-        modified:   ../internal/repository/filesystem/loader.go
-
-no changes added to commit (use "git add" and/or "git commit -a")
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd$ 
+git commit -a -m "cleanarh"
 
 
 
