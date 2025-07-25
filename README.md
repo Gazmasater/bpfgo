@@ -368,34 +368,28 @@ docker compose up -d
 ✅ Как исправить GPG ошибку Tor Project
 Выполни в терминале:
 
-bash
-Копировать код
+
 sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 74A941BA219EC810
 Если apt-key больше не работает (в новых Ubuntu), делаем так:
 
-bash
-Копировать код
+
 curl -fsSL https://deb.torproject.org/torproject.org/keys/archive-keyring.gpg \
   | gpg --dearmor | sudo tee /usr/share/keyrings/tor-archive-keyring.gpg > /dev/null
 И обнови sources.list или sources.list.d/tor.list, чтобы использовать этот ключ:
 
-bash
-Копировать код
+
 echo "deb [signed-by=/usr/share/keyrings/tor-archive-keyring.gpg] https://deb.torproject.org/torproject.org noble main" \
   | sudo tee /etc/apt/sources.list.d/tor.list > /dev/null
 Потом снова:
 
-bash
-Копировать код
+
 sudo apt update
 ✅ После этого — установи Docker Compose:
-bash
-Копировать код
+
 sudo apt install docker-compose-plugin -y
 И проверь:
 
-bash
-Копировать код
+
 docker compose version
 
 
