@@ -333,177 +333,36 @@ sudo docker run -d \
 
   ___________________________________________________________________________________________
 
-package main
+docker build -t cryptarb .
+docker run -v $(pwd)/data:/app/data cryptarb
 
-import (
-	"log"
-	"os"
-	"path/filepath"
-
-	"cryptarb/internal/app"
-	"cryptarb/internal/repository/mexc"
-)
-
-func main() {
-	// Путь к директории с данными (можно заменить через переменную окружения)
-	dataDir := "/app/data"
-	trianglesPath := filepath.Join(dataDir, "triangles.json")
-
-	// Убедимся, что директория существует
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		log.Fatalf("failed to create data directory: %v", err)
-	}
-
-	arb, err := app.New(trianglesPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Запускаем обработку WebSocket
-	go func() {
-		if err := mexc.ListenWS(arb.Channels(), arb.HandleRaw); err != nil {
-			log.Fatal(err)
-		}
-	}()
-
-	// Не выходим
-	select {}
-}
+sudo apt update
+sudo apt install docker-compose-plugin -y
+docker compose version
+docker compose up --build -d
+docker compose ps
+docker compose logs -f
+docker compose down
 
 
 
-package app
-
-import (
-	"cryptarb/internal/domain/triangle"
-	"cryptarb/internal/repository/filesystem"
-	"cryptarb/internal/repository/mexc"
-	"encoding/json"
-	"io/ioutil"
-	"log"
-	"os"
-	"strconv"
-	"sync"
-)
-
-type Arbitrager struct {
-	Triangles       []triangle.Triangle
-	latest          map[string]float64
-	trianglesByPair map[string][]int
-	sumProfit       float64
-	profitFile      string
-	mu              sync.Mutex
-}
-
-func New(dataPath string) (*Arbitrager, error) {
-	ts, err := filesystem.LoadTriangles(dataPath)
-	if err != nil {
-		return nil, err
-	}
-
-	avail := mexc.FetchAvailableSymbols()
-	ts = triangle.Filter(ts, avail)
-
-	trianglesByPair := make(map[string][]int)
-	for i, tri := range ts {
-		pairs := []string{
-			tri.A + tri.B, tri.B + tri.C, tri.A + tri.C,
-			tri.B + tri.A, tri.C + tri.B, tri.C + tri.A,
-		}
-		for _, p := range pairs {
-			trianglesByPair[p] = append(trianglesByPair[p], i)
-		}
-	}
-
-	// Читаем сохранённую прибыль (если есть)
-	profitFile := "profit.txt"
-	var sumProfit float64
-	if content, err := ioutil.ReadFile(profitFile); err == nil {
-		if val, err := strconv.ParseFloat(string(content), 64); err == nil {
-			sumProfit = val
-		}
-	}
-
-	return &Arbitrager{
-		Triangles:       ts,
-		latest:          make(map[string]float64),
-		trianglesByPair: trianglesByPair,
-		sumProfit:       sumProfit,
-		profitFile:      profitFile,
-	}, nil
-}
-
-func (a *Arbitrager) Channels() []string {
-	return triangle.BuildChannels(a.Triangles)
-}
-
-func (a *Arbitrager) HandleRaw(raw []byte) {
-	var msg struct {
-		Symbol string `json:"s"`
-		Data   struct {
-			Deals []struct {
-				Price string `json:"p"`
-			} `json:"deals"`
-		} `json:"d"`
-	}
-	if json.Unmarshal(raw, &msg) != nil || msg.Symbol == "" || len(msg.Data.Deals) == 0 {
-		return
-	}
-	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
-	if err != nil {
-		return
-	}
-
-	a.mu.Lock()
-	a.latest[msg.Symbol] = price
-	rev := msg.Symbol[len(msg.Symbol)/2:] + msg.Symbol[:len(msg.Symbol)/2]
-	a.latest[rev] = 1 / price
-	a.mu.Unlock()
-
-	a.Check(msg.Symbol)
-}
-
-func (a *Arbitrager) Check(symbol string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	indices := a.trianglesByPair[symbol]
-	if len(indices) == 0 {
-		return
-	}
-
-	const commission = 0.001
-	const nf = (1 - commission) * (1 - commission) * (1 - commission)
-
-	for _, i := range indices {
-		tri := a.Triangles[i]
-		ab := tri.A + tri.B
-		bc := tri.B + tri.C
-		ac := tri.A + tri.C
-
-		p1, ok1 := a.latest[ab]
-		p2, ok2 := a.latest[bc]
-		p3, ok3 := a.latest[ac]
-
-		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
-			continue
-		}
-
-		profit := (p1*p2/p3*nf - 1) * 100
-		if profit > 0 {
-			a.sumProfit += profit
-			log.Printf("🔺 %s/%s/%s profit %.3f%% total=%.3f%%",
-				tri.A, tri.B, tri.C, profit, a.sumProfit)
-
-			// сохраняем в файл
-			_ = os.WriteFile(a.profitFile, []byte(strconv.FormatFloat(a.sumProfit, 'f', 6, 64)), 0644)
-		}
-	}
-}
+✅ 2. Docker Compose (рекомендуется)
+Создай файл docker-compose.yml:
 
 
+version: "3.9"
 
-profitFile := filepath.Join(filepath.Dir(dataPath), "profit.txt")
+services:
+  cryptarb:
+    image: cryptarb
+    restart: always
+    volumes:
+      - ./data:/app/data
+
+
+docker compose up -d
+Контейнер будет автоматически перезапускаться при сбое или после перезагрузки машины.
+
 
 
 
