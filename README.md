@@ -364,6 +364,53 @@ docker compose up -d
 Контейнер будет автоматически перезапускаться при сбое или после перезагрузки машины.
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ sudo apt update
+[sudo] password for gaz358: 
+Hit:1 http://ru.archive.ubuntu.com/ubuntu noble InRelease
+Get:2 http://ru.archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]                
+Get:3 http://ru.archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB]                    
+Get:4 http://archive.ubuntu.com/ubuntu jammy-proposed InRelease [279 kB]                        
+Get:5 http://ru.archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [1,282 kB]
+Get:6 http://security.ubuntu.com/ubuntu noble-security InRelease [126 kB]                
+Get:7 http://ru.archive.ubuntu.com/ubuntu noble-updates/main Translation-en [260 kB]            
+Get:8 http://ru.archive.ubuntu.com/ubuntu noble-updates/main amd64 Components [164 kB]          
+Get:9 http://ru.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Components [212 B]     
+Get:10 http://ru.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Packages [1,113 kB]     
+Get:11 http://ru.archive.ubuntu.com/ubuntu noble-updates/universe Translation-en [284 kB]       
+Get:12 http://ru.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Components [377 kB]     
+Get:13 http://ru.archive.ubuntu.com/ubuntu noble-updates/universe Icons (48x48) [226 kB]        
+Get:14 http://ru.archive.ubuntu.com/ubuntu noble-updates/universe Icons (64x64) [350 kB]
+Get:15 http://ru.archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Components [940 B]
+Get:16 http://ru.archive.ubuntu.com/ubuntu noble-backports/main amd64 Components [7,068 B]
+Get:17 http://ru.archive.ubuntu.com/ubuntu noble-backports/restricted amd64 Components [216 B]
+Get:18 http://ru.archive.ubuntu.com/ubuntu noble-backports/universe amd64 Components [28.4 kB]
+Get:19 http://ru.archive.ubuntu.com/ubuntu noble-backports/multiverse amd64 Components [212 B]
+Get:20 http://archive.ubuntu.com/ubuntu jammy-proposed/main amd64 Packages [454 kB]       
+Get:21 http://security.ubuntu.com/ubuntu noble-security/main amd64 Packages [1,023 kB]          
+Get:22 http://archive.ubuntu.com/ubuntu jammy-proposed/main Translation-en [86.6 kB]            
+Get:23 http://archive.ubuntu.com/ubuntu jammy-proposed/main amd64 Components [5,720 B]          
+Ign:24 https://deb.torproject.org/torproject.org noble InRelease                                
+Get:25 http://security.ubuntu.com/ubuntu noble-security/main Translation-en [180 kB]            
+Get:26 http://security.ubuntu.com/ubuntu noble-security/main amd64 Components [21.5 kB]
+Get:27 http://security.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [1,484 kB]
+Get:28 http://security.ubuntu.com/ubuntu noble-security/restricted Translation-en [323 kB]
+Get:29 http://security.ubuntu.com/ubuntu noble-security/restricted amd64 Components [212 B]
+Get:30 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Packages [876 kB]
+Get:31 http://security.ubuntu.com/ubuntu noble-security/universe Translation-en [193 kB]
+Get:32 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Components [52.2 kB]
+Get:33 http://security.ubuntu.com/ubuntu noble-security/multiverse amd64 Components [208 B]
+Ign:24 https://deb.torproject.org/torproject.org noble InRelease                    
+Get:24 https://deb.torproject.org/torproject.org noble InRelease [2,812 B]
+Err:24 https://deb.torproject.org/torproject.org noble InRelease
+  The following signatures couldn't be verified because the public key is not available: NO_PUBKEY 74A941BA219EC810
+Reading package lists... Done
+W: GPG error: https://deb.torproject.org/torproject.org noble InRelease: The following signatures couldn't be verified because the public key is not available: NO_PUBKEY 74A941BA219EC810
+E: The repository 'https://deb.torproject.org/torproject.org noble InRelease' is not signed.
+N: Updating from such a repository can't be done securely, and is therefore disabled by default.
+N: See apt-secure(8) manpage for repository creation and user configuration details.
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ 
+
+
 
 
 
