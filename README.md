@@ -333,10 +333,12 @@ sudo docker run -d \
 
   ___________________________________________________________________________________________
 
-
-
-git commit -a -m "cleanarh"
-
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ git add .
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ git commit -a -m "cleanarh"
+[cleanarh 8ceba85] cleanarh
+ 2 files changed, 62 insertions(+), 31 deletions(-)
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ git push origin master
+Everything up-to-date
 
 
 
