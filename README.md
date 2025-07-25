@@ -365,71 +365,26 @@ docker compose up -d
 
 
 
-✅ Как исправить GPG ошибку Tor Project
-Выполни в терминале:
-
-
-sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 74A941BA219EC810
-Если apt-key больше не работает (в новых Ubuntu), делаем так:
-
-
-curl -fsSL https://deb.torproject.org/torproject.org/keys/archive-keyring.gpg \
-  | gpg --dearmor | sudo tee /usr/share/keyrings/tor-archive-keyring.gpg > /dev/null
-И обнови sources.list или sources.list.d/tor.list, чтобы использовать этот ключ:
-
-
-echo "deb [signed-by=/usr/share/keyrings/tor-archive-keyring.gpg] https://deb.torproject.org/torproject.org noble main" \
-  | sudo tee /etc/apt/sources.list.d/tor.list > /dev/null
-Потом снова:
-
-
-sudo apt update
-✅ После этого — установи Docker Compose:
-
-sudo apt install docker-compose-plugin -y
-И проверь:
-
-
-docker compose version
-
-
-
-🔧 1. Установи зависимости
-bash
-Копировать код
-sudo apt update
-sudo apt install ca-certificates curl gnupg -y
-🔑 2. Добавь GPG-ключ Docker
-bash
-Копировать код
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-  | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-📦 3. Добавь Docker-репозиторий для noble
-bash
-Копировать код
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-  https://download.docker.com/linux/ubuntu noble stable" \
-  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-🔄 4. Обнови список пакетов
-bash
-Копировать код
-sudo apt update
-✅ 5. Установи плагин Docker Compose
-bash
-Копировать код
-sudo apt install docker-compose-plugin -y
-🧪 6. Проверь
-bash
-Копировать код
-docker compose version
-Ожидаемый результат:
-
-mathematica
-Копировать код
-Docker Compose version v2.x.x
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ sudo apt update
+Hit:1 http://ru.archive.ubuntu.com/ubuntu noble InRelease
+Hit:2 http://ru.archive.ubuntu.com/ubuntu noble-updates InRelease                     
+Hit:3 http://ru.archive.ubuntu.com/ubuntu noble-backports InRelease                   
+Hit:4 http://archive.ubuntu.com/ubuntu jammy-proposed InRelease                       
+Hit:5 http://security.ubuntu.com/ubuntu noble-security InRelease                      
+Get:6 https://download.docker.com/linux/ubuntu noble InRelease [48.8 kB]              
+Err:6 https://download.docker.com/linux/ubuntu noble InRelease                        
+  The following signatures couldn't be verified because the public key is not available: NO_PUBKEY 7EA0A9C3F273FCD8
+Ign:7 https://deb.torproject.org/torproject.org noble InRelease
+Ign:7 https://deb.torproject.org/torproject.org noble InRelease         
+Ign:7 https://deb.torproject.org/torproject.org noble InRelease         
+Err:7 https://deb.torproject.org/torproject.org noble InRelease
+  Could not wait for server fd - select (11: Resource temporarily unavailable) [IP: 204.8.99.146 443]
+Reading package lists... Done
+W: GPG error: https://download.docker.com/linux/ubuntu noble InRelease: The following signatures couldn't be verified because the public key is not available: NO_PUBKEY 7EA0A9C3F273FCD8
+E: The repository 'https://download.docker.com/linux/ubuntu noble InRelease' is not signed.
+N: Updating from such a repository can't be done securely, and is therefore disabled by default.
+N: See apt-secure(8) manpage for repository creation and user configuration details.
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ 
 
 
 
