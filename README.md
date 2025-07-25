@@ -335,128 +335,17 @@ sudo docker run -d \
 
 
 
-package app
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd$ git add .
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd$ git commit -m "cleanarh"
+On branch cleanarh
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+        modified:   ../internal/app/arbitrage.go
+        modified:   ../internal/repository/filesystem/loader.go
 
-import (
-	"cryptarb/internal/domain/triangle"
-	"cryptarb/internal/repository/filesystem"
-	"cryptarb/internal/repository/mexc"
-	"encoding/json"
-	"log"
-	"strconv"
-	"sync"
-)
-
-type Arbitrager struct {
-	Triangles       []triangle.Triangle
-	latest          map[string]float64
-	trianglesByPair map[string][]int
-	sumProfit       float64 // ← Сюда будем накапливать
-	mu              sync.Mutex
-}
-
-func New(dataPath string) (*Arbitrager, error) {
-	// 1) Загружаем все треугольники
-	ts, err := filesystem.LoadTriangles(dataPath)
-	if err != nil {
-		return nil, err
-	}
-	// 2) Фильтруем по доступным парам
-	avail := mexc.FetchAvailableSymbols()
-	ts = triangle.Filter(ts, avail)
-
-	// 3) Индексация треугольников по парам
-	trianglesByPair := make(map[string][]int)
-	for i, tri := range ts {
-		pairs := []string{
-			tri.A + tri.B,
-			tri.B + tri.C,
-			tri.A + tri.C,
-			tri.B + tri.A,
-			tri.C + tri.B,
-			tri.C + tri.A,
-		}
-		for _, p := range pairs {
-			trianglesByPair[p] = append(trianglesByPair[p], i)
-		}
-	}
-
-	return &Arbitrager{
-		Triangles:       ts,
-		latest:          make(map[string]float64),
-		trianglesByPair: trianglesByPair,
-	}, nil
-}
-
-// Channels отдаёт WS-каналы на основе отфильтрованных треугольников
-func (a *Arbitrager) Channels() []string {
-	return triangle.BuildChannels(a.Triangles)
-}
-
-func (a *Arbitrager) HandleRaw(raw []byte) {
-	var msg struct {
-		Symbol string `json:"s"`
-		Data   struct {
-			Deals []struct {
-				Price string `json:"p"`
-			} `json:"deals"`
-		} `json:"d"`
-	}
-	if json.Unmarshal(raw, &msg) != nil || msg.Symbol == "" || len(msg.Data.Deals) == 0 {
-		return
-	}
-	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
-	if err != nil {
-		return
-	}
-
-	a.mu.Lock()
-	a.latest[msg.Symbol] = price
-	rev := msg.Symbol[len(msg.Symbol)/2:] + msg.Symbol[:len(msg.Symbol)/2]
-	a.latest[rev] = 1 / price
-	a.mu.Unlock()
-
-	a.Check(msg.Symbol)
-}
-
-func (a *Arbitrager) Check(symbol string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	indices := a.trianglesByPair[symbol]
-	if len(indices) == 0 {
-		return
-	}
-
-	const commission = 0.001
-	const nf = (1 - commission) * (1 - commission) * (1 - commission)
-
-	for _, i := range indices {
-		tri := a.Triangles[i]
-		ab := tri.A + tri.B
-		bc := tri.B + tri.C
-		ac := tri.A + tri.C
-
-		p1, ok1 := a.latest[ab]
-		p2, ok2 := a.latest[bc]
-		p3, ok3 := a.latest[ac]
-
-		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
-			continue
-		}
-
-		profit := (p1*p2/p3*nf - 1) * 100
-		if profit > 0 {
-			a.sumProfit += profit
-			log.Printf("🔺 %s/%s/%s profit %.3f%% total=%.3f%%",
-				tri.A, tri.B, tri.C, profit, a.sumProfit)
-		}
-	}
-}
-
-
-
-
+no changes added to commit (use "git add" and/or "git commit -a")
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd$ 
 
 
 
