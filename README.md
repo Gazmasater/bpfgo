@@ -365,26 +365,19 @@ docker compose up -d
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ sudo apt update
-Hit:1 http://ru.archive.ubuntu.com/ubuntu noble InRelease
-Hit:2 http://ru.archive.ubuntu.com/ubuntu noble-updates InRelease                     
-Hit:3 http://ru.archive.ubuntu.com/ubuntu noble-backports InRelease                   
-Hit:4 http://archive.ubuntu.com/ubuntu jammy-proposed InRelease                       
-Hit:5 http://security.ubuntu.com/ubuntu noble-security InRelease                      
-Get:6 https://download.docker.com/linux/ubuntu noble InRelease [48.8 kB]              
-Err:6 https://download.docker.com/linux/ubuntu noble InRelease                        
-  The following signatures couldn't be verified because the public key is not available: NO_PUBKEY 7EA0A9C3F273FCD8
-Ign:7 https://deb.torproject.org/torproject.org noble InRelease
-Ign:7 https://deb.torproject.org/torproject.org noble InRelease         
-Ign:7 https://deb.torproject.org/torproject.org noble InRelease         
-Err:7 https://deb.torproject.org/torproject.org noble InRelease
-  Could not wait for server fd - select (11: Resource temporarily unavailable) [IP: 204.8.99.146 443]
-Reading package lists... Done
-W: GPG error: https://download.docker.com/linux/ubuntu noble InRelease: The following signatures couldn't be verified because the public key is not available: NO_PUBKEY 7EA0A9C3F273FCD8
-E: The repository 'https://download.docker.com/linux/ubuntu noble InRelease' is not signed.
-N: Updating from such a repository can't be done securely, and is therefore disabled by default.
-N: See apt-secure(8) manpage for repository creation and user configuration details.
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ 
+sudo gpg --no-default-keyring \
+  --keyring /etc/apt/keyrings/docker.gpg \
+  --keyserver keyserver.ubuntu.com \
+  --recv-keys 7EA0A9C3F273FCD8
+
+
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+
+sudo apt update
+
+sudo apt install docker-compose-plugin -y
 
 
 
