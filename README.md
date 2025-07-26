@@ -673,36 +673,18 @@ sudo docker compose up -d
 
 
 gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ sudo docker compose build --no-cache
-[sudo] password for gaz358: 
 WARN[0000] /home/gaz358/myprog/crypt/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion 
-[+] Building 80.6s (14/14) FINISHED                                                              
- => [internal] load local bake definitions                                                  0.0s
- => => reading from stdin 375B                                                              0.0s
- => [internal] load build definition from Dockerfile                                        0.0s
- => => transferring dockerfile: 986B                                                        0.0s
- => resolve image config for docker-image://docker.io/docker/dockerfile:1.4                 1.9s
- => CACHED docker-image://docker.io/docker/dockerfile:1.4@sha256:9ba7531bd80fb0a858632727c  0.0s
- => [internal] load .dockerignore                                                           0.0s
- => => transferring context: 2B                                                             0.0s
- => [internal] load metadata for docker.io/library/ubuntu:24.04                             0.0s
- => CACHED [1/6] FROM docker.io/library/ubuntu:24.04                                        0.0s
- => [2/6] RUN apt-get update &&     apt-get install -y --no-install-recommends curl git m  30.2s
- => [3/6] WORKDIR /app                                                                      0.0s
- => [4/6] RUN git clone --branch cleanarh https://github.com/Gazmasater/cryp_arbtryang.git  1.9s
- => [5/6] RUN go mod download                                                              22.8s
- => [6/6] RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w"     -o cryptarb ./cmd/cr  20.0s
- => exporting to image                                                                      3.4s
- => => exporting layers                                                                     3.4s
- => => writing image sha256:3029e906d78ff1a2d2f6a3bcdb1f82ed8657a94a01f7826e8640b274072d5d  0.0s
- => => naming to docker.io/library/cryptarb                                                 0.0s
- => resolving provenance for metadata file                                                  0.0s
-[+] Building 1/1
- ✔ cryptarb  Built                                                                          0.0s 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ sudo docker compose up -d
-WARN[0000] /home/gaz358/myprog/crypt/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion 
-[+] Running 1/1
- ✔ Container crypt-cryptarb-1  Started    
-
+[+] Building 387.7s (7/12)                                                             
+ => => reading from stdin 375B                                                    0.0s
+ => [internal] load build definition from Dockerfile                              0.0s
+ => => transferring dockerfile: 992B                                              0.0s
+ => resolve image config for docker-image://docker.io/docker/dockerfile:1.4       6.1s
+ => CACHED docker-image://docker.io/docker/dockerfile:1.4@sha256:9ba7531bd80fb0a  0.0s
+ => [internal] load .dockerignore                                                 0.0s
+ => => transferring context: 2B                                                   0.0s
+ => [internal] load metadata for docker.io/library/ubuntu:24.04                   0.0s
+ => CACHED [1/6] FROM docker.io/library/ubuntu:24.04                              0.0s
+ => [2/6] RUN apt-get update &&     apt-get install -y --no-install-recommends  381.3s
 
 
 
