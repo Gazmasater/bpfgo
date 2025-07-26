@@ -666,6 +666,11 @@ func SymbolPairs(ts []Triangle) []string {
 }
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ sudo docker compose up --build --no-cache -d
+[sudo] password for gaz358: 
+unknown flag: --no-cache
+
+
 
 
 
