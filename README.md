@@ -644,51 +644,21 @@ type Exchange interface {
 }
 
 
-[{
-	"resource": "/home/gaz358/myprog/crypt/cmd/cryptarb/main.go",
-	"owner": "_generated_diagnostic_collection_name_#4",
-	"code": {
-		"value": "UnusedVar",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UnusedVar"
-		}
-	},
-	"severity": 8,
-	"message": "declared and not used: arb",
-	"source": "compiler",
-	"startLineNumber": 12,
-	"startColumn": 2,
-	"endLineNumber": 12,
-	"endColumn": 5,
-	"origin": "extHost1"
-}]
 
-[{
-	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
-	"owner": "_generated_diagnostic_collection_name_#4",
-	"code": {
-		"value": "UndeclaredImportedName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredImportedName"
+// SymbolPairs возвращает все уникальные пары из треугольников
+func SymbolPairs(ts []Triangle) []string {
+	set := make(map[string]struct{})
+	for _, t := range ts {
+		for _, p := range [][2]string{{t.A, t.B}, {t.B, t.C}, {t.A, t.C}} {
+			set[p[0]+p[1]] = struct{}{}
 		}
-	},
-	"severity": 8,
-	"message": "undefined: triangle.SymbolPairs",
-	"source": "compiler",
-	"startLineNumber": 52,
-	"startColumn": 40,
-	"endLineNumber": 52,
-	"endColumn": 51,
-	"origin": "extHost1"
-}]
+	}
+	out := make([]string, 0, len(set))
+	for k := range set {
+		out = append(out, k)
+	}
+	return out
+}
 
 
 
