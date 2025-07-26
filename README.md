@@ -354,10 +354,12 @@ version: "3.9"
 
 services:
   cryptarb:
+    build: .          # ← добавляем это
     image: cryptarb
     restart: always
     volumes:
       - ./data:/app/data
+
 
 
 docker compose up -d
