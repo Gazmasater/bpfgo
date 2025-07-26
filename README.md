@@ -341,7 +341,7 @@ sudo apt install docker-compose-plugin -y
 docker compose version
 docker compose up --build -d
 docker compose ps
-docker compose logs -f
+sudo docker compose logs -f
 docker compose down
 
 
@@ -661,6 +661,34 @@ func SymbolPairs(ts []Triangle) []string {
 	}
 	return out
 }
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ sudo docker compose up --build -d
+WARN[0000] /home/gaz358/myprog/crypt/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion 
+[+] Building 0.9s (14/14) FINISHED                                                               
+ => [internal] load local bake definitions                                                  0.0s
+ => => reading from stdin 351B                                                              0.0s
+ => [internal] load build definition from Dockerfile                                        0.0s
+ => => transferring dockerfile: 986B                                                        0.0s
+ => resolve image config for docker-image://docker.io/docker/dockerfile:1.4                 0.5s
+ => CACHED docker-image://docker.io/docker/dockerfile:1.4@sha256:9ba7531bd80fb0a858632727c  0.0s
+ => [internal] load .dockerignore                                                           0.0s
+ => => transferring context: 2B                                                             0.0s
+ => [internal] load metadata for docker.io/library/ubuntu:24.04                             0.0s
+ => [1/6] FROM docker.io/library/ubuntu:24.04                                               0.0s
+ => CACHED [2/6] RUN apt-get update &&     apt-get install -y --no-install-recommends curl  0.0s
+ => CACHED [3/6] WORKDIR /app                                                               0.0s
+ => CACHED [4/6] RUN git clone --branch cleanarh https://github.com/Gazmasater/cryp_arbtry  0.0s
+ => CACHED [5/6] RUN go mod download                                                        0.0s
+ => CACHED [6/6] RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w"     -o cryptarb ./  0.0s
+ => exporting to image                                                                      0.0s
+ => => exporting layers                                                                     0.0s
+ => => writing image sha256:364996cb2c87fff7c0c5b2f17ff15ce6985c00cff3e7ce4025e20f80b0859c  0.0s
+ => => naming to docker.io/library/cryptarb                                                 0.0s
+ => resolving provenance for metadata file                                                  0.0s
+[+] Running 2/2
+ ✔ cryptarb                    Built                                                        0.0s 
+ ✔ Container crypt-cryptarb-1  Running    
 
 
 
