@@ -644,4 +644,51 @@ type Exchange interface {
 }
 
 
+[{
+	"resource": "/home/gaz358/myprog/crypt/cmd/cryptarb/main.go",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "UnusedVar",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UnusedVar"
+		}
+	},
+	"severity": 8,
+	"message": "declared and not used: arb",
+	"source": "compiler",
+	"startLineNumber": 12,
+	"startColumn": 2,
+	"endLineNumber": 12,
+	"endColumn": 5,
+	"origin": "extHost1"
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "_generated_diagnostic_collection_name_#4",
+	"code": {
+		"value": "UndeclaredImportedName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredImportedName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: triangle.SymbolPairs",
+	"source": "compiler",
+	"startLineNumber": 52,
+	"startColumn": 40,
+	"endLineNumber": 52,
+	"endColumn": 51,
+	"origin": "extHost1"
+}]
+
+
 
