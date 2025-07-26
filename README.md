@@ -379,6 +379,269 @@ sudo apt update
 
 sudo apt install docker-compose-plugin -y
 
+_______________________________________________________________________________
+
+// internal/repository/mexc/mexc.go
+package mexc
+
+import (
+	"encoding/json"
+	"log"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/gorilla/websocket"
+)
+
+type Mexc struct{}
+
+func (Mexc) Name() string {
+	return "MEXC"
+}
+
+func (Mexc) FetchAvailableSymbols() map[string]bool {
+	out := make(map[string]bool)
+	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+	if err != nil {
+		return out
+	}
+	defer resp.Body.Close()
+	var body struct {
+		Symbols []struct {
+			Symbol string `json:"symbol"`
+		}
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return out
+	}
+	for _, s := range body.Symbols {
+		out[s.Symbol] = true
+	}
+	return out
+}
+
+func (Mexc) SubscribeDeals(pairs []string, handler func(exchange string, raw []byte)) error {
+	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	sub := map[string]interface{}{
+		"method": "SUBSCRIPTION",
+		"params": buildChannels(pairs),
+		"id":     time.Now().Unix(),
+	}
+	if err := conn.WriteJSON(sub); err != nil {
+		return err
+	}
+
+	var mu sync.Mutex
+	var lastPing time.Time
+	conn.SetPongHandler(func(string) error {
+		log.Printf("📶 [MEXC] Pong after %v\n", time.Since(lastPing))
+		return nil
+	})
+	go func() {
+		t := time.NewTicker(15 * time.Second)
+		defer t.Stop()
+		for range t.C {
+			mu.Lock()
+			lastPing = time.Now()
+			_ = conn.WriteMessage(websocket.PingMessage, []byte("hb"))
+			mu.Unlock()
+		}
+	}()
+
+	for {
+		_, raw, err := conn.ReadMessage()
+		if err != nil {
+			return err
+		}
+		handler("MEXC", raw)
+	}
+}
+
+func buildChannels(pairs []string) []string {
+	out := make([]string, 0, len(pairs))
+	for _, p := range pairs {
+		out = append(out, "spot@public.deals.v3.api@"+p)
+	}
+	return out
+}
+
+
+
+// internal/app/arbitrage.go
+package app
+
+import (
+	"cryptarb/internal/domain/exchange"
+	"cryptarb/internal/domain/triangle"
+	"cryptarb/internal/repository/filesystem"
+	"encoding/json"
+	"log"
+	"strconv"
+	"strings"
+	"sync"
+)
+
+type Arbitrager struct {
+	Triangles       []triangle.Triangle
+	latest          map[string]float64
+	trianglesByPair map[string][]int
+	sumProfit       float64
+	mu              sync.Mutex
+}
+
+func New(dataPath string, ex exchange.Exchange) (*Arbitrager, error) {
+	ts, err := filesystem.LoadTriangles(dataPath)
+	if err != nil {
+		return nil, err
+	}
+
+	avail := ex.FetchAvailableSymbols()
+	ts = triangle.Filter(ts, avail)
+
+	trianglesByPair := make(map[string][]int)
+	for i, tri := range ts {
+		pairs := []string{
+			tri.A + tri.B,
+			tri.B + tri.C,
+			tri.A + tri.C,
+			tri.B + tri.A,
+			tri.C + tri.B,
+			tri.C + tri.A,
+		}
+		for _, p := range pairs {
+			trianglesByPair[p] = append(trianglesByPair[p], i)
+		}
+	}
+
+	arb := &Arbitrager{
+		Triangles:       ts,
+		latest:          make(map[string]float64),
+		trianglesByPair: trianglesByPair,
+	}
+
+	go func() {
+		if err := ex.SubscribeDeals(triangle.SymbolPairs(ts), arb.HandleRaw); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	return arb, nil
+}
+
+func (a *Arbitrager) HandleRaw(exchange string, raw []byte) {
+	var msg struct {
+		Symbol string `json:"s"`
+		Data   struct {
+			Deals []struct {
+				Price string `json:"p"`
+			} `json:"deals"`
+		} `json:"d"`
+	}
+	if json.Unmarshal(raw, &msg) != nil || msg.Symbol == "" || len(msg.Data.Deals) == 0 {
+		return
+	}
+	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
+	if err != nil {
+		return
+	}
+
+	a.mu.Lock()
+	a.latest[msg.Symbol] = price
+	rev := reverseSymbol(msg.Symbol)
+	a.latest[rev] = 1 / price
+	a.mu.Unlock()
+
+	a.Check(msg.Symbol)
+}
+
+func (a *Arbitrager) Check(symbol string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	indices := a.trianglesByPair[symbol]
+	if len(indices) == 0 {
+		return
+	}
+
+	const commission = 0.001
+	nf := (1 - commission) * (1 - commission) * (1 - commission)
+
+	for _, i := range indices {
+		tri := a.Triangles[i]
+		ab := tri.A + tri.B
+		bc := tri.B + tri.C
+		ac := tri.A + tri.C
+
+		p1, ok1 := a.latest[ab]
+		p2, ok2 := a.latest[bc]
+		p3, ok3 := a.latest[ac]
+
+		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+			continue
+		}
+
+		profit := (p1*p2/p3*nf - 1) * 100
+		if profit > 0 {
+			a.sumProfit += profit
+			log.Printf("🔺 %s/%s/%s profit %.3f%% total=%.3f%%",
+				tri.A, tri.B, tri.C, profit, a.sumProfit)
+		}
+	}
+}
+
+func reverseSymbol(sym string) string {
+	if len(sym)%2 != 0 {
+		return sym
+	}
+	half := len(sym) / 2
+	return sym[half:] + sym[:half]
+}
+
+
+
+// cmd/cryptarb/main.go
+package main
+
+import (
+	"cryptarb/internal/app"
+	"cryptarb/internal/repository/mexc"
+	"log"
+)
+
+func main() {
+	ex := mexc.Mexc{}
+
+	arb, err := app.New("triangles.json", ex)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	select {} // блокируем main, пока работает арбитраж
+}
+
+
+// internal/domain/exchange/exchange.go
+package exchange
+
+// Exchange определяет интерфейс криптобиржи для подключения к арбитражному движку
+// и абстрагирует WebSocket/REST взаимодействие.
+type Exchange interface {
+	// Name возвращает уникальное имя биржи (например: "MEXC")
+	Name() string
+
+	// FetchAvailableSymbols возвращает список доступных торговых пар ("BTCUSDT" и т.д.)
+	FetchAvailableSymbols() map[string]bool
+
+	// SubscribeDeals подписывается на обновления по указанным парам
+	// и вызывает handler при каждом событии сделки
+	SubscribeDeals(pairs []string, handler func(exchange string, raw []byte)) error
+}
 
 
 
