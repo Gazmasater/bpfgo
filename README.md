@@ -386,6 +386,64 @@ sudo apt update
 sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
+func LoadTriangles(path string) ([]triangle.Triangle, error) {
+	// дефолтные треугольники
+	t := []triangle.Triangle{
+		{A: "XRP", B: "BTC", C: "USDT"},
+		{A: "ETH", B: "BTC", C: "USDT"},
+		{A: "TRX", B: "BTC", C: "USDT"},
+		{A: "ADA", B: "USDT", C: "BTC"},
+		{A: "BTC", B: "SOL", C: "USDT"},
+		{A: "XRP", B: "USDT", C: "ETH"},
+		{A: "XRP", B: "BTC", C: "ETH"},
+		{A: "LTC", B: "BTC", C: "USDT"},
+		{A: "DOGE", B: "BTC", C: "USDT"},
+		{A: "MATIC", B: "USDT", C: "BTC"},
+		{A: "DOT", B: "BTC", C: "USDT"},
+		{A: "AVAX", B: "BTC", C: "USDT"},
+		{A: "BCH", B: "BTC", C: "USDT"},
+		{A: "LINK", B: "BTC", C: "USDT"},
+		{A: "ETC", B: "BTC", C: "USDT"},
+		// Новые 10
+		{A: "SOL", B: "USDT", C: "ADA"},
+		{A: "SOL", B: "BTC", C: "ETH"},
+		{A: "ETH", B: "USDT", C: "DOT"},
+		{A: "ADA", B: "BTC", C: "LTC"},
+		{A: "DOGE", B: "USDT", C: "MATIC"},
+		{A: "LINK", B: "ETH", C: "USDT"},
+		{A: "AVAX", B: "USDT", C: "LINK"},
+		{A: "TRX", B: "USDT", C: "ADA"},
+		{A: "BCH", B: "USDT", C: "SOL"},
+		{A: "DOT", B: "USDT", C: "DOGE"},
+	}
+
+	// сериализуем и записываем в файл, если он не существует
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		b, _ := json.MarshalIndent(t, "", "  ")
+		_ = os.WriteFile(path, b, 0644)
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	b, err := io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+
+	var ts []triangle.Triangle
+	if err := json.Unmarshal(b, &ts); err != nil {
+		return nil, fmt.Errorf("unmarshal %s: %w", path, err)
+	}
+	return ts, nil
+}
+
+
+
+
 
 package app
 
