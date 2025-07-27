@@ -517,82 +517,77 @@ import (
 
 // LoadTriangles загружает треугольники по списку уже известных пар с биржи MEXC
 func LoadTriangles(_ string) ([]triangle.Triangle, error) {
-	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-	if err != nil {
-		return nil, fmt.Errorf("fetch exchangeInfo: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read exchangeInfo: %w", err)
+	// Вставленные пары из логов
+	subPairs := []string{
+		"LINGOUSDT", "MXBRL", "KILOUSDT", "PEPEEUR", "DASHUSDT", "DOTBTC", "WAVESUSDT", "BTCUSDT", "ARUSDT", "RIOUSDC", "DSYNCUSDC", "USDCEUR", "BTCUSDC", "USD1USDT", "BUTTHOLEUSDT", "NMRUSDT", "WBTCUSDT", "FHEUSDC", "MELANIAUSD1", "RWAUSDC", "ELDEUSDC", "BROCCOLIF3BUSDC", "ANKRUSDT", "ENAUSDE", "SUSDC", "PIEUR", "SPKUSDT", "BLUMUSDT", "LUNCUSDT", "DOGEEUR", "PLUMEUSDC", "ABTC", "ETHEUR", "WIFEUR", "MELANIAUSDC", "ICPUSDC", "UNIUSDC", "AVAXUSDT", "XRPUSDC", "MXBTC", "ONTBTC", "XMRUSDC", "PRAIUSDC", "ALCHUSDC", "SOLBTC", "SUIUSDT", "BANKUSDC", "KAIAUSDT", "QUBICUSDT", "USDCBRL", "LOTUSDT", "RFCUSDT", "ZBCNUSDC", "STOUSDT", "TAOUSDT", "USELESSUSDC", "ALGOUSDT", "XLMUSDT", "KEKIUSUSDC", "PNUTUSDT", "SUIUSDC", "FETUSDC", "HUSDT", "AERGOUSDT", "SOLUSDT", "ATOMBTC", "BDXUSDT", "NEOBTC", "FLYUSDC", "TONUSDC", "OMIUSDC", "BKNUSDT", "AVAXUSDC", "BUSDT", "TONEUR", "HBARUSDT", "NEWTUSDT", "SKATEUSDT", "ERAUSDC", "ZORAUSDT", "BTCUSD1", "PUMPUSDC", "JASMYUSDT", "LAUSDT", "EURUSDT", "SHIBUSDT", "ADAUSDC", "REDUSDT", "RDOUSDC", "USDCUSDT", "TURBOUSDC", "KERNELUSDC", "BERAUSDT", "PUMPBTCUSDT", "BOOMUSDC", "BCHUSDT", "XRPEUR", "FARTCOINUSDC", "ARBUSDT", "RBNTUSDC", "ETHUSDC", "ULTIMAEUR", "LAUNCHCOINUSDC", "ETHUSD1", "ENAUSDC", "TRUMPUSDT", "XCNUSDT", "LIBERTYUSD1", "BTCEUR", "BNBUSDC", "VINEUSDT", "WCTUSDC", "AAVEUSDC", "CGPTUSDC", "MXEUR", "ULTIMAUSDC", "HYPEUSDT", "APEUSDT", "SOONUSDT", "WIFUSDC", "ACHUSDT", "XDCUSDC", "SNSUSDC", "EGL1USDT", "SAHARAUSDT", "CRVETH", "MUBARAKUSDC", "ETHBRL", "TRUMPEUR", "MELANIAEUR", "BABYUSDT", "ULTIMAUSDT", "FTTUSDT", "GHIBLIUSDC", "ETHBTC", "MNTUSDC", "INJUSDT", "LINKUSDT", "BTCBRL", "ETHUSDT", "SUIEUR", "KASUSDC", "FILUSDC", "NXPCUSDT", "DOODUSDC", "BTCUSDE", "RSRUSDT", "SUPRAUSDC", "BANKUSD1", "B2USDT", "GRIFFAINUSDT", "XRPBTC", "BDXNUSDC", "1DOLLARUSDT", "TAGUSD1", "XRPUSD1", "KASUSD1", "TRXBTC", "SOSOUSDT", "EPTUSDT", "XRPUSDE", "MXETH", "BMTUSDT", "GUNUSDC", "TRUMPUSDC", "LTCUSDC", "MILKUSDT", "NPCUSDC", "MOREUSDT", "CUSDT", "TRUMPUSD1", "ONDOUSDT", "LINKUSDC", "NODEUSDC", "LTCBTC", "XLMUSDC", "NAKAUSDC", "FLOCKUSDC", "RENDERUSDT", "PARTIUSDC", "XENUSDT", "SENUSDT", "DOLOUSDT", "RIOEUR", "SPXUSDC", "VIRTUALUSDT", "ENSUSDT", "ADAUSDT", "DOTUSDT", "RAIUSDT", "KAITOUSDT", "TIAUSDT", "SHIBUSDC", "TAOEUR", "MINAUSDT", "CRVUSDT", "MYXUSDT", "OXTETH", "APTUSDC", "BRLUSDT", "CAWUSDC", "LINKETH", "LTCEUR", "OPUSDT", "WBTCUSDC", "SERAPHUSDC", "MXUSDC", "HUMAUSDC", "DEXEUSDT", "USDRUSDT", "RAYUSDT", "OBTUSDC", "AIXBTUSDC", "AUSDC", "POPCATUSDC", "NILUSDT", "PEAQUSDT", "AZEROUSDT", "SXTUSDC", "PIUSD1", "QTUMBTC", "SOLEUR", "ADABTC", "TRXUSDT", "HOMEUSDT", "VELVETUSDT", "RAREUSDT", "MXUSDT", "PEPEUSDC", "BEEUSDT", "BOMBUSDT", "KASUSDE", "WHITEUSDT", "SOLUSDC", "OMGUSDT", "NEARUSDT", "PIUSDT", "PENGUUSDT", "PROMPTUSDT", "HYPERUSDC", "SIGNUSDC", "TAOUSDC", "ATOMUSDT", "OBOLUSDT", "AI16ZUSDT", "SHMUSDT", "ASRRUSDT", "VIDTUSDC", "INITUSDC", "USDEUSDT", "WALUSDT", "UNIUSDT", "CORNUSDC", "KASEUR", "MOONPIGUSDT", "SNXUSDT", "ESUSDT", "BCHBTC", "DOGEUSDT", "ADAEUR", "AIOTUSDT", "BABYDOGEUSDT", "SOPHUSDT", "XRPETH", "IDOLUSDT", "SGCUSDC", "PEPEUSDT", "XRPUSDT", "ETCBTC", "AGTUSDT",
 	}
 
-	type symbolInfo struct {
-		Base  string `json:"baseAsset"`
-		Quote string `json:"quoteAsset"`
-	}
-	var payload struct {
-		Symbols []symbolInfo `json:"symbols"`
-	}
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, fmt.Errorf("unmarshal exchangeInfo: %w", err)
-	}
+	log.Printf("[INFO] Loaded %d pairs from hardcoded list", len(subPairs))
 
-	edges := make(map[string]map[string]bool)
-	assets := make(map[string]struct{})
-	for _, s := range payload.Symbols {
-		if s.Base == "" || s.Quote == "" {
+	// Построим направленный граф
+	edges := map[string]map[string]bool{}
+	for _, pair := range subPairs {
+		base, quote := unpackPair(pair)
+		if base == "" || quote == "" {
+			log.Printf("[WARN] can't unpack: %s", pair)
 			continue
 		}
-		if edges[s.Base] == nil {
-			edges[s.Base] = make(map[string]bool)
+		if edges[base] == nil {
+			edges[base] = map[string]bool{}
 		}
-		edges[s.Base][s.Quote] = true
-		assets[s.Base] = struct{}{}
-		assets[s.Quote] = struct{}{}
+		edges[base][quote] = true
 	}
 
-	var toks []string
-	for asset := range assets {
-		toks = append(toks, asset)
-	}
-	log.Printf("[INFO] Total unique assets: %d", len(toks))
-
-	var tris []triangle.Triangle
-	seen := make(map[[3]string]struct{})
-	for a, neigh := range edges {
-		for b := range neigh {
-			if edges[b] == nil {
-				continue
+	// Собираем уникальные активы
+	nodes := []string{}
+	seen := map[string]bool{}
+	for a := range edges {
+		if !seen[a] {
+			nodes = append(nodes, a)
+			seen[a] = true
+		}
+		for b := range edges[a] {
+			if !seen[b] {
+				nodes = append(nodes, b)
+				seen[b] = true
 			}
+		}
+	}
+
+	// Поиск треугольников
+	var tris []triangle.Triangle
+	uniq := map[[3]string]struct{}{}
+	for _, a := range nodes {
+		for b := range edges[a] {
 			for c := range edges[b] {
 				if edges[c][a] {
 					arr := []string{a, b, c}
 					sort.Strings(arr)
 					key := [3]string{arr[0], arr[1], arr[2]}
-					if _, ok := seen[key]; !ok {
+					if _, ok := uniq[key]; !ok {
+						uniq[key] = struct{}{}
 						tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
-						seen[key] = struct{}{}
 					}
 				}
 			}
 		}
 	}
 
-	log.Printf("[INFO] Loaded %d triangles", len(tris))
+	log.Printf("[INFO] Found %d triangles from %d pairs", len(tris), len(subPairs))
 	return tris, nil
 }
 
+// Примитивный парсер базового и котируемого актива
+func unpackPair(pair string) (string, string) {
+	quotes := []string{"USDT", "USDC", "BTC", "ETH", "EUR", "BRL", "USD1", "USDE"}
+	for _, q := range quotes {
+		if len(pair) > len(q) && pair[len(pair)-len(q):] == q {
+			return pair[:len(pair)-len(q)], q
+		}
+	}
+	return "", ""
+}
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ cd cmd/cryptarb
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/07/28 01:32:47 [INFO] Total unique assets: 2094
-2025/07/28 01:32:47 [INFO] Loaded 0 triangles
-2025/07/28 01:32:47 [INIT] Loaded 0 triangles after filtering
-2025/07/28 01:32:47 [INIT] total raw pairs before filtering: 0
-2025/07/28 01:32:47 [INIT] total unique pairs after filtering: 0
-2025/07/28 01:32:47 [INIT] subscribing on: []
 
 
 
