@@ -544,6 +544,68 @@ func reverseSymbol(sym string) string {
 
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
+2025/07/27 17:18:47 [RAW][MEXC] {"id":1753625926,"code":0,"msg":"Subscribed successful! [spot@public.deals.v3.api@SOLUSDT,spot@public.deals.v3.api@SOLUSDC]. Not Subscribed successfully! [spot@public.deals.v3.api@USDTUSDC].  Reason： Blocked! "}
+2025/07/27 17:18:47 [SKIP][MEXC] empty symbol or no deals
+2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDC","d":{"deals":[{"p":"186.2964","v":"0.02","S":1,"t":1753625927133}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDC","t":1753625927137}
+2025/07/27 17:18:47 [TICK][MEXC] SOLUSDC=186.29640000 SOLUSDC=0.00536779
+2025/07/27 17:18:47 [CHECK] symbol=SOLUSDC indices=[0]
+2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0(ok=false) BC=0(ok=false) AC=0.005367790252522324(ok=true)
+2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
+2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"186.37","v":"13.180","S":2,"t":1753625927152}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753625927155}
+2025/07/27 17:18:47 [TICK][MEXC] SOLUSDT=186.37000000 SOLUSDT=0.00536567
+2025/07/27 17:18:47 [CHECK] symbol=SOLUSDT indices=[0]
+2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0.005365670440521543(ok=true) BC=0(ok=false) AC=0.005367790252522324(ok=true)
+2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
+2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"186.37","v":"0.180","S":2,"t":1753625927152}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753625927155}
+2025/07/27 17:18:47 [TICK][MEXC] SOLUSDT=186.37000000 SOLUSDT=0.00536567
+2025/07/27 17:18:47 [CHECK] symbol=SOLUSDT indices=[0]
+2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0.005365670440521543(ok=true) BC=0(ok=false) AC=0.005367790252522324(ok=true)
+2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
+2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"186.37","v":"7.020","S":2,"t":1753625927152}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753625927155}
+2025/07/27 17:18:47 [TICK][MEXC] SOLUSDT=186.37000000 SOLUSDT=0.00536567
+2025/07/27 17:18:47 [CHECK] symbol=SOLUSDT indices=[0]
+2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0.005365670440521543(ok=true) BC=0(ok=false) AC=0.005367790252522324(ok=true)
+2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
+2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDC","d":{"deals":[{"p":"186.2972","v":"0.05","S":1,"t":1753625927634}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDC","t":1753625927637}
+2025/07/27 17:18:47 [TICK][MEXC] SOLUSDC=186.29720000 SOLUSDC=0.00536777
+2025/07/27 17:18:47 [CHECK] symbol=SOLUSDC indices=[0]
+2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0.005365670440521543(ok=true) BC=0(ok=false) AC=0.005367767202083552(ok=true)
+2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
+2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDC","d":{"deals":[{"p":"186.2972","v":"0.19","S":1,"t":1753625927634}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDC","t":1753625927638}
+2025/07/27 17:18:47 [TICK][MEXC] SOLUSDC=186.29720000 SOLUSDC=0.00536777
+2025/07/27 17:18:47 [CHECK] symbol=SOLUSDC indices=[0]
+2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0.005365670440521543(ok=true) BC=0(ok=false) AC=0.005367767202083552(ok=true)
+2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
+2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDC","d":{"deals":[{"p":"186.2972","v":"0.06","S":2,"t":1753625927634}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDC","t":1753625927638}
+2025/07/27 17:18:47 [TICK][MEXC] SOLUSDC=186.29720000 SOLUSDC=0.00536777
+2025/07/27 17:18:47 [CHECK] symbol=SOLUSDC indices=[0]
+2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0.005365670440521543(ok=true) BC=0(ok=false) AC=0.005367767202083552(ok=true)
+2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
+2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDC","d":{"deals":[{"p":"186.2971","v":"0.19","S":2,"t":1753625927635}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDC","t":1753625927638}
+2025/07/27 17:18:47 [TICK][MEXC] SOLUSDC=186.29710000 SOLUSDC=0.00536777
+2025/07/27 17:18:47 [CHECK] symbol=SOLUSDC indices=[0]
+2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0.005365670440521543(ok=true) BC=0(ok=false) AC=0.005367770083377573(ok=true)
+2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
+2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDC","d":{"deals":[{"p":"186.2971","v":"0.12","S":2,"t":1753625927636}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDC","t":1753625927640}
+2025/07/27 17:18:47 [TICK][MEXC] SOLUSDC=186.29710000 SOLUSDC=0.00536777
+2025/07/27 17:18:47 [CHECK] symbol=SOLUSDC indices=[0]
+2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0.005365670440521543(ok=true) BC=0(ok=false) AC=0.005367770083377573(ok=true)
+2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
+2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"186.39","v":"1.200","S":2,"t":1753625927651}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753625927655}
+2025/07/27 17:18:47 [TICK][MEXC] SOLUSDT=186.39000000 SOLUSDT=0.00536509
+2025/07/27 17:18:47 [CHECK] symbol=SOLUSDT indices=[0]
+2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0.005365094693921348(ok=true) BC=0(ok=false) AC=0.005367770083377573(ok=true)
+2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
+2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"186.39","v":"0.930","S":2,"t":1753625927652}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753625927655}
+2025/07/27 17:18:47 [TICK][MEXC] SOLUSDT=186.39000000 SOLUSDT=0.00536509
+2025/07/27 17:18:47 [CHECK] symbol=SOLUSDT indices=[0]
+2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0.005365094693921348(ok=true) BC=0(ok=false) AC=0.005367770083377573(ok=true)
+2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
+^Csignal: interrupt
+
+
+
 
 
 
