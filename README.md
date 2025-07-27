@@ -401,6 +401,15 @@ log.Printf("[INIT] triangles=%d, subscribing on %d unique pairs: %v",
     len(ts), len(allPairs), allPairs)
 
 
+    gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ cd cmd/cryptarb
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
+2025/07/27 19:55:46 [INIT] triangles=10, subscribing on 20 unique pairs: [SOLUSDC BTCUSDT XRPBTC LTCBTC XRPUSDT ETHBTC TRXBTC LTCUSDT DOTBTC DOTUSDT SOLUSDT USDCUSDT USDTSOL ETHUSDT USDTBTC TRXUSDT BTCSOL ADAUSDT ADABTC XRPETH]
+2025/07/27 19:56:02 📶 [MEXC] Pong after 247.22322ms
+2025/07/27 19:56:17 📶 [MEXC] Pong after 302.160306ms
+2025/07/27 19:56:22 [WS][MEXC] subscribe error: websocket: close 1005 (no status); reconnecting in 1s...
+
+
+
 
 
 
