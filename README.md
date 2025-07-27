@@ -388,14 +388,45 @@ sudo apt install docker-compose-plugin -y
 _______________________________________________________________________________
 
 
-func LoadTriangles(path string) ([]triangle.Triangle, error) {
-    return []triangle.Triangle{
-        {A: "SOL", B: "USDT", C: "USDC"},
-    }, nil
+func (a *Arbitrager) HandleRaw(msg RawMsg) {
+    // 1) Логируем «сырые» данные
+    log.Printf("[raw] %s → %s", msg.Name, string(msg.Data))
+
+    // 2) Распарсиваем данные (пример для WS-тикера формата JSON {"symbol":"BTCUSDT","price":...})
+    var tick struct {
+        Symbol string  `json:"symbol"`
+        Price  float64 `json:"price,string"`
+    }
+    if err := json.Unmarshal(msg.Data, &tick); err != nil {
+        log.Printf("[error] parse msg from %s: %v", msg.Name, err)
+        return
+    }
+    log.Printf("[tick] %s %s price=%.8f", msg.Name, tick.Symbol, tick.Price)
+
+    // 3) Обновляем внутренний кеш
+    a.mu.Lock()
+    a.latest[msg.Name+":"+tick.Symbol] = tick.Price
+    indices := a.trianglesByPair[tick.Symbol]
+    a.mu.Unlock()
+
+    // 4) Перебираем все треугольники, в которые входит эта пара
+    for _, idx := range indices {
+        tri := a.Triangles[idx]
+        // вычисляем профит (используйте свою функцию расчёта)
+        profit, err := triangle.CalculateProfit(tri, a.latest, msg.Name)
+        if err != nil {
+            log.Printf("[error] calc profit for %v: %v", tri, err)
+            continue
+        }
+        log.Printf("[check] tri=%v profit=%.6f", tri, profit)
+
+        // 5) Если профит больше порога, логируем сигнал
+        if profit > a.profitThreshold {
+            log.Printf("[arb!] tri=%v → opportunity! profit=%.6f", tri, profit)
+        }
+    }
 }
 
-
-git commit -a -m "1trianglcomiss0"
 
 
 
