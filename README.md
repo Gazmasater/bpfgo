@@ -516,11 +516,67 @@ func LoadTriangles(path string) ([]triangle.Triangle, error) {
 ____________________________________________________________________________
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/07/27 21:22:51 [INIT] Loaded 0 triangles after filtering
-2025/07/27 21:22:51 [INIT] total raw pairs before filtering: 0
-2025/07/27 21:22:51 [INIT] total unique pairs after filtering: 0
-2025/07/27 21:22:51 [INIT] subscribing on: []
+func LoadTriangles(_ string) ([]triangle.Triangle, error) {
+	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+	if err != nil {
+		return nil, fmt.Errorf("fetch exchangeInfo: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read exchangeInfo: %w", err)
+	}
+
+	type symbolInfo struct {
+		Base  string `json:"baseAsset"`
+		Quote string `json:"quoteAsset"`
+	}
+	var payload struct {
+		Symbols []symbolInfo `json:"symbols"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("unmarshal exchangeInfo: %w", err)
+	}
+
+	edges := make(map[string]map[string]bool)
+	assets := make(map[string]bool)
+	for _, s := range payload.Symbols {
+		if s.Base == "" || s.Quote == "" {
+			continue
+		}
+		if edges[s.Base] == nil {
+			edges[s.Base] = make(map[string]bool)
+		}
+		edges[s.Base][s.Quote] = true
+		assets[s.Base] = true
+		assets[s.Quote] = true
+	}
+
+	var toks []string
+	for a := range assets {
+		toks = append(toks, a)
+	}
+
+	var tris []triangle.Triangle
+	n := len(toks)
+	for i := 0; i < n; i++ {
+		for j := 0; j < n; j++ {
+			for k := 0; k < n; k++ {
+				if i == j || j == k || i == k {
+					continue
+				}
+				a, b, c := toks[i], toks[j], toks[k]
+				if edges[a][b] && edges[b][c] && edges[c][a] {
+					tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
+				}
+			}
+		}
+	}
+
+	log.Printf("[INFO] Loaded %d triangles", len(tris))
+	return tris, nil
+}
 
 
 
