@@ -387,7 +387,7 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-func LoadTriangles(path string) ([]triangle.Triangle, error) {
+func LoadTriangles() ([]triangle.Triangle, error) {
 	// 1) Получаем exchangeInfo
 	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
@@ -461,11 +461,57 @@ func LoadTriangles(path string) ([]triangle.Triangle, error) {
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ sudo docker compose logs -f
-WARN[0000] /home/gaz358/myprog/crypt/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion 
-cryptarb-1  | 2025/07/27 10:13:56 📶 [MEXC] Pong after 280.414757ms
-cryptarb-1  | 2025/07/27 10:13:57 websocket: close 1005 (no status)
-cryptarb-1 exited with code 1
-cryptarb-1  | 2025/07/27 10:14:29 📶 [MEXC] Pong after 290.615071ms
-cryptarb-1  | 2025/07/27 10:14:33 websocket: close 1005 (no status)
+func New(dataPath string, ex exchange.Exchange) (*Arbitrager, error) {
+	ts, err := filesystem.LoadTriangles()
+	if err != nil {
+		return nil, err
+	}
+
+	avail := ex.FetchAvailableSymbols()
+	ts = triangle.Filter(ts, avail)
+
+	trianglesByPair := make(map[string][]int)
+	for i, tri := range ts {
+		pairs := []string{
+			tri.A + tri.B,
+			tri.B + tri.C,
+			tri.A + tri.C,
+			tri.B + tri.A,
+			tri.C + tri.B,
+			tri.C + tri.A,
+		}
+		for _, p := range pairs {
+			trianglesByPair[p] = append(trianglesByPair[p], i)
+		}
+	}
+
+	arb := &Arbitrager{
+		Triangles:       ts,
+		latest:          make(map[string]float64),
+		trianglesByPair: trianglesByPair,
+	}
+
+	go func() {
+		if err := ex.SubscribeDeals(triangle.SymbolPairs(ts), arb.HandleRaw); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	return arb, nil
+}
+
+
+
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "go-staticcheck",
+	"severity": 4,
+	"message": "not enough arguments in call to filesystem.LoadTriangles\n\thave ()\n\twant (string) (compile)",
+	"source": "go-staticcheck",
+	"startLineNumber": 22,
+	"startColumn": 13,
+	"endLineNumber": 22,
+	"endColumn": 39,
+	"origin": "extHost1"
+}]
 
