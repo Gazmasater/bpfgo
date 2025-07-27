@@ -388,44 +388,45 @@ sudo apt install docker-compose-plugin -y
 _______________________________________________________________________________
 
 
-func (a *Arbitrager) HandleRaw(msg RawMsg) {
-    // 1) Логируем «сырые» данные
-    log.Printf("[raw] %s → %s", msg.Name, string(msg.Data))
+		{A: "SOL", B: "USDT", C: "USDC"},
 
-    // 2) Распарсиваем данные (пример для WS-тикера формата JSON {"symbol":"BTCUSDT","price":...})
-    var tick struct {
-        Symbol string  `json:"symbol"`
-        Price  float64 `json:"price,string"`
-    }
-    if err := json.Unmarshal(msg.Data, &tick); err != nil {
-        log.Printf("[error] parse msg from %s: %v", msg.Name, err)
-        return
-    }
-    log.Printf("[tick] %s %s price=%.8f", msg.Name, tick.Symbol, tick.Price)
+  func (a *Arbitrager) Check(symbol string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 
-    // 3) Обновляем внутренний кеш
-    a.mu.Lock()
-    a.latest[msg.Name+":"+tick.Symbol] = tick.Price
-    indices := a.trianglesByPair[tick.Symbol]
-    a.mu.Unlock()
+	indices := a.trianglesByPair[symbol]
+	if len(indices) == 0 {
+		return
+	}
 
-    // 4) Перебираем все треугольники, в которые входит эта пара
-    for _, idx := range indices {
-        tri := a.Triangles[idx]
-        // вычисляем профит (используйте свою функцию расчёта)
-        profit, err := triangle.CalculateProfit(tri, a.latest, msg.Name)
-        if err != nil {
-            log.Printf("[error] calc profit for %v: %v", tri, err)
-            continue
-        }
-        log.Printf("[check] tri=%v profit=%.6f", tri, profit)
+	const commission = 0.0005
+	nf := (1 - commission) * (1 - commission) * (1 - commission)
 
-        // 5) Если профит больше порога, логируем сигнал
-        if profit > a.profitThreshold {
-            log.Printf("[arb!] tri=%v → opportunity! profit=%.6f", tri, profit)
-        }
-    }
+	for _, i := range indices {
+		tri := a.Triangles[i]
+		ab := tri.A + tri.B
+		bc := tri.B + tri.C
+		ac := tri.A + tri.C
+
+		p1, ok1 := a.latest[ab]
+		p2, ok2 := a.latest[bc]
+		p3, ok3 := a.latest[ac]
+
+		fmt.Println("AB BC AC", p1, p2, p3)
+
+		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+			continue
+		}
+
+		profit := (p1*p2/p3*nf - 1) * 100
+		//	if profit > 0 {
+		a.sumProfit += profit
+		log.Printf("🔺 %s/%s/%s profit %.3f%% total=%.3f%%",
+			tri.A, tri.B, tri.C, profit, a.sumProfit)
+		//}
+	}
 }
+
 
 
 
