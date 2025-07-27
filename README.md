@@ -388,26 +388,70 @@ sudo apt install docker-compose-plugin -y
 _______________________________________________________________________________
 
 
-// после того, как собрали subPairs:
-uniq := make(map[string]struct{}, len(subPairs))
-for _, p := range subPairs {
-    uniq[p] = struct{}{}
+func New(path string, ex exchange.Exchange) (*Arbitrager, error) {
+    ts, err := filesystem.LoadTriangles(path)
+    if err != nil {
+        return nil, err
+    }
+    avail := ex.FetchAvailableSymbols()
+    ts = triangle.Filter(ts, avail)
+
+    // собираем пары и индексы
+    trianglesByPair := make(map[string][]int)
+    var subPairs []string
+    for i, tri := range ts {
+        ab := tri.A + tri.B
+        bc := tri.B + tri.C
+        ca := tri.C + tri.A
+        trianglesByPair[ab] = append(trianglesByPair[ab], i)
+        trianglesByPair[bc] = append(trianglesByPair[bc], i)
+        trianglesByPair[ca] = append(trianglesByPair[ca], i)
+        subPairs = append(subPairs, ab, bc, ca)
+    }
+
+    // фильтруем только по реально существующим символам
+    uniq := make(map[string]struct{}, len(subPairs))
+    for _, p := range subPairs {
+        if avail[p] {
+            uniq[p] = struct{}{}
+        }
+    }
+    subPairs = subPairs[:0]
+    for p := range uniq {
+        subPairs = append(subPairs, p)
+    }
+    log.Printf("[INIT] triangles=%d, subscribing on %d valid pairs: %v",
+        len(ts), len(subPairs), subPairs,
+    )
+
+    arb := &Arbitrager{
+        Triangles:       ts,
+        latest:          make(map[string]float64),
+        trianglesByPair: trianglesByPair,
+    }
+
+    // подписываемся чанками по 25 пар, чтобы не перегрузить WS
+    const maxPerConn = 25
+    for i := 0; i < len(subPairs); i += maxPerConn {
+        end := i + maxPerConn
+        if end > len(subPairs) {
+            end = len(subPairs)
+        }
+        chunk := subPairs[i:end]
+        go func(pairs []string) {
+            for {
+                if err := ex.SubscribeDeals(pairs, arb.HandleRaw); err != nil {
+                    log.Printf("[WS][%s] subscribe chunk error: %v; retrying…", ex.Name(), err)
+                    time.Sleep(time.Second)
+                    continue
+                }
+                break
+            }
+        }(chunk)
+    }
+
+    return arb, nil
 }
-var allPairs []string
-for p := range uniq {
-    allPairs = append(allPairs, p)
-}
-log.Printf("[INIT] triangles=%d, subscribing on %d unique pairs: %v",
-    len(ts), len(allPairs), allPairs)
-
-
-    gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ cd cmd/cryptarb
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/07/27 19:55:46 [INIT] triangles=10, subscribing on 20 unique pairs: [SOLUSDC BTCUSDT XRPBTC LTCBTC XRPUSDT ETHBTC TRXBTC LTCUSDT DOTBTC DOTUSDT SOLUSDT USDCUSDT USDTSOL ETHUSDT USDTBTC TRXUSDT BTCSOL ADAUSDT ADABTC XRPETH]
-2025/07/27 19:56:02 📶 [MEXC] Pong after 247.22322ms
-2025/07/27 19:56:17 📶 [MEXC] Pong after 302.160306ms
-2025/07/27 19:56:22 [WS][MEXC] subscribe error: websocket: close 1005 (no status); reconnecting in 1s...
-
 
 
 
