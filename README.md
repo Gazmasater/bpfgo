@@ -387,15 +387,8 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
- => ERROR [6/6] RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w"     -o cryptarb ./  18.6s
-------
- > [6/6] RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w"     -o cryptarb ./cmd/cryptarb/main.go:
-18.43 # command-line-arguments
-18.43 cmd/cryptarb/main.go:12:20: not enough arguments in call to app.New
-18.43   have (mexc.Mexc)
-18.43   want (string, exchange.Exchange)
-------
-failed to solve: process "/bin/sh -c CGO_ENABLED=0 GOOS=linux go build -ldflags=\"-s -w\"     -o cryptarb ./cmd/cryptarb/main.go" did not complete successfully: exit code: 1
++ func New(ex exchange.Exchange) (*Arbitrager, error) {
+
 
 
 
