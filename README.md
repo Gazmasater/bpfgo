@@ -501,6 +501,88 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 2025/07/28 01:13:04 [WS] subscribing chunk 225:250: [VELVETUSDT RAREUSDT MXUSDT PEPEUSDC BEEUSDT BOMBUSDT KASUSDE WHITEUSDT SOLUSDC OMGUSDT NEARUSDT PIUSDT PENGUUSDT PROMPTUSDT HYPERUSDC SIGNUSDC TAOUSDC ATOMUSDT OBOLUSDT AI16ZUSDT SHMUSDT ASRRUSDT VIDTUSDC INITUSDC USDEUSDT]
 2025/07/28 01:13:04 [WS] subscribing chunk 250:270: [WALUSDT UNIUSDT CORNUSDC KASEUR MOONPIGUSDT SNXUSDT ESUSDT BCHBTC DOGEUSDT ADAEUR AIOTUSDT BABYDOGEUSDT SOPHUSDT XRPETH IDOLUSDT SGCUSDC PEPEUSDT XRPUSDT ETCBTC AGTUSDT]
 
+________________________________________________________________________________________________
+
+package filesystem
+
+import (
+	"cryptarb/internal/domain/triangle"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"sort"
+)
+
+// LoadTriangles загружает треугольники по списку уже известных пар с биржи MEXC
+func LoadTriangles(_ string) ([]triangle.Triangle, error) {
+	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+	if err != nil {
+		return nil, fmt.Errorf("fetch exchangeInfo: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read exchangeInfo: %w", err)
+	}
+
+	type symbolInfo struct {
+		Base  string `json:"baseAsset"`
+		Quote string `json:"quoteAsset"`
+	}
+	var payload struct {
+		Symbols []symbolInfo `json:"symbols"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("unmarshal exchangeInfo: %w", err)
+	}
+
+	edges := make(map[string]map[string]bool)
+	assets := make(map[string]struct{})
+	for _, s := range payload.Symbols {
+		if s.Base == "" || s.Quote == "" {
+			continue
+		}
+		if edges[s.Base] == nil {
+			edges[s.Base] = make(map[string]bool)
+		}
+		edges[s.Base][s.Quote] = true
+		assets[s.Base] = struct{}{}
+		assets[s.Quote] = struct{}{}
+	}
+
+	var toks []string
+	for asset := range assets {
+		toks = append(toks, asset)
+	}
+	log.Printf("[INFO] Total unique assets: %d", len(toks))
+
+	var tris []triangle.Triangle
+	seen := make(map[[3]string]struct{})
+	for a, neigh := range edges {
+		for b := range neigh {
+			if edges[b] == nil {
+				continue
+			}
+			for c := range edges[b] {
+				if edges[c][a] {
+					arr := []string{a, b, c}
+					sort.Strings(arr)
+					key := [3]string{arr[0], arr[1], arr[2]}
+					if _, ok := seen[key]; !ok {
+						tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
+						seen[key] = struct{}{}
+					}
+				}
+			}
+		}
+	}
+
+	log.Printf("[INFO] Loaded %d triangles", len(tris))
+	return tris, nil
+}
 
 
 
