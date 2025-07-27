@@ -388,6 +388,28 @@ sudo apt install docker-compose-plugin -y
 _______________________________________________________________________________
 
 
+package app
+
+import (
+	"encoding/json"
+	"log"
+	"strconv"
+	"sync"
+	"time"
+
+	"cryptarb/internal/domain/exchange"
+	"cryptarb/internal/domain/triangle"
+	"cryptarb/internal/repository/filesystem"
+)
+
+type Arbitrager struct {
+	Triangles       []triangle.Triangle
+	latest          map[string]float64
+	trianglesByPair map[string][]int
+	sumProfit       float64
+	mu              sync.Mutex
+}
+
 func New(path string, ex exchange.Exchange) (*Arbitrager, error) {
 	ts, err := filesystem.LoadTriangles(path)
 	if err != nil {
@@ -397,19 +419,21 @@ func New(path string, ex exchange.Exchange) (*Arbitrager, error) {
 	avail := ex.FetchAvailableSymbols()
 	ts = triangle.Filter(ts, avail)
 
+	// Построим индексы треугольников по парам
 	trianglesByPair := make(map[string][]int)
+	// Подготовим список подписки
+	subPairs := make([]string, 0, len(ts)*3)
 	for i, tri := range ts {
-		pairs := []string{
-			tri.A + tri.B,
-			tri.B + tri.C,
-			tri.A + tri.C,
-			tri.B + tri.A,
-			tri.C + tri.B,
-			tri.C + tri.A,
-		}
-		for _, p := range pairs {
-			trianglesByPair[p] = append(trianglesByPair[p], i)
-		}
+		// Правильные пары для подписки:
+		ab := tri.A + tri.B   // A→B
+		bc := tri.B + tri.C   // B→C
+		ca := tri.C + tri.A   // C→A
+		// Запоминаем индексы для Check
+		trianglesByPair[ab] = append(trianglesByPair[ab], i)
+		trianglesByPair[bc] = append(trianglesByPair[bc], i)
+		trianglesByPair[ca] = append(trianglesByPair[ca], i)
+		// Добавляем в подписку
+		subPairs = append(subPairs, ab, bc, ca)
 	}
 
 	arb := &Arbitrager{
@@ -418,11 +442,10 @@ func New(path string, ex exchange.Exchange) (*Arbitrager, error) {
 		trianglesByPair: trianglesByPair,
 	}
 
-	// Запускаем WS с авто-переподключением
+	// Запускаем WS с авто-переподключением на нужные пары
 	go func() {
-		pairs := triangle.SymbolPairs(ts)
 		for {
-			err := ex.SubscribeDeals(pairs, arb.HandleRaw)
+			err := ex.SubscribeDeals(subPairs, arb.HandleRaw)
 			if err != nil {
 				log.Printf("[WS][%s] subscribe error: %v; reconnecting in 1s...", ex.Name(), err)
 				time.Sleep(time.Second)
@@ -436,14 +459,11 @@ func New(path string, ex exchange.Exchange) (*Arbitrager, error) {
 }
 
 func (a *Arbitrager) HandleRaw(exchangeName string, raw []byte) {
-	log.Printf("[RAW][%s] %s", exchangeName, string(raw))
-
+	// Парсим WS-сообщение
 	var msg struct {
 		Symbol string `json:"s"`
 		Data   struct {
-			Deals []struct {
-				Price string `json:"p"`
-			} `json:"deals"`
+			Deals []struct { Price string `json:"p"`} `json:"deals"`
 		} `json:"d"`
 	}
 	if err := json.Unmarshal(raw, &msg); err != nil {
@@ -451,24 +471,21 @@ func (a *Arbitrager) HandleRaw(exchangeName string, raw []byte) {
 		return
 	}
 	if msg.Symbol == "" || len(msg.Data.Deals) == 0 {
-		log.Printf("[SKIP][%s] empty symbol or no deals", exchangeName)
 		return
 	}
 
-	priceStr := msg.Data.Deals[0].Price
-	price, err := strconv.ParseFloat(priceStr, 64)
+	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
 	if err != nil {
-		log.Printf("[ERROR][%s] parse price %q: %v", exchangeName, priceStr, err)
+		log.Printf("[ERROR][%s] parse price %q: %v", exchangeName, msg.Data.Deals[0].Price, err)
 		return
 	}
 
 	a.mu.Lock()
 	a.latest[msg.Symbol] = price
-	rev := reverseSymbol(msg.Symbol)
-	a.latest[rev] = 1 / price
-	log.Printf("[TICK][%s] %s=%.8f %s=%.8f", exchangeName, msg.Symbol, price, rev, 1/price)
+	log.Printf("[TICK][%s] %s=%.8f", exchangeName, msg.Symbol, price)
 	a.mu.Unlock()
 
+	// Проверяем треугольники по этому символу
 	a.Check(msg.Symbol)
 }
 
@@ -477,7 +494,6 @@ func (a *Arbitrager) Check(symbol string) {
 	defer a.mu.Unlock()
 
 	indices := a.trianglesByPair[symbol]
-	log.Printf("[CHECK] symbol=%s indices=%v", symbol, indices)
 	if len(indices) == 0 {
 		return
 	}
@@ -488,40 +504,26 @@ func (a *Arbitrager) Check(symbol string) {
 	for _, i := range indices {
 		tri := a.Triangles[i]
 		ab := tri.A + tri.B
-		bc := tri.C + tri.B
-		ac := tri.A + tri.C
+		bc := tri.B + tri.C
+		ca := tri.C + tri.A
 
 		p1, ok1 := a.latest[ab]
 		p2, ok2 := a.latest[bc]
-		p3, ok3 := a.latest[ac]
+		p3, ok3 := a.latest[ca]
 
-		log.Printf("[DATA] tri=%s/%s/%s AB=%v(ok=%v) BC=%v(ok=%v) AC=%v(ok=%v)",
+		log.Printf("[DATA] tri=%s/%s/%s AB=%v(ok=%v) BC=%v(ok=%v) CA=%v(ok=%v)",
 			tri.A, tri.B, tri.C,
-			p1, ok1, p2, ok2, p3, ok3,
-		)
+			p1, ok1, p2, ok2, p3, ok3)
 
 		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
-			log.Printf("[SKIP] incomplete for %v", tri)
 			continue
 		}
 
-		profit := (p1*p2/p3*nf - 1) * 100
+		profit := (p1 * p2 / p3 * nf - 1) * 100
 		a.sumProfit += profit
 		log.Printf("🔺 ARB %s/%s/%s profit=%.3f%% total=%.3f%%", tri.A, tri.B, tri.C, profit, a.sumProfit)
 	}
 }
-
-func reverseSymbol(sym string) string {
-	if len(sym)%2 != 0 {
-		return sym
-	}
-	half := len(sym) / 2
-	return sym[half:] + sym[:half]
-}
-
-
-
-
 
 
 
