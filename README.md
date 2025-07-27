@@ -600,6 +600,8 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 }
 
 
-
+for _, s := range symbols {
+    log.Printf("[DEBUG]   base=%s, quote=%s", s.Base, s.Quote)
+}
 
 
