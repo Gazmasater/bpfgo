@@ -516,19 +516,6 @@ func LoadTriangles(path string) ([]triangle.Triangle, error) {
 ____________________________________________________________________________
 
 
-package filesystem
-
-import (
-	"cryptarb/internal/domain/triangle"
-	"encoding/json"
-	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"sort"
-)
-
-// LoadTriangles загружает все возможные треугольники с биржи MEXC
 func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
@@ -546,18 +533,20 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 		Base  string `json:"baseAsset"`
 		Quote string `json:"quoteAsset"`
 	}
-	var respPayload struct {
-		Code int `json:"code"`
-		Msg  string `json:"msg"`
-		Data struct {
-			Symbols []symbolInfo `json:"symbols"`
-		} `json:"data"`
+	// Разбираем JSON
+	type symbolInfo struct {
+		Base  string `json:"baseAsset"`
+		Quote string `json:"quoteAsset"`
 	}
-	if err := json.Unmarshal(body, &respPayload); err != nil {
+	// MEXC возвращает топ-уровневый массив "symbols"
+	var payload struct {
+		Symbols []symbolInfo `json:"symbols"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, fmt.Errorf("unmarshal exchangeInfo: %w", err)
 	}
 
-	symbols := respPayload.Data.Symbols
+	symbols := payload.Symbols
 
 	// Построим направленный граф
 	edges := make(map[string]map[string]bool)
@@ -614,17 +603,6 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 	log.Printf("[INFO] Loaded %d triangles", len(tris))
 	return tris, nil
 }
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/07/27 23:33:10 [INFO] Total unique assets: 2094
-2025/07/27 23:43:15 [INFO] Loaded 0 triangles
-2025/07/27 23:43:15 [INIT] Loaded 0 triangles after filtering
-2025/07/27 23:43:15 [INIT] total raw pairs before filtering: 0
-2025/07/27 23:43:15 [INIT] total unique pairs after filtering: 0
-2025/07/27 23:43:15 [INIT] subscribing on: []
-
-
 
 
 
