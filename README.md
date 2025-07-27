@@ -516,43 +516,11 @@ func LoadTriangles(path string) ([]triangle.Triangle, error) {
 ____________________________________________________________________________
 
 
-func LoadTriangles(_ string) ([]triangle.Triangle, error) {
-	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-	if err != nil {
-		return nil, fmt.Errorf("fetch exchangeInfo: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read exchangeInfo: %w", err)
-	}
-
-	// Разбираем JSON ответа
-	type symbolInfo struct {
-		Base  string `json:"baseAsset"`
-		Quote string `json:"quoteAsset"`
-	}
-	var respPayload struct {
-		Code int    `json:"code"`
-		Msg  string `json:"msg"`
-		Data struct {
-			Symbols []symbolInfo `json:"symbols"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &respPayload); err != nil {
-		return nil, fmt.Errorf("unmarshal exchangeInfo: %w", err)
-	}
-
-	symbols := respPayload.Data.Symbols
-
-	for _, s := range symbols {
-		log.Printf("[DEBUG]   base=%s, quote=%s", s.Base, s.Quote)
-	}
-
-	var tris []triangle.Triangle
-
-	return tris, nil
+var raw map[string]interface{}
+if err := json.Unmarshal(body, &raw); err != nil {
+    log.Printf("raw JSON: %s", string(body))
+    return nil, err
 }
+log.Printf("raw keys: %v", keys(raw))
 
 
