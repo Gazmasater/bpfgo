@@ -516,96 +516,88 @@ func LoadTriangles(path string) ([]triangle.Triangle, error) {
 ____________________________________________________________________________
 
 
-func New(path string, ex exchange.Exchange) (*Arbitrager, error) {
-	// 1. Загружаем треугольники и фильтруем по доступности пар
-	ts, err := filesystem.LoadTriangles(path)
+func LoadTriangles(path string) ([]triangle.Triangle, error) {
+	// жёстко заданный набор (можно читать из файла path, но здесь для примера — константа)
+	t := []triangle.Triangle{
+		{A: "SOL", B: "USDT", C: "USDC"},
+		{A: "XRP", B: "BTC", C: "USDT"},
+		{A: "ETH", B: "BTC", C: "USDT"},
+		{A: "TRX", B: "BTC", C: "USDT"},
+		{A: "ADA", B: "USDT", C: "BTC"},
+		{A: "LTC", B: "BTC", C: "USDT"},
+		{A: "DOGE", B: "BTC", C: "USDT"},
+		{A: "MATIC", B: "USDT", C: "BTC"},
+		{A: "DOT", B: "BTC", C: "USDT"},
+		{A: "AVAX", B: "BTC", C: "USDT"},
+		{A: "BCH", B: "BTC", C: "USDT"},
+		{A: "LINK", B: "BTC", C: "USDT"},
+		{A: "ETC", B: "BTC", C: "USDT"},
+	}
+
+	// Если вы хотите динамически подтягивать из API:
+	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
-		return nil, err
+		return t, nil // fallback на константу
 	}
-	avail := ex.FetchAvailableSymbols()
-	ts = triangle.Filter(ts, avail)
+	defer resp.Body.Close()
 
-	log.Printf("[INIT] Loaded %d triangles after filtering", len(ts))
-
-	// 2. Собираем мапу индексов и список всех потенциальных подписок
-	trianglesByPair := make(map[string][]int)
-	var subPairsRaw []string
-	for i, tri := range ts {
-		ab := tri.A + tri.B // A→B
-		bc := tri.B + tri.C // B→C
-		ca := tri.C + tri.A // C→A
-
-		log.Printf("[TRI %2d] %s → %s → %s → %s (AB=%s BC=%s CA=%s)",
-			i, tri.A, tri.B, tri.C, tri.A, ab, bc, ca)
-
-		trianglesByPair[ab] = append(trianglesByPair[ab], i)
-		trianglesByPair[bc] = append(trianglesByPair[bc], i)
-		trianglesByPair[ca] = append(trianglesByPair[ca], i)
-
-		subPairsRaw = append(subPairsRaw, ab, bc, ca)
-	}
-	log.Printf("[INIT] total raw pairs before filtering: %d", len(subPairsRaw))
-
-	// 3. Фильтрация по доступным символам
-	uniq := make(map[string]struct{})
-	for _, p := range subPairsRaw {
-		if avail[p] {
-			uniq[p] = struct{}{}
-		} else {
-			log.Printf("[SKIP] %s not available on exchange", p)
-		}
-	}
-	var subPairs []string
-	for p := range uniq {
-		subPairs = append(subPairs, p)
-	}
-	log.Printf("[INIT] total unique pairs after filtering: %d", len(subPairs))
-	log.Printf("[INIT] subscribing on: %v", subPairs)
-
-	arb := &Arbitrager{
-		Triangles:       ts,
-		latest:          make(map[string]float64),
-		trianglesByPair: trianglesByPair,
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return t, nil
 	}
 
-	// 4. Подписываемся чанками по maxPerConn
-	const maxPerConn = 25
-	for i := 0; i < len(subPairs); i += maxPerConn {
-		end := i + maxPerConn
-		if end > len(subPairs) {
-			end = len(subPairs)
-		}
-		chunk := subPairs[i:end]
-		log.Printf("[WS] subscribing chunk %d:%d: %v", i, end, chunk)
+	type symbolInfo struct {
+		Base  string `json:"baseAsset"`
+		Quote string `json:"quoteAsset"`
+		Maker string `json:"makerCommission"`
+		Taker string `json:"takerCommission"`
+	}
+	var payload struct {
+		Symbols []symbolInfo `json:"symbols"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return t, nil
+	}
 
-		go func(pairs []string) {
-			for {
-				if err := ex.SubscribeDeals(pairs, arb.HandleRaw); err != nil {
-					log.Printf("[WS][%s] subscribe chunk error: %v; retrying…", ex.Name(), err)
-					time.Sleep(time.Second)
-					continue
-				}
-				return
+	// Построим все треугольники нулевой комиссии (пример см. ранее)
+	edges := make(map[string]map[string]bool)
+	assets := make(map[string]bool)
+	for _, s := range payload.Symbols {
+		if s.Maker == "0" && s.Taker == "0" {
+			if edges[s.Base] == nil {
+				edges[s.Base] = make(map[string]bool)
 			}
-		}(chunk)
+			edges[s.Base][s.Quote] = true
+			assets[s.Base] = true
+			assets[s.Quote] = true
+		}
+	}
+	// генерация циклов длины 3 (треугольников)
+	var toks []string
+	for a := range assets {
+		toks = append(toks, a)
+	}
+	for i := 0; i < len(toks); i++ {
+		for j := i + 1; j < len(toks); j++ {
+			for k := j + 1; k < len(toks); k++ {
+				A, B, C := toks[i], toks[j], toks[k]
+				perms := [][3]string{
+					{A, B, C}, {A, C, B},
+					{B, A, C}, {B, C, A},
+					{C, A, B}, {C, B, A},
+				}
+				for _, p := range perms {
+					if edges[p[0]][p[1]] && edges[p[1]][p[2]] && edges[p[2]][p[0]] {
+						t = append(t, triangle.Triangle{A: p[0], B: p[1], C: p[2]})
+						break
+					}
+				}
+			}
+		}
 	}
 
-	return arb, nil
+	return t, nil
 }
-
-
-		{A: "XRP",   B: "BTC",  C: "USDT"},
-	{A: "ETH",   B: "BTC",  C: "USDT"},
-	{A: "TRX",   B: "BTC",  C: "USDT"},
-	{A: "ADA",   B: "USDT", C: "BTC"},
-	{A: "LTC",   B: "BTC",  C: "USDT"},
-	{A: "DOGE",  B: "BTC",  C: "USDT"},
-	{A: "MATIC", B: "USDT", C: "BTC"},
-	{A: "DOT",   B: "BTC",  C: "USDT"},
-	{A: "AVAX",  B: "BTC",  C: "USDT"},
-	{A: "BCH",   B: "BTC",  C: "USDT"},
-	{A: "LINK",  B: "BTC",  C: "USDT"},
-	{A: "ETC",   B: "BTC",  C: "USDT"},
 
 
 
