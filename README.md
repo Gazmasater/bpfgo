@@ -521,6 +521,22 @@ if err := json.Unmarshal(body, &raw); err != nil {
     log.Printf("raw JSON: %s", string(body))
     return nil, err
 }
-log.Printf("raw keys: %v", keys(raw))
+
+// Собираем ключи вручную
+keyList := make([]string, 0, len(raw))
+for k := range raw {
+    keyList = append(keyList, k)
+}
+log.Printf("[DEBUG] top-level keys: %v", keyList)
+
+// Если нужно ещё глубже, например raw["data"]:
+if dataVal, ok := raw["data"].(map[string]interface{}); ok {
+    dataKeys := make([]string, 0, len(dataVal))
+    for k := range dataVal {
+        dataKeys = append(dataKeys, k)
+    }
+    log.Printf("[DEBUG] data-level keys: %v", dataKeys)
+}
+
 
 
