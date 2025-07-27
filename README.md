@@ -388,32 +388,63 @@ sudo apt install docker-compose-plugin -y
 _______________________________________________________________________________
 
 
-В New при формировании subPairs заменить:
-
-go
-Копировать код
-bc := tri.B + tri.C // невалидно, USDTUSDC
-ca := tri.C + tri.A
-на
-
-go
-Копировать код
-ab := tri.A + tri.B     // SOLUSDT
-bc := tri.C + tri.B     // USDCUSDT
-ca := tri.C + tri.A     // USDCSOL
-В Check использовать те же три ключа:
-
-go
-Копировать код
-ab := tri.A + tri.B   // SOLUSDT
-bc := tri.C + tri.B   // USDCUSDT
-ca := tri.C + tri.A   // USDCSOL
-И подписаться на эти же символы:
-
-go
-Копировать код
-subPairs = append(subPairs, ab, bc, ca)
-После этого вы получите в latest цены по USDCUSDT (BC), и треугольник {SOL,USDT,USDC} перестанет пропускаться.
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
+2025/07/27 17:51:51 [TICK][MEXC] USDCUSDT=0.99960000
+2025/07/27 17:51:51 [DATA] tri=SOL/USDT/USDC AB=0(ok=false) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:52 [TICK][MEXC] USDCUSDT=0.99960000
+2025/07/27 17:51:52 [DATA] tri=SOL/USDT/USDC AB=0(ok=false) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:52 [TICK][MEXC] SOLUSDT=185.40000000
+2025/07/27 17:51:52 [DATA] tri=SOL/USDT/USDC AB=185.4(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:53 [TICK][MEXC] USDCUSDT=0.99960000
+2025/07/27 17:51:53 [DATA] tri=SOL/USDT/USDC AB=185.4(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:53 [TICK][MEXC] SOLUSDT=185.41000000
+2025/07/27 17:51:53 [DATA] tri=SOL/USDT/USDC AB=185.41(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:53 [TICK][MEXC] SOLUSDT=185.41000000
+2025/07/27 17:51:53 [DATA] tri=SOL/USDT/USDC AB=185.41(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:53 [TICK][MEXC] SOLUSDT=185.41000000
+2025/07/27 17:51:53 [DATA] tri=SOL/USDT/USDC AB=185.41(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:54 [TICK][MEXC] USDCUSDT=0.99960000
+2025/07/27 17:51:54 [DATA] tri=SOL/USDT/USDC AB=185.41(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:54 [TICK][MEXC] SOLUSDT=185.43000000
+2025/07/27 17:51:54 [DATA] tri=SOL/USDT/USDC AB=185.43(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:54 [TICK][MEXC] SOLUSDT=185.43000000
+2025/07/27 17:51:54 [DATA] tri=SOL/USDT/USDC AB=185.43(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:54 [TICK][MEXC] SOLUSDT=185.43000000
+2025/07/27 17:51:54 [DATA] tri=SOL/USDT/USDC AB=185.43(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:54 [TICK][MEXC] USDCUSDT=0.99960000
+2025/07/27 17:51:54 [DATA] tri=SOL/USDT/USDC AB=185.43(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:54 [TICK][MEXC] USDCUSDT=0.99960000
+2025/07/27 17:51:54 [DATA] tri=SOL/USDT/USDC AB=185.43(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:56 [TICK][MEXC] SOLUSDT=185.42000000
+2025/07/27 17:51:56 [DATA] tri=SOL/USDT/USDC AB=185.42(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:56 [TICK][MEXC] SOLUSDT=185.42000000
+2025/07/27 17:51:56 [DATA] tri=SOL/USDT/USDC AB=185.42(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:56 [TICK][MEXC] SOLUSDT=185.42000000
+2025/07/27 17:51:56 [DATA] tri=SOL/USDT/USDC AB=185.42(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:56 [TICK][MEXC] USDCUSDT=0.99960000
+2025/07/27 17:51:56 [DATA] tri=SOL/USDT/USDC AB=185.42(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:56 [TICK][MEXC] SOLUSDT=185.43000000
+2025/07/27 17:51:56 [DATA] tri=SOL/USDT/USDC AB=185.43(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:56 [TICK][MEXC] SOLUSDT=185.43000000
+2025/07/27 17:51:56 [DATA] tri=SOL/USDT/USDC AB=185.43(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:56 [TICK][MEXC] SOLUSDT=185.43000000
+2025/07/27 17:51:56 [DATA] tri=SOL/USDT/USDC AB=185.43(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:57 [TICK][MEXC] USDCUSDT=0.99960000
+2025/07/27 17:51:57 [DATA] tri=SOL/USDT/USDC AB=185.43(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:57 [TICK][MEXC] SOLUSDT=185.45000000
+2025/07/27 17:51:57 [DATA] tri=SOL/USDT/USDC AB=185.45(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:57 [TICK][MEXC] SOLUSDT=185.45000000
+2025/07/27 17:51:57 [DATA] tri=SOL/USDT/USDC AB=185.45(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:57 [TICK][MEXC] USDCUSDT=0.99960000
+2025/07/27 17:51:57 [DATA] tri=SOL/USDT/USDC AB=185.45(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:57 [TICK][MEXC] SOLUSDT=185.48000000
+2025/07/27 17:51:57 [DATA] tri=SOL/USDT/USDC AB=185.48(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:57 [TICK][MEXC] SOLUSDT=185.48000000
+2025/07/27 17:51:57 [DATA] tri=SOL/USDT/USDC AB=185.48(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+2025/07/27 17:51:57 [TICK][MEXC] SOLUSDT=185.48000000
+2025/07/27 17:51:57 [DATA] tri=SOL/USDT/USDC AB=185.48(ok=true) BC=0.9996(ok=true) CA=0(ok=false)
+^Csignal: interrupt
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ 
 
 
 
