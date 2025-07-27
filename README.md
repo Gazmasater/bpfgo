@@ -388,7 +388,87 @@ sudo apt install docker-compose-plugin -y
 _______________________________________________________________________________
 
 
-"triangles.json"
+package filesystem
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+
+	"cryptarb/internal/domain/triangle"
+)
+
+// LoadTriangles запрашивает с MEXC все спотовые пары с 0% комиссии
+// и строит из них все возможные треугольники (A→B→C→A)
+func LoadTriangles(_ string) ([]triangle.Triangle, error) {
+	// 1) Получаем exchangeInfo
+	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+	if err != nil {
+		return nil, fmt.Errorf("fetch exchangeInfo: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// 2) Читаем тело
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read exchangeInfo: %w", err)
+	}
+
+	// 3) Парсим JSON
+	type symbolInfo struct {
+		BaseAsset       string `json:"baseAsset"`
+		QuoteAsset      string `json:"quoteAsset"`
+		MakerCommission string `json:"makerCommission"`
+		TakerCommission string `json:"takerCommission"`
+	}
+	var payload struct {
+		Symbols []symbolInfo `json:"symbols"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("unmarshal exchangeInfo: %w", err)
+	}
+
+	// 4) Строим граф пар с нулевой комиссией
+	edges := make(map[string]map[string]bool)
+	assets := make(map[string]bool)
+	for _, s := range payload.Symbols {
+		if s.MakerCommission == "0" && s.TakerCommission == "0" {
+			if edges[s.BaseAsset] == nil {
+				edges[s.BaseAsset] = make(map[string]bool)
+			}
+			edges[s.BaseAsset][s.QuoteAsset] = true
+			assets[s.BaseAsset] = true
+			assets[s.QuoteAsset] = true
+		}
+	}
+
+	// 5) Собираем список активов
+	var toks []string
+	for a := range assets {
+		toks = append(toks, a)
+	}
+
+	// 6) Ищем треугольники
+	var tris []triangle.Triangle
+	n := len(toks)
+	for i := 0; i < n; i++ {
+		for j := i + 1; j < n; j++ {
+			for k := j + 1; k < n; k++ {
+				a, b, c := toks[i], toks[j], toks[k]
+				perms := [][3]string{{a, b, c}, {a, c, b}, {b, a, c}, {b, c, a}, {c, a, b}, {c, b, a}}
+				for _, p := range perms {
+					x, y, z := p[0], p[1], p[2]
+					if edges[x][y] && edges[y][z] && edges[z][x] {
+						tris = append(tris, triangle.Triangle{A: x, B: y, C: z})
+						break
+					}
+				}
+			}
+		}
+	}
+	return tris, nil
+}
 
 
 
