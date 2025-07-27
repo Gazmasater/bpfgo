@@ -387,8 +387,28 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-func New(ex exchange.Exchange) (*Arbitrager, error) {
-	ts, err := filesystem.LoadTriangles()
+package app
+
+import (
+	"cryptarb/internal/domain/exchange"
+	"cryptarb/internal/domain/triangle"
+	"cryptarb/internal/repository/filesystem"
+	"encoding/json"
+	"log"
+	"strconv"
+	"sync"
+)
+
+type Arbitrager struct {
+	Triangles       []triangle.Triangle
+	latest          map[string]float64
+	trianglesByPair map[string][]int
+	sumProfit       float64
+	mu              sync.Mutex
+}
+
+func New(string parth, ex exchange.Exchange) (*Arbitrager, error) {
+	ts, err := filesystem.LoadTriangles(parth)
 	if err != nil {
 		return nil, err
 	}
@@ -426,6 +446,28 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 	return arb, nil
 }
 
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "UndeclaredName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: parth",
+	"source": "compiler",
+	"startLineNumber": 21,
+	"startColumn": 17,
+	"endLineNumber": 21,
+	"endColumn": 22,
+	"origin": "extHost1"
+}]
 
 
 
