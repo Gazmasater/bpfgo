@@ -387,75 +387,85 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-func LoadTriangles() ([]triangle.Triangle, error) {
-    // 1) Получаем exchangeInfo
-    resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-    if err != nil {
-        return nil, fmt.Errorf("fetch exchangeInfo: %w", err)
-    }
-    defer resp.Body.Close()
+func LoadTriangles(path string) ([]triangle.Triangle, error) {
+	// 1) Получаем exchangeInfo
+	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+	if err != nil {
+		return nil, fmt.Errorf("fetch exchangeInfo: %w", err)
+	}
+	defer resp.Body.Close()
 
-    body, err := io.ReadAll(resp.Body)
-    if err != nil {
-        return nil, fmt.Errorf("read exchangeInfo: %w", err)
-    }
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read exchangeInfo: %w", err)
+	}
 
-    // 2) Распарсиваем JSON
-    type symbolInfo struct {
-        BaseAsset       string `json:"baseAsset"`
-        QuoteAsset      string `json:"quoteAsset"`
-        MakerCommission string `json:"makerCommission"`
-        TakerCommission string `json:"takerCommission"`
-    }
-    var data struct {
-        Symbols []symbolInfo `json:"symbols"`
-    }
-    if err := json.Unmarshal(body, &data); err != nil {
-        return nil, fmt.Errorf("unmarshal exchangeInfo: %w", err)
-    }
+	// 2) Распарсиваем JSON
+	type symbolInfo struct {
+		BaseAsset       string `json:"baseAsset"`
+		QuoteAsset      string `json:"quoteAsset"`
+		MakerCommission string `json:"makerCommission"`
+		TakerCommission string `json:"takerCommission"`
+	}
+	var data struct {
+		Symbols []symbolInfo `json:"symbols"`
+	}
+	if err := json.Unmarshal(body, &data); err != nil {
+		return nil, fmt.Errorf("unmarshal exchangeInfo: %w", err)
+	}
 
-    // 3) Строим ориентированный граф нулевых комиссий
-    edges := make(map[string]map[string]bool)
-    assets := make(map[string]bool)
-    for _, s := range data.Symbols {
-        if s.MakerCommission == "0" && s.TakerCommission == "0" {
-            if edges[s.BaseAsset] == nil {
-                edges[s.BaseAsset] = make(map[string]bool)
-            }
-            edges[s.BaseAsset][s.QuoteAsset] = true
-            assets[s.BaseAsset] = true
-            assets[s.QuoteAsset] = true
-        }
-    }
+	// 3) Строим ориентированный граф нулевых комиссий
+	edges := make(map[string]map[string]bool)
+	assets := make(map[string]bool)
+	for _, s := range data.Symbols {
+		if s.MakerCommission == "0" && s.TakerCommission == "0" {
+			if edges[s.BaseAsset] == nil {
+				edges[s.BaseAsset] = make(map[string]bool)
+			}
+			edges[s.BaseAsset][s.QuoteAsset] = true
+			assets[s.BaseAsset] = true
+			assets[s.QuoteAsset] = true
+		}
+	}
 
-    // 4) Ищем все 3-циклы A→B→C→A
-    var toks []string
-    for t := range assets {
-        toks = append(toks, t)
-    }
-    var triangles []triangle.Triangle
-    n := len(toks)
-    // Перебираем комбинации по 3
-    for i := 0; i < n; i++ {
-        for j := i + 1; j < n; j++ {
-            for k := j + 1; k < n; k++ {
-                a, b, c := toks[i], toks[j], toks[k]
-                // Проверяем все 6 направленных перестановок
-                perms := [][3]string{
-                    {a, b, c}, {a, c, b},
-                    {b, a, c}, {b, c, a},
-                    {c, a, b}, {c, b, a},
-                }
-                for _, p := range perms {
-                    x, y, z := p[0], p[1], p[2]
-                    if edges[x][y] && edges[y][z] && edges[z][x] {
-                        triangles = append(triangles, triangle.Triangle{A: x, B: y, C: z})
-                        break
-                    }
-                }
-            }
-        }
-    }
-    return triangles, nil
+	// 4) Ищем все 3-циклы A→B→C→A
+	var toks []string
+	for t := range assets {
+		toks = append(toks, t)
+	}
+	var triangles []triangle.Triangle
+	n := len(toks)
+	// Перебираем комбинации по 3
+	for i := 0; i < n; i++ {
+		for j := i + 1; j < n; j++ {
+			for k := j + 1; k < n; k++ {
+				a, b, c := toks[i], toks[j], toks[k]
+				// Проверяем все 6 направленных перестановок
+				perms := [][3]string{
+					{a, b, c}, {a, c, b},
+					{b, a, c}, {b, c, a},
+					{c, a, b}, {c, b, a},
+				}
+				for _, p := range perms {
+					x, y, z := p[0], p[1], p[2]
+					if edges[x][y] && edges[y][z] && edges[z][x] {
+						triangles = append(triangles, triangle.Triangle{A: x, B: y, C: z})
+						break
+					}
+				}
+			}
+		}
+	}
+	return triangles, nil
 }
+
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ sudo docker compose logs -f
+WARN[0000] /home/gaz358/myprog/crypt/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion 
+cryptarb-1  | 2025/07/27 10:13:56 📶 [MEXC] Pong after 280.414757ms
+cryptarb-1  | 2025/07/27 10:13:57 websocket: close 1005 (no status)
+cryptarb-1 exited with code 1
+cryptarb-1  | 2025/07/27 10:14:29 📶 [MEXC] Pong after 290.615071ms
+cryptarb-1  | 2025/07/27 10:14:33 websocket: close 1005 (no status)
 
