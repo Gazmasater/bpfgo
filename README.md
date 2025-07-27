@@ -516,6 +516,19 @@ func LoadTriangles(path string) ([]triangle.Triangle, error) {
 ____________________________________________________________________________
 
 
+package filesystem
+
+import (
+	"cryptarb/internal/domain/triangle"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"sort"
+)
+
+// LoadTriangles загружает все возможные треугольники с биржи MEXC
 func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
@@ -567,19 +580,25 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 	n := len(toks)
 	seen := make(map[[3]string]bool)
 	for i := 0; i < n; i++ {
-		for j := 0; j < n; j++ {
-			for k := 0; k < n; k++ {
-				if i == j || j == k || k == i {
-					continue
-				}
+		for j := i + 1; j < n; j++ {
+			for k := j + 1; k < n; k++ {
 				a, b, c := toks[i], toks[j], toks[k]
-				if edges[a][b] && edges[b][c] && edges[c][a] {
-					arr := []string{a, b, c}
-					sort.Strings(arr)
-					key := [3]string{arr[0], arr[1], arr[2]}
-					if !seen[key] {
-						tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
-						seen[key] = true
+				perms := [][3]string{
+					{a, b, c}, {a, c, b},
+					{b, a, c}, {b, c, a},
+					{c, a, b}, {c, b, a},
+				}
+				for _, p := range perms {
+					x, y, z := p[0], p[1], p[2]
+					if edges[x][y] && edges[y][z] && edges[z][x] {
+						arr := []string{x, y, z}
+						sort.Strings(arr)
+						key := [3]string{arr[0], arr[1], arr[2]}
+						if !seen[key] {
+							tris = append(tris, triangle.Triangle{A: x, B: y, C: z})
+							seen[key] = true
+						}
+						break
 					}
 				}
 			}
@@ -589,15 +608,6 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 	log.Printf("[INFO] Loaded %d triangles", len(tris))
 	return tris, nil
 }
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/07/27 22:52:36 [INFO] Total unique assets: 2094
-2025/07/27 23:00:36 [INFO] Loaded 0 triangles
-2025/07/27 23:00:37 [INIT] Loaded 0 triangles after filtering
-2025/07/27 23:00:37 [INIT] total raw pairs before filtering: 0
-2025/07/27 23:00:37 [INIT] total unique pairs after filtering: 0
-2025/07/27 23:00:37 [INIT] subscribing on: []
 
 
 
