@@ -558,17 +558,21 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 		toks = append(toks, a)
 	}
 
+	log.Printf("[INFO] Total unique assets: %d", len(toks))
+
 	var tris []triangle.Triangle
+	seen := make(map[string]struct{})
 	n := len(toks)
 	for i := 0; i < n; i++ {
-		for j := 0; j < n; j++ {
-			for k := 0; k < n; k++ {
-				if i == j || j == k || i == k {
-					continue
-				}
+		for j := i + 1; j < n; j++ {
+			for k := j + 1; k < n; k++ {
 				a, b, c := toks[i], toks[j], toks[k]
 				if edges[a][b] && edges[b][c] && edges[c][a] {
-					tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
+					key := normalizeKey(a, b, c)
+					if _, ok := seen[key]; !ok {
+						seen[key] = struct{}{}
+						tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
+					}
 				}
 			}
 		}
@@ -577,6 +581,13 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 	log.Printf("[INFO] Loaded %d triangles", len(tris))
 	return tris, nil
 }
+
+func normalizeKey(a, b, c string) string {
+	t := []string{a, b, c}
+	sort.Strings(t)
+	return t[0] + ">" + t[1] + ">" + t[2]
+}
+
 
 
 
