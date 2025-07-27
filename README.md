@@ -387,131 +387,89 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
+package filesystem
+
+import (
+    "encoding/json"
+    "fmt"
+    "io"
+    "net/http"
+
+    "cryptarb/internal/domain/triangle"
+)
+
+// LoadTriangles запрашивает на MEXC все пары с нулевой комиссией
+// и строит из них все треугольники (A→B→C→A).
 func LoadTriangles() ([]triangle.Triangle, error) {
-	// 1) Получаем exchangeInfo
-	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-	if err != nil {
-		return nil, fmt.Errorf("fetch exchangeInfo: %w", err)
-	}
-	defer resp.Body.Close()
+    // 1) Получаем exchangeInfo
+    resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+    if err != nil {
+        return nil, fmt.Errorf("fetch exchangeInfo: %w", err)
+    }
+    defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read exchangeInfo: %w", err)
-	}
+    // 2) Читаем тело ответа
+    body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return nil, fmt.Errorf("read exchangeInfo: %w", err)
+    }
 
-	// 2) Распарсиваем JSON
-	type symbolInfo struct {
-		BaseAsset       string `json:"baseAsset"`
-		QuoteAsset      string `json:"quoteAsset"`
-		MakerCommission string `json:"makerCommission"`
-		TakerCommission string `json:"takerCommission"`
-	}
-	var data struct {
-		Symbols []symbolInfo `json:"symbols"`
-	}
-	if err := json.Unmarshal(body, &data); err != nil {
-		return nil, fmt.Errorf("unmarshal exchangeInfo: %w", err)
-	}
+    // 3) Парсим JSON
+    type symbolInfo struct {
+        BaseAsset       string `json:"baseAsset"`
+        QuoteAsset      string `json:"quoteAsset"`
+        MakerCommission string `json:"makerCommission"`
+        TakerCommission string `json:"takerCommission"`
+    }
+    var payload struct {
+        Symbols []symbolInfo `json:"symbols"`
+    }
+    if err := json.Unmarshal(body, &payload); err != nil {
+        return nil, fmt.Errorf("unmarshal exchangeInfo: %w", err)
+    }
 
-	// 3) Строим ориентированный граф нулевых комиссий
-	edges := make(map[string]map[string]bool)
-	assets := make(map[string]bool)
-	for _, s := range data.Symbols {
-		if s.MakerCommission == "0" && s.TakerCommission == "0" {
-			if edges[s.BaseAsset] == nil {
-				edges[s.BaseAsset] = make(map[string]bool)
-			}
-			edges[s.BaseAsset][s.QuoteAsset] = true
-			assets[s.BaseAsset] = true
-			assets[s.QuoteAsset] = true
-		}
-	}
+    // 4) Строим граф ребер для нулевых комиссий
+    edges := make(map[string]map[string]bool)
+    assets := make(map[string]bool)
+    for _, s := range payload.Symbols {
+        if s.MakerCommission == "0" && s.TakerCommission == "0" {
+            if edges[s.BaseAsset] == nil {
+                edges[s.BaseAsset] = make(map[string]bool)
+            }
+            edges[s.BaseAsset][s.QuoteAsset] = true
+            assets[s.BaseAsset] = true
+            assets[s.QuoteAsset] = true
+        }
+    }
 
-	// 4) Ищем все 3-циклы A→B→C→A
-	var toks []string
-	for t := range assets {
-		toks = append(toks, t)
-	}
-	var triangles []triangle.Triangle
-	n := len(toks)
-	// Перебираем комбинации по 3
-	for i := 0; i < n; i++ {
-		for j := i + 1; j < n; j++ {
-			for k := j + 1; k < n; k++ {
-				a, b, c := toks[i], toks[j], toks[k]
-				// Проверяем все 6 направленных перестановок
-				perms := [][3]string{
-					{a, b, c}, {a, c, b},
-					{b, a, c}, {b, c, a},
-					{c, a, b}, {c, b, a},
-				}
-				for _, p := range perms {
-					x, y, z := p[0], p[1], p[2]
-					if edges[x][y] && edges[y][z] && edges[z][x] {
-						triangles = append(triangles, triangle.Triangle{A: x, B: y, C: z})
-						break
-					}
-				}
-			}
-		}
-	}
-	return triangles, nil
+    // 5) Собираем список уникальных активов
+    var toks []string
+    for a := range assets {
+        toks = append(toks, a)
+    }
+
+    // 6) Перебираем все комбинации по 3 и ищем циклы
+    n := len(toks)
+    var tris []triangle.Triangle
+    for i := 0; i < n; i++ {
+        for j := i + 1; j < n; j++ {
+            for k := j + 1; k < n; k++ {
+                a, b, c := toks[i], toks[j], toks[k]
+                perms := [][3]string{
+                    {a, b, c}, {a, c, b},
+                    {b, a, c}, {b, c, a},
+                    {c, a, b}, {c, b, a},
+                }
+                for _, p := range perms {
+                    x, y, z := p[0], p[1], p[2]
+                    if edges[x][y] && edges[y][z] && edges[z][x] {
+                        tris = append(tris, triangle.Triangle{A: x, B: y, C: z})
+                        break
+                    }
+                }
+            }
+        }
+    }
+    return tris, nil
 }
-
-
-
-func New(dataPath string, ex exchange.Exchange) (*Arbitrager, error) {
-	ts, err := filesystem.LoadTriangles()
-	if err != nil {
-		return nil, err
-	}
-
-	avail := ex.FetchAvailableSymbols()
-	ts = triangle.Filter(ts, avail)
-
-	trianglesByPair := make(map[string][]int)
-	for i, tri := range ts {
-		pairs := []string{
-			tri.A + tri.B,
-			tri.B + tri.C,
-			tri.A + tri.C,
-			tri.B + tri.A,
-			tri.C + tri.B,
-			tri.C + tri.A,
-		}
-		for _, p := range pairs {
-			trianglesByPair[p] = append(trianglesByPair[p], i)
-		}
-	}
-
-	arb := &Arbitrager{
-		Triangles:       ts,
-		latest:          make(map[string]float64),
-		trianglesByPair: trianglesByPair,
-	}
-
-	go func() {
-		if err := ex.SubscribeDeals(triangle.SymbolPairs(ts), arb.HandleRaw); err != nil {
-			log.Fatal(err)
-		}
-	}()
-
-	return arb, nil
-}
-
-
-
-[{
-	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
-	"owner": "go-staticcheck",
-	"severity": 4,
-	"message": "not enough arguments in call to filesystem.LoadTriangles\n\thave ()\n\twant (string) (compile)",
-	"source": "go-staticcheck",
-	"startLineNumber": 22,
-	"startColumn": 13,
-	"endLineNumber": 22,
-	"endColumn": 39,
-	"origin": "extHost1"
-}]
 
