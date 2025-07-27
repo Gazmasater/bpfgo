@@ -516,131 +516,6 @@ func LoadTriangles(path string) ([]triangle.Triangle, error) {
 ____________________________________________________________________________
 
 
-// internal/repository/filesystem/loader.go
-package filesystem
-
-import (
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-
-	"cryptarb/internal/domain/triangle"
-)
-
-// LoadTriangles возвращает суровый список треугольников,
-// затем вы можете дополнительно фильтровать его по доступности пар.
-func LoadTriangles(path string) ([]triangle.Triangle, error) {
-	// жёстко заданный набор (можно читать из файла path, но здесь для примера — константа)
-	t := []triangle.Triangle{
-		{A: "SOL", B: "USDT", C: "USDC"},
-		{A: "XRP", B: "BTC", C: "USDT"},
-		{A: "ETH", B: "BTC", C: "USDT"},
-		{A: "TRX", B: "BTC", C: "USDT"},
-		{A: "ADA", B: "USDT", C: "BTC"},
-		{A: "BTC", B: "SOL", C: "USDT"},
-		{A: "XRP", B: "USDT", C: "ETH"},
-		{A: "XRP", B: "BTC", C: "ETH"},
-		{A: "LTC", B: "BTC", C: "USDT"},
-		{A: "DOGE", B: "BTC", C: "USDT"},
-		{A: "MATIC", B: "USDT", C: "BTC"},
-		{A: "DOT", B: "BTC", C: "USDT"},
-		{A: "AVAX", B: "BTC", C: "USDT"},
-		{A: "BCH", B: "BTC", C: "USDT"},
-		{A: "LINK", B: "BTC", C: "USDT"},
-		{A: "ETC", B: "BTC", C: "USDT"},
-	}
-
-	// Если вы хотите динамически подтягивать из API:
-	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-	if err != nil {
-		return t, nil // fallback на константу
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return t, nil
-	}
-
-	type symbolInfo struct {
-		Base  string `json:"baseAsset"`
-		Quote string `json:"quoteAsset"`
-		Maker string `json:"makerCommission"`
-		Taker string `json:"takerCommission"`
-	}
-	var payload struct {
-		Symbols []symbolInfo `json:"symbols"`
-	}
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return t, nil
-	}
-
-	// Построим все треугольники нулевой комиссии (пример см. ранее)
-	edges := make(map[string]map[string]bool)
-	assets := make(map[string]bool)
-	for _, s := range payload.Symbols {
-		if s.Maker == "0" && s.Taker == "0" {
-			if edges[s.Base] == nil {
-				edges[s.Base] = make(map[string]bool)
-			}
-			edges[s.Base][s.Quote] = true
-			assets[s.Base] = true
-			assets[s.Quote] = true
-		}
-	}
-	// генерация циклов длины 3 (треугольников)
-	var toks []string
-	for a := range assets {
-		toks = append(toks, a)
-	}
-	for i := 0; i < len(toks); i++ {
-		for j := i + 1; j < len(toks); j++ {
-			for k := j + 1; k < len(toks); k++ {
-				A, B, C := toks[i], toks[j], toks[k]
-				perms := [][3]string{
-					{A, B, C}, {A, C, B},
-					{B, A, C}, {B, C, A},
-					{C, A, B}, {C, B, A},
-				}
-				for _, p := range perms {
-					if edges[p[0]][p[1]] && edges[p[1]][p[2]] && edges[p[2]][p[0]] {
-						t = append(t, triangle.Triangle{A: p[0], B: p[1], C: p[2]})
-						break
-					}
-				}
-			}
-		}
-	}
-
-	return t, nil
-}
-
-
-
-// internal/app/arbitrage.go
-package app
-
-import (
-	"encoding/json"
-	"log"
-	"strconv"
-	"sync"
-	"time"
-
-	"cryptarb/internal/domain/exchange"
-	"cryptarb/internal/domain/triangle"
-	"cryptarb/internal/repository/filesystem"
-)
-
-type Arbitrager struct {
-	Triangles       []triangle.Triangle
-	latest          map[string]float64
-	trianglesByPair map[string][]int
-	sumProfit       float64
-	mu              sync.Mutex
-}
-
 func New(path string, ex exchange.Exchange) (*Arbitrager, error) {
 	// 1. Загружаем треугольники и фильтруем по доступности пар
 	ts, err := filesystem.LoadTriangles(path)
@@ -650,33 +525,42 @@ func New(path string, ex exchange.Exchange) (*Arbitrager, error) {
 	avail := ex.FetchAvailableSymbols()
 	ts = triangle.Filter(ts, avail)
 
+	log.Printf("[INIT] Loaded %d triangles after filtering", len(ts))
+
 	// 2. Собираем мапу индексов и список всех потенциальных подписок
 	trianglesByPair := make(map[string][]int)
-	var subPairs []string
+	var subPairsRaw []string
 	for i, tri := range ts {
 		ab := tri.A + tri.B // A→B
 		bc := tri.B + tri.C // B→C
 		ca := tri.C + tri.A // C→A
+
+		log.Printf("[TRI %2d] %s → %s → %s → %s (AB=%s BC=%s CA=%s)",
+			i, tri.A, tri.B, tri.C, tri.A, ab, bc, ca)
+
 		trianglesByPair[ab] = append(trianglesByPair[ab], i)
 		trianglesByPair[bc] = append(trianglesByPair[bc], i)
 		trianglesByPair[ca] = append(trianglesByPair[ca], i)
-		subPairs = append(subPairs, ab, bc, ca)
-	}
 
-	// 3. Оставляем только реально существующие пары
-	uniq := make(map[string]struct{}, len(subPairs))
-	for _, p := range subPairs {
+		subPairsRaw = append(subPairsRaw, ab, bc, ca)
+	}
+	log.Printf("[INIT] total raw pairs before filtering: %d", len(subPairsRaw))
+
+	// 3. Фильтрация по доступным символам
+	uniq := make(map[string]struct{})
+	for _, p := range subPairsRaw {
 		if avail[p] {
 			uniq[p] = struct{}{}
+		} else {
+			log.Printf("[SKIP] %s not available on exchange", p)
 		}
 	}
-	subPairs = subPairs[:0]
+	var subPairs []string
 	for p := range uniq {
 		subPairs = append(subPairs, p)
 	}
-	log.Printf("[INIT] triangles=%d, subscribing on %d valid pairs: %v",
-		len(ts), len(subPairs), subPairs,
-	)
+	log.Printf("[INIT] total unique pairs after filtering: %d", len(subPairs))
+	log.Printf("[INIT] subscribing on: %v", subPairs)
 
 	arb := &Arbitrager{
 		Triangles:       ts,
@@ -684,7 +568,7 @@ func New(path string, ex exchange.Exchange) (*Arbitrager, error) {
 		trianglesByPair: trianglesByPair,
 	}
 
-	// 4. Подписываемся чанками по maxPerConn пар
+	// 4. Подписываемся чанками по maxPerConn
 	const maxPerConn = 25
 	for i := 0; i < len(subPairs); i += maxPerConn {
 		end := i + maxPerConn
@@ -692,6 +576,8 @@ func New(path string, ex exchange.Exchange) (*Arbitrager, error) {
 			end = len(subPairs)
 		}
 		chunk := subPairs[i:end]
+		log.Printf("[WS] subscribing chunk %d:%d: %v", i, end, chunk)
+
 		go func(pairs []string) {
 			for {
 				if err := ex.SubscribeDeals(pairs, arb.HandleRaw); err != nil {
@@ -706,86 +592,6 @@ func New(path string, ex exchange.Exchange) (*Arbitrager, error) {
 
 	return arb, nil
 }
-
-func (a *Arbitrager) HandleRaw(exchangeName string, raw []byte) {
-	// 1) Парсим WS-сообщение
-	var msg struct {
-		Symbol string `json:"s"`
-		Data   struct {
-			Deals []struct{ Price string `json:"p"` } `json:"deals"`
-		} `json:"d"`
-	}
-	if err := json.Unmarshal(raw, &msg); err != nil {
-		log.Printf("[ERROR][%s] unmarshal raw: %v", exchangeName, err)
-		return
-	}
-	if msg.Symbol == "" || len(msg.Data.Deals) == 0 {
-		return
-	}
-
-	// 2) Конвертируем цену
-	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
-	if err != nil {
-		log.Printf("[ERROR][%s] parse price %q: %v", exchangeName, msg.Data.Deals[0].Price, err)
-		return
-	}
-
-	// 3) Сохраняем цену и логируем тик
-	a.mu.Lock()
-	a.latest[msg.Symbol] = price
-	log.Printf("[TICK][%s] %s=%.8f", exchangeName, msg.Symbol, price)
-	a.mu.Unlock()
-
-	// 4) Проверяем все треугольники, где участвует этот symbol
-	a.Check(msg.Symbol)
-}
-
-func (a *Arbitrager) Check(symbol string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	indices := a.trianglesByPair[symbol]
-	if len(indices) == 0 {
-		return
-	}
-
-	const commission = 0.0005
-	nf := (1 - commission) * (1 - commission) * (1 - commission)
-
-	for _, i := range indices {
-		tri := a.Triangles[i]
-		ab := tri.A + tri.B // A→B
-		bc := tri.B + tri.C // B→C
-		ca := tri.C + tri.A // C→A
-
-		p1, ok1 := a.latest[ab] // price of B per A
-		p2, ok2 := a.latest[bc] // price of C per B
-		p3, ok3 := a.latest[ca] // price of A per C
-
-		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
-			continue
-		}
-
-		// Profit factor = p1 * p2 * p3 * net_fees
-		profitFactor := p1 * p2 * p3 * nf
-		profit := (profitFactor - 1) * 100
-
-		if profit > 0 {
-			a.sumProfit += profit
-			log.Printf("🔺 ARB %s/%s/%s profit=%.4f%% total=%.4f%%",
-				tri.A, tri.B, tri.C, profit, a.sumProfit)
-		}
-	}
-}
-
-
-az358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/07/27 20:36:04 [INIT] triangles=13, subscribing on 13 valid pairs: [ETHBTC BCHBTC LINKETH SOLUSDT BTCUSDT ETCBTC LTCBTC XRPBTC TRXBTC ADAUSDT XRPUSDT DOTBTC ETHUSDT]
-2025/07/27 20:36:19 📶 [MEXC] Pong after 211.100968ms
-2025/07/27 20:36:34 📶 [MEXC] Pong after 213.048243ms
-2025/07/27 20:36:49 📶 [MEXC] Pong after 262.045252ms
-2025/07/27 20:37:04 📶 [MEXC] Pong after 219.960412ms
-
 
 
 
