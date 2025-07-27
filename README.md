@@ -779,6 +779,14 @@ func (a *Arbitrager) Check(symbol string) {
 }
 
 
+az358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
+2025/07/27 20:36:04 [INIT] triangles=13, subscribing on 13 valid pairs: [ETHBTC BCHBTC LINKETH SOLUSDT BTCUSDT ETCBTC LTCBTC XRPBTC TRXBTC ADAUSDT XRPUSDT DOTBTC ETHUSDT]
+2025/07/27 20:36:19 📶 [MEXC] Pong after 211.100968ms
+2025/07/27 20:36:34 📶 [MEXC] Pong after 213.048243ms
+2025/07/27 20:36:49 📶 [MEXC] Pong after 262.045252ms
+2025/07/27 20:37:04 📶 [MEXC] Pong after 219.960412ms
+
+
 
 
 
