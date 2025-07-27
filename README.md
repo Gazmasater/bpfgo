@@ -388,45 +388,17 @@ sudo apt install docker-compose-plugin -y
 _______________________________________________________________________________
 
 
-func (a *Arbitrager) Check(symbol string) {
-    a.mu.Lock()
-    defer a.mu.Unlock()
-
-    idxs := a.trianglesByPair[symbol]
-    if len(idxs) == 0 {
-        return
-    }
-
-    const commission = 0.0005
-    nf := (1 - commission) * (1 - commission) * (1 - commission)
-
-    for _, i := range idxs {
-        tri := a.Triangles[i]
-        abKey := tri.A + tri.B   // A→B
-        bcKey := tri.B + tri.C   // B→C
-        caKey := tri.C + tri.A   // C→A
-
-        p1, ok1 := a.latest[abKey]
-        p2, ok2 := a.latest[bcKey]
-        p3, ok3 := a.latest[caKey]
-
-        if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
-            continue
-        }
-
-        // Правильная формула профита:
-        profitFactor := p1 * p2 * p3 * nf
-        profit := (profitFactor - 1) * 100
-
-        if profit > 0 {
-            a.sumProfit += profit
-            log.Printf("🔺 ARB %s/%s/%s profit=%.4f%% total=%.4f%%",
-                tri.A, tri.B, tri.C, profit, a.sumProfit,
-            )
-        }
-    }
+// после того, как собрали subPairs:
+uniq := make(map[string]struct{}, len(subPairs))
+for _, p := range subPairs {
+    uniq[p] = struct{}{}
 }
-
+var allPairs []string
+for p := range uniq {
+    allPairs = append(allPairs, p)
+}
+log.Printf("[INIT] triangles=%d, subscribing on %d unique pairs: %v",
+    len(ts), len(allPairs), allPairs)
 
 
 
