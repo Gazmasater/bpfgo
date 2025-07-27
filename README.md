@@ -388,46 +388,137 @@ sudo apt install docker-compose-plugin -y
 _______________________________________________________________________________
 
 
-Что нужно исправить
-В Check
-Заменить
+func New(path string, ex exchange.Exchange) (*Arbitrager, error) {
+	ts, err := filesystem.LoadTriangles(path)
+	if err != nil {
+		return nil, err
+	}
 
-go
-Копировать код
-bc := tri.B + tri.C // "USDTUSDC" – никогда не прилетает
-ac := tri.A + tri.C 
-на
+	avail := ex.FetchAvailableSymbols()
+	ts = triangle.Filter(ts, avail)
 
-go
-Копировать код
-bc := tri.C + tri.B // "USDCUSDT" – правильная пара C/B
-ac := tri.A + tri.C // "SOLUSDC"
-В New при подписке
-Сейчас вы вызываете
+	trianglesByPair := make(map[string][]int)
+	for i, tri := range ts {
+		pairs := []string{
+			tri.A + tri.B,
+			tri.B + tri.C,
+			tri.A + tri.C,
+			tri.B + tri.A,
+			tri.C + tri.B,
+			tri.C + tri.A,
+		}
+		for _, p := range pairs {
+			trianglesByPair[p] = append(trianglesByPair[p], i)
+		}
+	}
 
-go
-Копировать код
-ex.SubscribeDeals(triangle.SymbolPairs(ts), arb.HandleRaw)
-(или что-то подобное), и там, видимо, генерируются только {A+B, B+C, A+C}. Нужно подписаться на все пары, которые вы проверяете в Check, то есть на ключи из trianglesByPair (они у вас уже содержат и C+B). Например:
+	arb := &Arbitrager{
+		Triangles:       ts,
+		latest:          make(map[string]float64),
+		trianglesByPair: trianglesByPair,
+	}
 
-go
-Копировать код
-// Вместо triangle.SymbolPairs(ts)
-var subPairs []string
-for p := range trianglesByPair {
-    subPairs = append(subPairs, p)
+	// Запускаем WS с авто-переподключением
+	go func() {
+		pairs := triangle.SymbolPairs(ts)
+		for {
+			err := ex.SubscribeDeals(pairs, arb.HandleRaw)
+			if err != nil {
+				log.Printf("[WS][%s] subscribe error: %v; reconnecting in 1s...", ex.Name(), err)
+				time.Sleep(time.Second)
+				continue
+			}
+			break
+		}
+	}()
+
+	return arb, nil
 }
-go func() {
-    for {
-        if err := ex.SubscribeDeals(subPairs, arb.HandleRaw); err != nil {
-            log.Printf("[%s] WS error: %v, retrying...", ex.Name(), err)
-            time.Sleep(time.Second)
-            continue
-        }
-        break
-    }
-}()
-Это обеспечит подписку на USDCUSDT и, следовательно, в Check у вас появится ненулевой p2.
+
+func (a *Arbitrager) HandleRaw(exchangeName string, raw []byte) {
+	log.Printf("[RAW][%s] %s", exchangeName, string(raw))
+
+	var msg struct {
+		Symbol string `json:"s"`
+		Data   struct {
+			Deals []struct {
+				Price string `json:"p"`
+			} `json:"deals"`
+		} `json:"d"`
+	}
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		log.Printf("[ERROR][%s] unmarshal raw: %v", exchangeName, err)
+		return
+	}
+	if msg.Symbol == "" || len(msg.Data.Deals) == 0 {
+		log.Printf("[SKIP][%s] empty symbol or no deals", exchangeName)
+		return
+	}
+
+	priceStr := msg.Data.Deals[0].Price
+	price, err := strconv.ParseFloat(priceStr, 64)
+	if err != nil {
+		log.Printf("[ERROR][%s] parse price %q: %v", exchangeName, priceStr, err)
+		return
+	}
+
+	a.mu.Lock()
+	a.latest[msg.Symbol] = price
+	rev := reverseSymbol(msg.Symbol)
+	a.latest[rev] = 1 / price
+	log.Printf("[TICK][%s] %s=%.8f %s=%.8f", exchangeName, msg.Symbol, price, rev, 1/price)
+	a.mu.Unlock()
+
+	a.Check(msg.Symbol)
+}
+
+func (a *Arbitrager) Check(symbol string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	indices := a.trianglesByPair[symbol]
+	log.Printf("[CHECK] symbol=%s indices=%v", symbol, indices)
+	if len(indices) == 0 {
+		return
+	}
+
+	const commission = 0.0005
+	nf := (1 - commission) * (1 - commission) * (1 - commission)
+
+	for _, i := range indices {
+		tri := a.Triangles[i]
+		ab := tri.A + tri.B
+		bc := tri.C + tri.B
+		ac := tri.A + tri.C
+
+		p1, ok1 := a.latest[ab]
+		p2, ok2 := a.latest[bc]
+		p3, ok3 := a.latest[ac]
+
+		log.Printf("[DATA] tri=%s/%s/%s AB=%v(ok=%v) BC=%v(ok=%v) AC=%v(ok=%v)",
+			tri.A, tri.B, tri.C,
+			p1, ok1, p2, ok2, p3, ok3,
+		)
+
+		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+			log.Printf("[SKIP] incomplete for %v", tri)
+			continue
+		}
+
+		profit := (p1*p2/p3*nf - 1) * 100
+		a.sumProfit += profit
+		log.Printf("🔺 ARB %s/%s/%s profit=%.3f%% total=%.3f%%", tri.A, tri.B, tri.C, profit, a.sumProfit)
+	}
+}
+
+func reverseSymbol(sym string) string {
+	if len(sym)%2 != 0 {
+		return sym
+	}
+	half := len(sym) / 2
+	return sym[half:] + sym[:half]
+}
+
 
 
 
