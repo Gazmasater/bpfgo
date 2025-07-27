@@ -386,143 +386,27 @@ sudo apt update
 sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
-func LoadTriangles(path string) ([]triangle.Triangle, error) {
-	// дефолтные треугольники
-	t := []triangle.Triangle{
-		{A: "XRP", B: "BTC", C: "USDT"},
-		{A: "ETH", B: "BTC", C: "USDT"},
-		{A: "TRX", B: "BTC", C: "USDT"},
-		{A: "ADA", B: "USDT", C: "BTC"},
-		{A: "BTC", B: "SOL", C: "USDT"},
-		{A: "XRP", B: "USDT", C: "ETH"},
-		{A: "XRP", B: "BTC", C: "ETH"},
-		{A: "LTC", B: "BTC", C: "USDT"},
-		{A: "DOGE", B: "BTC", C: "USDT"},
-		{A: "MATIC", B: "USDT", C: "BTC"},
-		{A: "DOT", B: "BTC", C: "USDT"},
-		{A: "AVAX", B: "BTC", C: "USDT"},
-		{A: "BCH", B: "BTC", C: "USDT"},
-		{A: "LINK", B: "BTC", C: "USDT"},
-		{A: "ETC", B: "BTC", C: "USDT"},
-		// Новые 10
-		{A: "SOL", B: "USDT", C: "ADA"},
-		{A: "SOL", B: "BTC", C: "ETH"},
-		{A: "ETH", B: "USDT", C: "DOT"},
-		{A: "ADA", B: "BTC", C: "LTC"},
-		{A: "DOGE", B: "USDT", C: "MATIC"},
-		{A: "LINK", B: "ETH", C: "USDT"},
-		{A: "AVAX", B: "USDT", C: "LINK"},
-		{A: "TRX", B: "USDT", C: "ADA"},
-		{A: "BCH", B: "USDT", C: "SOL"},
-		{A: "DOT", B: "USDT", C: "DOGE"},
-	}
 
-	// сериализуем и записываем в файл, если он не существует
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		b, _ := json.MarshalIndent(t, "", "  ")
-		_ = os.WriteFile(path, b, 0644)
-	}
-
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	b, err := io.ReadAll(f)
-	if err != nil {
-		return nil, err
-	}
-
-	var ts []triangle.Triangle
-	if err := json.Unmarshal(b, &ts); err != nil {
-		return nil, fmt.Errorf("unmarshal %s: %w", path, err)
-	}
-	return ts, nil
-}
-
-
-
-
-
-package app
-
-import (
-	"cryptarb/internal/domain/exchange"
-	"cryptarb/internal/domain/triangle"
-	"cryptarb/internal/repository/filesystem"
-	"encoding/json"
-	"log"
-	"strconv"
-	"sync"
-)
-
-type Arbitrager struct {
-	Triangles       []triangle.Triangle
-	latest          map[string]float64
-	trianglesByPair map[string][]int
-	sumProfit       float64
-	mu              sync.Mutex
-}
-
-func New(string parth, ex exchange.Exchange) (*Arbitrager, error) {
-	ts, err := filesystem.LoadTriangles(parth)
-	if err != nil {
-		return nil, err
-	}
-
-	avail := ex.FetchAvailableSymbols()
-	ts = triangle.Filter(ts, avail)
-
-	trianglesByPair := make(map[string][]int)
-	for i, tri := range ts {
-		pairs := []string{
-			tri.A + tri.B,
-			tri.B + tri.C,
-			tri.A + tri.C,
-			tri.B + tri.A,
-			tri.C + tri.B,
-			tri.C + tri.A,
-		}
-		for _, p := range pairs {
-			trianglesByPair[p] = append(trianglesByPair[p], i)
-		}
-	}
-
-	arb := &Arbitrager{
-		Triangles:       ts,
-		latest:          make(map[string]float64),
-		trianglesByPair: trianglesByPair,
-	}
-
-	go func() {
-		if err := ex.SubscribeDeals(triangle.SymbolPairs(ts), arb.HandleRaw); err != nil {
-			log.Fatal(err)
-		}
-	}()
-
-	return arb, nil
-}
 
 [{
-	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"resource": "/home/gaz358/myprog/crypt/cmd/cryptarb/main.go",
 	"owner": "_generated_diagnostic_collection_name_#0",
 	"code": {
-		"value": "UndeclaredName",
+		"value": "WrongArgCount",
 		"target": {
 			"$mid": 1,
 			"path": "/golang.org/x/tools/internal/typesinternal",
 			"scheme": "https",
 			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredName"
+			"fragment": "WrongArgCount"
 		}
 	},
 	"severity": 8,
-	"message": "undefined: parth",
+	"message": "not enough arguments in call to app.New\n\thave (mexc.Mexc)\n\twant (string, exchange.Exchange)",
 	"source": "compiler",
-	"startLineNumber": 21,
-	"startColumn": 17,
-	"endLineNumber": 21,
+	"startLineNumber": 12,
+	"startColumn": 22,
+	"endLineNumber": 12,
 	"endColumn": 22,
 	"origin": "extHost1"
 }]
