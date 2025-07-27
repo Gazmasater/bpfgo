@@ -589,6 +589,15 @@ func unpackPair(pair string) (string, string) {
 }
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
+2025/07/28 01:45:50 [INFO] Loaded 270 pairs from hardcoded list
+2025/07/28 01:45:50 [INFO] Found 0 triangles from 270 pairs
+2025/07/28 01:45:50 [INIT] Loaded 0 triangles after filtering
+2025/07/28 01:45:50 [INIT] total raw pairs before filtering: 0
+2025/07/28 01:45:50 [INIT] total unique pairs after filtering: 0
+2025/07/28 01:45:50 [INIT] subscribing on: []
+
+
 
 
 
