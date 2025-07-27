@@ -616,6 +616,13 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 }
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
+2025/07/27 23:33:10 [INFO] Total unique assets: 2094
+2025/07/27 23:43:15 [INFO] Loaded 0 triangles
+2025/07/27 23:43:15 [INIT] Loaded 0 triangles after filtering
+2025/07/27 23:43:15 [INIT] total raw pairs before filtering: 0
+2025/07/27 23:43:15 [INIT] total unique pairs after filtering: 0
+2025/07/27 23:43:15 [INIT] subscribing on: []
 
 
 
