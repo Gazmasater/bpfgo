@@ -588,5 +588,15 @@ func unpackPair(pair string) (string, string) {
 
 
 
-
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ cd cmd/cryptarb
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
+2025/07/28 01:58:01 [SKIP] cannot unpack pair: ENAUSDE
+2025/07/28 01:58:01 [SKIP] cannot unpack pair: BTCUSDE
+2025/07/28 01:58:01 [SKIP] cannot unpack pair: XRPUSDE
+2025/07/28 01:58:01 [SKIP] cannot unpack pair: KASUSDE
+2025/07/28 01:58:01 [INFO] Found 0 triangles from 270 pairs
+2025/07/28 01:58:02 [INIT] Loaded 0 triangles after filtering
+2025/07/28 01:58:02 [INIT] total raw pairs before filtering: 0
+2025/07/28 01:58:02 [INIT] total unique pairs after filtering: 0
+2025/07/28 01:58:02 [INIT] subscribing on: []
 
