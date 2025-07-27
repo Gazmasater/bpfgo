@@ -528,29 +528,27 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 		return nil, fmt.Errorf("read exchangeInfo: %w", err)
 	}
 
-	// Разбираем JSON: код ответа и данные
+	// Разбираем JSON ответа
 	type symbolInfo struct {
 		Base  string `json:"baseAsset"`
 		Quote string `json:"quoteAsset"`
 	}
-	// Разбираем JSON
-	type symbolInfo struct {
-		Base  string `json:"baseAsset"`
-		Quote string `json:"quoteAsset"`
+	var respPayload struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+		Data struct {
+			Symbols []symbolInfo `json:"symbols"`
+		} `json:"data"`
 	}
-	// MEXC возвращает топ-уровневый массив "symbols"
-	var payload struct {
-		Symbols []symbolInfo `json:"symbols"`
-	}
-	if err := json.Unmarshal(body, &payload); err != nil {
+	if err := json.Unmarshal(body, &respPayload); err != nil {
 		return nil, fmt.Errorf("unmarshal exchangeInfo: %w", err)
 	}
 
-	symbols := payload.Symbols
+	symbols := respPayload.Data.Symbols
 
-	// Построим направленный граф
+	// Построим направленный граф актива -> актив
 	edges := make(map[string]map[string]bool)
-	assets := make(map[string]bool)
+	assetsSet := make(map[string]bool)
 	for _, s := range symbols {
 		if s.Base == "" || s.Quote == "" {
 			continue
@@ -559,18 +557,18 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 			edges[s.Base] = make(map[string]bool)
 		}
 		edges[s.Base][s.Quote] = true
-		assets[s.Base] = true
-		assets[s.Quote] = true
+		assetsSet[s.Base] = true
+		assetsSet[s.Quote] = true
 	}
 
-	// Строим список всех активов
+	// Список уникальных активов
 	var toks []string
-	for asset := range assets {
+	for asset := range assetsSet {
 		toks = append(toks, asset)
 	}
 	log.Printf("[INFO] Total unique assets: %d", len(toks))
 
-	// Ищем все 3-циклы: A → B → C → A
+	// Поиск 3-циклов (треугольников)
 	var tris []triangle.Triangle
 	n := len(toks)
 	seen := make(map[[3]string]bool)
@@ -578,14 +576,11 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 		for j := i + 1; j < n; j++ {
 			for k := j + 1; k < n; k++ {
 				a, b, c := toks[i], toks[j], toks[k]
-				perms := [][3]string{
-					{a, b, c}, {a, c, b},
-					{b, a, c}, {b, c, a},
-					{c, a, b}, {c, b, a},
-				}
+				perms := [][3]string{{a, b, c}, {a, c, b}, {b, a, c}, {b, c, a}, {c, a, b}, {c, b, a}}
 				for _, p := range perms {
 					x, y, z := p[0], p[1], p[2]
 					if edges[x][y] && edges[y][z] && edges[z][x] {
+						// сортируем для ключа
 						arr := []string{x, y, z}
 						sort.Strings(arr)
 						key := [3]string{arr[0], arr[1], arr[2]}
@@ -603,17 +598,6 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 	log.Printf("[INFO] Loaded %d triangles", len(tris))
 	return tris, nil
 }
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ cd cmd/cryptarb
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/07/27 23:50:11 [INFO] Total unique assets: 2094
-2025/07/28 00:00:20 [INFO] Loaded 0 triangles
-2025/07/28 00:00:20 [INIT] Loaded 0 triangles after filtering
-2025/07/28 00:00:20 [INIT] total raw pairs before filtering: 0
-2025/07/28 00:00:20 [INIT] total unique pairs after filtering: 0
-2025/07/28 00:00:20 [INIT] subscribing on: []
-
 
 
 
