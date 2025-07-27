@@ -387,97 +387,15 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-package filesystem
+ => ERROR [6/6] RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w"     -o cryptarb ./  18.6s
+------
+ > [6/6] RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w"     -o cryptarb ./cmd/cryptarb/main.go:
+18.43 # command-line-arguments
+18.43 cmd/cryptarb/main.go:12:20: not enough arguments in call to app.New
+18.43   have (mexc.Mexc)
+18.43   want (string, exchange.Exchange)
+------
+failed to solve: process "/bin/sh -c CGO_ENABLED=0 GOOS=linux go build -ldflags=\"-s -w\"     -o cryptarb ./cmd/cryptarb/main.go" did not complete successfully: exit code: 1
 
-import (
-    "encoding/json"
-    "fmt"
-    "io"
-    "net/http"
-
-    "cryptarb/internal/domain/triangle"
-)
-
-// LoadTriangles запрашивает на MEXC все пары с нулевой комиссией
-// и строит из них все треугольники (A→B→C→A).
-func LoadTriangles() ([]triangle.Triangle, error) {
-    // 1) Получаем exchangeInfo
-    resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-    if err != nil {
-        return nil, fmt.Errorf("fetch exchangeInfo: %w", err)
-    }
-    defer resp.Body.Close()
-
-    // 2) Читаем тело ответа
-    body, err := io.ReadAll(resp.Body)
-    if err != nil {
-        return nil, fmt.Errorf("read exchangeInfo: %w", err)
-    }
-
-    // 3) Парсим JSON
-    type symbolInfo struct {
-        BaseAsset       string `json:"baseAsset"`
-        QuoteAsset      string `json:"quoteAsset"`
-        MakerCommission string `json:"makerCommission"`
-        TakerCommission string `json:"takerCommission"`
-    }
-    var payload struct {
-        Symbols []symbolInfo `json:"symbols"`
-    }
-    if err := json.Unmarshal(body, &payload); err != nil {
-        return nil, fmt.Errorf("unmarshal exchangeInfo: %w", err)
-    }
-
-    // 4) Строим граф ребер для нулевых комиссий
-    edges := make(map[string]map[string]bool)
-    assets := make(map[string]bool)
-    for _, s := range payload.Symbols {
-        if s.MakerCommission == "0" && s.TakerCommission == "0" {
-            if edges[s.BaseAsset] == nil {
-                edges[s.BaseAsset] = make(map[string]bool)
-            }
-            edges[s.BaseAsset][s.QuoteAsset] = true
-            assets[s.BaseAsset] = true
-            assets[s.QuoteAsset] = true
-        }
-    }
-
-    // 5) Собираем список уникальных активов
-    var toks []string
-    for a := range assets {
-        toks = append(toks, a)
-    }
-
-    // 6) Перебираем все комбинации по 3 и ищем циклы
-    n := len(toks)
-    var tris []triangle.Triangle
-    for i := 0; i < n; i++ {
-        for j := i + 1; j < n; j++ {
-            for k := j + 1; k < n; k++ {
-                a, b, c := toks[i], toks[j], toks[k]
-                perms := [][3]string{
-                    {a, b, c}, {a, c, b},
-                    {b, a, c}, {b, c, a},
-                    {c, a, b}, {c, b, a},
-                }
-                for _, p := range perms {
-                    x, y, z := p[0], p[1], p[2]
-                    if edges[x][y] && edges[y][z] && edges[z][x] {
-                        tris = append(tris, triangle.Triangle{A: x, B: y, C: z})
-                        break
-                    }
-                }
-            }
-        }
-    }
-    return tris, nil
-}
-
-
-
-func New(ex exchange.Exchange) (*Arbitrager, error) {
-    ts, err := filesystem.LoadTriangles()
-    // …
-}
 
 
