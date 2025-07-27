@@ -539,4 +539,7 @@ if dataVal, ok := raw["data"].(map[string]interface{}); ok {
 }
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
+2025/07/28 00:46:24 [DEBUG] top-level keys: [serverTime rateLimits exchangeFilters symbols timezone]
+
 
