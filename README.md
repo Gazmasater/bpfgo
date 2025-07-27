@@ -617,5 +617,19 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 }
 
 
+2025/07/28 01:04:34 [DEBUG]   base=HYPER, quote=USDC
+2025/07/28 01:04:34 [DEBUG]   base=NODEX, quote=USDT
+2025/07/28 01:04:34 [DEBUG]   base=ORT, quote=USDT
+2025/07/28 01:04:34 [DEBUG]   base=ULTIMA, quote=USDT
+2025/07/28 01:04:34 [DEBUG]   base=FLDT, quote=USDT
+2025/07/28 01:04:34 [DEBUG]   base=OMNI, quote=USDT
+2025/07/28 01:04:34 [INFO] Total unique assets: 2094
+2025/07/28 01:04:34 [INFO] Loaded 0 triangles
+2025/07/28 01:04:34 [INIT] Loaded 0 triangles after filtering
+2025/07/28 01:04:34 [INIT] total raw pairs before filtering: 0
+2025/07/28 01:04:34 [INIT] total unique pairs after filtering: 0
+2025/07/28 01:04:34 [INIT] subscribing on: []
+
+
 
 
