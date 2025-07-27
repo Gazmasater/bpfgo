@@ -516,102 +516,15 @@ func LoadTriangles(path string) ([]triangle.Triangle, error) {
 ____________________________________________________________________________
 
 
-package filesystem
-
-import (
-	"cryptarb/internal/domain/triangle"
-	"encoding/json"
-	"fmt"
-	"io"
-	"log"
-	"net/http"
-)
-
-// LoadTriangles загружает все возможные треугольники с биржи MEXC
-func LoadTriangles(_ string) ([]triangle.Triangle, error) {
-	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-	if err != nil {
-		return nil, fmt.Errorf("fetch exchangeInfo: %w", err)
+if edges[a][b] && edges[b][c] && edges[c][a] {
+	arr := []string{a, b, c}
+	sort.Strings(arr)
+	key := [3]string{arr[0], arr[1], arr[2]}
+	if !seen[key] {
+		tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
+		seen[key] = true
 	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read exchangeInfo: %w", err)
-	}
-
-	// Разбираем символы
-	type symbolInfo struct {
-		Base  string `json:"baseAsset"`
-		Quote string `json:"quoteAsset"`
-	}
-	var payload struct {
-		Symbols []symbolInfo `json:"symbols"`
-	}
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, fmt.Errorf("unmarshal exchangeInfo: %w", err)
-	}
-
-	// Построим направленный граф
-	edges := make(map[string]map[string]bool)
-	assets := make(map[string]bool)
-	for _, s := range payload.Symbols {
-		if s.Base == "" || s.Quote == "" {
-			continue
-		}
-		if edges[s.Base] == nil {
-			edges[s.Base] = make(map[string]bool)
-		}
-		edges[s.Base][s.Quote] = true
-		assets[s.Base] = true
-		assets[s.Quote] = true
-	}
-
-	// Строим список всех активов
-	var toks []string
-	for asset := range assets {
-		toks = append(toks, asset)
-	}
-	log.Printf("[INFO] Total unique assets: %d", len(toks))
-
-	// Ищем все 3-циклы: A → B → C → A
-	var tris []triangle.Triangle
-	n := len(toks)
-	seen := make(map[[3]string]bool)
-	for i := 0; i < n; i++ {
-		for j := 0; j < n; j++ {
-			for k := 0; k < n; k++ {
-				if i == j || j == k || k == i {
-					continue
-				}
-				a, b, c := toks[i], toks[j], toks[k]
-				if edges[a][b] && edges[b][c] && edges[c][a] {
-					// Уникальный ключ для исключения дубликатов (например: ABC == BCA)
-					key := [3]string{a, b, c}
-					if !seen[key] {
-						tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
-						seen[key] = true
-					}
-				}
-			}
-		}
-	}
-
-	log.Printf("[INFO] Loaded %d triangles", len(tris))
-	return tris, nil
 }
-
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ cd cmd/cryptarb
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/07/27 22:36:44 [INFO] Total unique assets: 2094
-2025/07/27 22:44:44 [INFO] Loaded 0 triangles
-2025/07/27 22:44:44 [INIT] Loaded 0 triangles after filtering
-2025/07/27 22:44:44 [INIT] total raw pairs before filtering: 0
-2025/07/27 22:44:44 [INIT] total unique pairs after filtering: 0
-2025/07/27 22:44:44 [INIT] subscribing on: []
-
 
 
 
