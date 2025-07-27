@@ -552,4 +552,16 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 }
 
 
+2025/07/28 00:56:09 [DEBUG]   base=TRAC, quote=USDT
+2025/07/28 00:56:09 [DEBUG]   base=HEART, quote=USDT
+2025/07/28 00:56:09 [DEBUG]   base=TAP, quote=USDT
+2025/07/28 00:56:09 [DEBUG]   base=MLT, quote=USDT
+2025/07/28 00:56:09 [DEBUG]   base=SOLO, quote=USDT
+2025/07/28 00:56:09 [DEBUG]   base=SOIL, quote=USDT
+2025/07/28 00:56:09 [DEBUG]   base=STONKS, quote=USDT
+2025/07/28 00:56:09 [DEBUG]   base=VERT, quote=USDT
+2025/07/28 00:56:09 [DEBUG]   base=KAS, quote=USDT
+2025/07/28 00:56:09 [DEBUG]   base=DOGEGOV, quote=USDT
+
+
 
