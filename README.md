@@ -388,145 +388,16 @@ sudo apt install docker-compose-plugin -y
 _______________________________________________________________________________
 
 
-func New(path string, ex exchange.Exchange) (*Arbitrager, error) {
-    ts, err := filesystem.LoadTriangles(path)
-    if err != nil {
-        return nil, err
-    }
-    avail := ex.FetchAvailableSymbols()
-    ts = triangle.Filter(ts, avail)
-
-    // собираем пары и индексы
-    trianglesByPair := make(map[string][]int)
-    var subPairs []string
-    for i, tri := range ts {
-        ab := tri.A + tri.B
-        bc := tri.B + tri.C
-        ca := tri.C + tri.A
-        trianglesByPair[ab] = append(trianglesByPair[ab], i)
-        trianglesByPair[bc] = append(trianglesByPair[bc], i)
-        trianglesByPair[ca] = append(trianglesByPair[ca], i)
-        subPairs = append(subPairs, ab, bc, ca)
-    }
-
-    // фильтруем только по реально существующим символам
-    uniq := make(map[string]struct{}, len(subPairs))
-    for _, p := range subPairs {
-        if avail[p] {
-            uniq[p] = struct{}{}
-        }
-    }
-    subPairs = subPairs[:0]
-    for p := range uniq {
-        subPairs = append(subPairs, p)
-    }
-    log.Printf("[INIT] triangles=%d, subscribing on %d valid pairs: %v",
-        len(ts), len(subPairs), subPairs,
-    )
-
-    arb := &Arbitrager{
-        Triangles:       ts,
-        latest:          make(map[string]float64),
-        trianglesByPair: trianglesByPair,
-    }
-
-    // подписываемся чанками по 25 пар, чтобы не перегрузить WS
-    const maxPerConn = 25
-    for i := 0; i < len(subPairs); i += maxPerConn {
-        end := i + maxPerConn
-        if end > len(subPairs) {
-            end = len(subPairs)
-        }
-        chunk := subPairs[i:end]
-        go func(pairs []string) {
-            for {
-                if err := ex.SubscribeDeals(pairs, arb.HandleRaw); err != nil {
-                    log.Printf("[WS][%s] subscribe chunk error: %v; retrying…", ex.Name(), err)
-                    time.Sleep(time.Second)
-                    continue
-                }
-                break
-            }
-        }(chunk)
-    }
-
-    return arb, nil
-}
-
-
-func LoadTriangles(path string) ([]triangle.Triangle, error) {
-	// дефолтные треугольники
-	t := []triangle.Triangle{
-		{A: "SOL", B: "USDT", C: "USDC"},
-		{A: "XRP", B: "BTC", C: "USDT"},
-		{A: "ETH", B: "BTC", C: "USDT"},
-		{A: "TRX", B: "BTC", C: "USDT"},
-		{A: "ADA", B: "USDT", C: "BTC"},
-		{A: "BTC", B: "SOL", C: "USDT"},
-		{A: "XRP", B: "USDT", C: "ETH"},
-		{A: "XRP", B: "BTC", C: "ETH"},
-		{A: "LTC", B: "BTC", C: "USDT"},
-		{A: "DOGE", B: "BTC", C: "USDT"},
-		{A: "MATIC", B: "USDT", C: "BTC"},
-
-		{A: "DOT", B: "BTC", C: "USDT"},
-		{A: "AVAX", B: "BTC", C: "USDT"},
-		{A: "BCH", B: "BTC", C: "USDT"},
-		{A: "LINK", B: "BTC", C: "USDT"},
-		{A: "ETC", B: "BTC", C: "USDT"},
-		// Новые 10
-		{A: "SOL", B: "USDT", C: "ADA"},
-		{A: "SOL", B: "BTC", C: "ETH"},
-		{A: "ETH", B: "USDT", C: "DOT"},
-		{A: "ADA", B: "BTC", C: "LTC"},
-		{A: "DOGE", B: "USDT", C: "MATIC"},
-		{A: "LINK", B: "ETH", C: "USDT"},
-		{A: "AVAX", B: "USDT", C: "LINK"},
-		{A: "TRX", B: "USDT", C: "ADA"},
-		{A: "BCH", B: "USDT", C: "SOL"},
-		{A: "DOT", B: "USDT", C: "DOGE"},
-	}
-
-	// сериализуем и записываем в файл, если он не существует
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		b, _ := json.MarshalIndent(t, "", "  ")
-		_ = os.WriteFile(path, b, 0644)
-	}
-
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	b, err := io.ReadAll(f)
-	if err != nil {
-		return nil, err
-	}
-
-	var ts []triangle.Triangle
-	if err := json.Unmarshal(b, &ts); err != nil {
-		return nil, fmt.Errorf("unmarshal %s: %w", path, err)
-	}
-	return ts, nil
-}
-
-
-
-____________________________________________________________________________
-
-
 package filesystem
 
 import (
+    "cryptarb/internal/domain/triangle"
     "encoding/json"
     "fmt"
     "io"
     "log"
     "net/http"
     "sort"
-
-    "cryptarb/internal/domain/triangle"
 )
 
 // LoadTriangles загружает все возможные треугольники с биржи MEXC
@@ -556,53 +427,52 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
         return nil, fmt.Errorf("unmarshal exchangeInfo: %w", err)
     }
 
-    // 4) Логируем все пары для отладки
     symbols := payload.Symbols
-    log.Printf("[DEBUG] fetched %d symbols:", len(symbols))
-    for _, s := range symbols {
-        log.Printf("[DEBUG]   base=%s, quote=%s", s.Base, s.Quote)
-    }
+    log.Printf("[DEBUG] fetched %d symbols", len(symbols))
 
-    // 5) Строим направленный граф смежностей edges[A][B] = true
-    edges := make(map[string]map[string]bool, len(symbols))
+    // 4) Строим двунаправленный граф смежностей
+    //    edges[A][B] = true и edges[B][A] = true
+    edges := make(map[string]map[string]bool, len(symbols)*2)
     assets := make(map[string]struct{}, len(symbols)*2)
     for _, s := range symbols {
         if s.Base == "" || s.Quote == "" {
             continue
         }
+        // инициализируем map-у по необходимости
         if edges[s.Base] == nil {
             edges[s.Base] = make(map[string]bool)
         }
+        if edges[s.Quote] == nil {
+            edges[s.Quote] = make(map[string]bool)
+        }
+        // прямая и обратная «рёбра»
         edges[s.Base][s.Quote] = true
+        edges[s.Quote][s.Base] = true
+
         assets[s.Base] = struct{}{}
         assets[s.Quote] = struct{}{}
     }
 
-    // 6) Список уникальных активов
+    // 5) Собираем список всех уникальных активов
     var toks []string
     for a := range assets {
         toks = append(toks, a)
     }
     log.Printf("[INFO] Total unique assets: %d", len(toks))
 
-    // 7) Ищем треугольники A→B→C→A
+    // 6) Ищем все 3-циклы A → B → C → A
     var tris []triangle.Triangle
     seen := make(map[[3]string]struct{})
 
-    // Для каждого ребра A→B
-    for a, neigh := range edges {
-        for b := range neigh {
-            // Для каждого ребра B→C
-            if edges[b] == nil {
-                continue
-            }
+    for a := range edges {
+        for b := range edges[a] {
             for c := range edges[b] {
-                // Проверяем, есть ли C→A
+                // если есть назад в A
                 if edges[c][a] {
-                    // Дедупликация: сортируем [A,B,C] по алфавиту
-                    arr := []string{a, b, c}
-                    sort.Strings(arr)
-                    key := [3]string{arr[0], arr[1], arr[2]}
+                    // дедупликация: сортируем имена
+                    keyArr := []string{a, b, c}
+                    sort.Strings(keyArr)
+                    key := [3]string{keyArr[0], keyArr[1], keyArr[2]}
                     if _, ok := seen[key]; !ok {
                         tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
                         seen[key] = struct{}{}
@@ -617,18 +487,6 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 }
 
 
-2025/07/28 01:04:34 [DEBUG]   base=HYPER, quote=USDC
-2025/07/28 01:04:34 [DEBUG]   base=NODEX, quote=USDT
-2025/07/28 01:04:34 [DEBUG]   base=ORT, quote=USDT
-2025/07/28 01:04:34 [DEBUG]   base=ULTIMA, quote=USDT
-2025/07/28 01:04:34 [DEBUG]   base=FLDT, quote=USDT
-2025/07/28 01:04:34 [DEBUG]   base=OMNI, quote=USDT
-2025/07/28 01:04:34 [INFO] Total unique assets: 2094
-2025/07/28 01:04:34 [INFO] Loaded 0 triangles
-2025/07/28 01:04:34 [INIT] Loaded 0 triangles after filtering
-2025/07/28 01:04:34 [INIT] total raw pairs before filtering: 0
-2025/07/28 01:04:34 [INIT] total unique pairs after filtering: 0
-2025/07/28 01:04:34 [INIT] subscribing on: []
 
 
 
