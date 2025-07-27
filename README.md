@@ -516,34 +516,16 @@ func LoadTriangles(path string) ([]triangle.Triangle, error) {
 ____________________________________________________________________________
 
 
-func LoadTriangles(path string) ([]triangle.Triangle, error) {
-	// жёстко заданный набор (можно читать из файла path, но здесь для примера — константа)
-	t := []triangle.Triangle{
-		{A: "SOL", B: "USDT", C: "USDC"},
-		{A: "XRP", B: "BTC", C: "USDT"},
-		{A: "ETH", B: "BTC", C: "USDT"},
-		{A: "TRX", B: "BTC", C: "USDT"},
-		{A: "ADA", B: "USDT", C: "BTC"},
-		{A: "LTC", B: "BTC", C: "USDT"},
-		{A: "DOGE", B: "BTC", C: "USDT"},
-		{A: "MATIC", B: "USDT", C: "BTC"},
-		{A: "DOT", B: "BTC", C: "USDT"},
-		{A: "AVAX", B: "BTC", C: "USDT"},
-		{A: "BCH", B: "BTC", C: "USDT"},
-		{A: "LINK", B: "BTC", C: "USDT"},
-		{A: "ETC", B: "BTC", C: "USDT"},
-	}
-
-	// Если вы хотите динамически подтягивать из API:
+func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
-		return t, nil // fallback на константу
+		return nil, fmt.Errorf("fetch exchangeInfo: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return t, nil
+		return nil, fmt.Errorf("read exchangeInfo: %w", err)
 	}
 
 	type symbolInfo struct {
@@ -556,10 +538,9 @@ func LoadTriangles(path string) ([]triangle.Triangle, error) {
 		Symbols []symbolInfo `json:"symbols"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return t, nil
+		return nil, fmt.Errorf("unmarshal exchangeInfo: %w", err)
 	}
 
-	// Построим все треугольники нулевой комиссии (пример см. ранее)
 	edges := make(map[string]map[string]bool)
 	assets := make(map[string]bool)
 	for _, s := range payload.Symbols {
@@ -572,31 +553,28 @@ func LoadTriangles(path string) ([]triangle.Triangle, error) {
 			assets[s.Quote] = true
 		}
 	}
-	// генерация циклов длины 3 (треугольников)
+
 	var toks []string
 	for a := range assets {
 		toks = append(toks, a)
 	}
-	for i := 0; i < len(toks); i++ {
-		for j := i + 1; j < len(toks); j++ {
-			for k := j + 1; k < len(toks); k++ {
-				A, B, C := toks[i], toks[j], toks[k]
-				perms := [][3]string{
-					{A, B, C}, {A, C, B},
-					{B, A, C}, {B, C, A},
-					{C, A, B}, {C, B, A},
+
+	var tris []triangle.Triangle
+	n := len(toks)
+	for i := 0; i < n; i++ {
+		for j := 0; j < n; j++ {
+			for k := 0; k < n; k++ {
+				if i == j || j == k || i == k {
+					continue
 				}
-				for _, p := range perms {
-					if edges[p[0]][p[1]] && edges[p[1]][p[2]] && edges[p[2]][p[0]] {
-						t = append(t, triangle.Triangle{A: p[0], B: p[1], C: p[2]})
-						break
-					}
+				a, b, c := toks[i], toks[j], toks[k]
+				if edges[a][b] && edges[b][c] && edges[c][a] {
+					tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
 				}
 			}
 		}
 	}
-
-	return t, nil
+	return tris, nil
 }
 
 
