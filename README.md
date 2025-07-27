@@ -473,3 +473,11 @@ func LoadTriangles() ([]triangle.Triangle, error) {
     return tris, nil
 }
 
+
+
+func New(ex exchange.Exchange) (*Arbitrager, error) {
+    ts, err := filesystem.LoadTriangles()
+    // …
+}
+
+
