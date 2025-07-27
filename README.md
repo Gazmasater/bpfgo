@@ -589,6 +589,15 @@ func normalizeKey(a, b, c string) string {
 }
 
 
+az358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
+2025/07/27 21:57:54 [INFO] Total unique assets: 2094
+2025/07/27 21:59:20 [INFO] Loaded 0 triangles
+2025/07/27 21:59:20 [INIT] Loaded 0 triangles after filtering
+2025/07/27 21:59:20 [INIT] total raw pairs before filtering: 0
+2025/07/27 21:59:20 [INIT] total unique pairs after filtering: 0
+2025/07/27 21:59:20 [INIT] subscribing on: []
+
+
 
 
 
