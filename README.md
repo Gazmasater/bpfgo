@@ -387,7 +387,44 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-+ func New(ex exchange.Exchange) (*Arbitrager, error) {
+func New(ex exchange.Exchange) (*Arbitrager, error) {
+	ts, err := filesystem.LoadTriangles()
+	if err != nil {
+		return nil, err
+	}
+
+	avail := ex.FetchAvailableSymbols()
+	ts = triangle.Filter(ts, avail)
+
+	trianglesByPair := make(map[string][]int)
+	for i, tri := range ts {
+		pairs := []string{
+			tri.A + tri.B,
+			tri.B + tri.C,
+			tri.A + tri.C,
+			tri.B + tri.A,
+			tri.C + tri.B,
+			tri.C + tri.A,
+		}
+		for _, p := range pairs {
+			trianglesByPair[p] = append(trianglesByPair[p], i)
+		}
+	}
+
+	arb := &Arbitrager{
+		Triangles:       ts,
+		latest:          make(map[string]float64),
+		trianglesByPair: trianglesByPair,
+	}
+
+	go func() {
+		if err := ex.SubscribeDeals(triangle.SymbolPairs(ts), arb.HandleRaw); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	return arb, nil
+}
 
 
 
