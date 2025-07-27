@@ -391,14 +391,16 @@ _______________________________________________________________________________
 package app
 
 import (
-	"cryptarb/internal/domain/exchange"
-	"cryptarb/internal/domain/triangle"
-	"cryptarb/internal/repository/filesystem"
 	"encoding/json"
 	"fmt"
 	"log"
 	"strconv"
 	"sync"
+	"time"
+
+	"cryptarb/internal/domain/exchange"
+	"cryptarb/internal/domain/triangle"
+	"cryptarb/internal/repository/filesystem"
 )
 
 type Arbitrager struct {
@@ -409,8 +411,8 @@ type Arbitrager struct {
 	mu              sync.Mutex
 }
 
-func New(parth string, ex exchange.Exchange) (*Arbitrager, error) {
-	ts, err := filesystem.LoadTriangles(parth)
+func New(path string, ex exchange.Exchange) (*Arbitrager, error) {
+	ts, err := filesystem.LoadTriangles(path)
 	if err != nil {
 		return nil, err
 	}
@@ -439,16 +441,26 @@ func New(parth string, ex exchange.Exchange) (*Arbitrager, error) {
 		trianglesByPair: trianglesByPair,
 	}
 
+	// Запускаем WS с авто-переподключением
 	go func() {
-		if err := ex.SubscribeDeals(triangle.SymbolPairs(ts), arb.HandleRaw); err != nil {
-			log.Fatal(err)
+		pairs := triangle.SymbolPairs(ts)
+		for {
+			err := ex.SubscribeDeals(pairs, arb.HandleRaw)
+			if err != nil {
+				log.Printf("[WS][%s] subscribe error: %v; reconnecting in 1s...", ex.Name(), err)
+				time.Sleep(time.Second)
+				continue
+			}
+			break
 		}
 	}()
 
 	return arb, nil
 }
 
-func (a *Arbitrager) HandleRaw(exchange string, raw []byte) {
+func (a *Arbitrager) HandleRaw(exchangeName string, raw []byte) {
+	log.Printf("[RAW][%s] %s", exchangeName, string(raw))
+
 	var msg struct {
 		Symbol string `json:"s"`
 		Data   struct {
@@ -457,11 +469,19 @@ func (a *Arbitrager) HandleRaw(exchange string, raw []byte) {
 			} `json:"deals"`
 		} `json:"d"`
 	}
-	if json.Unmarshal(raw, &msg) != nil || msg.Symbol == "" || len(msg.Data.Deals) == 0 {
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		log.Printf("[ERROR][%s] unmarshal raw: %v", exchangeName, err)
 		return
 	}
-	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
+	if msg.Symbol == "" || len(msg.Data.Deals) == 0 {
+		log.Printf("[SKIP][%s] empty symbol or no deals", exchangeName)
+		return
+	}
+
+	priceStr := msg.Data.Deals[0].Price
+	price, err := strconv.ParseFloat(priceStr, 64)
 	if err != nil {
+		log.Printf("[ERROR][%s] parse price %q: %v", exchangeName, priceStr, err)
 		return
 	}
 
@@ -469,6 +489,7 @@ func (a *Arbitrager) HandleRaw(exchange string, raw []byte) {
 	a.latest[msg.Symbol] = price
 	rev := reverseSymbol(msg.Symbol)
 	a.latest[rev] = 1 / price
+	log.Printf("[TICK][%s] %s=%.8f %s=%.8f", exchangeName, msg.Symbol, price, rev, 1/price)
 	a.mu.Unlock()
 
 	a.Check(msg.Symbol)
@@ -479,6 +500,7 @@ func (a *Arbitrager) Check(symbol string) {
 	defer a.mu.Unlock()
 
 	indices := a.trianglesByPair[symbol]
+	log.Printf("[CHECK] symbol=%s indices=%v", symbol, indices)
 	if len(indices) == 0 {
 		return
 	}
@@ -496,18 +518,19 @@ func (a *Arbitrager) Check(symbol string) {
 		p2, ok2 := a.latest[bc]
 		p3, ok3 := a.latest[ac]
 
-		fmt.Println("AB BC AC", p1, p2, p3)
+		log.Printf("[DATA] tri=%s/%s/%s AB=%v(ok=%v) BC=%v(ok=%v) AC=%v(ok=%v)",
+			tri.A, tri.B, tri.C,
+			p1, ok1, p2, ok2, p3, ok3,
+		)
 
 		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+			log.Printf("[SKIP] incomplete for %v", tri)
 			continue
 		}
 
 		profit := (p1*p2/p3*nf - 1) * 100
-		//	if profit > 0 {
 		a.sumProfit += profit
-		log.Printf("🔺 %s/%s/%s profit %.3f%% total=%.3f%%",
-			tri.A, tri.B, tri.C, profit, a.sumProfit)
-		//}
+		log.Printf("🔺 ARB %s/%s/%s profit=%.3f%% total=%.3f%%", tri.A, tri.B, tri.C, profit, a.sumProfit)
 	}
 }
 
@@ -518,8 +541,6 @@ func reverseSymbol(sym string) string {
 	half := len(sym) / 2
 	return sym[half:] + sym[:half]
 }
-
-
 
 
 
