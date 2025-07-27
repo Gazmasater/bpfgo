@@ -546,62 +546,13 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 
 	symbols := respPayload.Data.Symbols
 
-	// Построим направленный граф актива -> актив
-	edges := make(map[string]map[string]bool)
-	assetsSet := make(map[string]bool)
 	for _, s := range symbols {
-		if s.Base == "" || s.Quote == "" {
-			continue
-		}
-		if edges[s.Base] == nil {
-			edges[s.Base] = make(map[string]bool)
-		}
-		edges[s.Base][s.Quote] = true
-		assetsSet[s.Base] = true
-		assetsSet[s.Quote] = true
+		log.Printf("[DEBUG]   base=%s, quote=%s", s.Base, s.Quote)
 	}
 
-	// Список уникальных активов
-	var toks []string
-	for asset := range assetsSet {
-		toks = append(toks, asset)
-	}
-	log.Printf("[INFO] Total unique assets: %d", len(toks))
-
-	// Поиск 3-циклов (треугольников)
 	var tris []triangle.Triangle
-	n := len(toks)
-	seen := make(map[[3]string]bool)
-	for i := 0; i < n; i++ {
-		for j := i + 1; j < n; j++ {
-			for k := j + 1; k < n; k++ {
-				a, b, c := toks[i], toks[j], toks[k]
-				perms := [][3]string{{a, b, c}, {a, c, b}, {b, a, c}, {b, c, a}, {c, a, b}, {c, b, a}}
-				for _, p := range perms {
-					x, y, z := p[0], p[1], p[2]
-					if edges[x][y] && edges[y][z] && edges[z][x] {
-						// сортируем для ключа
-						arr := []string{x, y, z}
-						sort.Strings(arr)
-						key := [3]string{arr[0], arr[1], arr[2]}
-						if !seen[key] {
-							tris = append(tris, triangle.Triangle{A: x, B: y, C: z})
-							seen[key] = true
-						}
-						break
-					}
-				}
-			}
-		}
-	}
 
-	log.Printf("[INFO] Loaded %d triangles", len(tris))
 	return tris, nil
-}
-
-
-for _, s := range symbols {
-    log.Printf("[DEBUG]   base=%s, quote=%s", s.Base, s.Quote)
 }
 
 
