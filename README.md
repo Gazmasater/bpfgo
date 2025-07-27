@@ -541,22 +541,28 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 		return nil, fmt.Errorf("read exchangeInfo: %w", err)
 	}
 
-	// Разбираем символы
+	// Разбираем JSON: код ответа и данные
 	type symbolInfo struct {
 		Base  string `json:"baseAsset"`
 		Quote string `json:"quoteAsset"`
 	}
-	var payload struct {
-		Symbols []symbolInfo `json:"symbols"`
+	var respPayload struct {
+		Code int `json:"code"`
+		Msg  string `json:"msg"`
+		Data struct {
+			Symbols []symbolInfo `json:"symbols"`
+		} `json:"data"`
 	}
-	if err := json.Unmarshal(body, &payload); err != nil {
+	if err := json.Unmarshal(body, &respPayload); err != nil {
 		return nil, fmt.Errorf("unmarshal exchangeInfo: %w", err)
 	}
+
+	symbols := respPayload.Data.Symbols
 
 	// Построим направленный граф
 	edges := make(map[string]map[string]bool)
 	assets := make(map[string]bool)
-	for _, s := range payload.Symbols {
+	for _, s := range symbols {
 		if s.Base == "" || s.Quote == "" {
 			continue
 		}
@@ -609,13 +615,6 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 	return tris, nil
 }
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/07/27 23:12:48 [INFO] Total unique assets: 2094
-2025/07/27 23:22:38 [INFO] Loaded 0 triangles
-2025/07/27 23:22:39 [INIT] Loaded 0 triangles after filtering
-2025/07/27 23:22:39 [INIT] total raw pairs before filtering: 0
-2025/07/27 23:22:39 [INIT] total unique pairs after filtering: 0
-2025/07/27 23:22:39 [INIT] subscribing on: []
 
 
 
