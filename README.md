@@ -388,28 +388,7 @@ sudo apt install docker-compose-plugin -y
 _______________________________________________________________________________
 
 
-[{
-	"resource": "/home/gaz358/myprog/crypt/cmd/cryptarb/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "WrongArgCount",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "WrongArgCount"
-		}
-	},
-	"severity": 8,
-	"message": "not enough arguments in call to app.New\n\thave (mexc.Mexc)\n\twant (string, exchange.Exchange)",
-	"source": "compiler",
-	"startLineNumber": 12,
-	"startColumn": 22,
-	"endLineNumber": 12,
-	"endColumn": 22,
-	"origin": "extHost1"
-}]
+"triangles.json"
 
 
 
