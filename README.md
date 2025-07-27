@@ -391,107 +391,135 @@ _______________________________________________________________________________
 package app
 
 import (
-    "encoding/json"
-    "fmt"
-    "log"
-    "sync"
+	"cryptarb/internal/domain/exchange"
+	"cryptarb/internal/domain/triangle"
+	"cryptarb/internal/repository/filesystem"
+	"encoding/json"
+	"fmt"
+	"log"
+	"strconv"
+	"sync"
 )
 
-// RawMsg приходит из WS: Name — биржа, Data — сырое JSON
-type RawMsg struct {
-    Name string
-    Data []byte
-}
-
 type Arbitrager struct {
-    Triangles       []triangle.Triangle
-    latest          map[string]float64
-    trianglesByPair map[string][]int
-    sumProfit       float64
-    mu              sync.Mutex
-
-    // порог профита, можно выставить в 0 для отладки
-    profitThreshold float64
+	Triangles       []triangle.Triangle
+	latest          map[string]float64
+	trianglesByPair map[string][]int
+	sumProfit       float64
+	mu              sync.Mutex
 }
 
-// HandleRaw обрабатывает каждое WS-сообщение от биржи,
-// логирует его, сохраняет цену и запускает Check по символу.
-func (a *Arbitrager) HandleRaw(msg RawMsg) {
-    // 1) Распарсим JSON от MEXC WS trade: {"symbol":"SOLUSDT","price":"187.12", ...}
-    var tick struct {
-        Symbol string `json:"symbol"`
-        Price  string `json:"price"`
-    }
-    if err := json.Unmarshal(msg.Data, &tick); err != nil {
-        log.Printf("[ERROR] %s: failed to unmarshal %s: %v", msg.Name, string(msg.Data), err)
-        return
-    }
+func New(parth string, ex exchange.Exchange) (*Arbitrager, error) {
+	ts, err := filesystem.LoadTriangles(parth)
+	if err != nil {
+		return nil, err
+	}
 
-    // 2) Конвертируем цену в float64
-    price, err := strconv.ParseFloat(tick.Price, 64)
-    if err != nil {
-        log.Printf("[ERROR] %s: bad price format %q: %v", msg.Name, tick.Price, err)
-        return
-    }
+	avail := ex.FetchAvailableSymbols()
+	ts = triangle.Filter(ts, avail)
 
-    // 3) Логируем факт получения
-    log.Printf("[%s] TICK %s = %.8f", msg.Name, tick.Symbol, price)
+	trianglesByPair := make(map[string][]int)
+	for i, tri := range ts {
+		pairs := []string{
+			tri.A + tri.B,
+			tri.B + tri.C,
+			tri.A + tri.C,
+			tri.B + tri.A,
+			tri.C + tri.B,
+			tri.C + tri.A,
+		}
+		for _, p := range pairs {
+			trianglesByPair[p] = append(trianglesByPair[p], i)
+		}
+	}
 
-    // 4) Сохраняем цену
-    a.mu.Lock()
-    a.latest[tick.Symbol] = price
-    a.mu.Unlock()
+	arb := &Arbitrager{
+		Triangles:       ts,
+		latest:          make(map[string]float64),
+		trianglesByPair: trianglesByPair,
+	}
 
-    // 5) Запускаем проверку по этому символу
-    a.Check(tick.Symbol)
+	go func() {
+		if err := ex.SubscribeDeals(triangle.SymbolPairs(ts), arb.HandleRaw); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	return arb, nil
 }
 
-// Check пересчитывает все треугольники, содержащие symbol,
-// и логирует найденный профит.
+func (a *Arbitrager) HandleRaw(exchange string, raw []byte) {
+	var msg struct {
+		Symbol string `json:"s"`
+		Data   struct {
+			Deals []struct {
+				Price string `json:"p"`
+			} `json:"deals"`
+		} `json:"d"`
+	}
+	if json.Unmarshal(raw, &msg) != nil || msg.Symbol == "" || len(msg.Data.Deals) == 0 {
+		return
+	}
+	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
+	if err != nil {
+		return
+	}
+
+	a.mu.Lock()
+	a.latest[msg.Symbol] = price
+	rev := reverseSymbol(msg.Symbol)
+	a.latest[rev] = 1 / price
+	a.mu.Unlock()
+
+	a.Check(msg.Symbol)
+}
+
 func (a *Arbitrager) Check(symbol string) {
-    a.mu.Lock()
-    defer a.mu.Unlock()
+	a.mu.Lock()
+	defer a.mu.Unlock()
 
-    indices := a.trianglesByPair[symbol]
-    if len(indices) == 0 {
-        return
-    }
+	indices := a.trianglesByPair[symbol]
+	if len(indices) == 0 {
+		return
+	}
 
-    const commission = 0.0005 // 0.05%
-    nf := (1 - commission) * (1 - commission) * (1 - commission)
+	const commission = 0.0005
+	nf := (1 - commission) * (1 - commission) * (1 - commission)
 
-    for _, i := range indices {
-        tri := a.Triangles[i]
+	for _, i := range indices {
+		tri := a.Triangles[i]
+		ab := tri.A + tri.B
+		bc := tri.B + tri.C
+		ac := tri.A + tri.C
 
-        // Правильные ключи в latest:
-        //   AB = A+B
-        //   BC = C+B  (swap чтобы взять C->B)
-        //   CA = A+C
-        ab := tri.A + tri.B
-        bc := tri.C + tri.B
-        ca := tri.A + tri.C
+		p1, ok1 := a.latest[ab]
+		p2, ok2 := a.latest[bc]
+		p3, ok3 := a.latest[ac]
 
-        p1, ok1 := a.latest[ab]
-        p2, ok2 := a.latest[bc]
-        p3, ok3 := a.latest[ca]
+		fmt.Println("AB BC AC", p1, p2, p3)
 
-        log.Printf("[CHECK] tri=%s/%s/%s prices AB=%v BC=%v CA=%v",
-            tri.A, tri.B, tri.C, p1, p2, p3,
-        )
+		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+			continue
+		}
 
-        if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
-            continue
-        }
-
-        profit := (p1 * p2 / p3 * nf - 1) * 100
-        if profit > a.profitThreshold {
-            a.sumProfit += profit
-            log.Printf("🔺 ARB %s→%s→%s = %.4f%% (total %.4f%%)",
-                tri.A, tri.B, tri.C, profit, a.sumProfit,
-            )
-        }
-    }
+		profit := (p1*p2/p3*nf - 1) * 100
+		//	if profit > 0 {
+		a.sumProfit += profit
+		log.Printf("🔺 %s/%s/%s profit %.3f%% total=%.3f%%",
+			tri.A, tri.B, tri.C, profit, a.sumProfit)
+		//}
+	}
 }
+
+func reverseSymbol(sym string) string {
+	if len(sym)%2 != 0 {
+		return sym
+	}
+	half := len(sym) / 2
+	return sym[half:] + sym[:half]
+}
+
+
 
 
 
