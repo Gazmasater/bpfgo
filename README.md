@@ -471,4 +471,9 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 }
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
+2025/07/27 14:59:59 websocket: close 1005 (no status)
+exit status 1
+
+
 
