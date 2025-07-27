@@ -516,30 +516,40 @@ func LoadTriangles(path string) ([]triangle.Triangle, error) {
 ____________________________________________________________________________
 
 
-var raw map[string]interface{}
-if err := json.Unmarshal(body, &raw); err != nil {
-    log.Printf("raw JSON: %s", string(body))
-    return nil, err
-}
-
-// Собираем ключи вручную
-keyList := make([]string, 0, len(raw))
-for k := range raw {
-    keyList = append(keyList, k)
-}
-log.Printf("[DEBUG] top-level keys: %v", keyList)
-
-// Если нужно ещё глубже, например raw["data"]:
-if dataVal, ok := raw["data"].(map[string]interface{}); ok {
-    dataKeys := make([]string, 0, len(dataVal))
-    for k := range dataVal {
-        dataKeys = append(dataKeys, k)
+func LoadTriangles(_ string) ([]triangle.Triangle, error) {
+    resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+    if err != nil {
+        return nil, fmt.Errorf("fetch exchangeInfo: %w", err)
     }
-    log.Printf("[DEBUG] data-level keys: %v", dataKeys)
+    defer resp.Body.Close()
+
+    body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return nil, fmt.Errorf("read exchangeInfo: %w", err)
+    }
+
+    // распарсим правильную схему — top-level "symbols"
+    type symbolInfo struct {
+        Base  string `json:"baseAsset"`
+        Quote string `json:"quoteAsset"`
+    }
+    var payload struct {
+        Symbols []symbolInfo `json:"symbols"`
+    }
+    if err := json.Unmarshal(body, &payload); err != nil {
+        return nil, fmt.Errorf("unmarshal exchangeInfo: %w", err)
+    }
+
+    symbols := payload.Symbols
+    log.Printf("[DEBUG] fetched %d symbols", len(symbols))
+    for _, s := range symbols {
+        log.Printf("[DEBUG]   base=%s, quote=%s", s.Base, s.Quote)
+    }
+
+    // ... дальше строим граф и ищем треугольники
+    // edges := ...
+    // return tris, nil
 }
 
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/07/28 00:46:24 [DEBUG] top-level keys: [serverTime rateLimits exchangeFilters symbols timezone]
 
 
