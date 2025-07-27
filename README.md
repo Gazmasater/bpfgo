@@ -548,7 +548,11 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 		if edges[s.Base] == nil {
 			edges[s.Base] = make(map[string]bool)
 		}
+		if edges[s.Quote] == nil {
+			edges[s.Quote] = make(map[string]bool)
+		}
 		edges[s.Base][s.Quote] = true
+		edges[s.Quote][s.Base] = true // добавляем обратное направление
 		assets[s.Base] = true
 		assets[s.Quote] = true
 	}
@@ -587,18 +591,6 @@ func normalizeKey(a, b, c string) string {
 	sort.Strings(t)
 	return t[0] + ">" + t[1] + ">" + t[2]
 }
-
-
-az358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/07/27 21:57:54 [INFO] Total unique assets: 2094
-2025/07/27 21:59:20 [INFO] Loaded 0 triangles
-2025/07/27 21:59:20 [INIT] Loaded 0 triangles after filtering
-2025/07/27 21:59:20 [INIT] total raw pairs before filtering: 0
-2025/07/27 21:59:20 [INIT] total unique pairs after filtering: 0
-2025/07/27 21:59:20 [INIT] subscribing on: []
-
-
-
 
 
 
