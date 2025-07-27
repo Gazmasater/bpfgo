@@ -388,221 +388,49 @@ sudo apt install docker-compose-plugin -y
 _______________________________________________________________________________
 
 
-package app
+Что нужно исправить
+В Check
+Заменить
 
-import (
-	"encoding/json"
-	"fmt"
-	"log"
-	"strconv"
-	"sync"
-	"time"
+go
+Копировать код
+bc := tri.B + tri.C // "USDTUSDC" – никогда не прилетает
+ac := tri.A + tri.C 
+на
 
-	"cryptarb/internal/domain/exchange"
-	"cryptarb/internal/domain/triangle"
-	"cryptarb/internal/repository/filesystem"
-)
+go
+Копировать код
+bc := tri.C + tri.B // "USDCUSDT" – правильная пара C/B
+ac := tri.A + tri.C // "SOLUSDC"
+В New при подписке
+Сейчас вы вызываете
 
-type Arbitrager struct {
-	Triangles       []triangle.Triangle
-	latest          map[string]float64
-	trianglesByPair map[string][]int
-	sumProfit       float64
-	mu              sync.Mutex
+go
+Копировать код
+ex.SubscribeDeals(triangle.SymbolPairs(ts), arb.HandleRaw)
+(или что-то подобное), и там, видимо, генерируются только {A+B, B+C, A+C}. Нужно подписаться на все пары, которые вы проверяете в Check, то есть на ключи из trianglesByPair (они у вас уже содержат и C+B). Например:
+
+go
+Копировать код
+// Вместо triangle.SymbolPairs(ts)
+var subPairs []string
+for p := range trianglesByPair {
+    subPairs = append(subPairs, p)
 }
-
-func New(path string, ex exchange.Exchange) (*Arbitrager, error) {
-	ts, err := filesystem.LoadTriangles(path)
-	if err != nil {
-		return nil, err
-	}
-
-	avail := ex.FetchAvailableSymbols()
-	ts = triangle.Filter(ts, avail)
-
-	trianglesByPair := make(map[string][]int)
-	for i, tri := range ts {
-		pairs := []string{
-			tri.A + tri.B,
-			tri.B + tri.C,
-			tri.A + tri.C,
-			tri.B + tri.A,
-			tri.C + tri.B,
-			tri.C + tri.A,
-		}
-		for _, p := range pairs {
-			trianglesByPair[p] = append(trianglesByPair[p], i)
-		}
-	}
-
-	arb := &Arbitrager{
-		Triangles:       ts,
-		latest:          make(map[string]float64),
-		trianglesByPair: trianglesByPair,
-	}
-
-	// Запускаем WS с авто-переподключением
-	go func() {
-		pairs := triangle.SymbolPairs(ts)
-		for {
-			err := ex.SubscribeDeals(pairs, arb.HandleRaw)
-			if err != nil {
-				log.Printf("[WS][%s] subscribe error: %v; reconnecting in 1s...", ex.Name(), err)
-				time.Sleep(time.Second)
-				continue
-			}
-			break
-		}
-	}()
-
-	return arb, nil
-}
-
-func (a *Arbitrager) HandleRaw(exchangeName string, raw []byte) {
-	log.Printf("[RAW][%s] %s", exchangeName, string(raw))
-
-	var msg struct {
-		Symbol string `json:"s"`
-		Data   struct {
-			Deals []struct {
-				Price string `json:"p"`
-			} `json:"deals"`
-		} `json:"d"`
-	}
-	if err := json.Unmarshal(raw, &msg); err != nil {
-		log.Printf("[ERROR][%s] unmarshal raw: %v", exchangeName, err)
-		return
-	}
-	if msg.Symbol == "" || len(msg.Data.Deals) == 0 {
-		log.Printf("[SKIP][%s] empty symbol or no deals", exchangeName)
-		return
-	}
-
-	priceStr := msg.Data.Deals[0].Price
-	price, err := strconv.ParseFloat(priceStr, 64)
-	if err != nil {
-		log.Printf("[ERROR][%s] parse price %q: %v", exchangeName, priceStr, err)
-		return
-	}
-
-	a.mu.Lock()
-	a.latest[msg.Symbol] = price
-	rev := reverseSymbol(msg.Symbol)
-	a.latest[rev] = 1 / price
-	log.Printf("[TICK][%s] %s=%.8f %s=%.8f", exchangeName, msg.Symbol, price, rev, 1/price)
-	a.mu.Unlock()
-
-	a.Check(msg.Symbol)
-}
-
-func (a *Arbitrager) Check(symbol string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	indices := a.trianglesByPair[symbol]
-	log.Printf("[CHECK] symbol=%s indices=%v", symbol, indices)
-	if len(indices) == 0 {
-		return
-	}
-
-	const commission = 0.0005
-	nf := (1 - commission) * (1 - commission) * (1 - commission)
-
-	for _, i := range indices {
-		tri := a.Triangles[i]
-		ab := tri.A + tri.B
-		bc := tri.B + tri.C
-		ac := tri.A + tri.C
-
-		p1, ok1 := a.latest[ab]
-		p2, ok2 := a.latest[bc]
-		p3, ok3 := a.latest[ac]
-
-		log.Printf("[DATA] tri=%s/%s/%s AB=%v(ok=%v) BC=%v(ok=%v) AC=%v(ok=%v)",
-			tri.A, tri.B, tri.C,
-			p1, ok1, p2, ok2, p3, ok3,
-		)
-
-		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
-			log.Printf("[SKIP] incomplete for %v", tri)
-			continue
-		}
-
-		profit := (p1*p2/p3*nf - 1) * 100
-		a.sumProfit += profit
-		log.Printf("🔺 ARB %s/%s/%s profit=%.3f%% total=%.3f%%", tri.A, tri.B, tri.C, profit, a.sumProfit)
-	}
-}
-
-func reverseSymbol(sym string) string {
-	if len(sym)%2 != 0 {
-		return sym
-	}
-	half := len(sym) / 2
-	return sym[half:] + sym[:half]
-}
+go func() {
+    for {
+        if err := ex.SubscribeDeals(subPairs, arb.HandleRaw); err != nil {
+            log.Printf("[%s] WS error: %v, retrying...", ex.Name(), err)
+            time.Sleep(time.Second)
+            continue
+        }
+        break
+    }
+}()
+Это обеспечит подписку на USDCUSDT и, следовательно, в Check у вас появится ненулевой p2.
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/07/27 17:18:47 [RAW][MEXC] {"id":1753625926,"code":0,"msg":"Subscribed successful! [spot@public.deals.v3.api@SOLUSDT,spot@public.deals.v3.api@SOLUSDC]. Not Subscribed successfully! [spot@public.deals.v3.api@USDTUSDC].  Reason： Blocked! "}
-2025/07/27 17:18:47 [SKIP][MEXC] empty symbol or no deals
-2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDC","d":{"deals":[{"p":"186.2964","v":"0.02","S":1,"t":1753625927133}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDC","t":1753625927137}
-2025/07/27 17:18:47 [TICK][MEXC] SOLUSDC=186.29640000 SOLUSDC=0.00536779
-2025/07/27 17:18:47 [CHECK] symbol=SOLUSDC indices=[0]
-2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0(ok=false) BC=0(ok=false) AC=0.005367790252522324(ok=true)
-2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
-2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"186.37","v":"13.180","S":2,"t":1753625927152}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753625927155}
-2025/07/27 17:18:47 [TICK][MEXC] SOLUSDT=186.37000000 SOLUSDT=0.00536567
-2025/07/27 17:18:47 [CHECK] symbol=SOLUSDT indices=[0]
-2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0.005365670440521543(ok=true) BC=0(ok=false) AC=0.005367790252522324(ok=true)
-2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
-2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"186.37","v":"0.180","S":2,"t":1753625927152}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753625927155}
-2025/07/27 17:18:47 [TICK][MEXC] SOLUSDT=186.37000000 SOLUSDT=0.00536567
-2025/07/27 17:18:47 [CHECK] symbol=SOLUSDT indices=[0]
-2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0.005365670440521543(ok=true) BC=0(ok=false) AC=0.005367790252522324(ok=true)
-2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
-2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"186.37","v":"7.020","S":2,"t":1753625927152}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753625927155}
-2025/07/27 17:18:47 [TICK][MEXC] SOLUSDT=186.37000000 SOLUSDT=0.00536567
-2025/07/27 17:18:47 [CHECK] symbol=SOLUSDT indices=[0]
-2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0.005365670440521543(ok=true) BC=0(ok=false) AC=0.005367790252522324(ok=true)
-2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
-2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDC","d":{"deals":[{"p":"186.2972","v":"0.05","S":1,"t":1753625927634}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDC","t":1753625927637}
-2025/07/27 17:18:47 [TICK][MEXC] SOLUSDC=186.29720000 SOLUSDC=0.00536777
-2025/07/27 17:18:47 [CHECK] symbol=SOLUSDC indices=[0]
-2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0.005365670440521543(ok=true) BC=0(ok=false) AC=0.005367767202083552(ok=true)
-2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
-2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDC","d":{"deals":[{"p":"186.2972","v":"0.19","S":1,"t":1753625927634}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDC","t":1753625927638}
-2025/07/27 17:18:47 [TICK][MEXC] SOLUSDC=186.29720000 SOLUSDC=0.00536777
-2025/07/27 17:18:47 [CHECK] symbol=SOLUSDC indices=[0]
-2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0.005365670440521543(ok=true) BC=0(ok=false) AC=0.005367767202083552(ok=true)
-2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
-2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDC","d":{"deals":[{"p":"186.2972","v":"0.06","S":2,"t":1753625927634}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDC","t":1753625927638}
-2025/07/27 17:18:47 [TICK][MEXC] SOLUSDC=186.29720000 SOLUSDC=0.00536777
-2025/07/27 17:18:47 [CHECK] symbol=SOLUSDC indices=[0]
-2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0.005365670440521543(ok=true) BC=0(ok=false) AC=0.005367767202083552(ok=true)
-2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
-2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDC","d":{"deals":[{"p":"186.2971","v":"0.19","S":2,"t":1753625927635}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDC","t":1753625927638}
-2025/07/27 17:18:47 [TICK][MEXC] SOLUSDC=186.29710000 SOLUSDC=0.00536777
-2025/07/27 17:18:47 [CHECK] symbol=SOLUSDC indices=[0]
-2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0.005365670440521543(ok=true) BC=0(ok=false) AC=0.005367770083377573(ok=true)
-2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
-2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDC","d":{"deals":[{"p":"186.2971","v":"0.12","S":2,"t":1753625927636}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDC","t":1753625927640}
-2025/07/27 17:18:47 [TICK][MEXC] SOLUSDC=186.29710000 SOLUSDC=0.00536777
-2025/07/27 17:18:47 [CHECK] symbol=SOLUSDC indices=[0]
-2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0.005365670440521543(ok=true) BC=0(ok=false) AC=0.005367770083377573(ok=true)
-2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
-2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"186.39","v":"1.200","S":2,"t":1753625927651}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753625927655}
-2025/07/27 17:18:47 [TICK][MEXC] SOLUSDT=186.39000000 SOLUSDT=0.00536509
-2025/07/27 17:18:47 [CHECK] symbol=SOLUSDT indices=[0]
-2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0.005365094693921348(ok=true) BC=0(ok=false) AC=0.005367770083377573(ok=true)
-2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
-2025/07/27 17:18:47 [RAW][MEXC] {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"186.39","v":"0.930","S":2,"t":1753625927652}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1753625927655}
-2025/07/27 17:18:47 [TICK][MEXC] SOLUSDT=186.39000000 SOLUSDT=0.00536509
-2025/07/27 17:18:47 [CHECK] symbol=SOLUSDT indices=[0]
-2025/07/27 17:18:47 [DATA] tri=SOL/USDT/USDC AB=0.005365094693921348(ok=true) BC=0(ok=false) AC=0.005367770083377573(ok=true)
-2025/07/27 17:18:47 [SKIP] incomplete for {SOL USDT USDC}
-^Csignal: interrupt
 
 
 
