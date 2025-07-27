@@ -516,19 +516,35 @@ func LoadTriangles(path string) ([]triangle.Triangle, error) {
 ____________________________________________________________________________
 
 
+package filesystem
+
+import (
+    "encoding/json"
+    "fmt"
+    "io"
+    "log"
+    "net/http"
+    "sort"
+
+    "cryptarb/internal/domain/triangle"
+)
+
+// LoadTriangles загружает все возможные треугольники с биржи MEXC
 func LoadTriangles(_ string) ([]triangle.Triangle, error) {
+    // 1) Получаем exchangeInfo
     resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
     if err != nil {
         return nil, fmt.Errorf("fetch exchangeInfo: %w", err)
     }
     defer resp.Body.Close()
 
+    // 2) Читаем тело
     body, err := io.ReadAll(resp.Body)
     if err != nil {
         return nil, fmt.Errorf("read exchangeInfo: %w", err)
     }
 
-    // распарсим правильную схему — top-level "symbols"
+    // 3) Разбираем JSON: сразу top-level "symbols"
     type symbolInfo struct {
         Base  string `json:"baseAsset"`
         Quote string `json:"quoteAsset"`
@@ -540,28 +556,66 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
         return nil, fmt.Errorf("unmarshal exchangeInfo: %w", err)
     }
 
+    // 4) Логируем все пары для отладки
     symbols := payload.Symbols
-    log.Printf("[DEBUG] fetched %d symbols", len(symbols))
+    log.Printf("[DEBUG] fetched %d symbols:", len(symbols))
     for _, s := range symbols {
         log.Printf("[DEBUG]   base=%s, quote=%s", s.Base, s.Quote)
     }
 
-    // ... дальше строим граф и ищем треугольники
-    // edges := ...
-    // return tris, nil
+    // 5) Строим направленный граф смежностей edges[A][B] = true
+    edges := make(map[string]map[string]bool, len(symbols))
+    assets := make(map[string]struct{}, len(symbols)*2)
+    for _, s := range symbols {
+        if s.Base == "" || s.Quote == "" {
+            continue
+        }
+        if edges[s.Base] == nil {
+            edges[s.Base] = make(map[string]bool)
+        }
+        edges[s.Base][s.Quote] = true
+        assets[s.Base] = struct{}{}
+        assets[s.Quote] = struct{}{}
+    }
+
+    // 6) Список уникальных активов
+    var toks []string
+    for a := range assets {
+        toks = append(toks, a)
+    }
+    log.Printf("[INFO] Total unique assets: %d", len(toks))
+
+    // 7) Ищем треугольники A→B→C→A
+    var tris []triangle.Triangle
+    seen := make(map[[3]string]struct{})
+
+    // Для каждого ребра A→B
+    for a, neigh := range edges {
+        for b := range neigh {
+            // Для каждого ребра B→C
+            if edges[b] == nil {
+                continue
+            }
+            for c := range edges[b] {
+                // Проверяем, есть ли C→A
+                if edges[c][a] {
+                    // Дедупликация: сортируем [A,B,C] по алфавиту
+                    arr := []string{a, b, c}
+                    sort.Strings(arr)
+                    key := [3]string{arr[0], arr[1], arr[2]}
+                    if _, ok := seen[key]; !ok {
+                        tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
+                        seen[key] = struct{}{}
+                    }
+                }
+            }
+        }
+    }
+
+    log.Printf("[INFO] Loaded %d triangles", len(tris))
+    return tris, nil
 }
 
-
-2025/07/28 00:56:09 [DEBUG]   base=TRAC, quote=USDT
-2025/07/28 00:56:09 [DEBUG]   base=HEART, quote=USDT
-2025/07/28 00:56:09 [DEBUG]   base=TAP, quote=USDT
-2025/07/28 00:56:09 [DEBUG]   base=MLT, quote=USDT
-2025/07/28 00:56:09 [DEBUG]   base=SOLO, quote=USDT
-2025/07/28 00:56:09 [DEBUG]   base=SOIL, quote=USDT
-2025/07/28 00:56:09 [DEBUG]   base=STONKS, quote=USDT
-2025/07/28 00:56:09 [DEBUG]   base=VERT, quote=USDT
-2025/07/28 00:56:09 [DEBUG]   base=KAS, quote=USDT
-2025/07/28 00:56:09 [DEBUG]   base=DOGEGOV, quote=USDT
 
 
 
