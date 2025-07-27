@@ -503,14 +503,11 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 
 ________________________________________________________________________________________________
 
-func unpackPair(pair string) (string, string) {
-	quotes := []string{"USDT", "USDC", "USDE", "BTC", "ETH", "EUR", "BRL", "USD1"}
-	for _, q := range quotes {
-		if len(pair) > len(q) && pair[len(pair)-len(q):] == q {
-			return pair[:len(pair)-len(q)], q
-		}
-	}
-	return "", ""
-}
-
+az358@gaz358-BOD-WXX9:~/myprog/crypt$ cd cmd/cryptarb
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
+2025/07/28 02:05:04 [INFO] Found 0 triangles from 270 pairs
+2025/07/28 02:05:04 [INIT] Loaded 0 triangles after filtering
+2025/07/28 02:05:04 [INIT] total raw pairs before filtering: 0
+2025/07/28 02:05:04 [INIT] total unique pairs after filtering: 0
+2025/07/28 02:05:04 [INIT] subscribing on: []
 
