@@ -395,17 +395,8 @@ func LoadTriangles(path string) ([]triangle.Triangle, error) {
 }
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ git commit -m "1trianglcomiss0"
-On branch cleanarhinterf_0
-Changes not staged for commit:
-  (use "git add <file>..." to update what will be committed)
-  (use "git restore <file>..." to discard changes in working directory)
-        modified:   ../../Dockerfile
-        modified:   ../../internal/app/arbitrage.go
-        modified:   ../../internal/repository/filesystem/loader.go
+git commit -a -m "1trianglcomiss0"
 
-no changes added to commit (use "git add" and/or "git commit -a")
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ 
 
 
 
