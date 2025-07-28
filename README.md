@@ -665,10 +665,9 @@ log.Printf("🔺 ARB %s/%s/%s profit=%.4f%% total=%.4f%%",
 	tri.A, tri.B, tri.C, profit, a.sumProfit)
 
 
- ARB USDC/USDT/ULTIMA profit=0.3821% total=0.3821%
-2025/07/28 13:14:43 🔺 ARB ULTIMA/USDC/USDT profit=0.3821% total=0.7641%
-2025/07/28 13:14:43 🔺 ARB USDT/ULTIMA/USDC profit=0.3821% total=1.1462%
-
+ARB USDC/EUR/TRUMP profit=0.2101% total=0.2101%
+2025/07/28 13:40:51 🔺 ARB EUR/TRUMP/USDC profit=0.2101% total=0.4202%
+2025/07/28 13:40:51 🔺 ARB TRUMP/USDC/EUR profit=0.2101% total=0.6304%
 
 
 
