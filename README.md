@@ -577,11 +577,12 @@ func unpackPair(pair string) (string, string) {
 _________________________________________________________________________________________
 
 
-nc LoadTriangles(_ string) ([]triangle.Triangle, error) {
+func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 	subPairs := []string{
-		"XRPUSDT", "XRPBTC", "BTCUSDT", // формирует: XRP→USDT, XRP→BTC, BTC→USDT
+		"XRPUSDT", "XRPBTC", "BTCUSDT",
 	}
 
+	// Строим направленный граф: и BUY, и SELL
 	graph := make(map[string][]string)
 	for _, pair := range subPairs {
 		base, quote := unpackPair(pair)
@@ -589,18 +590,29 @@ nc LoadTriangles(_ string) ([]triangle.Triangle, error) {
 			log.Printf("[SKIP] cannot unpack pair: %s", pair)
 			continue
 		}
-		graph[base] = append(graph[base], quote) // только в прямом направлении
+
+		// BUY: quote → base (покупка базовой валюты за котируемую)
+		graph[quote] = append(graph[quote], base)
+
+		// SELL: base → quote (продажа базовой валюты за котируемую)
+		graph[base] = append(graph[base], quote)
 	}
 
+	// Вывод графа
+	for k, v := range graph {
+		log.Printf("[GRAPH] %s -> %v", k, v)
+	}
+
+	// Поиск направленных треугольников
 	var tris []triangle.Triangle
 	seen := make(map[[3]string]struct{})
 
-	for a, neighbors := range graph {
-		for _, b := range neighbors {
+	for a, bList := range graph {
+		for _, b := range bList {
 			for _, c := range graph[b] {
 				for _, back := range graph[c] {
 					if back == a {
-						// направленный цикл: A → B → C → A
+						// цикл: A → B → C → A
 						key := [3]string{a, b, c}
 						if _, ok := seen[key]; !ok {
 							seen[key] = struct{}{}
@@ -615,24 +627,6 @@ nc LoadTriangles(_ string) ([]triangle.Triangle, error) {
 	log.Printf("[INFO] Found %d directed triangles from %d pairs", len(tris), len(subPairs))
 	return tris, nil
 }
-
-// Разделяет строку пары на base и quote
-func unpackPair(pair string) (string, string) {
-	quotes := []string{"USDT", "USDC", "BTC", "ETH", "EUR", "BRL", "USD1"}
-	for _, q := range quotes {
-		if len(pair) > len(q) && pair[len(pair)-len(q):] == q {
-			return pair[:len(pair)-len(q)], q
-		}
-	}
-	return "", ""
-}
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/07/28 11:36:47 [INFO] Found 0 directed triangles from 3 pairs
-2025/07/28 11:36:47 [INIT] Loaded 0 triangles after filtering
-2025/07/28 11:36:47 [INIT] total raw pairs before filtering: 0
-2025/07/28 11:36:47 [INIT] total unique pairs after filtering: 0
-2025/07/28 11:36:47 [INIT] subscribing on: []
 
 
 
