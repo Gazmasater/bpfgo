@@ -629,5 +629,32 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 }
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
+2025/07/28 11:48:57 [GRAPH] USDT -> [XRP BTC]
+2025/07/28 11:48:57 [GRAPH] XRP -> [USDT BTC]
+2025/07/28 11:48:57 [GRAPH] BTC -> [XRP USDT]
+2025/07/28 11:48:57 [INFO] Found 6 directed triangles from 3 pairs
+2025/07/28 11:48:58 [INIT] Loaded 6 triangles after filtering
+2025/07/28 11:48:58 [TRI  0] USDT → XRP → BTC → USDT (AB=USDTXRP BC=XRPBTC CA=BTCUSDT)
+2025/07/28 11:48:58 [TRI  1] USDT → BTC → XRP → USDT (AB=USDTBTC BC=BTCXRP CA=XRPUSDT)
+2025/07/28 11:48:58 [TRI  2] XRP → USDT → BTC → XRP (AB=XRPUSDT BC=USDTBTC CA=BTCXRP)
+2025/07/28 11:48:58 [TRI  3] XRP → BTC → USDT → XRP (AB=XRPBTC BC=BTCUSDT CA=USDTXRP)
+2025/07/28 11:48:58 [TRI  4] BTC → XRP → USDT → BTC (AB=BTCXRP BC=XRPUSDT CA=USDTBTC)
+2025/07/28 11:48:58 [TRI  5] BTC → USDT → XRP → BTC (AB=BTCUSDT BC=USDTXRP CA=XRPBTC)
+2025/07/28 11:48:58 [INIT] total raw pairs before filtering: 18
+2025/07/28 11:48:58 [SKIP] USDTXRP not available on exchange
+2025/07/28 11:48:58 [SKIP] USDTBTC not available on exchange
+2025/07/28 11:48:58 [SKIP] BTCXRP not available on exchange
+2025/07/28 11:48:58 [SKIP] USDTBTC not available on exchange
+2025/07/28 11:48:58 [SKIP] BTCXRP not available on exchange
+2025/07/28 11:48:58 [SKIP] USDTXRP not available on exchange
+2025/07/28 11:48:58 [SKIP] BTCXRP not available on exchange
+2025/07/28 11:48:58 [SKIP] USDTBTC not available on exchange
+2025/07/28 11:48:58 [SKIP] USDTXRP not available on exchange
+2025/07/28 11:48:58 [INIT] total unique pairs after filtering: 3
+2025/07/28 11:48:58 [INIT] subscribing on: [XRPBTC BTCUSDT XRPUSDT]
+2025/07/28 11:48:58 [WS] subscribing chunk 0:3: [XRPBTC BTCUSDT XRPUSDT]
+
+
 
 
