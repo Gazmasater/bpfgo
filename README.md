@@ -577,83 +577,259 @@ func unpackPair(pair string) (string, string) {
 _________________________________________________________________________________________
 
 
-func LoadTriangles(_ string) ([]triangle.Triangle, error) {
-	subPairs := []string{
-		"XRPUSDT", "XRPBTC", "BTCUSDT",
+package app
+
+import (
+	"encoding/json"
+	"log"
+	"strconv"
+	"sync"
+	"time"
+
+	"cryptarb/internal/domain/exchange"
+	"cryptarb/internal/domain/triangle"
+	"cryptarb/internal/repository/filesystem"
+)
+
+type Arbitrager struct {
+	Triangles       []triangle.Triangle
+	latest          map[string]float64
+	trianglesByPair map[string][]int
+	sumProfit       float64
+	mu              sync.Mutex
+}
+
+func New(path string, ex exchange.Exchange) (*Arbitrager, error) {
+	// 1. Загружаем треугольники и фильтруем по доступности пар
+	ts, err := filesystem.LoadTriangles(path)
+	if err != nil {
+		return nil, err
+	}
+	avail := ex.FetchAvailableSymbols()
+	ts = triangle.Filter(ts, avail)
+
+	log.Printf("[INIT] Loaded %d triangles after filtering", len(ts))
+
+	// 2. Собираем мапу индексов и список всех потенциальных подписок
+	trianglesByPair := make(map[string][]int)
+	var subPairsRaw []string
+	for i, tri := range ts {
+		ab := tri.A + tri.B // A→B
+		bc := tri.B + tri.C // B→C
+		ca := tri.C + tri.A // C→A
+
+		log.Printf("[TRI %2d] %s → %s → %s → %s (AB=%s BC=%s CA=%s)",
+			i, tri.A, tri.B, tri.C, tri.A, ab, bc, ca)
+
+		trianglesByPair[ab] = append(trianglesByPair[ab], i)
+		trianglesByPair[bc] = append(trianglesByPair[bc], i)
+		trianglesByPair[ca] = append(trianglesByPair[ca], i)
+
+		subPairsRaw = append(subPairsRaw, ab, bc, ca)
+	}
+	log.Printf("[INIT] total raw pairs before filtering: %d", len(subPairsRaw))
+
+	// 3. Фильтрация по доступным символам
+	uniq := make(map[string]struct{})
+	for _, p := range subPairsRaw {
+		if avail[p] {
+			uniq[p] = struct{}{}
+		} else {
+			log.Printf("[SKIP] %s not available on exchange", p)
+		}
+	}
+	var subPairs []string
+	for p := range uniq {
+		subPairs = append(subPairs, p)
+	}
+	log.Printf("[INIT] total unique pairs after filtering: %d", len(subPairs))
+	log.Printf("[INIT] subscribing on: %v", subPairs)
+
+	arb := &Arbitrager{
+		Triangles:       ts,
+		latest:          make(map[string]float64),
+		trianglesByPair: trianglesByPair,
 	}
 
-	// Строим направленный граф: и BUY, и SELL
-	graph := make(map[string][]string)
-	for _, pair := range subPairs {
-		base, quote := unpackPair(pair)
-		if base == "" || quote == "" {
-			log.Printf("[SKIP] cannot unpack pair: %s", pair)
+	// 4. Подписываемся чанками по maxPerConn
+	const maxPerConn = 25
+	for i := 0; i < len(subPairs); i += maxPerConn {
+		end := i + maxPerConn
+		if end > len(subPairs) {
+			end = len(subPairs)
+		}
+		chunk := subPairs[i:end]
+		log.Printf("[WS] subscribing chunk %d:%d: %v", i, end, chunk)
+
+		go func(pairs []string) {
+			for {
+				if err := ex.SubscribeDeals(pairs, arb.HandleRaw); err != nil {
+					log.Printf("[WS][%s] subscribe chunk error: %v; retrying…", ex.Name(), err)
+					time.Sleep(time.Second)
+					continue
+				}
+				return
+			}
+		}(chunk)
+	}
+
+	return arb, nil
+}
+
+func (a *Arbitrager) HandleRaw(exchangeName string, raw []byte) {
+	// 1) Парсим WS-сообщение
+	var msg struct {
+		Symbol string `json:"s"`
+		Data   struct {
+			Deals []struct {
+				Price string `json:"p"`
+			} `json:"deals"`
+		} `json:"d"`
+	}
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		log.Printf("[ERROR][%s] unmarshal raw: %v", exchangeName, err)
+		return
+	}
+	if msg.Symbol == "" || len(msg.Data.Deals) == 0 {
+		return
+	}
+
+	// 2) Конвертируем цену
+	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
+	if err != nil {
+		log.Printf("[ERROR][%s] parse price %q: %v", exchangeName, msg.Data.Deals[0].Price, err)
+		return
+	}
+
+	// 3) Сохраняем цену и логируем тик
+	a.mu.Lock()
+	a.latest[msg.Symbol] = price
+	log.Printf("[TICK][%s] %s=%.8f", exchangeName, msg.Symbol, price)
+	a.mu.Unlock()
+
+	// 4) Проверяем все треугольники, где участвует этот symbol
+	a.Check(msg.Symbol)
+}
+
+func (a *Arbitrager) Check(symbol string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	indices := a.trianglesByPair[symbol]
+	if len(indices) == 0 {
+		return
+	}
+
+	const commission = 0.0005
+	nf := (1 - commission) * (1 - commission) * (1 - commission)
+
+	for _, i := range indices {
+		tri := a.Triangles[i]
+		ab := tri.A + tri.B // A→B
+		bc := tri.B + tri.C // B→C
+		ca := tri.C + tri.A // C→A
+
+		p1, ok1 := a.latest[ab] // price of B per A
+		p2, ok2 := a.latest[bc] // price of C per B
+		p3, ok3 := a.latest[ca] // price of A per C
+
+		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
 			continue
 		}
 
-		// BUY: quote → base (покупка базовой валюты за котируемую)
-		graph[quote] = append(graph[quote], base)
+		// Profit factor = p1 * p2 * p3 * net_fees
+		profitFactor := p1 * p2 * p3 * nf
+		profit := (profitFactor - 1) * 100
 
-		// SELL: base → quote (продажа базовой валюты за котируемую)
-		graph[base] = append(graph[base], quote)
+		//if profit > 0 {
+		a.sumProfit += profit
+		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%% total=%.4f%%",
+			tri.A, tri.B, tri.C, profit, a.sumProfit)
+		//	}
 	}
-
-	// Вывод графа
-	for k, v := range graph {
-		log.Printf("[GRAPH] %s -> %v", k, v)
-	}
-
-	// Поиск направленных треугольников
-	var tris []triangle.Triangle
-	seen := make(map[[3]string]struct{})
-
-	for a, bList := range graph {
-		for _, b := range bList {
-			for _, c := range graph[b] {
-				for _, back := range graph[c] {
-					if back == a {
-						// цикл: A → B → C → A
-						key := [3]string{a, b, c}
-						if _, ok := seen[key]; !ok {
-							seen[key] = struct{}{}
-							tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
-						}
-					}
-				}
-			}
-		}
-	}
-
-	log.Printf("[INFO] Found %d directed triangles from %d pairs", len(tris), len(subPairs))
-	return tris, nil
 }
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/07/28 11:48:57 [GRAPH] USDT -> [XRP BTC]
-2025/07/28 11:48:57 [GRAPH] XRP -> [USDT BTC]
-2025/07/28 11:48:57 [GRAPH] BTC -> [XRP USDT]
-2025/07/28 11:48:57 [INFO] Found 6 directed triangles from 3 pairs
-2025/07/28 11:48:58 [INIT] Loaded 6 triangles after filtering
-2025/07/28 11:48:58 [TRI  0] USDT → XRP → BTC → USDT (AB=USDTXRP BC=XRPBTC CA=BTCUSDT)
-2025/07/28 11:48:58 [TRI  1] USDT → BTC → XRP → USDT (AB=USDTBTC BC=BTCXRP CA=XRPUSDT)
-2025/07/28 11:48:58 [TRI  2] XRP → USDT → BTC → XRP (AB=XRPUSDT BC=USDTBTC CA=BTCXRP)
-2025/07/28 11:48:58 [TRI  3] XRP → BTC → USDT → XRP (AB=XRPBTC BC=BTCUSDT CA=USDTXRP)
-2025/07/28 11:48:58 [TRI  4] BTC → XRP → USDT → BTC (AB=BTCXRP BC=XRPUSDT CA=USDTBTC)
-2025/07/28 11:48:58 [TRI  5] BTC → USDT → XRP → BTC (AB=BTCUSDT BC=USDTXRP CA=XRPBTC)
-2025/07/28 11:48:58 [INIT] total raw pairs before filtering: 18
-2025/07/28 11:48:58 [SKIP] USDTXRP not available on exchange
-2025/07/28 11:48:58 [SKIP] USDTBTC not available on exchange
-2025/07/28 11:48:58 [SKIP] BTCXRP not available on exchange
-2025/07/28 11:48:58 [SKIP] USDTBTC not available on exchange
-2025/07/28 11:48:58 [SKIP] BTCXRP not available on exchange
-2025/07/28 11:48:58 [SKIP] USDTXRP not available on exchange
-2025/07/28 11:48:58 [SKIP] BTCXRP not available on exchange
-2025/07/28 11:48:58 [SKIP] USDTBTC not available on exchange
-2025/07/28 11:48:58 [SKIP] USDTXRP not available on exchange
-2025/07/28 11:48:58 [INIT] total unique pairs after filtering: 3
-2025/07/28 11:48:58 [INIT] subscribing on: [XRPBTC BTCUSDT XRPUSDT]
-2025/07/28 11:48:58 [WS] subscribing chunk 0:3: [XRPBTC BTCUSDT XRPUSDT]
+2025/07/28 12:00:41 [TICK][MEXC] BCHBTC=0.00485800
+2025/07/28 12:00:41 [TICK][MEXC] BCHBTC=0.00485800
+2025/07/28 12:00:41 [TICK][MEXC] BCHBTC=0.00485800
+2025/07/28 12:00:41 [TICK][MEXC] BCHBTC=0.00485300
+2025/07/28 12:00:41 [TICK][MEXC] BCHBTC=0.00485800
+2025/07/28 12:00:41 [TICK][MEXC] BCHBTC=0.00485800
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDC=119073.23000000
+2025/07/28 12:00:41 [TICK][MEXC] AVAXUSDC=26.63600000
+2025/07/28 12:00:41 [TICK][MEXC] AVAXUSDC=26.63600000
+2025/07/28 12:00:41 [TICK][MEXC] AVAXUSDC=26.63200000
+2025/07/28 12:00:41 [TICK][MEXC] AVAXUSDC=26.63600000
+2025/07/28 12:00:41 [TICK][MEXC] AVAXUSDC=26.63600000
+2025/07/28 12:00:41 [TICK][MEXC] AVAXUSDC=26.63600000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDC=119073.23000000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDC=119073.23000000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDT=119051.42000000
+2025/07/28 12:00:41 [TICK][MEXC] XLMUSDC=0.44290000
+2025/07/28 12:00:41 [TICK][MEXC] USDCUSDT=0.99980000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDC=119073.23000000
+2025/07/28 12:00:41 [TICK][MEXC] PIUSD1=0.44735000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDC=119073.12000000
+2025/07/28 12:00:41 [TICK][MEXC] ULTIMAUSDT=5082.92000000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDC=119071.37000000
+2025/07/28 12:00:41 [TICK][MEXC] ETHUSDT=3890.29000000
+2025/07/28 12:00:41 [TICK][MEXC] MXUSDT=2.23470000
+2025/07/28 12:00:41 [TICK][MEXC] MXUSDT=2.23470000
+2025/07/28 12:00:41 [TICK][MEXC] MXUSDT=2.23470000
+2025/07/28 12:00:41 [TICK][MEXC] XLMUSDT=0.44300000
+2025/07/28 12:00:41 [TICK][MEXC] XLMUSDT=0.44300000
+2025/07/28 12:00:41 [TICK][MEXC] XLMUSDT=0.44300000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDC=119073.22000000
+2025/07/28 12:00:41 [TICK][MEXC] DOGEUSDT=0.24179000
+2025/07/28 12:00:41 [TICK][MEXC] DOGEUSDT=0.24179000
+2025/07/28 12:00:41 [TICK][MEXC] DOGEUSDT=0.24179000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDC=119073.22000000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDC=119073.11000000
+2025/07/28 12:00:41 [TICK][MEXC] XRPUSDT=3.26250000
+2025/07/28 12:00:41 [TICK][MEXC] XRPUSDT=3.26250000
+2025/07/28 12:00:41 [TICK][MEXC] XRPUSDT=3.26250000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDC=119073.11000000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDC=119073.22000000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDT=119051.43000000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDT=119051.42000000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDT=119051.43000000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDT=119051.43000000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDT=119051.42000000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDT=119051.43000000
+2025/07/28 12:00:41 [TICK][MEXC] MXUSDC=2.23730000
+2025/07/28 12:00:41 [TICK][MEXC] MXETH=0.00057367
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDC=119073.21000000
+2025/07/28 12:00:41 [TICK][MEXC] MXBTC=0.00001875
+2025/07/28 12:00:41 [TICK][MEXC] CRVUSDT=1.03080000
+2025/07/28 12:00:41 [TICK][MEXC] CRVUSDT=1.03080000
+2025/07/28 12:00:41 [TICK][MEXC] CRVUSDT=1.03080000
+2025/07/28 12:00:41 [TICK][MEXC] CRVUSDT=1.03080000
+2025/07/28 12:00:41 [TICK][MEXC] DOTUSDT=4.25300000
+2025/07/28 12:00:41 [TICK][MEXC] DOGEEUR=0.20697000
+2025/07/28 12:00:41 [TICK][MEXC] DOGEEUR=0.20699000
+2025/07/28 12:00:41 [TICK][MEXC] DOGEEUR=0.20699000
+2025/07/28 12:00:41 [TICK][MEXC] DOGEEUR=0.20699000
+2025/07/28 12:00:41 [TICK][MEXC] DOGEEUR=0.20699000
+2025/07/28 12:00:41 [TICK][MEXC] DOTUSDT=4.25300000
+2025/07/28 12:00:41 [TICK][MEXC] DOGEEUR=0.20699000
+2025/07/28 12:00:41 [TICK][MEXC] BRLUSDT=0.17900000
+2025/07/28 12:00:41 [TICK][MEXC] XRPEUR=2.79330000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDC=119073.21000000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDC=119073.10000000
+2025/07/28 12:00:41 [TICK][MEXC] XRPUSDC=3.26440000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDC=119073.10000000
+2025/07/28 12:00:41 [TICK][MEXC] BTCUSDC=119073.21000000
+2025/07/28 12:00:41 [TICK][MEXC] CRVETH=0.00026471
+2025/07/28 12:00:41 [TICK][MEXC] CRVETH=0.00026466
+2025/07/28 12:00:41 [TICK][MEXC] CRVETH=0.00026466
+2025/07/28 12:00:41 [TICK][MEXC] CRVETH=0.00026466
+2025/07/28 12:00:41 [TICK][MEXC] CRVETH=0.00026466
+2025/07/28 12:00:41 [TICK][MEXC] CRVETH=0.00026466
+2025/07/28 12:00:41 [TICK][MEXC] AVAXUSDC=26.63000000
+2025/07/28 12:00:42 [TICK][MEXC] XLMUSDC=0.44300000
+2025/07/28 12:00:42 [TICK][MEXC] XLMUSDC=0.44300000
+2025/07/28 12:00:42 [TICK][MEXC] XLMUSDC=0.44300000
 
 
 
