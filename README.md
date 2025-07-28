@@ -577,6 +577,49 @@ func unpackPair(pair string) (string, string) {
 _________________________________________________________________________________________
 
 
-0.0035
+025/07/28 18:35:14 🔺 ARB MX/USDT/BRL profit=0.2237% total=1.7359%
+2025/07/28 18:35:16 🔺 ARB BRL/MX/USDT profit=0.2237% total=1.9595%
+2025/07/28 18:35:18 🔺 ARB USDT/BRL/MX profit=0.2237% total=2.1832%
+2025/07/28 18:35:20 🔺 ARB MX/USDT/BRL profit=0.2237% total=2.4069%
+2025/07/28 18:35:22 🔺 ARB BRL/MX/USDT profit=0.2237% total=2.6306%
+2025/07/28 18:35:24 🔺 ARB USDT/BRL/MX profit=0.2237% total=2.8543%
+2025/07/28 18:35:26 🔺 ARB MX/USDT/BRL profit=0.2237% total=3.0780%
+2025/07/28 18:35:28 🔺 ARB BRL/MX/USDT profit=0.2237% total=3.3017%
+2025/07/28 18:35:30 🔺 ARB USDT/BRL/MX profit=0.2237% total=3.5254%
+2025/07/28 18:35:32 🔺 ARB MX/USDT/BRL profit=0.2237% total=3.7491%
+2025/07/28 18:35:34 🔺 ARB BRL/MX/USDT profit=0.2237% total=3.9728%
+2025/07/28 18:35:36 🔺 ARB USDT/BRL/MX profit=0.2237% total=4.1965%
+2025/07/28 18:35:38 🔺 ARB MX/USDT/BRL profit=0.2237% total=4.4202%
+2025/07/28 18:35:40 🔺 ARB BRL/MX/USDT profit=0.2237% total=4.6439%
+2025/07/28 18:35:42 🔺 ARB USDT/BRL/MX profit=0.2237% total=4.8676%
+2025/07/28 18:35:44 🔺 ARB MX/USDT/BRL profit=0.2237% total=5.0912%
+2025/07/28 18:35:46 🔺 ARB BRL/MX/USDT profit=0.2237% total=5.3149%
+2025/07/28 18:35:48 🔺 ARB EUR/MX/USDT profit=0.2009% total=5.5159%
+2025/07/28 18:35:50 🔺 ARB USDT/BTC/MX profit=0.2059% total=5.7218%
+2025/07/28 18:35:52 🔺 ARB USDT/EUR/MX profit=0.2009% total=5.9227%
+2025/07/28 18:35:54 🔺 ARB USDT/BRL/MX profit=0.2640% total=6.1867%
+2025/07/28 18:35:56 🔺 ARB MX/USDT/BTC profit=0.2059% total=6.3926%
+2025/07/28 18:35:58 🔺 ARB MX/USDT/EUR profit=0.2009% total=6.5936%
+2025/07/28 18:36:00 🔺 ARB MX/USDT/BRL profit=0.2640% total=6.8575%
+2025/07/28 18:36:02 🔺 ARB BTC/MX/USDT profit=0.2059% total=7.0634%
+2025/07/28 18:36:04 🔺 ARB BRL/MX/USDT profit=0.2640% total=7.3274%
+2025/07/28 18:36:06 🔺 ARB EUR/MX/USDT profit=0.2009% total=7.5283%
+2025/07/28 18:36:08 🔺 ARB USDT/BTC/MX profit=0.2059% total=7.7343%
+2025/07/28 18:36:10 🔺 ARB USDT/EUR/MX profit=0.2009% total=7.9352%
+2025/07/28 18:36:12 🔺 ARB USDT/BRL/MX profit=0.2640% total=8.1992%
+2025/07/28 18:36:14 🔺 ARB MX/USDT/BTC profit=0.2059% total=8.4051%
+2025/07/28 18:36:16 🔺 ARB MX/USDT/EUR profit=0.2009% total=8.6060%
+2025/07/28 18:36:18 🔺 ARB MX/USDT/BRL profit=0.2640% total=8.8700%
+2025/07/28 18:36:20 🔺 ARB BTC/MX/USDT profit=0.2059% total=9.0759%
+2025/07/28 18:36:22 🔺 ARB BRL/MX/USDT profit=0.2640% total=9.3399%
+2025/07/28 18:36:24 🔺 ARB EUR/MX/USDT profit=0.2054% total=9.5453%
+2025/07/28 18:36:26 🔺 ARB USDT/BTC/MX profit=0.2104% total=9.7557%
+2025/07/28 18:36:28 🔺 ARB USDT/EUR/MX profit=0.2054% total=9.9611%
+2025/07/28 18:36:30 🔺 ARB USDT/BRL/MX profit=0.2684% total=10.2295%
+2025/07/28 18:36:32 🔺 ARB MX/USDT/BTC profit=0.2104% total=10.4399%
+2025/07/28 18:36:34 🔺 ARB MX/USDT/EUR profit=0.2054% total=10.6453%
+2025/07/28 18:36:36 🔺 ARB MX/USDT/BRL profit=0.2684% total=10.9138%
+2025/07/28 18:36:38 🔺 ARB BTC/MX/USDT profit=0.2104% total=11.1242%
+2025/07/28 18:36:40 🔺 ARB BRL/MX/USDT profit=0.2684% total=11.3926%
 
 
