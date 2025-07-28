@@ -632,17 +632,23 @@ func LoadTriangles(_ string) ([]triangle.Triangle, error) {
 	return tris, nil
 }
 
-[{
-	"resource": "/home/gaz358/myprog/crypt/internal/repository/filesystem/loader.go",
-	"owner": "go-staticcheck",
-	"severity": 4,
-	"message": "this result of append is never used, except maybe in other appends (SA4010)",
-	"source": "go-staticcheck",
-	"startLineNumber": 124,
-	"startColumn": 12,
-	"endLineNumber": 124,
-	"endColumn": 29,
-	"origin": "extHost1"
-}]
+// Разделяет строку пары на base и quote
+func unpackPair(pair string) (string, string) {
+	quotes := []string{"USDT", "USDC", "BTC", "ETH", "EUR", "BRL", "USD1"}
+	for _, q := range quotes {
+		if len(pair) > len(q) && pair[len(pair)-len(q):] == q {
+			return pair[:len(pair)-len(q)], q
+		}
+	}
+	return "", ""
+}
+
+
+az358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
+2025/07/28 11:27:27 [INFO] Found 0 triangles from 3 pairs
+2025/07/28 11:27:27 [INIT] Loaded 0 triangles after filtering
+2025/07/28 11:27:27 [INIT] total raw pairs before filtering: 0
+2025/07/28 11:27:27 [INIT] total unique pairs after filtering: 0
+2025/07/28 11:27:27 [INIT] subscribing on: []
 
 
