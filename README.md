@@ -574,3 +574,75 @@ func unpackPair(pair string) (string, string) {
 	return "", ""
 }
 
+_________________________________________________________________________________________
+
+
+func LoadTriangles(_ string) ([]triangle.Triangle, error) {
+	subPairs := []string{
+		"LINGOUSDT", "MXBRL", "KILOUSDT", "PEPEEUR", "DASHUSDT", "DOTBTC", "WAVESUSDT", "BTCUSDT", "ARUSDT",
+		// ... укорочено для примера; вставь весь список при необходимости
+		"XRPUSDT", "ETCBTC", "AGTUSDT",
+	}
+
+	// Граф как map[string][]string — аналог связного списка
+	graph := make(map[string][]string)
+	for _, pair := range subPairs {
+		base, quote := unpackPair(pair)
+		if base == "" || quote == "" {
+			log.Printf("[SKIP] cannot unpack pair: %s", pair)
+			continue
+		}
+		graph[base] = append(graph[base], quote)
+	}
+
+	// Сбор всех уникальных активов
+	assetSet := map[string]bool{}
+	for base, quotes := range graph {
+		assetSet[base] = true
+		for _, q := range quotes {
+			assetSet[q] = true
+		}
+	}
+	var assets []string
+	for a := range assetSet {
+		assets = append(assets, a)
+	}
+
+	// Поиск всех треугольников A→B→C→A
+	var tris []triangle.Triangle
+	seen := make(map[[3]string]struct{})
+	for a, neighbors := range graph {
+		for _, b := range neighbors {
+			for _, c := range graph[b] {
+				for _, back := range graph[c] {
+					if back == a {
+						sorted := []string{a, b, c}
+						sort.Strings(sorted)
+						key := [3]string{sorted[0], sorted[1], sorted[2]}
+						if _, ok := seen[key]; !ok {
+							seen[key] = struct{}{}
+							tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
+						}
+						break
+					}
+				}
+			}
+		}
+	}
+
+	log.Printf("[INFO] Found %d triangles from %d pairs", len(tris), len(subPairs))
+	return tris, nil
+}
+
+// Разделяет строку пары на base и quote
+func unpackPair(pair string) (string, string) {
+	quotes := []string{"USDT", "USDC", "BTC", "ETH", "EUR", "BRL", "USD1"}
+	for _, q := range quotes {
+		if len(pair) > len(q) && pair[len(pair)-len(q):] == q {
+			return pair[:len(pair)-len(q)], q
+		}
+	}
+	return "", ""
+}
+
+
