@@ -577,243 +577,83 @@ func unpackPair(pair string) (string, string) {
 _________________________________________________________________________________________
 
 
-package app
+🔧 Шаг 1: добавь realSymbols в Arbitrager
+В New() ты уже вызываешь:
 
-import (
-	"encoding/json"
-	"log"
-	"strconv"
-	"sync"
-	"time"
+go
+Копировать код
+avail := ex.FetchAvailableSymbols()
+Это map[string]bool. Сохрани его в структуру:
 
-	"cryptarb/internal/domain/exchange"
-	"cryptarb/internal/domain/triangle"
-	"cryptarb/internal/repository/filesystem"
-)
-
+go
+Копировать код
 type Arbitrager struct {
 	Triangles       []triangle.Triangle
 	latest          map[string]float64
 	trianglesByPair map[string][]int
 	sumProfit       float64
+	realSymbols     map[string]bool // 🔥 Добавить сюда
 	mu              sync.Mutex
 }
+В конце New():
 
-func New(path string, ex exchange.Exchange) (*Arbitrager, error) {
-	// 1. Загружаем треугольники и фильтруем по доступности пар
-	ts, err := filesystem.LoadTriangles(path)
-	if err != nil {
-		return nil, err
-	}
-	avail := ex.FetchAvailableSymbols()
-	ts = triangle.Filter(ts, avail)
-
-	log.Printf("[INIT] Loaded %d triangles after filtering", len(ts))
-
-	// 2. Собираем мапу индексов и список всех потенциальных подписок
-	trianglesByPair := make(map[string][]int)
-	var subPairsRaw []string
-	for i, tri := range ts {
-		ab := tri.A + tri.B // A→B
-		bc := tri.B + tri.C // B→C
-		ca := tri.C + tri.A // C→A
-
-		log.Printf("[TRI %2d] %s → %s → %s → %s (AB=%s BC=%s CA=%s)",
-			i, tri.A, tri.B, tri.C, tri.A, ab, bc, ca)
-
-		trianglesByPair[ab] = append(trianglesByPair[ab], i)
-		trianglesByPair[bc] = append(trianglesByPair[bc], i)
-		trianglesByPair[ca] = append(trianglesByPair[ca], i)
-
-		subPairsRaw = append(subPairsRaw, ab, bc, ca)
-	}
-	log.Printf("[INIT] total raw pairs before filtering: %d", len(subPairsRaw))
-
-	// 3. Фильтрация по доступным символам
-	uniq := make(map[string]struct{})
-	for _, p := range subPairsRaw {
-		if avail[p] {
-			uniq[p] = struct{}{}
-		} else {
-			log.Printf("[SKIP] %s not available on exchange", p)
-		}
-	}
-	var subPairs []string
-	for p := range uniq {
-		subPairs = append(subPairs, p)
-	}
-	log.Printf("[INIT] total unique pairs after filtering: %d", len(subPairs))
-	log.Printf("[INIT] subscribing on: %v", subPairs)
-
-	arb := &Arbitrager{
-		Triangles:       ts,
-		latest:          make(map[string]float64),
-		trianglesByPair: trianglesByPair,
-	}
-
-	// 4. Подписываемся чанками по maxPerConn
-	const maxPerConn = 25
-	for i := 0; i < len(subPairs); i += maxPerConn {
-		end := i + maxPerConn
-		if end > len(subPairs) {
-			end = len(subPairs)
-		}
-		chunk := subPairs[i:end]
-		log.Printf("[WS] subscribing chunk %d:%d: %v", i, end, chunk)
-
-		go func(pairs []string) {
-			for {
-				if err := ex.SubscribeDeals(pairs, arb.HandleRaw); err != nil {
-					log.Printf("[WS][%s] subscribe chunk error: %v; retrying…", ex.Name(), err)
-					time.Sleep(time.Second)
-					continue
-				}
-				return
-			}
-		}(chunk)
-	}
-
-	return arb, nil
+go
+Копировать код
+arb := &Arbitrager{
+	Triangles:       ts,
+	latest:          make(map[string]float64),
+	trianglesByPair: trianglesByPair,
+	realSymbols:     avail, // 🔥 сохраняем доступные символы
 }
-
-func (a *Arbitrager) HandleRaw(exchangeName string, raw []byte) {
-	// 1) Парсим WS-сообщение
-	var msg struct {
-		Symbol string `json:"s"`
-		Data   struct {
-			Deals []struct {
-				Price string `json:"p"`
-			} `json:"deals"`
-		} `json:"d"`
+🔧 Шаг 2: добавь normalizeSymbol() метод
+go
+Копировать код
+func (a *Arbitrager) normalizeSymbol(base, quote string) (string, bool) {
+	if a.realSymbols[base+quote] {
+		return base + quote, true
 	}
-	if err := json.Unmarshal(raw, &msg); err != nil {
-		log.Printf("[ERROR][%s] unmarshal raw: %v", exchangeName, err)
-		return
+	if a.realSymbols[quote+base] {
+		return quote + base, true
 	}
-	if msg.Symbol == "" || len(msg.Data.Deals) == 0 {
-		return
-	}
-
-	// 2) Конвертируем цену
-	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
-	if err != nil {
-		log.Printf("[ERROR][%s] parse price %q: %v", exchangeName, msg.Data.Deals[0].Price, err)
-		return
-	}
-
-	// 3) Сохраняем цену и логируем тик
-	a.mu.Lock()
-	a.latest[msg.Symbol] = price
-	log.Printf("[TICK][%s] %s=%.8f", exchangeName, msg.Symbol, price)
-	a.mu.Unlock()
-
-	// 4) Проверяем все треугольники, где участвует этот symbol
-	a.Check(msg.Symbol)
+	return "", false
 }
+🔧 Шаг 3: измени Check() — вставь нормализацию
+Было:
 
-func (a *Arbitrager) Check(symbol string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+go
+Копировать код
+ab := tri.A + tri.B
+bc := tri.B + tri.C
+ca := tri.C + tri.A
+Стало:
 
-	indices := a.trianglesByPair[symbol]
-	if len(indices) == 0 {
-		return
-	}
+go
+Копировать код
+ab, okAB := a.normalizeSymbol(tri.A, tri.B)
+bc, okBC := a.normalizeSymbol(tri.B, tri.C)
+ca, okCA := a.normalizeSymbol(tri.C, tri.A)
 
-	const commission = 0.0005
-	nf := (1 - commission) * (1 - commission) * (1 - commission)
-
-	for _, i := range indices {
-		tri := a.Triangles[i]
-		ab := tri.A + tri.B // A→B
-		bc := tri.B + tri.C // B→C
-		ca := tri.C + tri.A // C→A
-
-		p1, ok1 := a.latest[ab] // price of B per A
-		p2, ok2 := a.latest[bc] // price of C per B
-		p3, ok3 := a.latest[ca] // price of A per C
-
-		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
-			continue
-		}
-
-		// Profit factor = p1 * p2 * p3 * net_fees
-		profitFactor := p1 * p2 * p3 * nf
-		profit := (profitFactor - 1) * 100
-
-		//if profit > 0 {
-		a.sumProfit += profit
-		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%% total=%.4f%%",
-			tri.A, tri.B, tri.C, profit, a.sumProfit)
-		//	}
-	}
+if !okAB || !okBC || !okCA {
+	log.Printf("[SKIP] triangle %s/%s/%s has no real pair", tri.A, tri.B, tri.C)
+	continue
 }
+🔧 Также замени:
+go
+Копировать код
+p1, ok1 := a.latest[ab]
+p2, ok2 := a.latest[bc]
+p3, ok3 := a.latest[ca]
+📌 Это остаётся как есть, теперь ab/bc/ca всегда соответствуют реальным тикерам, и будет ok1/2/3 == true, как только придут тики.
 
+✅ Результат
+Теперь треугольники:
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/07/28 12:28:50 [GRAPH] BTC -> [XRP USDT]
-2025/07/28 12:28:50 [GRAPH] XRP -> [BTC USDT]
-2025/07/28 12:28:50 [GRAPH] USDT -> [BTC XRP]
-2025/07/28 12:28:50 [INFO] Found 6 directed triangles from 3 pairs
-2025/07/28 12:28:51 [INIT] Loaded 6 triangles after filtering
-2025/07/28 12:28:51 [TRI  0] USDT → BTC → XRP → USDT (AB=USDTBTC BC=BTCXRP CA=XRPUSDT)
-2025/07/28 12:28:51 [TRI  1] USDT → XRP → BTC → USDT (AB=USDTXRP BC=XRPBTC CA=BTCUSDT)
-2025/07/28 12:28:51 [TRI  2] BTC → XRP → USDT → BTC (AB=BTCXRP BC=XRPUSDT CA=USDTBTC)
-2025/07/28 12:28:51 [TRI  3] BTC → USDT → XRP → BTC (AB=BTCUSDT BC=USDTXRP CA=XRPBTC)
-2025/07/28 12:28:51 [TRI  4] XRP → BTC → USDT → XRP (AB=XRPBTC BC=BTCUSDT CA=USDTXRP)
-2025/07/28 12:28:51 [TRI  5] XRP → USDT → BTC → XRP (AB=XRPUSDT BC=USDTBTC CA=BTCXRP)
-2025/07/28 12:28:51 [INIT] total raw pairs before filtering: 18
-2025/07/28 12:28:51 [SKIP] USDTBTC not available on exchange
-2025/07/28 12:28:51 [SKIP] BTCXRP not available on exchange
-2025/07/28 12:28:51 [SKIP] USDTXRP not available on exchange
-2025/07/28 12:28:51 [SKIP] BTCXRP not available on exchange
-2025/07/28 12:28:51 [SKIP] USDTBTC not available on exchange
-2025/07/28 12:28:51 [SKIP] USDTXRP not available on exchange
-2025/07/28 12:28:51 [SKIP] USDTXRP not available on exchange
-2025/07/28 12:28:51 [SKIP] USDTBTC not available on exchange
-2025/07/28 12:28:51 [SKIP] BTCXRP not available on exchange
-2025/07/28 12:28:51 [INIT] total unique pairs after filtering: 3
-2025/07/28 12:28:51 [INIT] subscribing on: [XRPUSDT XRPBTC BTCUSDT]
-2025/07/28 12:28:51 [WS] subscribing chunk 0:3: [XRPUSDT XRPBTC BTCUSDT]
-ab bc ca ok1 ok2 ok3 USDTBTC BTCXRP XRPUSDT false false true
-ab bc ca ok1 ok2 ok3 BTCXRP XRPUSDT USDTBTC false true false
-ab bc ca ok1 ok2 ok3 XRPUSDT USDTBTC BTCXRP true false false
-ab bc ca ok1 ok2 ok3 USDTBTC BTCXRP XRPUSDT false false true
-ab bc ca ok1 ok2 ok3 BTCXRP XRPUSDT USDTBTC false true false
-ab bc ca ok1 ok2 ok3 XRPUSDT USDTBTC BTCXRP true false false
-ab bc ca ok1 ok2 ok3 USDTBTC BTCXRP XRPUSDT false false true
-ab bc ca ok1 ok2 ok3 BTCXRP XRPUSDT USDTBTC false true false
-ab bc ca ok1 ok2 ok3 XRPUSDT USDTBTC BTCXRP true false false
-ab bc ca ok1 ok2 ok3 USDTXRP XRPBTC BTCUSDT false false true
-ab bc ca ok1 ok2 ok3 BTCUSDT USDTXRP XRPBTC true false false
-ab bc ca ok1 ok2 ok3 XRPBTC BTCUSDT USDTXRP false true false
-ab bc ca ok1 ok2 ok3 USDTXRP XRPBTC BTCUSDT false false true
-ab bc ca ok1 ok2 ok3 BTCUSDT USDTXRP XRPBTC true false false
-ab bc ca ok1 ok2 ok3 XRPBTC BTCUSDT USDTXRP false true false
-ab bc ca ok1 ok2 ok3 USDTXRP XRPBTC BTCUSDT false false true
-ab bc ca ok1 ok2 ok3 BTCUSDT USDTXRP XRPBTC true false false
-ab bc ca ok1 ok2 ok3 XRPBTC BTCUSDT USDTXRP false true false
-ab bc ca ok1 ok2 ok3 USDTBTC BTCXRP XRPUSDT false false true
-ab bc ca ok1 ok2 ok3 BTCXRP XRPUSDT USDTBTC false true false
-ab bc ca ok1 ok2 ok3 XRPUSDT USDTBTC BTCXRP true false false
-ab bc ca ok1 ok2 ok3 USDTBTC BTCXRP XRPUSDT false false true
-ab bc ca ok1 ok2 ok3 BTCXRP XRPUSDT USDTBTC false true false
-ab bc ca ok1 ok2 ok3 XRPUSDT USDTBTC BTCXRP true false false
-ab bc ca ok1 ok2 ok3 USDTBTC BTCXRP XRPUSDT false false true
-ab bc ca ok1 ok2 ok3 BTCXRP XRPUSDT USDTBTC false true false
-ab bc ca ok1 ok2 ok3 XRPUSDT USDTBTC BTCXRP true false false
-ab bc ca ok1 ok2 ok3 USDTBTC BTCXRP XRPUSDT false false true
-ab bc ca ok1 ok2 ok3 BTCXRP XRPUSDT USDTBTC false true false
-ab bc ca ok1 ok2 ok3 XRPUSDT USDTBTC BTCXRP true false false
-ab bc ca ok1 ok2 ok3 USDTXRP XRPBTC BTCUSDT false false true
-ab bc ca ok1 ok2 ok3 BTCUSDT USDTXRP XRPBTC true false false
-ab bc ca ok1 ok2 ok3 XRPBTC BTCUSDT USDTXRP false true false
-ab bc ca ok1 ok2 ok3 USDTXRP XRPBTC BTCUSDT false false true
-ab bc ca ok1 ok2 ok3 BTCUSDT USDTXRP XRPBTC true false false
-ab bc ca ok1 ok2 ok3 XRPBTC BTCUSDT USDTXRP false true false
-ab bc ca ok1 ok2 ok3 USDTBTC BTCXRP XRPUSDT false false true
-ab bc ca ok1 ok2 ok3 BTCXRP XRPUSDT USDTBTC false true false
-ab bc ca ok1 ok2 ok3 XRPUSDT USDTBTC BTCXRP true false false
+не будут строиться на несуществующих парах (BTCXRP, USDTBTC, и т. д.)
+
+будут корректно проверяться на наличие трёх цен
+
+профит начнёт выводиться, как только ты получишь все 3 тика
+
 
 
 
