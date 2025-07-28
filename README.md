@@ -577,118 +577,95 @@ func unpackPair(pair string) (string, string) {
 _________________________________________________________________________________________
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/07/28 12:49:23 [GRAPH] BTC -> [XRP USDT]
-2025/07/28 12:49:23 [GRAPH] XRP -> [BTC USDT]
-2025/07/28 12:49:23 [GRAPH] USDT -> [BTC XRP]
-2025/07/28 12:49:23 [INFO] Found 6 directed triangles from 3 pairs
-2025/07/28 12:49:23 [INIT] Loaded 6 triangles after filtering
-2025/07/28 12:49:23 [TRI  0] BTC → XRP → USDT → BTC (AB=BTCXRP BC=XRPUSDT CA=USDTBTC)
-2025/07/28 12:49:23 [TRI  1] BTC → USDT → XRP → BTC (AB=BTCUSDT BC=USDTXRP CA=XRPBTC)
-2025/07/28 12:49:23 [TRI  2] XRP → BTC → USDT → XRP (AB=XRPBTC BC=BTCUSDT CA=USDTXRP)
-2025/07/28 12:49:23 [TRI  3] XRP → USDT → BTC → XRP (AB=XRPUSDT BC=USDTBTC CA=BTCXRP)
-2025/07/28 12:49:23 [TRI  4] USDT → BTC → XRP → USDT (AB=USDTBTC BC=BTCXRP CA=XRPUSDT)
-2025/07/28 12:49:23 [TRI  5] USDT → XRP → BTC → USDT (AB=USDTXRP BC=XRPBTC CA=BTCUSDT)
-2025/07/28 12:49:23 [INIT] total raw pairs before filtering: 18
-2025/07/28 12:49:23 [SKIP] BTCXRP not available on exchange
-2025/07/28 12:49:23 [SKIP] USDTBTC not available on exchange
-2025/07/28 12:49:23 [SKIP] USDTXRP not available on exchange
-2025/07/28 12:49:23 [SKIP] USDTXRP not available on exchange
-2025/07/28 12:49:23 [SKIP] USDTBTC not available on exchange
-2025/07/28 12:49:23 [SKIP] BTCXRP not available on exchange
-2025/07/28 12:49:23 [SKIP] USDTBTC not available on exchange
-2025/07/28 12:49:23 [SKIP] BTCXRP not available on exchange
-2025/07/28 12:49:23 [SKIP] USDTXRP not available on exchange
-2025/07/28 12:49:23 [INIT] total unique pairs after filtering: 3
-2025/07/28 12:49:23 [INIT] subscribing on: [BTCUSDT XRPBTC XRPUSDT]
-2025/07/28 12:49:23 [WS] subscribing chunk 0:3: [BTCUSDT XRPBTC XRPUSDT]
-ab bc ca ok1 ok2 ok3 XRPBTC XRPUSDT BTCUSDT false true false
-ab bc ca ok1 ok2 ok3 XRPUSDT BTCUSDT XRPBTC true false false
-ab bc ca ok1 ok2 ok3 BTCUSDT XRPBTC XRPUSDT false false true
-ab bc ca ok1 ok2 ok3 XRPBTC XRPUSDT BTCUSDT false true false
-ab bc ca ok1 ok2 ok3 XRPUSDT BTCUSDT XRPBTC true false false
-ab bc ca ok1 ok2 ok3 BTCUSDT XRPBTC XRPUSDT false false true
-ab bc ca ok1 ok2 ok3 XRPBTC XRPUSDT BTCUSDT false true false
-ab bc ca ok1 ok2 ok3 XRPUSDT BTCUSDT XRPBTC true false false
-ab bc ca ok1 ok2 ok3 BTCUSDT XRPBTC XRPUSDT false false true
-ab bc ca ok1 ok2 ok3 BTCUSDT XRPUSDT XRPBTC false true true
-ab bc ca ok1 ok2 ok3 XRPBTC BTCUSDT XRPUSDT true false true
-ab bc ca ok1 ok2 ok3 XRPUSDT XRPBTC BTCUSDT true true false
-ab bc ca ok1 ok2 ok3 BTCUSDT XRPUSDT XRPBTC false true true
-ab bc ca ok1 ok2 ok3 XRPBTC BTCUSDT XRPUSDT true false true
-ab bc ca ok1 ok2 ok3 XRPUSDT XRPBTC BTCUSDT true true false
-ab bc ca ok1 ok2 ok3 BTCUSDT XRPUSDT XRPBTC false true true
-ab bc ca ok1 ok2 ok3 XRPBTC BTCUSDT XRPUSDT true false true
-ab bc ca ok1 ok2 ok3 XRPUSDT XRPBTC BTCUSDT true true false
-ab bc ca ok1 ok2 ok3 XRPBTC XRPUSDT BTCUSDT true true false
-ab bc ca ok1 ok2 ok3 XRPUSDT BTCUSDT XRPBTC true false true
-ab bc ca ok1 ok2 ok3 BTCUSDT XRPBTC XRPUSDT false true true
-ab bc ca ok1 ok2 ok3 BTCUSDT XRPUSDT XRPBTC true true true
-2025/07/28 12:49:25 🔺 ARB BTC/USDT/XRP profit=951.3234% total=951.3234%
-ab bc ca ok1 ok2 ok3 XRPBTC BTCUSDT XRPUSDT true true true
-2025/07/28 12:49:25 🔺 ARB XRP/BTC/USDT profit=951.3234% total=1902.6467%
-ab bc ca ok1 ok2 ok3 XRPUSDT XRPBTC BTCUSDT true true true
-2025/07/28 12:49:25 🔺 ARB USDT/XRP/BTC profit=951.3234% total=2853.9701%
-ab bc ca ok1 ok2 ok3 BTCUSDT XRPUSDT XRPBTC true true true
-2025/07/28 12:49:25 🔺 ARB BTC/USDT/XRP profit=951.3234% total=3805.2934%
-ab bc ca ok1 ok2 ok3 XRPBTC BTCUSDT XRPUSDT true true true
-2025/07/28 12:49:25 🔺 ARB XRP/BTC/USDT profit=951.3234% total=4756.6168%
-ab bc ca ok1 ok2 ok3 XRPUSDT XRPBTC BTCUSDT true true true
-2025/07/28 12:49:25 🔺 ARB USDT/XRP/BTC profit=951.3234% total=5707.9401%
-ab bc ca ok1 ok2 ok3 BTCUSDT XRPUSDT XRPBTC true true true
-2025/07/28 12:49:25 🔺 ARB BTC/USDT/XRP profit=951.3234% total=6659.2635%
-ab bc ca ok1 ok2 ok3 XRPBTC BTCUSDT XRPUSDT true true true
-2025/07/28 12:49:25 🔺 ARB XRP/BTC/USDT profit=951.3234% total=7610.5868%
-ab bc ca ok1 ok2 ok3 XRPUSDT XRPBTC BTCUSDT true true true
-2025/07/28 12:49:25 🔺 ARB USDT/XRP/BTC profit=951.3234% total=8561.9102%
-ab bc ca ok1 ok2 ok3 BTCUSDT XRPUSDT XRPBTC true true true
-2025/07/28 12:49:25 🔺 ARB BTC/USDT/XRP profit=951.3234% total=9513.2336%
-ab bc ca ok1 ok2 ok3 XRPBTC BTCUSDT XRPUSDT true true true
-2025/07/28 12:49:25 🔺 ARB XRP/BTC/USDT profit=951.3234% total=10464.5569%
-ab bc ca ok1 ok2 ok3 XRPUSDT XRPBTC BTCUSDT true true true
-2025/07/28 12:49:25 🔺 ARB USDT/XRP/BTC profit=951.3234% total=11415.8803%
-ab bc ca ok1 ok2 ok3 XRPBTC XRPUSDT BTCUSDT true true true
-2025/07/28 12:49:25 🔺 ARB BTC/XRP/USDT profit=951.3234% total=12367.2036%
-ab bc ca ok1 ok2 ok3 XRPUSDT BTCUSDT XRPBTC true true true
-2025/07/28 12:49:25 🔺 ARB XRP/USDT/BTC profit=951.3234% total=13318.5270%
-ab bc ca ok1 ok2 ok3 BTCUSDT XRPBTC XRPUSDT true true true
-2025/07/28 12:49:25 🔺 ARB USDT/BTC/XRP profit=951.3234% total=14269.8503%
-ab bc ca ok1 ok2 ok3 XRPBTC XRPUSDT BTCUSDT true true true
-2025/07/28 12:49:25 🔺 ARB BTC/XRP/USDT profit=951.3234% total=15221.1737%
-ab bc ca ok1 ok2 ok3 XRPUSDT BTCUSDT XRPBTC true true true
-2025/07/28 12:49:25 🔺 ARB XRP/USDT/BTC profit=951.3234% total=16172.4970%
-ab bc ca ok1 ok2 ok3 BTCUSDT XRPBTC XRPUSDT true true true
-2025/07/28 12:49:25 🔺 ARB USDT/BTC/XRP profit=951.3234% total=17123.8204%
-ab bc ca ok1 ok2 ok3 XRPBTC XRPUSDT BTCUSDT true true true
-2025/07/28 12:49:25 🔺 ARB BTC/XRP/USDT profit=951.3234% total=18075.1438%
-ab bc ca ok1 ok2 ok3 XRPUSDT BTCUSDT XRPBTC true true true
-2025/07/28 12:49:25 🔺 ARB XRP/USDT/BTC profit=951.3234% total=19026.4671%
-ab bc ca ok1 ok2 ok3 BTCUSDT XRPBTC XRPUSDT true true true
-2025/07/28 12:49:25 🔺 ARB USDT/BTC/XRP profit=951.3234% total=19977.7905%
-ab bc ca ok1 ok2 ok3 XRPBTC XRPUSDT BTCUSDT true true true
-2025/07/28 12:49:25 🔺 ARB BTC/XRP/USDT profit=951.3558% total=20929.1462%
-ab bc ca ok1 ok2 ok3 XRPUSDT BTCUSDT XRPBTC true true true
-2025/07/28 12:49:25 🔺 ARB XRP/USDT/BTC profit=951.3558% total=21880.5020%
-ab bc ca ok1 ok2 ok3 BTCUSDT XRPBTC XRPUSDT true true true
-2025/07/28 12:49:25 🔺 ARB USDT/BTC/XRP profit=951.3558% total=22831.8577%
-ab bc ca ok1 ok2 ok3 XRPBTC XRPUSDT BTCUSDT true true true
-2025/07/28 12:49:25 🔺 ARB BTC/XRP/USDT profit=951.3558% total=23783.2135%
-ab bc ca ok1 ok2 ok3 XRPUSDT BTCUSDT XRPBTC true true true
-2025/07/28 12:49:25 🔺 ARB XRP/USDT/BTC profit=951.3558% total=24734.5692%
-ab bc ca ok1 ok2 ok3 BTCUSDT XRPBTC XRPUSDT true true true
-2025/07/28 12:49:25 🔺 ARB USDT/BTC/XRP profit=951.3558% total=25685.9250%
-ab bc ca ok1 ok2 ok3 XRPBTC XRPUSDT BTCUSDT true true true
-2025/07/28 12:49:26 🔺 ARB BTC/XRP/USDT profit=951.3234% total=26637.2484%
-ab bc ca ok1 ok2 ok3 XRPUSDT BTCUSDT XRPBTC true true true
-2025/07/28 12:49:26 🔺 ARB XRP/USDT/BTC profit=951.3234% total=27588.5717%
-ab bc ca ok1 ok2 ok3 BTCUSDT XRPBTC XRPUSDT true true true
-2025/07/28 12:49:26 🔺 ARB USDT/BTC/XRP profit=951.3234% total=28539.8951%
-ab bc ca ok1 ok2 ok3 BTCUSDT XRPUSDT XRPBTC true true true
-2025/07/28 12:49:26 🔺 ARB BTC/USDT/XRP profit=951.3234% total=29491.2184%
-ab bc ca ok1 ok2 ok3 XRPBTC BTCUSDT XRPUSDT true true true
-2025/07/28 12:49:26 🔺 ARB XRP/BTC/USDT profit=951.3234% total=30442.5418%
-ab bc ca ok1 ok2 ok3 XRPUSDT XRPBTC BTCUSDT true true true
-2025/07/28 12:49:26 🔺 ARB USDT/XRP/BTC profit=951.3234% total=31393.8651%
+🔧 1. Расширь структуру Arbitrager:
+go
+Копировать код
+type Arbitrager struct {
+	Triangles       []triangle.Triangle
+	latest          map[string]float64
+	trianglesByPair map[string][]int
+	sumProfit       float64
+	realSymbols     map[string]bool // 🔥 добавь
+	mu              sync.Mutex
+}
+🔧 2. В New(...) сохрани avail:
+go
+Копировать код
+arb := &Arbitrager{
+	Triangles:       ts,
+	latest:          make(map[string]float64),
+	trianglesByPair: trianglesByPair,
+	realSymbols:     avail, // 🔥 сохрани реальные пары
+}
+🔧 3. Добавь метод normalizeSymbolDir(...):
+go
+Копировать код
+func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, ok bool, reversed bool) {
+	if a.realSymbols[base+quote] {
+		return base + quote, true, false // прямое направление
+	}
+	if a.realSymbols[quote+base] {
+		return quote + base, true, true // обратное направление
+	}
+	return "", false, false
+}
+🔧 4. Обнови Check(symbol):
+Заменить вот это:
+
+go
+Копировать код
+ab := tri.A + tri.B
+bc := tri.B + tri.C
+ca := tri.C + tri.A
+
+p1, ok1 := a.latest[ab]
+p2, ok2 := a.latest[bc]
+p3, ok3 := a.latest[ca]
+На это:
+
+go
+Копировать код
+ab, okAB, revAB := a.normalizeSymbolDir(tri.A, tri.B)
+bc, okBC, revBC := a.normalizeSymbolDir(tri.B, tri.C)
+ca, okCA, revCA := a.normalizeSymbolDir(tri.C, tri.A)
+
+if !okAB || !okBC || !okCA {
+	log.Printf("[SKIP] triangle %s/%s/%s has no real pairs", tri.A, tri.B, tri.C)
+	return
+}
+
+p1, ok1 := a.latest[ab]
+p2, ok2 := a.latest[bc]
+p3, ok3 := a.latest[ca]
+
+if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+	log.Printf("ab bc ca ok1 ok2 ok3 %s %s %s %v %v %v", ab, bc, ca, ok1, ok2, ok3)
+	return
+}
+
+// 🔁 инвертируем, если направление "обратное"
+if revAB {
+	p1 = 1 / p1
+}
+if revBC {
+	p2 = 1 / p2
+}
+if revCA {
+	p3 = 1 / p3
+}
+Остальное — оставить как есть:
+
+go
+Копировать код
+const commission = 0.0005
+nf := (1 - commission) * (1 - commission) * (1 - commission)
+
+profitFactor := p1 * p2 * p3 * nf
+profit := (profitFactor - 1) * 100
+
+a.sumProfit += profit
+log.Printf("🔺 ARB %s/%s/%s profit=%.4f%% total=%.4f%%",
+	tri.A, tri.B, tri.C, profit, a.sumProfit)
 
 
 
