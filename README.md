@@ -578,8 +578,7 @@ ________________________________________________________________________________
 
 
 🔧 1. Расширь структуру Arbitrager:
-go
-Копировать код
+
 type Arbitrager struct {
 	Triangles       []triangle.Triangle
 	latest          map[string]float64
@@ -589,8 +588,7 @@ type Arbitrager struct {
 	mu              sync.Mutex
 }
 🔧 2. В New(...) сохрани avail:
-go
-Копировать код
+
 arb := &Arbitrager{
 	Triangles:       ts,
 	latest:          make(map[string]float64),
@@ -598,8 +596,7 @@ arb := &Arbitrager{
 	realSymbols:     avail, // 🔥 сохрани реальные пары
 }
 🔧 3. Добавь метод normalizeSymbolDir(...):
-go
-Копировать код
+
 func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, ok bool, reversed bool) {
 	if a.realSymbols[base+quote] {
 		return base + quote, true, false // прямое направление
@@ -666,6 +663,11 @@ profit := (profitFactor - 1) * 100
 a.sumProfit += profit
 log.Printf("🔺 ARB %s/%s/%s profit=%.4f%% total=%.4f%%",
 	tri.A, tri.B, tri.C, profit, a.sumProfit)
+
+
+ ARB USDC/USDT/ULTIMA profit=0.3821% total=0.3821%
+2025/07/28 13:14:43 🔺 ARB ULTIMA/USDC/USDT profit=0.3821% total=0.7641%
+2025/07/28 13:14:43 🔺 ARB USDT/ULTIMA/USDC profit=0.3821% total=1.1462%
 
 
 
