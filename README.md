@@ -584,28 +584,104 @@ MEXC_API_KEY=mx0vglgT3ZDnsRu2U5
 MEXC_SECRET_KEY=8ae390ad89f04bec97cb7b81413de813
 
 
-go get github.com/joho/godotenv
 
 
-import (
-	"log"
-	"os"
+✅ 1. Добавь метод в интерфейс Exchange
+В файле domain/exchange/exchange.go:
 
-	"github.com/joho/godotenv"
-)
+go
+Копировать
+Редактировать
+type Exchange interface {
+	Name() string
+	FetchAvailableSymbols() map[string]bool
+	SubscribeDeals(pairs []string, handler func(exchange string, raw []byte)) error
 
-func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Ошибка загрузки .env файла")
+	// 🔥 Новый метод
+	PlaceMarketOrder(symbol, side string, quantity float64) (orderID string, err error)
+}
+✅ 2. Реализация для MexcExchange
+В файле internal/repository/mexc/mexc.go:
+
+
+type MexcExchange struct {
+	apiKey    string
+	apiSecret string
+}
+
+// Добавь это:
+func NewMexcExchange(apiKey, apiSecret string) *MexcExchange {
+	return &MexcExchange{
+		apiKey:    apiKey,
+		apiSecret: apiSecret,
+	}
+}
+Теперь сам метод:
+
+
+func (m *MexcExchange) PlaceMarketOrder(symbol, side string, quantity float64) (string, error) {
+	endpoint := "https://api.mexc.com/api/v3/order"
+	timestamp := strconv.FormatInt(time.Now().UnixMilli(), 10)
+
+	// Запрос тела
+	params := make(map[string]string)
+	params["symbol"] = symbol
+	params["side"] = strings.ToUpper(side) // "BUY" или "SELL"
+	params["type"] = "MARKET"
+	if side == "BUY" {
+		params["quoteOrderQty"] = fmt.Sprintf("%.4f", quantity) // сумма в USDT
+	} else {
+		params["quantity"] = fmt.Sprintf("%.6f", quantity) // количество монет
 	}
 
-	apiKey := os.Getenv("MEXC_API_KEY")
-	secret := os.Getenv("MEXC_SECRET_KEY")
+	// Формируем строку запроса
+	query := url.Values{}
+	for k, v := range params {
+		query.Set(k, v)
+	}
+	query.Set("timestamp", timestamp)
 
-	log.Println("✅ Ключи загружены, запускаем арбитраж...")
+	// Подпись
+	signature := createSignature(m.apiSecret, query.Encode())
+	query.Set("signature", signature)
 
-	// Инициализируй клиента и запускай арбитраж
+	// Отправка
+	req, _ := http.NewRequest("POST", endpoint+"?"+query.Encode(), nil)
+	req.Header.Set("X-MEXC-APIKEY", m.apiKey)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("HTTP error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("Order failed: %s", string(body))
+	}
+
+	var result struct {
+		OrderID string `json:"orderId"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("Decode error: %v", err)
+	}
+
+	return result.OrderID, nil
 }
+✅ 3. Функция подписи:
+
+func createSignature(secret, query string) string {
+	h := hmac.New(sha256.New, []byte(secret))
+	h.Write([]byte(query))
+	return hex.EncodeToString(h.Sum(nil))
+}
+✅ Пример инициализации
+В main.go:
+
+
+mexc := repository.NewMexcExchange(os.Getenv("MEXC_API_KEY"), os.Getenv("MEXC_SECRET_KEY"))
+
 
 
