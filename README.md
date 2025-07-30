@@ -580,25 +580,26 @@ func unpackPair(pair string) (string, string) {
 _________________________________________________________________________________________
 
 
-type Arbitrager struct {
-	Triangles       []triangle.Triangle
-	latest          map[string]float64
-	trianglesByPair map[string][]int
-
-	realSymbols map[string]bool
-	mu          sync.Mutex
-
-	StartAmount float64
-	exchange    exchange.Exchange // 🔧 Добавить это
-}
-
-arb := &Arbitrager{
-	Triangles:       ts,
-	latest:          make(map[string]float64),
-	trianglesByPair: trianglesByPair,
-	realSymbols:     avail,
-	StartAmount:     0.5,
-	exchange:        ex, // 🧩 здесь
-}
-
+[{
+	"resource": "/home/gaz358/myprog/crypt/cmd/cryptarb/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "InvalidIfaceAssign",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "InvalidIfaceAssign"
+		}
+	},
+	"severity": 8,
+	"message": "cannot use ex (variable of type *mexc.MexcExchange) as exchange.Exchange value in argument to app.New: *mexc.MexcExchange does not implement exchange.Exchange (missing method Name)",
+	"source": "compiler",
+	"startLineNumber": 31,
+	"startColumn": 37,
+	"endLineNumber": 31,
+	"endColumn": 39,
+	"origin": "extHost1"
+}]
 
