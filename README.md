@@ -581,11 +581,17 @@ ________________________________________________________________________________
 
 
 
-025/07/30 19:22:18 ✅ Step 2: OrderID C02__579276592967122945022
-2025/07/30 19:22:18 💱 Step 3: SELL ULTIMA for USDT @ 4733.300000 (adj 4731.880010) ≈ 1.0916
-2025/07/30 19:22:18 ❌ Ошибка арбитража: step 3 order failed: order failed: {"msg":" quantity scale is invalid","code":400}
-
-
+025/07/30 22:47:50 🔺 ARB USDT/ULTIMA/USDC profit=0.1723%
+2025/07/30 22:47:50 🔺 Выполняем арбитраж USDT → ULTIMA → USDC → USDT (3.5000 USDT)
+2025/07/30 22:47:51 💱 Step 1: BUY ULTIMA for 3.5000 USDT @ 5030.000000 (adj 5031.509000) ≈ 0.000696
+2025/07/30 22:47:51 ✅ Step 1: OrderID C02__579328322945806338022
+2025/07/30 22:47:51 ❌ Ошибка арбитража: step 2 ask error (USDCULTIMA): no ask in depth for USDCULTIMA
+cc2025/07/30 22:48:11 🔺 ARB USDT/ULTIMA/USDC profit=0.1723%
+2025/07/30 22:48:11 🔺 Выполняем арбитраж USDT → ULTIMA → USDC → USDT (3.5000 USDT)
+2025/07/30 22:48:11 💱 Step 1: BUY ULTIMA for 3.5000 USDT @ 5023.500000 (adj 5025.007050) ≈ 0.000697
+2025/07/30 22:48:12 ✅ Step 1: OrderID C02__579328409851670534022
+2025/07/30 22:48:12 ❌ Ошибка арбитража: step 2 ask error (USDCULTIMA): no ask in depth for USDCULTIMA
+^Csignal: interrupt
 
 
 
