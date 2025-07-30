@@ -579,20 +579,434 @@ func unpackPair(pair string) (string, string) {
 
 _________________________________________________________________________________________
 
-type Exchange interface {
-	Name() string
-	PlaceMarketOrder(symbol, side string, quantity float64) (string, error)
-	FetchAvailableSymbols() map[string]bool
-	SubscribeDeals(pairs []string, handler func(exchange string, raw []byte)) error
-	GetBestAsk(symbol string) (float64, error)
-	GetBestBid(symbol string) (float64, error)
+package mexc
+
+import (
+	"cryptarb/internal/domain/triangle"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/gorilla/websocket"
+)
+
+type Mexc struct{}
+
+type MexcExchange struct {
+	apiKey    string
+	apiSecret string
+}
+
+func NewMexcExchange(apiKey, apiSecret string) *MexcExchange {
+	return &MexcExchange{
+		apiKey:    apiKey,
+		apiSecret: apiSecret,
+	}
+}
+
+func (m *MexcExchange) Name() string {
+	return "MEXC"
+}
+
+func (m *MexcExchange) PlaceMarketOrder(symbol, side string, quantity float64) (string, error) {
+	endpoint := "https://api.mexc.com/api/v3/order"
+	timestamp := strconv.FormatInt(time.Now().UnixMilli(), 10)
+
+	// Запрос тела
+	params := make(map[string]string)
+	params["symbol"] = symbol
+	params["side"] = strings.ToUpper(side) // "BUY" или "SELL"
+	params["type"] = "MARKET"
+	if side == "BUY" {
+		params["quoteOrderQty"] = fmt.Sprintf("%.4f", quantity) // сумма в USDT
+	} else {
+		params["quantity"] = fmt.Sprintf("%.6f", quantity) // количество монет
+	}
+
+	// Формируем строку запроса
+	query := url.Values{}
+	for k, v := range params {
+		query.Set(k, v)
+	}
+	query.Set("timestamp", timestamp)
+
+	// Подпись
+	signature := createSignature(m.apiSecret, query.Encode())
+	query.Set("signature", signature)
+
+	// Отправка
+	req, _ := http.NewRequest("POST", endpoint+"?"+query.Encode(), nil)
+	req.Header.Set("X-MEXC-APIKEY", m.apiKey)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("HTTP error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("order failed: %s", string(body))
+	}
+
+	var result struct {
+		OrderID string `json:"orderId"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("decode error: %v", err)
+	}
+
+	return result.OrderID, nil
+}
+
+func createSignature(secret, query string) string {
+	h := hmac.New(sha256.New, []byte(secret))
+	h.Write([]byte(query))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func (Mexc) Name() string {
+	return "MEXC"
+}
+
+func (m *MexcExchange) SubscribeDeals(pairs []string, handler func(exchange string, raw []byte)) error {
+	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	sub := map[string]interface{}{
+		"method": "SUBSCRIPTION",
+		"params": buildChannels(pairs),
+		"id":     time.Now().Unix(),
+	}
+	if err := conn.WriteJSON(sub); err != nil {
+		return err
+	}
+
+	var mu sync.Mutex
+	var lastPing time.Time
+	conn.SetPongHandler(func(string) error {
+		log.Printf("📶 [MEXC] Pong after %v\n", time.Since(lastPing))
+		return nil
+	})
+
+	go func() {
+		t := time.NewTicker(45 * time.Second)
+		defer t.Stop()
+		for range t.C {
+			mu.Lock()
+			lastPing = time.Now()
+			_ = conn.WriteMessage(websocket.PingMessage, []byte("hb"))
+			mu.Unlock()
+		}
+	}()
+
+	for {
+		_, raw, err := conn.ReadMessage()
+		if err != nil {
+			return err
+		}
+		handler("MEXC", raw)
+	}
+}
+
+func buildChannels(pairs []string) []string {
+	out := make([]string, 0, len(pairs))
+	for _, p := range pairs {
+		out = append(out, "spot@public.deals.v3.api@"+p)
+	}
+	return out
+}
+
+func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
+	// Пример через REST API: GET https://api.mexc.com/api/v3/exchangeInfo
+	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+	if err != nil {
+		log.Printf("❌ Не удалось получить пары: %v", err)
+		return nil
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Symbols []struct {
+			Symbol     string `json:"symbol"`
+			Status     string `json:"status"`
+			IsSpot     bool   `json:"isSpotTrading"`
+			BaseAsset  string `json:"baseAsset"`
+			QuoteAsset string `json:"quoteAsset"`
+		} `json:"symbols"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Printf("❌ Ошибка декодирования пар: %v", err)
+		return nil
+	}
+
+	symbols := make(map[string]bool)
+	for _, s := range result.Symbols {
+		if s.Status == "ENABLED" {
+			symbols[s.Symbol] = true
+		}
+	}
+
+	return symbols
+}
+
+func ExecuteTriangle(exchange *MexcExchange, tri triangle.Triangle, amountUSDT float64) error {
+	if tri.A != "USDT" {
+		return fmt.Errorf("треугольник должен начинаться с USDT")
+	}
+
+	log.Printf("🔺 Выполняем арбитраж %s → %s → %s → %s (%.4f USDT)",
+		tri.A, tri.B, tri.C, tri.A, amountUSDT)
+
+	// Step 1: USDT → B
+	symbol1 := tri.B + "USDT"
+	ask1, err := exchange.GetBestAsk(symbol1)
+	if err != nil {
+		return fmt.Errorf("step 1 ask error (%s): %v", symbol1, err)
+	}
+	ask1Adj := ask1 * 1.0003
+	amountB := amountUSDT / ask1Adj
+
+	log.Printf("💱 Step 1: BUY %s for %.4f USDT @ %.6f (adj %.6f) ≈ %.6f",
+		tri.B, amountUSDT, ask1, ask1Adj, amountB)
+
+	order1, err := exchange.PlaceMarketOrder(symbol1, "BUY", amountUSDT)
+	if err != nil {
+		return fmt.Errorf("step 1 order failed: %v", err)
+	}
+	log.Printf("✅ Step 1: OrderID %s", order1)
+
+	// Step 2: B → C
+	symbol2 := tri.C + tri.B
+	ask2, err := exchange.GetBestAsk(symbol2)
+	if err != nil {
+		return fmt.Errorf("step 2 ask error (%s): %v", symbol2, err)
+	}
+	ask2Adj := ask2 * 1.0003
+	amountC := amountB / ask2Adj
+
+	log.Printf("💱 Step 2: BUY %s for %.6f %s @ %.6f (adj %.6f) ≈ %.6f",
+		tri.C, amountB, tri.B, ask2, ask2Adj, amountC)
+
+	order2, err := exchange.PlaceMarketOrder(symbol2, "BUY", amountB)
+	if err != nil {
+		return fmt.Errorf("step 2 order failed: %v", err)
+	}
+	log.Printf("✅ Step 2: OrderID %s", order2)
+
+	// Step 3: C → USDT
+	symbol3 := tri.C + "USDT"
+	bid3, err := exchange.GetBestBid(symbol3)
+	if err != nil {
+		return fmt.Errorf("step 3 bid error (%s): %v", symbol3, err)
+	}
+	bid3Adj := bid3 * 0.9997
+	finalUSDT := amountC * bid3Adj
+
+	log.Printf("💱 Step 3: SELL %s for USDT @ %.6f (adj %.6f) ≈ %.4f",
+		tri.C, bid3, bid3Adj, finalUSDT)
+
+	order3, err := exchange.PlaceMarketOrder(symbol3, "SELL", amountC)
+	if err != nil {
+		return fmt.Errorf("step 3 order failed: %v", err)
+	}
+	log.Printf("✅ Step 3: OrderID %s", order3)
+
+	log.Printf("🎯 Арбитраж завершён: с %.4f USDT получили ≈ %.4f USDT", amountUSDT, finalUSDT)
+	return nil
+}
+
+func (m *MexcExchange) GetBestAsk(symbol string) (float64, error) {
+	resp, err := http.Get("https://api.mexc.com/api/v3/depth?symbol=" + symbol + "&limit=1")
+	if err != nil {
+		return 0, fmt.Errorf("get depth failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var data struct {
+		Asks [][]string `json:"asks"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return 0, fmt.Errorf("decode depth failed: %v", err)
+	}
+	if len(data.Asks) == 0 {
+		return 0, fmt.Errorf("no ask in depth for %s", symbol)
+	}
+	return strconv.ParseFloat(data.Asks[0][0], 64)
+}
+
+func (m *MexcExchange) GetBestBid(symbol string) (float64, error) {
+	resp, err := http.Get("https://api.mexc.com/api/v3/depth?symbol=" + symbol + "&limit=1")
+	if err != nil {
+		return 0, fmt.Errorf("get depth failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var data struct {
+		Bids [][]string `json:"bids"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return 0, fmt.Errorf("decode depth failed: %v", err)
+	}
+	if len(data.Bids) == 0 {
+		return 0, fmt.Errorf("no bid in depth for %s", symbol)
+	}
+	return strconv.ParseFloat(data.Bids[0][0], 64)
 }
 
 
-func ExecuteTriangle(ex exchange.Exchange, tri triangle.Triangle, amountUSDT float64) error
+				continue
+				}
+				return
+			}
+		}(chunk)
+	}
 
-err := mexc.ExecuteTriangle(a.exchange, tri, 0.5)
+	return arb, nil
+}
 
+func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, ok bool, reversed bool) {
+	if a.realSymbols[base+quote] {
+		return base + quote, true, false // прямое направление
+	}
+	if a.realSymbols[quote+base] {
+		return quote + base, true, true // обратное направление
+	}
+	return "", false, false
+}
+
+func (a *Arbitrager) HandleRaw(exchangeName string, raw []byte) {
+	// 1) Парсим WS-сообщение
+	var msg struct {
+		Symbol string `json:"s"`
+		Data   struct {
+			Deals []struct {
+				Price string `json:"p"`
+			} `json:"deals"`
+		} `json:"d"`
+	}
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		log.Printf("[ERROR][%s] unmarshal raw: %v", exchangeName, err)
+		return
+	}
+	if msg.Symbol == "" || len(msg.Data.Deals) == 0 {
+		return
+	}
+
+	// 2) Конвертируем цену
+	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
+	if err != nil {
+		log.Printf("[ERROR][%s] parse price %q: %v", exchangeName, msg.Data.Deals[0].Price, err)
+		return
+	}
+
+	// 3) Сохраняем цену и логируем тик
+	a.mu.Lock()
+	a.latest[msg.Symbol] = price
+	//	log.Printf("[TICK][%s] %s=%.8f", exchangeName, msg.Symbol, price)
+	a.mu.Unlock()
+
+	// 4) Проверяем все треугольники, где участвует этот symbol
+	a.Check(msg.Symbol)
+}
+
+func (a *Arbitrager) Check(symbol string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	indices := a.trianglesByPair[symbol]
+	if len(indices) == 0 {
+		return
+	}
+
+	const commission = 0.0035
+	nf := (1 - commission) * (1 - commission) * (1 - commission)
+
+	for _, i := range indices {
+		tri := a.Triangles[i]
+		ab, okAB, revAB := a.normalizeSymbolDir(tri.A, tri.B)
+		bc, okBC, revBC := a.normalizeSymbolDir(tri.B, tri.C)
+		ca, okCA, revCA := a.normalizeSymbolDir(tri.C, tri.A)
+
+		if !okAB || !okBC || !okCA {
+			log.Printf("[SKIP] triangle %s/%s/%s has no real pairs", tri.A, tri.B, tri.C)
+			return
+		}
+
+		p1, ok1 := a.latest[ab] // price of B per A
+		p2, ok2 := a.latest[bc] // price of C per B
+		p3, ok3 := a.latest[ca] // price of A per C
+
+		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+			//log.Printf("ab bc ca ok1 ok2 ok3 %s %s %s %v %v %v", ab, bc, ca, ok1, ok2, ok3)
+			return
+		}
+
+		if revAB {
+			p1 = 1 / p1
+		}
+		if revBC {
+			p2 = 1 / p2
+		}
+		if revCA {
+			p3 = 1 / p3
+		}
+
+		// Profit factor = p1 * p2 * p3 * net_fees
+		profitFactor := p1 * p2 * p3 * nf
+		profit := (profitFactor - 1) * 100
+
+		if profit > 0.15 && tri.A == "USDT" {
+			log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
+
+			err := mexc.ExecuteTriangle(a.exchange, tri, 0.5)
+			if err != nil {
+				log.Printf("❌ Ошибка арбитража: %v", err)
+			}
+			time.Sleep(2 * time.Second)
+		}
+
+	}
+}
+
+
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "IncompatibleAssign",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "IncompatibleAssign"
+		}
+	},
+	"severity": 8,
+	"message": "cannot use a.exchange (variable of interface type exchange.Exchange) as *mexc.MexcExchange value in argument to mexc.ExecuteTriangle: need type assertion",
+	"source": "compiler",
+	"startLineNumber": 202,
+	"startColumn": 32,
+	"endLineNumber": 202,
+	"endColumn": 42,
+	"origin": "extHost1"
+}]
 
 
 
