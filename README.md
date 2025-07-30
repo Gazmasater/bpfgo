@@ -1,3 +1,6 @@
+8ae390ad89f04bec97cb7b81413de813
+
+
 swag init -g cmd/server/main.go -o cmd/server/docs
 
 
@@ -577,9 +580,32 @@ func unpackPair(pair string) (string, string) {
 _________________________________________________________________________________________
 
 
-if profit > 0.2 {
-			a.sumProfit += profit
-			log.Printf("🔺 ARB %s/%s/%s profit=%.4f%% total=%.4f%%",
-				tri.A, tri.B, tri.C, profit, a.sumProfit)
-		}
+MEXC_API_KEY=mx0vglgT3ZDnsRu2U5
+MEXC_SECRET_KEY=8ae390ad89f04bec97cb7b81413de813
+
+
+go get github.com/joho/godotenv
+
+
+import (
+	"log"
+	"os"
+
+	"github.com/joho/godotenv"
+)
+
+func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Ошибка загрузки .env файла")
+	}
+
+	apiKey := os.Getenv("MEXC_API_KEY")
+	secret := os.Getenv("MEXC_SECRET_KEY")
+
+	log.Println("✅ Ключи загружены, запускаем арбитраж...")
+
+	// Инициализируй клиента и запускай арбитраж
+}
+
 
