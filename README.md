@@ -785,30 +785,7 @@ func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
 }
 
 
-[{
-	"resource": "/home/gaz358/myprog/crypt/cmd/cryptarb/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "InvalidIfaceAssign",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "InvalidIfaceAssign"
-		}
-	},
-	"severity": 8,
-	"message": "cannot use ex (variable of type *mexc.MexcExchange) as exchange.Exchange value in argument to app.New: *mexc.MexcExchange does not implement exchange.Exchange (missing method SubscribeDeals)",
-	"source": "compiler",
-	"startLineNumber": 31,
-	"startColumn": 37,
-	"endLineNumber": 31,
-	"endColumn": 39,
-	"origin": "extHost1"
-}]
-
-func (Mexc) SubscribeDeals(pairs []string, handler func(exchange string, raw []byte)) error {
+func (m *MexcExchange) SubscribeDeals(pairs []string, handler func(exchange string, raw []byte)) error {
 	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", nil)
 	if err != nil {
 		return err
@@ -823,12 +800,14 @@ func (Mexc) SubscribeDeals(pairs []string, handler func(exchange string, raw []b
 	if err := conn.WriteJSON(sub); err != nil {
 		return err
 	}
+
 	var mu sync.Mutex
 	var lastPing time.Time
 	conn.SetPongHandler(func(string) error {
 		log.Printf("📶 [MEXC] Pong after %v\n", time.Since(lastPing))
 		return nil
 	})
+
 	go func() {
 		t := time.NewTicker(45 * time.Second)
 		defer t.Stop()
@@ -848,5 +827,6 @@ func (Mexc) SubscribeDeals(pairs []string, handler func(exchange string, raw []b
 		handler("MEXC", raw)
 	}
 }
+
 
 
