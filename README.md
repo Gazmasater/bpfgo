@@ -579,17 +579,17 @@ func unpackPair(pair string) (string, string) {
 
 _________________________________________________________________________________________
 
-func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
-	log.Println("🔍 Загружаем /api/v3/exchangeInfo")
-	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-	if err != nil {
-		log.Printf("❌ Не удалось получить пары: %v", err)
-		return nil
-	}
-	defer resp.Body.Close()
+body, err := io.ReadAll(resp.Body)
+if err != nil {
+    log.Fatal(err)
+}
+log.Println(string(body)) // Убедись, что JSON корректный
 
-	body, _ := io.ReadAll(resp.Body)
-	log.Printf("📥 Ответ от /exchangeInfo: %s", string(body))
+err = json.Unmarshal(body, &yourStruct)
+if err != nil {
+    log.Printf("Ошибка декодирования: %v", err)
+}
+
 
 
 
