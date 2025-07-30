@@ -580,253 +580,90 @@ func unpackPair(pair string) (string, string) {
 _________________________________________________________________________________________
 
 
-package mexc
-
-import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
-	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"net/url"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
-
-	"github.com/gorilla/websocket"
-)
-
-type Mexc struct{}
-
-type MexcExchange struct {
-	apiKey    string
-	apiSecret string
+type Triangle struct {
+	A string // Стартовая валюта (например, USDT)
+	B string // Промежуточная (например, BTC)
+	C string // Третья (например, ETH)
 }
 
-func NewMexcExchange(apiKey, apiSecret string) *MexcExchange {
-	return &MexcExchange{
-		apiKey:    apiKey,
-		apiSecret: apiSecret,
-	}
-}
-
-func (m *MexcExchange) Name() string {
-	return "MEXC"
-}
-
-func (m *MexcExchange) PlaceMarketOrder(symbol, side string, quantity float64) (string, error) {
-	endpoint := "https://api.mexc.com/api/v3/order"
-	timestamp := strconv.FormatInt(time.Now().UnixMilli(), 10)
-
-	// Запрос тела
-	params := make(map[string]string)
-	params["symbol"] = symbol
-	params["side"] = strings.ToUpper(side) // "BUY" или "SELL"
-	params["type"] = "MARKET"
-	if side == "BUY" {
-		params["quoteOrderQty"] = fmt.Sprintf("%.4f", quantity) // сумма в USDT
-	} else {
-		params["quantity"] = fmt.Sprintf("%.6f", quantity) // количество монет
+func ExecuteTriangle(exchange *MexcExchange, tri Triangle, amountUSDT float64) error {
+	if tri.A != "USDT" {
+		return fmt.Errorf("треугольник должен начинаться с USDT")
 	}
 
-	// Формируем строку запроса
-	query := url.Values{}
-	for k, v := range params {
-		query.Set(k, v)
-	}
-	query.Set("timestamp", timestamp)
+	log.Printf("🔺 Выполняем арбитраж %s → %s → %s → %s (%.4f USDT)",
+		tri.A, tri.B, tri.C, tri.A, amountUSDT)
 
-	// Подпись
-	signature := createSignature(m.apiSecret, query.Encode())
-	query.Set("signature", signature)
-
-	// Отправка
-	req, _ := http.NewRequest("POST", endpoint+"?"+query.Encode(), nil)
-	req.Header.Set("X-MEXC-APIKEY", m.apiKey)
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	// Step 1: USDT → B
+	symbol1 := tri.B + "USDT"
+	ask1, err := exchange.GetBestAsk(symbol1)
 	if err != nil {
-		return "", fmt.Errorf("HTTP error: %v", err)
+		return fmt.Errorf("step 1 ask error (%s): %v", symbol1, err)
 	}
-	defer resp.Body.Close()
+	ask1Adj := ask1 * 1.0003
+	amountB := amountUSDT / ask1Adj
 
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("order failed: %s", string(body))
-	}
+	log.Printf("💱 Step 1: BUY %s for %.4f USDT @ %.6f (adj %.6f) ≈ %.6f",
+		tri.B, amountUSDT, ask1, ask1Adj, amountB)
 
-	var result struct {
-		OrderID string `json:"orderId"`
-	}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", fmt.Errorf("decode error: %v", err)
-	}
-
-	return result.OrderID, nil
-}
-
-func createSignature(secret, query string) string {
-	h := hmac.New(sha256.New, []byte(secret))
-	h.Write([]byte(query))
-	return hex.EncodeToString(h.Sum(nil))
-}
-
-func (Mexc) Name() string {
-	return "MEXC"
-}
-
-func (Mexc) FetchAvailableSymbols() map[string]bool {
-	out := make(map[string]bool)
-	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+	order1, err := exchange.PlaceMarketOrder(symbol1, "BUY", amountUSDT)
 	if err != nil {
-		return out
+		return fmt.Errorf("step 1 order failed: %v", err)
 	}
-	defer resp.Body.Close()
-	var body struct {
-		Symbols []struct {
-			Symbol string `json:"symbol"`
-		}
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return out
-	}
-	for _, s := range body.Symbols {
-		out[s.Symbol] = true
-	}
-	return out
-}
+	log.Printf("✅ Step 1: OrderID %s", order1)
 
-func (Mexc) SubscribeDeals(pairs []string, handler func(exchange string, raw []byte)) error {
-	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", nil)
+	// Step 2: B → C
+	symbol2 := tri.C + tri.B
+	ask2, err := exchange.GetBestAsk(symbol2)
 	if err != nil {
-		return err
+		return fmt.Errorf("step 2 ask error (%s): %v", symbol2, err)
 	}
-	defer conn.Close()
+	ask2Adj := ask2 * 1.0003
+	amountC := amountB / ask2Adj
 
-	sub := map[string]interface{}{
-		"method": "SUBSCRIPTION",
-		"params": buildChannels(pairs),
-		"id":     time.Now().Unix(),
-	}
-	if err := conn.WriteJSON(sub); err != nil {
-		return err
-	}
-	var mu sync.Mutex
-	var lastPing time.Time
-	conn.SetPongHandler(func(string) error {
-		log.Printf("📶 [MEXC] Pong after %v\n", time.Since(lastPing))
-		return nil
-	})
-	go func() {
-		t := time.NewTicker(45 * time.Second)
-		defer t.Stop()
-		for range t.C {
-			mu.Lock()
-			lastPing = time.Now()
-			_ = conn.WriteMessage(websocket.PingMessage, []byte("hb"))
-			mu.Unlock()
-		}
-	}()
+	log.Printf("💱 Step 2: BUY %s for %.6f %s @ %.6f (adj %.6f) ≈ %.6f",
+		tri.C, amountB, tri.B, ask2, ask2Adj, amountC)
 
-	for {
-		_, raw, err := conn.ReadMessage()
-		if err != nil {
-			return err
-		}
-		handler("MEXC", raw)
-	}
-}
-
-func buildChannels(pairs []string) []string {
-	out := make([]string, 0, len(pairs))
-	for _, p := range pairs {
-		out = append(out, "spot@public.deals.v3.api@"+p)
-	}
-	return out
-}
-
-func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
-	// Пример через REST API: GET https://api.mexc.com/api/v3/exchangeInfo
-	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+	order2, err := exchange.PlaceMarketOrder(symbol2, "BUY", amountB)
 	if err != nil {
-		log.Printf("❌ Не удалось получить пары: %v", err)
-		return nil
+		return fmt.Errorf("step 2 order failed: %v", err)
 	}
-	defer resp.Body.Close()
+	log.Printf("✅ Step 2: OrderID %s", order2)
 
-	var result struct {
-		Symbols []struct {
-			Symbol     string `json:"symbol"`
-			Status     string `json:"status"`
-			IsSpot     bool   `json:"isSpotTrading"`
-			BaseAsset  string `json:"baseAsset"`
-			QuoteAsset string `json:"quoteAsset"`
-		} `json:"symbols"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		log.Printf("❌ Ошибка декодирования пар: %v", err)
-		return nil
-	}
-
-	symbols := make(map[string]bool)
-	for _, s := range result.Symbols {
-		if s.Status == "ENABLED" {
-			symbols[s.Symbol] = true
-		}
-	}
-
-	return symbols
-}
-
-
-func (m *MexcExchange) SubscribeDeals(pairs []string, handler func(exchange string, raw []byte)) error {
-	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", nil)
+	// Step 3: C → USDT
+	symbol3 := tri.C + "USDT"
+	bid3, err := exchange.GetBestBid(symbol3)
 	if err != nil {
-		return err
+		return fmt.Errorf("step 3 bid error (%s): %v", symbol3, err)
 	}
-	defer conn.Close()
+	bid3Adj := bid3 * 0.9997
+	finalUSDT := amountC * bid3Adj
 
-	sub := map[string]interface{}{
-		"method": "SUBSCRIPTION",
-		"params": buildChannels(pairs),
-		"id":     time.Now().Unix(),
+	log.Printf("💱 Step 3: SELL %s for USDT @ %.6f (adj %.6f) ≈ %.4f",
+		tri.C, bid3, bid3Adj, finalUSDT)
+
+	order3, err := exchange.PlaceMarketOrder(symbol3, "SELL", amountC)
+	if err != nil {
+		return fmt.Errorf("step 3 order failed: %v", err)
 	}
-	if err := conn.WriteJSON(sub); err != nil {
-		return err
-	}
+	log.Printf("✅ Step 3: OrderID %s", order3)
 
-	var mu sync.Mutex
-	var lastPing time.Time
-	conn.SetPongHandler(func(string) error {
-		log.Printf("📶 [MEXC] Pong after %v\n", time.Since(lastPing))
-		return nil
-	})
-
-	go func() {
-		t := time.NewTicker(45 * time.Second)
-		defer t.Stop()
-		for range t.C {
-			mu.Lock()
-			lastPing = time.Now()
-			_ = conn.WriteMessage(websocket.PingMessage, []byte("hb"))
-			mu.Unlock()
-		}
-	}()
-
-	for {
-		_, raw, err := conn.ReadMessage()
-		if err != nil {
-			return err
-		}
-		handler("MEXC", raw)
-	}
+	log.Printf("🎯 Арбитраж завершён: с %.4f USDT получили ≈ %.4f USDT", amountUSDT, finalUSDT)
+	return nil
 }
+
+
+if profit > 0.15 && tri.A == "USDT" {
+	log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
+
+	err := ExecuteTriangle(exchange, tri, 0.5)
+	if err != nil {
+		log.Printf("❌ Ошибка арбитража: %v", err)
+	}
+	time.Sleep(2 * time.Second)
+}
+
+
 
 
 
