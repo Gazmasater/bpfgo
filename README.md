@@ -581,11 +581,131 @@ ________________________________________________________________________________
 
 
 
-Ты можешь переиспользовать уже существующую функцию normalizeSymbolDir из app.Arbitrager — для этого просто:
+package app
 
-Передай *Arbitrager в ExecuteTriangle(...), и вызывай arb.normalizeSymbolDir(...)
+import (
+	"fmt"
+	"log"
+	"math"
 
-Либо вынеси normalizeSymbolDir в triangle/utils.go, чтобы использовать в любом пакете.
+	"cryptarb/internal/domain/triangle"
+)
+
+func (a *Arbitrager) ExecuteTriangle(tri triangle.Triangle, amountUSDT float64) error {
+	if tri.A != "USDT" {
+		return fmt.Errorf("треугольник должен начинаться с USDT")
+	}
+
+	log.Printf("🔺 Выполняем арбитраж %s → %s → %s → %s (%.4f USDT)",
+		tri.A, tri.B, tri.C, tri.A, amountUSDT)
+
+	// Step 1: USDT → B
+	symbol1, ok1, rev1 := a.normalizeSymbolDir(tri.A, tri.B)
+	if !ok1 {
+		return fmt.Errorf("нет пары %s/%s", tri.A, tri.B)
+	}
+
+	ask1, err := a.exchange.GetBestAsk(symbol1)
+	if err != nil {
+		return fmt.Errorf("step 1 ask error (%s): %v", symbol1, err)
+	}
+	if rev1 {
+		ask1 = 1 / ask1
+	}
+	ask1Adj := ask1 * 1.0003
+	amountB := amountUSDT / ask1Adj
+
+	log.Printf("💱 Step 1: BUY %s for %.4f USDT @ %.6f (adj %.6f) ≈ %.6f",
+		tri.B, amountUSDT, ask1, ask1Adj, amountB)
+
+	order1, err := a.exchange.PlaceMarketOrder(symbol1, "BUY", amountUSDT)
+	if err != nil {
+		return fmt.Errorf("step 1 order failed: %v", err)
+	}
+	log.Printf("✅ Step 1: OrderID %s", order1)
+
+	// Step 2: B → C
+	symbol2, ok2, rev2 := a.normalizeSymbolDir(tri.B, tri.C)
+	if !ok2 {
+		return fmt.Errorf("нет пары %s/%s", tri.B, tri.C)
+	}
+
+	ask2, err := a.exchange.GetBestAsk(symbol2)
+	if err != nil {
+		return fmt.Errorf("step 2 ask error (%s): %v", symbol2, err)
+	}
+	if rev2 {
+		ask2 = 1 / ask2
+	}
+	ask2Adj := ask2 * 1.0003
+	amountC := amountB / ask2Adj
+
+	log.Printf("💱 Step 2: BUY %s for %.6f %s @ %.6f (adj %.6f) ≈ %.6f",
+		tri.C, amountB, tri.B, ask2, ask2Adj, amountC)
+
+	order2, err := a.exchange.PlaceMarketOrder(symbol2, "BUY", amountB)
+	if err != nil {
+		return fmt.Errorf("step 2 order failed: %v", err)
+	}
+	log.Printf("✅ Step 2: OrderID %s", order2)
+
+	// Step 3: C → USDT
+	symbol3, ok3, rev3 := a.normalizeSymbolDir(tri.C, tri.A)
+	if !ok3 {
+		return fmt.Errorf("нет пары %s/%s", tri.C, tri.A)
+	}
+
+	bid3, err := a.exchange.GetBestBid(symbol3)
+	if err != nil {
+		return fmt.Errorf("step 3 bid error (%s): %v", symbol3, err)
+	}
+	if rev3 {
+		bid3 = 1 / bid3
+	}
+	bid3Adj := bid3 * 0.9997
+	finalUSDT := amountC * bid3Adj
+
+	log.Printf("💱 Step 3: SELL %s for USDT @ %.6f (adj %.6f) ≈ %.4f",
+		tri.C, bid3, bid3Adj, finalUSDT)
+
+	order3, err := a.exchange.PlaceMarketOrder(symbol3, "SELL", amountC)
+	if err != nil {
+		return fmt.Errorf("step 3 order failed: %v", err)
+	}
+	log.Printf("✅ Step 3: OrderID %s", order3)
+
+	log.Printf("🎯 Арбитраж завершён: с %.4f USDT получили ≈ %.4f USDT", amountUSDT, finalUSDT)
+	return nil
+}
+
+
+
+
+🧩 Что нужно обновить ещё:
+В Check():
+
+Заменить:
+
+go
+Копировать
+Редактировать
+err := mexc.ExecuteTriangle(a.exchange, tri, 0.5)
+на:
+
+go
+Копировать
+Редактировать
+err := a.ExecuteTriangle(tri, a.StartAmount)
+Готов помочь, если нужно — можем сделать версию с округлением и фильтрацией minQty.
+
+
+
+
+
+
+
+Спросить ChatGPT
+
 
 
 
