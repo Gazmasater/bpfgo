@@ -664,6 +664,52 @@ if profit > 0.15 && tri.A == "USDT" {
 }
 
 
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/repository/mexc/mex.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "exchange.GetBestAsk undefined (type *MexcExchange has no field or method GetBestAsk)",
+	"source": "compiler",
+	"startLineNumber": 196,
+	"startColumn": 24,
+	"endLineNumber": 196,
+	"endColumn": 34,
+	"origin": "extHost1"
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/repository/mexc/mex.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "exchange.GetBestBid undefined (type *MexcExchange has no field or method GetBestBid)",
+	"source": "compiler",
+	"startLineNumber": 232,
+	"startColumn": 24,
+	"endLineNumber": 232,
+	"endColumn": 34,
+	"origin": "extHost1"
+}]
+
 
 
 
