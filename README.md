@@ -586,46 +586,62 @@ func (a *Arbitrager) ExecuteTriangle(tri triangle.Triangle, amountUSDT float64) 
 		return fmt.Errorf("треугольник должен начинаться с USDT")
 	}
 
-	log.Printf("🔺 Выполняем арбитраж %s → %s → %s → %s (%.4f USDT)",
-		tri.A, tri.B, tri.C, tri.A, amountUSDT)
+	log.Printf("🔺 Запуск арбитража по треугольнику: %s → %s → %s → %s", tri.A, tri.B, tri.C, tri.A)
+	log.Printf("💰 Стартовая сумма: %.4f %s", amountUSDT, tri.A)
 
 	// STEP 1: USDT → B
-	symbol1, ok1, rev1 := a.normalizeSymbolDir(tri.A, tri.B)
+	log.Println("📌 Step 1: Покупаем", tri.B, "за USDT")
+
+	symbol1, ok1, rev1 := a.normalizeSymbolDir(tri.B, tri.A) // всегда USDT → B
+	log.Printf("🔎 Step 1 symbol: %s (rev=%v)", symbol1, rev1)
+
 	if !ok1 {
-		return fmt.Errorf("нет пары %s/%s", tri.A, tri.B)
+		return fmt.Errorf("❌ нет пары %s/%s", tri.B, tri.A)
 	}
+
 	ask1, err := a.exchange.GetBestAsk(symbol1)
 	if err != nil {
-		return fmt.Errorf("step 1 ask error (%s): %v", symbol1, err)
+		return fmt.Errorf("❌ Step 1 ask error (%s): %v", symbol1, err)
 	}
+	log.Printf("📊 Step 1 ask: %.6f", ask1)
+
 	if rev1 {
 		ask1 = 1 / ask1
+		log.Printf("🔁 Step 1 ask перевёрнут: %.6f", ask1)
 	}
+
 	ask1Adj := ask1 * 1.0003
 	amountB := amountUSDT / ask1Adj
-
-	log.Printf("💱 Step 1: BUY %s for %.4f USDT @ %.6f (adj %.6f) ≈ %.6f",
+	log.Printf("💱 Step 1: BUY %s за %.4f USDT @ %.6f (adj %.6f) ≈ %.6f",
 		tri.B, amountUSDT, ask1, ask1Adj, amountB)
 
-	// Step 1 всегда "BUY" по USDT (quoteOrderQty)
 	order1, err := a.exchange.PlaceMarketOrder(symbol1, "BUY", amountUSDT)
 	if err != nil {
-		return fmt.Errorf("step 1 order failed: %v", err)
+		return fmt.Errorf("❌ Step 1 order failed: %v", err)
 	}
 	log.Printf("✅ Step 1: OrderID %s", order1)
 
 	// STEP 2: B → C
+	log.Println("📌 Step 2: Обмениваем", tri.B, "→", tri.C)
+
 	symbol2, ok2, rev2 := a.normalizeSymbolDir(tri.B, tri.C)
+	log.Printf("🔎 Step 2 symbol: %s (rev=%v)", symbol2, rev2)
+
 	if !ok2 {
-		return fmt.Errorf("нет пары %s/%s", tri.B, tri.C)
+		return fmt.Errorf("❌ нет пары %s/%s", tri.B, tri.C)
 	}
+
 	ask2, err := a.exchange.GetBestAsk(symbol2)
 	if err != nil {
-		return fmt.Errorf("step 2 ask error (%s): %v", symbol2, err)
+		return fmt.Errorf("❌ Step 2 ask error (%s): %v", symbol2, err)
 	}
+	log.Printf("📊 Step 2 ask: %.6f", ask2)
+
 	if rev2 {
 		ask2 = 1 / ask2
+		log.Printf("🔁 Step 2 ask перевёрнут: %.6f", ask2)
 	}
+
 	ask2Adj := ask2 * 1.0003
 	amountC := amountB / ask2Adj
 
@@ -633,30 +649,39 @@ func (a *Arbitrager) ExecuteTriangle(tri triangle.Triangle, amountUSDT float64) 
 	qty2 := amountB
 	if rev2 {
 		side2 = "SELL"
-		qty2 = amountB // продаём B (например LINK)
+		qty2 = amountB
 	}
 
-	log.Printf("💱 Step 2: %s %s → %s @ %.6f (adj %.6f) ≈ %.6f",
-		side2, tri.B, tri.C, ask2, ask2Adj, amountC)
+	log.Printf("💱 Step 2: %s %s → %s: %.6f (adj %.6f) qty=%.6f",
+		side2, tri.B, tri.C, ask2, ask2Adj, qty2)
 
 	order2, err := a.exchange.PlaceMarketOrder(symbol2, side2, qty2)
 	if err != nil {
-		return fmt.Errorf("step 2 order failed: %v", err)
+		return fmt.Errorf("❌ Step 2 order failed: %v", err)
 	}
 	log.Printf("✅ Step 2: OrderID %s", order2)
 
 	// STEP 3: C → USDT
+	log.Println("📌 Step 3: Обмениваем", tri.C, "→ USDT")
+
 	symbol3, ok3, rev3 := a.normalizeSymbolDir(tri.C, tri.A)
+	log.Printf("🔎 Step 3 symbol: %s (rev=%v)", symbol3, rev3)
+
 	if !ok3 {
-		return fmt.Errorf("нет пары %s/%s", tri.C, tri.A)
+		return fmt.Errorf("❌ нет пары %s/%s", tri.C, tri.A)
 	}
+
 	bid3, err := a.exchange.GetBestBid(symbol3)
 	if err != nil {
-		return fmt.Errorf("step 3 bid error (%s): %v", symbol3, err)
+		return fmt.Errorf("❌ Step 3 bid error (%s): %v", symbol3, err)
 	}
+	log.Printf("📊 Step 3 bid: %.6f", bid3)
+
 	if rev3 {
 		bid3 = 1 / bid3
+		log.Printf("🔁 Step 3 bid перевёрнут: %.6f", bid3)
 	}
+
 	bid3Adj := bid3 * 0.9997
 	finalUSDT := amountC * bid3Adj
 
@@ -667,12 +692,12 @@ func (a *Arbitrager) ExecuteTriangle(tri triangle.Triangle, amountUSDT float64) 
 		qty3 = finalUSDT
 	}
 
-	log.Printf("💱 Step 3: %s %s → USDT @ %.6f (adj %.6f) ≈ %.4f",
-		side3, tri.C, bid3, bid3Adj, finalUSDT)
+	log.Printf("💱 Step 3: %s %s → USDT @ %.6f (adj %.6f) qty=%.6f ≈ %.4f USDT",
+		side3, tri.C, bid3, bid3Adj, qty3, finalUSDT)
 
 	order3, err := a.exchange.PlaceMarketOrder(symbol3, side3, qty3)
 	if err != nil {
-		return fmt.Errorf("step 3 order failed: %v", err)
+		return fmt.Errorf("❌ Step 3 order failed: %v", err)
 	}
 	log.Printf("✅ Step 3: OrderID %s", order3)
 
@@ -680,15 +705,6 @@ func (a *Arbitrager) ExecuteTriangle(tri triangle.Triangle, amountUSDT float64) 
 	return nil
 }
 
-
-25/07/31 00:55:10 🔺 ARB USDT/ULTIMA/USDC profit=0.1718%
-2025/07/31 00:55:10 🔺 Выполняем арбитраж USDT → ULTIMA → USDC → USDT (3.5000 USDT)
-2025/07/31 00:55:10 💱 Step 1: BUY ULTIMA for 3.5000 USDT @ 0.000197 (adj 0.000197) ≈ 17782.295311
-2025/07/31 00:55:10 ✅ Step 1: OrderID C02__579360364865585161022
-2025/07/31 00:55:11 💱 Step 2: BUY ULTIMA → USDC @ 5153.840000 (adj 5155.386152) ≈ 3.449265
-2025/07/31 00:55:11 ❌ Ошибка арбитража: step 2 order failed: order failed: {"msg":"Insufficient position","code":30004}
-^Csignal: interrupt
-gaz358@gaz358-BOD-WXX9:~/myp
 
 
 
