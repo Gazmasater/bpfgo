@@ -623,6 +623,88 @@ func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
 }
 
 
+type Arbitrager struct {
+	Triangles       []triangle.Triangle
+	latest          map[string]float64
+	trianglesByPair map[string][]int
+	sumProfit       float64
+	realSymbols     map[string]bool
+	mu              sync.Mutex
+
+	StartAmount     float64 // 🔥 Добавляем сюда!
+}
+
+arb := &Arbitrager{
+	Triangles:       ts,
+	latest:          make(map[string]float64),
+	trianglesByPair: trianglesByPair,
+	realSymbols:     avail,
+	StartAmount:     25.0, // 💰 здесь сумма входа, можно из os.Getenv()
+}
+
+
+
+func (a *Arbitrager) ExecuteTriangle(tri triangle.Triangle, p1, p2, p3 float64) {
+	log.Printf("🚀 ВЫПОЛНЯЮ СДЕЛКУ: %s → %s → %s", tri.A, tri.B, tri.C)
+
+	startAmount := a.StartAmount // 🔹 сумма в USDT, передана заранее
+
+	// ---------------- 1. A → B ----------------
+	symbolAB, okAB, revAB := a.normalizeSymbolDir(tri.A, tri.B)
+	if !okAB {
+		log.Printf("❌ Пара %s/%s недоступна", tri.A, tri.B)
+		return
+	}
+	sideAB := "BUY"
+	if revAB {
+		sideAB = "SELL"
+	}
+	qtyAB := startAmount
+	order1ID, err := a.exchange.PlaceMarketOrder(symbolAB, sideAB, qtyAB)
+	if err != nil {
+		log.Printf("❌ Ордер 1 %s %s: %v", symbolAB, sideAB, err)
+		return
+	}
+	log.Printf("✅ Ордер 1: %s %s %.4f (ID: %s)", symbolAB, sideAB, qtyAB, order1ID)
+
+	// ---------------- 2. B → C ----------------
+	symbolBC, okBC, revBC := a.normalizeSymbolDir(tri.B, tri.C)
+	if !okBC {
+		log.Printf("❌ Пара %s/%s недоступна", tri.B, tri.C)
+		return
+	}
+	sideBC := "BUY"
+	if revBC {
+		sideBC = "SELL"
+	}
+	qtyBC := qtyAB * p1 // упрощённо — без учёта комиссии
+	order2ID, err := a.exchange.PlaceMarketOrder(symbolBC, sideBC, qtyBC)
+	if err != nil {
+		log.Printf("❌ Ордер 2 %s %s: %v", symbolBC, sideBC, err)
+		return
+	}
+	log.Printf("✅ Ордер 2: %s %s %.4f (ID: %s)", symbolBC, sideBC, qtyBC, order2ID)
+
+	// ---------------- 3. C → A ----------------
+	symbolCA, okCA, revCA := a.normalizeSymbolDir(tri.C, tri.A)
+	if !okCA {
+		log.Printf("❌ Пара %s/%s недоступна", tri.C, tri.A)
+		return
+	}
+	sideCA := "SELL"
+	if revCA {
+		sideCA = "BUY"
+	}
+	qtyCA := qtyBC * p2
+	order3ID, err := a.exchange.PlaceMarketOrder(symbolCA, sideCA, qtyCA)
+	if err != nil {
+		log.Printf("❌ Ордер 3 %s %s: %v", symbolCA, sideCA, err)
+		return
+	}
+	log.Printf("✅ Ордер 3: %s %s %.4f (ID: %s)", symbolCA, sideCA, qtyCA, order3ID)
+
+	log.Printf("🏁 Готово: треугольник %s → %s → %s исполнен", tri.A, tri.B, tri.C)
+}
 
 
 
