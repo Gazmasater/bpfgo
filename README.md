@@ -851,5 +851,22 @@ func (a *Arbitrager) ExecuteTriangle(tri triangle.Triangle, amountUSDT float64) 
 }
 
 
+025/07/31 02:57:35 📶 [MEXC] Pong after 221.42719ms
+2025/07/31 02:57:51 🔺 ARB USDT/MX/USDC profit=0.0446%
+2025/07/31 02:57:51 🔺 Запуск арбитража по треугольнику: USDT → MX → USDC → USDT
+2025/07/31 02:57:51 💰 Стартовая сумма: 3.5000 USDT
+2025/07/31 02:57:51 📌 Step 1: Покупаем MX за USDT
+2025/07/31 02:57:51 🔎 Step 1 symbol: MXUSDT (rev=false)
+2025/07/31 02:57:51 📊 Step 1 ask: 2.193200
+2025/07/31 02:57:51 💱 Step 1: BUY MX за 3.5000 USDT @ 2.193200 (adj 2.193858) ≈ 1.595363
+2025/07/31 02:57:51 ✅ Step 1: OrderID C02__579391239061786625022
+2025/07/31 02:57:51 📌 Step 2: Обмениваем MX → USDC
+2025/07/31 02:57:51 🔎 Step 2 symbol: MXUSDC (rev=false)
+2025/07/31 02:57:52 📊 Step 2 ask: 2.191600
+2025/07/31 02:57:52 💱 Step 2: SELL MX → USDC: 2.191600 (adj 2.192257) qty=1.595363
+2025/07/31 02:57:52 ❌ Ошибка арбитража: ❌ Step 2 order failed: order failed: {"msg":" quantity scale is invalid","code":400}
+^Csignal: interrupt
+
+
 
 
