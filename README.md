@@ -580,135 +580,45 @@ func unpackPair(pair string) (string, string) {
 _________________________________________________________________________________________
 
 
-type Triangle struct {
-	A string // Стартовая валюта (например, USDT)
-	B string // Промежуточная (например, BTC)
-	C string // Третья (например, ETH)
+func (m *MexcExchange) GetBestAsk(symbol string) (float64, error) {
+	resp, err := http.Get("https://api.mexc.com/api/v3/depth?symbol=" + symbol + "&limit=1")
+	if err != nil {
+		return 0, fmt.Errorf("get depth failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var data struct {
+		Asks [][]string `json:"asks"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return 0, fmt.Errorf("decode depth failed: %v", err)
+	}
+	if len(data.Asks) == 0 {
+		return 0, fmt.Errorf("no ask in depth for %s", symbol)
+	}
+	return strconv.ParseFloat(data.Asks[0][0], 64)
 }
 
-func ExecuteTriangle(exchange *MexcExchange, tri Triangle, amountUSDT float64) error {
-	if tri.A != "USDT" {
-		return fmt.Errorf("треугольник должен начинаться с USDT")
-	}
-
-	log.Printf("🔺 Выполняем арбитраж %s → %s → %s → %s (%.4f USDT)",
-		tri.A, tri.B, tri.C, tri.A, amountUSDT)
-
-	// Step 1: USDT → B
-	symbol1 := tri.B + "USDT"
-	ask1, err := exchange.GetBestAsk(symbol1)
+func (m *MexcExchange) GetBestBid(symbol string) (float64, error) {
+	resp, err := http.Get("https://api.mexc.com/api/v3/depth?symbol=" + symbol + "&limit=1")
 	if err != nil {
-		return fmt.Errorf("step 1 ask error (%s): %v", symbol1, err)
+		return 0, fmt.Errorf("get depth failed: %v", err)
 	}
-	ask1Adj := ask1 * 1.0003
-	amountB := amountUSDT / ask1Adj
+	defer resp.Body.Close()
 
-	log.Printf("💱 Step 1: BUY %s for %.4f USDT @ %.6f (adj %.6f) ≈ %.6f",
-		tri.B, amountUSDT, ask1, ask1Adj, amountB)
-
-	order1, err := exchange.PlaceMarketOrder(symbol1, "BUY", amountUSDT)
-	if err != nil {
-		return fmt.Errorf("step 1 order failed: %v", err)
+	var data struct {
+		Bids [][]string `json:"bids"`
 	}
-	log.Printf("✅ Step 1: OrderID %s", order1)
-
-	// Step 2: B → C
-	symbol2 := tri.C + tri.B
-	ask2, err := exchange.GetBestAsk(symbol2)
-	if err != nil {
-		return fmt.Errorf("step 2 ask error (%s): %v", symbol2, err)
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return 0, fmt.Errorf("decode depth failed: %v", err)
 	}
-	ask2Adj := ask2 * 1.0003
-	amountC := amountB / ask2Adj
-
-	log.Printf("💱 Step 2: BUY %s for %.6f %s @ %.6f (adj %.6f) ≈ %.6f",
-		tri.C, amountB, tri.B, ask2, ask2Adj, amountC)
-
-	order2, err := exchange.PlaceMarketOrder(symbol2, "BUY", amountB)
-	if err != nil {
-		return fmt.Errorf("step 2 order failed: %v", err)
+	if len(data.Bids) == 0 {
+		return 0, fmt.Errorf("no bid in depth for %s", symbol)
 	}
-	log.Printf("✅ Step 2: OrderID %s", order2)
-
-	// Step 3: C → USDT
-	symbol3 := tri.C + "USDT"
-	bid3, err := exchange.GetBestBid(symbol3)
-	if err != nil {
-		return fmt.Errorf("step 3 bid error (%s): %v", symbol3, err)
-	}
-	bid3Adj := bid3 * 0.9997
-	finalUSDT := amountC * bid3Adj
-
-	log.Printf("💱 Step 3: SELL %s for USDT @ %.6f (adj %.6f) ≈ %.4f",
-		tri.C, bid3, bid3Adj, finalUSDT)
-
-	order3, err := exchange.PlaceMarketOrder(symbol3, "SELL", amountC)
-	if err != nil {
-		return fmt.Errorf("step 3 order failed: %v", err)
-	}
-	log.Printf("✅ Step 3: OrderID %s", order3)
-
-	log.Printf("🎯 Арбитраж завершён: с %.4f USDT получили ≈ %.4f USDT", amountUSDT, finalUSDT)
-	return nil
+	return strconv.ParseFloat(data.Bids[0][0], 64)
 }
 
 
-if profit > 0.15 && tri.A == "USDT" {
-	log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
-
-	err := ExecuteTriangle(exchange, tri, 0.5)
-	if err != nil {
-		log.Printf("❌ Ошибка арбитража: %v", err)
-	}
-	time.Sleep(2 * time.Second)
-}
-
-
-[{
-	"resource": "/home/gaz358/myprog/crypt/internal/repository/mexc/mex.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingFieldOrMethod",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingFieldOrMethod"
-		}
-	},
-	"severity": 8,
-	"message": "exchange.GetBestAsk undefined (type *MexcExchange has no field or method GetBestAsk)",
-	"source": "compiler",
-	"startLineNumber": 196,
-	"startColumn": 24,
-	"endLineNumber": 196,
-	"endColumn": 34,
-	"origin": "extHost1"
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/crypt/internal/repository/mexc/mex.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingFieldOrMethod",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingFieldOrMethod"
-		}
-	},
-	"severity": 8,
-	"message": "exchange.GetBestBid undefined (type *MexcExchange has no field or method GetBestBid)",
-	"source": "compiler",
-	"startLineNumber": 232,
-	"startColumn": 24,
-	"endLineNumber": 232,
-	"endColumn": 34,
-	"origin": "extHost1"
-}]
 
 
 
