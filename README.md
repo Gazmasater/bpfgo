@@ -687,31 +687,46 @@ mexc := repository.NewMexcExchange(os.Getenv("MEXC_API_KEY"), os.Getenv("MEXC_SE
 package main
 
 import (
-	"cryptarb/internal/app"
 	"log"
 	"os"
+
+	"cryptarb/internal/app"
+	"cryptarb/internal/repository/mexc" // 👈 импортируем пакет mexc
 
 	"github.com/joho/godotenv"
 )
 
 func main() {
-
+	// 1. Загружаем .env
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Ошибка загрузки .env файла")
+		log.Fatal("❌ Не удалось загрузить .env:", err)
 	}
 
-	mexc := mexc.NewMexcExchange(os.Getenv("MEXC_API_KEY"), os.Getenv("MEXC_SECRET_KEY"))
+	apiKey := os.Getenv("MEXC_API_KEY")
+	secret := os.Getenv("MEXC_SECRET_KEY")
 
-	ex := mexc.Mexc{}
+	if apiKey == "" || secret == "" {
+		log.Fatal("❌ API ключи не найдены в .env")
+	}
 
+	// 2. Создаём клиента биржи
+	ex := mexc.NewMexcExchange(apiKey, secret) // ✅
+
+	// 3. Запускаем арбитраж
 	_, err = app.New("triangles.json", ex)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("❌ Ошибка запуска арбитража:", err)
 	}
 
-	select {} // блокируем main, пока работает арбитраж
+	// 4. Блокируем main
+	select {}
 }
+
+
+
+startAmount := 50.0 // USDT, можешь подставить из баланса
+
 
 
 
