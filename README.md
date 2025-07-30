@@ -612,6 +612,38 @@ func Filter(ts []Triangle, available map[string]bool) []Triangle {
 }
 
 
+2025/07/30 16:52:48 [GRAPH] CAW -> [USDC]
+2025/07/30 16:52:48 [GRAPH] PEAQ -> [USDT]
+2025/07/30 16:52:48 [GRAPH] VIDT -> [USDC]
+2025/07/30 16:52:48 [GRAPH] XRP -> [USDC EUR BTC USD1 USDE ETH USDT]
+2025/07/30 16:52:48 [GRAPH] BCH -> [USDT BTC]
+2025/07/30 16:52:48 [GRAPH] RBNT -> [USDC]
+2025/07/30 16:52:48 [GRAPH] LINK -> [USDT USDC ETH]
+2025/07/30 16:52:48 [GRAPH] PARTI -> [USDC]
+2025/07/30 16:52:48 [GRAPH] RAI -> [USDT]
+2025/07/30 16:52:48 [GRAPH] SERAPH -> [USDC]
+2025/07/30 16:52:48 [GRAPH] DSYNC -> [USDC]
+2025/07/30 16:52:48 [GRAPH] SOL -> [BTC USDT EUR USDC]
+2025/07/30 16:52:48 [GRAPH] USELESS -> [USDC]
+2025/07/30 16:52:48 [GRAPH] GHIBLI -> [USDC]
+2025/07/30 16:52:48 [GRAPH] OBT -> [USDC]
+2025/07/30 16:52:48 [GRAPH] AIOT -> [USDT]
+2025/07/30 16:52:48 [GRAPH] WAVES -> [USDT]
+2025/07/30 16:52:48 [GRAPH] WIF -> [EUR USDC]
+2025/07/30 16:52:48 [GRAPH] ONT -> [BTC]
+2025/07/30 16:52:48 [GRAPH] RFC -> [USDT]
+2025/07/30 16:52:48 [GRAPH] ATOM -> [BTC USDT]
+2025/07/30 16:52:48 [GRAPH] XMR -> [USDC]
+2025/07/30 16:52:48 [INFO] Found 612 directed triangles from 270 pairs
+2025/07/30 16:52:48 !!!!!!!![DEBUG] Биржа вернула 0 доступных пар
+2025/07/30 16:52:48 [FILTER ✅] Осталось треугольников после фильтрации: 0
+2025/07/30 16:52:48 [INIT] Loaded 0 triangles after filtering
+2025/07/30 16:52:48 [INIT] total raw pairs before filtering: 0
+2025/07/30 16:52:48 [INIT] total unique pairs after filtering: 0
+2025/07/30 16:52:48 [INIT] subscribing on: []
+
+
+
 
 
 
