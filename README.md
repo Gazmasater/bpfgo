@@ -705,5 +705,115 @@ func (a *Arbitrager) ExecuteTriangle(tri triangle.Triangle, amountUSDT float64) 
 	return nil
 }
 
+____________________________________________________________________________________
+
+package app_test
+
+import (
+	"cryptarb/internal/app"
+	"cryptarb/internal/domain/exchange"
+	"cryptarb/internal/domain/triangle"
+	"errors"
+	"testing"
+)
+
+// ===== MOCK IMPLEMENTATION =====
+
+type mockExchange struct {
+	asks   map[string]float64
+	bids   map[string]float64
+	orders []orderCall
+}
+
+type orderCall struct {
+	Symbol string
+	Side   string
+	Qty    float64
+}
+
+func (m *mockExchange) GetBestAsk(symbol string) (float64, error) {
+	v, ok := m.asks[symbol]
+	if !ok {
+		return 0, errors.New("ask not found")
+	}
+	return v, nil
+}
+
+func (m *mockExchange) GetBestBid(symbol string) (float64, error) {
+	v, ok := m.bids[symbol]
+	if !ok {
+		return 0, errors.New("bid not found")
+	}
+	return v, nil
+}
+
+func (m *mockExchange) PlaceMarketOrder(symbol, side string, qty float64) (string, error) {
+	m.orders = append(m.orders, orderCall{symbol, side, qty})
+	return "mock_order_id", nil
+}
+
+func (m *mockExchange) Name() string {
+	return "mock"
+}
+
+func (m *mockExchange) SubscribeDeals([]string, func(string, []byte)) error {
+	return nil
+}
+
+func (m *mockExchange) FetchAvailableSymbols() map[string]bool {
+	return map[string]bool{
+		"LINKUSDT":  true,
+		"LINKUSDC":  true,
+		"USDCUSDT":  true,
+	}
+}
+
+// ====== TEST CASE ======
+
+func TestExecuteTriangle_LinkUsdc_Direction(t *testing.T) {
+	ex := &mockExchange{
+		asks: map[string]float64{
+			"LINKUSDT": 0.05,   // USDT → LINK
+			"LINKUSDC": 17.40,  // LINK → USDC (прямое направление)
+		},
+		bids: map[string]float64{
+			"USDCUSDT": 1.00,   // USDC → USDT
+		},
+	}
+
+	arb, err := app.New("", ex)
+	if err != nil {
+		t.Fatalf("init arbitrager failed: %v", err)
+	}
+
+	tri := triangle.Triangle{
+		A: "USDT",
+		B: "LINK",
+		C: "USDC",
+	}
+
+	err = arb.ExecuteTriangle(tri, 3.5)
+	if err != nil {
+		t.Errorf("ExecuteTriangle failed: %v", err)
+	}
+
+	if len(ex.orders) != 3 {
+		t.Fatalf("ожидалось 3 ордера, получили %d", len(ex.orders))
+	}
+
+	if ex.orders[0].Symbol != "LINKUSDT" || ex.orders[0].Side != "BUY" {
+		t.Errorf("Step 1 неверный: %+v", ex.orders[0])
+	}
+
+	if ex.orders[1].Symbol != "LINKUSDC" || ex.orders[1].Side != "SELL" {
+		t.Errorf("Step 2 неверный: ожидалось SELL по LINKUSDC, получили: %+v", ex.orders[1])
+	}
+
+	if ex.orders[2].Symbol != "USDCUSDT" || ex.orders[2].Side != "SELL" {
+		t.Errorf("Step 3 неверный: %+v", ex.orders[2])
+	}
+}
+
+
 
 
