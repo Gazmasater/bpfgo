@@ -707,4 +707,3 @@ func (a *Arbitrager) ExecuteTriangle(tri triangle.Triangle, amountUSDT float64) 
 
 
 
-
