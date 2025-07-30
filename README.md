@@ -815,5 +815,31 @@ func TestExecuteTriangle_LinkUsdc_Direction(t *testing.T) {
 }
 
 
+2025/07/31 01:43:46 🔺 Запуск арбитража по треугольнику: USDT → LINK → USDC → USDT
+2025/07/31 01:43:46 💰 Стартовая сумма: 3.5000 USDT
+2025/07/31 01:43:46 📌 Step 1: Покупаем LINK за USDT
+2025/07/31 01:43:46 🔎 Step 1 symbol: LINKUSDT (rev=false)
+2025/07/31 01:43:46 📊 Step 1 ask: 0.050000
+2025/07/31 01:43:46 💱 Step 1: BUY LINK за 3.5000 USDT @ 0.050000 (adj 0.050015) ≈ 69.979006
+2025/07/31 01:43:46 ✅ Step 1: OrderID mock_order_id
+2025/07/31 01:43:46 📌 Step 2: Обмениваем LINK → USDC
+2025/07/31 01:43:46 🔎 Step 2 symbol: LINKUSDC (rev=false)
+2025/07/31 01:43:46 📊 Step 2 ask: 17.400000
+2025/07/31 01:43:46 💱 Step 2: BUY LINK → USDC: 17.400000 (adj 17.405220) qty=69.979006
+2025/07/31 01:43:46 ✅ Step 2: OrderID mock_order_id
+2025/07/31 01:43:46 📌 Step 3: Обмениваем USDC → USDT
+2025/07/31 01:43:46 🔎 Step 3 symbol: USDCUSDT (rev=false)
+2025/07/31 01:43:46 📊 Step 3 bid: 1.000000
+2025/07/31 01:43:46 💱 Step 3: SELL USDC → USDT @ 1.000000 (adj 0.999700) qty=4.020576 ≈ 4.0194 USDT
+2025/07/31 01:43:46 ✅ Step 3: OrderID mock_order_id
+2025/07/31 01:43:46 🎯 Арбитраж завершён: с 3.5000 USDT получили ≈ 4.0194 USDT
+--- FAIL: TestExecuteTriangle_LinkUsdc_Direction (0.00s)
+    arb_test.go:99: Step 2 неверный: ожидалось SELL по LINKUSDC, получили: {Symbol:LINKUSDC Side:BUY Qty:69.97900629811056}
+FAIL
+FAIL    cryptarb/internal/app   0.006s
+FAIL
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/internal/app$ 
+
+
 
 
