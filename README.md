@@ -577,24 +577,9 @@ func unpackPair(pair string) (string, string) {
 _________________________________________________________________________________________
 
 
-025/07/30 11:00:59 🔺 ARB USDT/EUR/ULTIMA profit=0.2371%
-2025/07/30 11:00:59 🔺 ARB USDT/USDC/ULTIMA profit=0.1704%
-2025/07/30 11:00:59 🔺 ARB ULTIMA/USDT/EUR profit=0.2371%
-2025/07/30 11:00:59 🔺 ARB ULTIMA/USDT/USDC profit=0.1704%
-2025/07/30 11:00:59 🔺 ARB USDC/ULTIMA/USDT profit=0.1704%
-2025/07/30 11:00:59 🔺 ARB EUR/ULTIMA/USDT profit=0.2371%
-2025/07/30 11:00:59 🔺 ARB USDT/EUR/ULTIMA profit=0.2957%
-2025/07/30 11:00:59 🔺 ARB USDT/USDC/ULTIMA profit=0.2289%
-2025/07/30 11:00:59 🔺 ARB ULTIMA/USDT/EUR profit=0.2957%
-2025/07/30 11:00:59 🔺 ARB ULTIMA/USDT/USDC profit=0.2289%
-2025/07/30 11:00:59 🔺 ARB USDC/ULTIMA/USDT profit=0.2289%
-2025/07/30 11:00:59 🔺 ARB EUR/ULTIMA/USDT profit=0.2957%
-2025/07/30 11:00:59 🔺 ARB USDT/EUR/ULTIMA profit=0.4543%
-2025/07/30 11:00:59 🔺 ARB USDT/USDC/ULTIMA profit=0.3874%
-2025/07/30 11:00:59 🔺 ARB ULTIMA/USDT/EUR profit=0.4543%
-2025/07/30 11:00:59 🔺 ARB ULTIMA/USDT/USDC profit=0.3874%
-2025/07/30 11:00:59 🔺 ARB USDC/ULTIMA/USDT profit=0.3874%
-2025/07/30 11:00:59 🔺 ARB EUR/ULTIMA/USDT profit=0.4543%
-2025/07/30 11:01:17 📶 [MEXC] Pong after 242.40351m
-
+if profit > 0.2 {
+			a.sumProfit += profit
+			log.Printf("🔺 ARB %s/%s/%s profit=%.4f%% total=%.4f%%",
+				tri.A, tri.B, tri.C, profit, a.sumProfit)
+		}
 
