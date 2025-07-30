@@ -681,4 +681,14 @@ func (a *Arbitrager) ExecuteTriangle(tri triangle.Triangle, amountUSDT float64) 
 }
 
 
+25/07/31 00:55:10 🔺 ARB USDT/ULTIMA/USDC profit=0.1718%
+2025/07/31 00:55:10 🔺 Выполняем арбитраж USDT → ULTIMA → USDC → USDT (3.5000 USDT)
+2025/07/31 00:55:10 💱 Step 1: BUY ULTIMA for 3.5000 USDT @ 0.000197 (adj 0.000197) ≈ 17782.295311
+2025/07/31 00:55:10 ✅ Step 1: OrderID C02__579360364865585161022
+2025/07/31 00:55:11 💱 Step 2: BUY ULTIMA → USDC @ 5153.840000 (adj 5155.386152) ≈ 3.449265
+2025/07/31 00:55:11 ❌ Ошибка арбитража: step 2 order failed: order failed: {"msg":"Insufficient position","code":30004}
+^Csignal: interrupt
+gaz358@gaz358-BOD-WXX9:~/myp
+
+
 
