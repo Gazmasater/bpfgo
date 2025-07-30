@@ -707,4 +707,18 @@ func (a *Arbitrager) ExecuteTriangle(tri triangle.Triangle, p1, p2, p3 float64) 
 }
 
 
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/repository/mexc/mex.go",
+	"owner": "go-staticcheck",
+	"severity": 4,
+	"message": "error strings should not be capitalized (ST1005)",
+	"source": "go-staticcheck",
+	"startLineNumber": 74,
+	"startColumn": 14,
+	"endLineNumber": 74,
+	"endColumn": 58,
+	"origin": "extHost1"
+}]
+
+
 
