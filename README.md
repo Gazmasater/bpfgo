@@ -581,12 +581,9 @@ ________________________________________________________________________________
 
 
 
-2025/07/30 19:03:42 🔺 ARB USDT/USDC/ULTIMA profit=0.1728%
-2025/07/30 19:03:42 🔺 Выполняем арбитраж USDT → USDC → ULTIMA → USDT (0.5000 USDT)
-2025/07/30 19:03:43 💱 Step 1: BUY USDC for 0.5000 USDT @ 1.000000 (adj 1.000300) ≈ 0.499850
-2025/07/30 19:03:43 ❌ Ошибка арбитража: step 1 order failed: order failed: {"msg":"The minimum transaction volume cannot be less than：1USDT","code":30002,"_extend":{"quantity":"1USDT"}}
-^Csignal: interrupt
-
+025/07/30 19:22:18 ✅ Step 2: OrderID C02__579276592967122945022
+2025/07/30 19:22:18 💱 Step 3: SELL ULTIMA for USDT @ 4733.300000 (adj 4731.880010) ≈ 1.0916
+2025/07/30 19:22:18 ❌ Ошибка арбитража: step 3 order failed: order failed: {"msg":" quantity scale is invalid","code":400}
 
 
 
