@@ -808,3 +808,45 @@ func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
 	"origin": "extHost1"
 }]
 
+func (Mexc) SubscribeDeals(pairs []string, handler func(exchange string, raw []byte)) error {
+	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	sub := map[string]interface{}{
+		"method": "SUBSCRIPTION",
+		"params": buildChannels(pairs),
+		"id":     time.Now().Unix(),
+	}
+	if err := conn.WriteJSON(sub); err != nil {
+		return err
+	}
+	var mu sync.Mutex
+	var lastPing time.Time
+	conn.SetPongHandler(func(string) error {
+		log.Printf("📶 [MEXC] Pong after %v\n", time.Since(lastPing))
+		return nil
+	})
+	go func() {
+		t := time.NewTicker(45 * time.Second)
+		defer t.Stop()
+		for range t.C {
+			mu.Lock()
+			lastPing = time.Now()
+			_ = conn.WriteMessage(websocket.PingMessage, []byte("hb"))
+			mu.Unlock()
+		}
+	}()
+
+	for {
+		_, raw, err := conn.ReadMessage()
+		if err != nil {
+			return err
+		}
+		handler("MEXC", raw)
+	}
+}
+
+
