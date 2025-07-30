@@ -579,95 +579,38 @@ func unpackPair(pair string) (string, string) {
 
 _________________________________________________________________________________________
 
-2025/07/30 16:24:11 [GRAPH] SKATE -> [USDT]
-2025/07/30 16:24:11 [GRAPH] HYPE -> [USDT]
-2025/07/30 16:24:11 [GRAPH] NAKA -> [USDC]
-2025/07/30 16:24:11 [GRAPH] QTUM -> [BTC]
-2025/07/30 16:24:11 [GRAPH] KERNEL -> [USDC]
-2025/07/30 16:24:11 [GRAPH] ARB -> [USDT]
-2025/07/30 16:24:11 [GRAPH] MUBARAK -> [USDC]
-2025/07/30 16:24:11 [GRAPH] XEN -> [USDT]
-2025/07/30 16:24:11 [GRAPH] HUMA -> [USDC]
-2025/07/30 16:24:11 [GRAPH] TRX -> [BTC USDT]
-2025/07/30 16:24:11 [GRAPH] SOSO -> [USDT]
-2025/07/30 16:24:11 [GRAPH] KAITO -> [USDT]
-2025/07/30 16:24:11 [GRAPH] SHM -> [USDT]
-2025/07/30 16:24:11 [GRAPH] ETC -> [BTC]
-2025/07/30 16:24:11 [GRAPH] USELESS -> [USDC]
-2025/07/30 16:24:11 [GRAPH] FIL -> [USDC]
-2025/07/30 16:24:11 [GRAPH] SEN -> [USDT]
-2025/07/30 16:24:11 [GRAPH] RARE -> [USDT]
-2025/07/30 16:24:11 [GRAPH] INIT -> [USDC]
-2025/07/30 16:24:11 [GRAPH] USDE -> [ENA BTC XRP KAS USDT]
-2025/07/30 16:24:11 [GRAPH] WIF -> [EUR USDC]
-2025/07/30 16:24:11 [GRAPH] ERA -> [USDC]
-2025/07/30 16:24:11 [GRAPH] CGPT -> [USDC]
-2025/07/30 16:24:11 [GRAPH] EPT -> [USDT]
-2025/07/30 16:24:11 [GRAPH] GUN -> [USDC]
-2025/07/30 16:24:11 [GRAPH] OXT -> [ETH]
-2025/07/30 16:24:11 [GRAPH] VELVET -> [USDT]
-2025/07/30 16:24:11 [GRAPH] KILO -> [USDT]
-2025/07/30 16:24:11 [GRAPH] DOT -> [BTC USDT]
-2025/07/30 16:24:11 [GRAPH] RIO -> [USDC EUR]
-2025/07/30 16:24:11 [GRAPH] WBTC -> [USDT USDC]
-2025/07/30 16:24:11 [GRAPH] RWA -> [USDC]
-2025/07/30 16:24:11 [GRAPH] A -> [BTC USDC]
-2025/07/30 16:24:11 [GRAPH] SHIB -> [USDT USDC]
-2025/07/30 16:24:11 [GRAPH] AGT -> [USDT]
-2025/07/30 16:24:11 [GRAPH] BERA -> [USDT]
-2025/07/30 16:24:11 [GRAPH] AAVE -> [USDC]
-2025/07/30 16:24:11 [GRAPH] ALGO -> [USDT]
-2025/07/30 16:24:11 [GRAPH] PUMPBTC -> [USDT]
-2025/07/30 16:24:11 [GRAPH] LINK -> [USDT USDC ETH]
-2025/07/30 16:24:11 [GRAPH] ONDO -> [USDT]
-2025/07/30 16:24:11 [GRAPH] DEXE -> [USDT]
-2025/07/30 16:24:11 [GRAPH] SUPRA -> [USDC]
-2025/07/30 16:24:11 [GRAPH] BABYDOGE -> [USDT]
-2025/07/30 16:24:11 [GRAPH] ELDE -> [USDC]
-2025/07/30 16:24:11 [GRAPH] QUBIC -> [USDT]
-2025/07/30 16:24:11 [GRAPH] AERGO -> [USDT]
-2025/07/30 16:24:11 [GRAPH] BDX -> [USDT]
-2025/07/30 16:24:11 [GRAPH] ZORA -> [USDT]
-2025/07/30 16:24:11 [GRAPH] JASMY -> [USDT]
-2025/07/30 16:24:11 [GRAPH] BOOM -> [USDC]
-2025/07/30 16:24:11 [GRAPH] ULTIMA -> [EUR USDC USDT]
-2025/07/30 16:24:11 [GRAPH] WCT -> [USDC]
-2025/07/30 16:24:11 [GRAPH] ACH -> [USDT]
-2025/07/30 16:24:11 [GRAPH] BMT -> [USDT]
-2025/07/30 16:24:11 [GRAPH] APT -> [USDC]
-2025/07/30 16:24:11 [GRAPH] AIXBT -> [USDC]
-2025/07/30 16:24:11 [GRAPH] BROCCOLIF3B -> [USDC]
-2025/07/30 16:24:11 [GRAPH] LUNC -> [USDT]
-2025/07/30 16:24:11 [GRAPH] ETH -> [EUR USDC USD1 CRV BRL BTC USDT MX OXT LINK XRP]
-2025/07/30 16:24:11 [GRAPH] UNI -> [USDC USDT]
-2025/07/30 16:24:11 [GRAPH] NEWT -> [USDT]
-2025/07/30 16:24:11 [GRAPH] TAG -> [USD1]
-2025/07/30 16:24:11 [GRAPH] MYX -> [USDT]
-2025/07/30 16:24:11 [GRAPH] PI -> [EUR USD1 USDT]
-2025/07/30 16:24:11 [GRAPH] FLY -> [USDC]
-2025/07/30 16:24:11 [GRAPH] BCH -> [USDT BTC]
-2025/07/30 16:24:11 [GRAPH] SOON -> [USDT]
-2025/07/30 16:24:11 [GRAPH] PENGU -> [USDT]
-2025/07/30 16:24:11 [GRAPH] SNX -> [USDT]
-2025/07/30 16:24:11 [GRAPH] ES -> [USDT]
-2025/07/30 16:24:11 [GRAPH] ONT -> [BTC]
-2025/07/30 16:24:11 [GRAPH] LA -> [USDT]
-2025/07/30 16:24:11 [GRAPH] RBNT -> [USDC]
-2025/07/30 16:24:11 [GRAPH] APE -> [USDT]
-2025/07/30 16:24:11 [GRAPH] SERAPH -> [USDC]
-2025/07/30 16:24:11 [GRAPH] AR -> [USDT]
-2025/07/30 16:24:11 [GRAPH] DSYNC -> [USDC]
-2025/07/30 16:24:11 [GRAPH] FHE -> [USDC]
-2025/07/30 16:24:11 [GRAPH] DOGE -> [EUR USDT]
-2025/07/30 16:24:11 [GRAPH] AVAX -> [USDT USDC]
-2025/07/30 16:24:11 [GRAPH] NEO -> [BTC]
-2025/07/30 16:24:11 [GRAPH] XDC -> [USDC]
-2025/07/30 16:24:11 [INFO] Found 612 directed triangles from 270 pairs
-2025/07/30 16:24:12 [INIT] Loaded 0 triangles after filtering
-2025/07/30 16:24:12 [INIT] total raw pairs before filtering: 0
-2025/07/30 16:24:12 [INIT] total unique pairs after filtering: 0
-2025/07/30 16:24:12 [INIT] subscribing on: []
-^Csignal: interrupt
+✅ Что нужно проверить
+1. Убедись, что FetchAvailableSymbols() возвращает нормальный список
+Добавь временный лог сразу после вызова:
+
+
+avail := ex.FetchAvailableSymbols()
+log.Printf("[DEBUG] Биржа вернула %d доступных пар", len(avail))
+Если 0 — значит ошибка на стороне mexc.FetchAvailableSymbols().
+
+2. Добавь отладку в triangle.Filter(...)
+В файл internal/domain/triangle/filter.go добавь:
+
+
+func Filter(ts []Triangle, available map[string]bool) []Triangle {
+	var out []Triangle
+	for _, t := range ts {
+		ok := func(a, b string) bool {
+			return available[a+b] || available[b+a]
+		}
+		if ok(t.A, t.B) && ok(t.B, t.C) && ok(t.A, t.C) {
+			out = append(out, t)
+		} else {
+			log.Printf("[FILTER ❌] %s/%s/%s → отсутствует пара: %v %v %v",
+				t.A, t.B, t.C,
+				available[t.A+t.B], available[t.B+t.C], available[t.A+t.C],
+			)
+		}
+	}
+	log.Printf("[FILTER ✅] Осталось треугольников после фильтрации: %d", len(out))
+	return out
+}
+
 
 
 
