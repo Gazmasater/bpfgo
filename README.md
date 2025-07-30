@@ -707,21 +707,149 @@ func (a *Arbitrager) ExecuteTriangle(tri triangle.Triangle, amountUSDT float64) 
 
 ____________________________________________________________________________________
 
-2025/07/31 01:56:34 🔺 ARB USDT/ULTIMA/USDC profit=0.4394%
-2025/07/31 01:56:34 🔺 Запуск арбитража по треугольнику: USDT → ULTIMA → USDC → USDT
-2025/07/31 01:56:34 💰 Стартовая сумма: 3.5000 USDT
-2025/07/31 01:56:34 📌 Step 1: Покупаем ULTIMA за USDT
-2025/07/31 01:56:34 🔎 Step 1 symbol: ULTIMAUSDT (rev=false)
-2025/07/31 01:56:34 📊 Step 1 ask: 5121.480000
-2025/07/31 01:56:34 💱 Step 1: BUY ULTIMA за 3.5000 USDT @ 5121.480000 (adj 5123.016444) ≈ 0.000683
-2025/07/31 01:56:34 ✅ Step 1: OrderID C02__579375814978629644022
-2025/07/31 01:56:34 📌 Step 2: Обмениваем ULTIMA → USDC
-2025/07/31 01:56:34 🔎 Step 2 symbol: ULTIMAUSDC (rev=false)
-2025/07/31 01:56:34 📊 Step 2 ask: 5366.030000
-2025/07/31 01:56:34 💱 Step 2: SELL ULTIMA → USDC: 5366.030000 (adj 5367.639809) qty=0.000683
-2025/07/31 01:56:34 ❌ Ошибка арбитража: ❌ Step 2 order failed: order failed: {"msg":" quantity scale is invalid","code":400}
-^Csignal: interrupt
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ 
+import (
+	"fmt"
+	"log"
+	"math"
+)
+
+// вспомогательная функция для округления вниз по stepSize
+func roundDown(val float64, decimals int) float64 {
+	factor := math.Pow(10, float64(decimals))
+	return math.Floor(val*factor) / factor
+}
+
+func (a *Arbitrager) ExecuteTriangle(tri triangle.Triangle, amountUSDT float64) error {
+	if tri.A != "USDT" {
+		return fmt.Errorf("треугольник должен начинаться с USDT")
+	}
+
+	log.Printf("🔺 Запуск арбитража по треугольнику: %s → %s → %s → %s", tri.A, tri.B, tri.C, tri.A)
+	log.Printf("💰 Стартовая сумма: %.4f %s", amountUSDT, tri.A)
+
+	// STEP 1: USDT → B
+	log.Println("📌 Step 1: Покупаем", tri.B, "за USDT")
+
+	symbol1, ok1, rev1 := a.normalizeSymbolDir(tri.B, tri.A)
+	log.Printf("🔎 Step 1 symbol: %s (rev=%v)", symbol1, rev1)
+	if !ok1 {
+		return fmt.Errorf("❌ нет пары %s/%s", tri.B, tri.A)
+	}
+
+	ask1, err := a.exchange.GetBestAsk(symbol1)
+	if err != nil {
+		return fmt.Errorf("❌ Step 1 ask error (%s): %v", symbol1, err)
+	}
+	log.Printf("📊 Step 1 ask: %.6f", ask1)
+
+	if rev1 {
+		ask1 = 1 / ask1
+		log.Printf("🔁 Step 1 ask перевёрнут: %.6f", ask1)
+	}
+
+	ask1Adj := ask1 * 1.0003
+	amountB := amountUSDT / ask1Adj
+	amountB = roundDown(amountB, 6)
+
+	log.Printf("💱 Step 1: BUY %s за %.4f USDT @ %.6f (adj %.6f) ≈ %.6f",
+		tri.B, amountUSDT, ask1, ask1Adj, amountB)
+
+	order1, err := a.exchange.PlaceMarketOrder(symbol1, "BUY", amountUSDT)
+	if err != nil {
+		return fmt.Errorf("❌ Step 1 order failed: %v", err)
+	}
+	log.Printf("✅ Step 1: OrderID %s", order1)
+
+	// STEP 2: B → C
+	log.Println("📌 Step 2: Обмениваем", tri.B, "→", tri.C)
+
+	symbol2, ok2, rev2 := a.normalizeSymbolDir(tri.B, tri.C)
+	log.Printf("🔎 Step 2 symbol: %s (rev=%v)", symbol2, rev2)
+	if !ok2 {
+		return fmt.Errorf("❌ нет пары %s/%s", tri.B, tri.C)
+	}
+
+	ask2, err := a.exchange.GetBestAsk(symbol2)
+	if err != nil {
+		return fmt.Errorf("❌ Step 2 ask error (%s): %v", symbol2, err)
+	}
+	log.Printf("📊 Step 2 ask: %.6f", ask2)
+
+	if rev2 {
+		ask2 = 1 / ask2
+		log.Printf("🔁 Step 2 ask перевёрнут: %.6f", ask2)
+	}
+
+	ask2Adj := ask2 * 1.0003
+	amountC := amountB / ask2Adj
+	amountC = roundDown(amountC, 6)
+
+	var side2 string
+	var qty2 float64
+	if rev2 {
+		side2 = "BUY"
+		qty2 = roundDown(amountB, 6)
+	} else {
+		side2 = "SELL"
+		qty2 = roundDown(amountB, 6)
+	}
+
+	log.Printf("💱 Step 2: %s %s → %s: %.6f (adj %.6f) qty=%.6f",
+		side2, tri.B, tri.C, ask2, ask2Adj, qty2)
+
+	order2, err := a.exchange.PlaceMarketOrder(symbol2, side2, qty2)
+	if err != nil {
+		return fmt.Errorf("❌ Step 2 order failed: %v", err)
+	}
+	log.Printf("✅ Step 2: OrderID %s", order2)
+
+	// STEP 3: C → USDT
+	log.Println("📌 Step 3: Обмениваем", tri.C, "→ USDT")
+
+	symbol3, ok3, rev3 := a.normalizeSymbolDir(tri.C, tri.A)
+	log.Printf("🔎 Step 3 symbol: %s (rev=%v)", symbol3, rev3)
+	if !ok3 {
+		return fmt.Errorf("❌ нет пары %s/%s", tri.C, tri.A)
+	}
+
+	bid3, err := a.exchange.GetBestBid(symbol3)
+	if err != nil {
+		return fmt.Errorf("❌ Step 3 bid error (%s): %v", symbol3, err)
+	}
+	log.Printf("📊 Step 3 bid: %.6f", bid3)
+
+	if rev3 {
+		bid3 = 1 / bid3
+		log.Printf("🔁 Step 3 bid перевёрнут: %.6f", bid3)
+	}
+
+	bid3Adj := bid3 * 0.9997
+	finalUSDT := amountC * bid3Adj
+	finalUSDT = roundDown(finalUSDT, 6)
+
+	var side3 string
+	var qty3 float64
+	if rev3 {
+		side3 = "BUY"
+		qty3 = roundDown(finalUSDT, 6)
+	} else {
+		side3 = "SELL"
+		qty3 = roundDown(amountC, 6)
+	}
+
+	log.Printf("💱 Step 3: %s %s → USDT @ %.6f (adj %.6f) qty=%.6f ≈ %.4f USDT",
+		side3, tri.C, bid3, bid3Adj, qty3, finalUSDT)
+
+	order3, err := a.exchange.PlaceMarketOrder(symbol3, side3, qty3)
+	if err != nil {
+		return fmt.Errorf("❌ Step 3 order failed: %v", err)
+	}
+	log.Printf("✅ Step 3: OrderID %s", order3)
+
+	log.Printf("🎯 Арбитраж завершён: с %.4f USDT получили ≈ %.4f USDT", amountUSDT, finalUSDT)
+	return nil
+}
+
 
 
 
