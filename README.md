@@ -588,67 +588,39 @@ ________________________________________________________________________________
 startAmount := 50.0 // USDT, можешь подставить из баланса
 
 
-package main
-
-import (
-	"log"
-	"os"
-
-	"cryptarb/internal/app"
-	"cryptarb/internal/repository/mexc" // 👈 импортируем пакет mexc
-
-	"github.com/joho/godotenv"
-)
-
-func main() {
-	// 1. Загружаем .env
-	err := godotenv.Load()
+func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
+	// Пример через REST API: GET https://api.mexc.com/api/v3/exchangeInfo
+	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
-		log.Fatal("❌ Не удалось загрузить .env:", err)
+		log.Printf("❌ Не удалось получить пары: %v", err)
+		return nil
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Symbols []struct {
+			Symbol     string `json:"symbol"`
+			Status     string `json:"status"`
+			IsSpot     bool   `json:"isSpotTrading"`
+			BaseAsset  string `json:"baseAsset"`
+			QuoteAsset string `json:"quoteAsset"`
+		} `json:"symbols"`
 	}
 
-	apiKey := os.Getenv("MEXC_API_KEY")
-	secret := os.Getenv("MEXC_SECRET_KEY")
-
-	if apiKey == "" || secret == "" {
-		log.Fatal("❌ API ключи не найдены в .env")
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Printf("❌ Ошибка декодирования пар: %v", err)
+		return nil
 	}
 
-	// 2. Создаём клиента биржи
-	ex := mexc.NewMexcExchange(apiKey, secret) // ✅
-
-	// 3. Запускаем арбитраж
-	_, err = app.New("triangles.json", ex)
-	if err != nil {
-		log.Fatal("❌ Ошибка запуска арбитража:", err)
-	}
-
-	// 4. Блокируем main
-	select {}
-}
-
-[{
-	"resource": "/home/gaz358/myprog/crypt/cmd/cryptarb/main.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "InvalidIfaceAssign",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "InvalidIfaceAssign"
+	symbols := make(map[string]bool)
+	for _, s := range result.Symbols {
+		if s.Status == "ENABLED" {
+			symbols[s.Symbol] = true
 		}
-	},
-	"severity": 8,
-	"message": "cannot use ex (variable of type *mexc.MexcExchange) as exchange.Exchange value in argument to app.New: *mexc.MexcExchange does not implement exchange.Exchange (missing method FetchAvailableSymbols)",
-	"source": "compiler",
-	"startLineNumber": 31,
-	"startColumn": 37,
-	"endLineNumber": 31,
-	"endColumn": 39,
-	"origin": "extHost1"
-}]
+	}
+
+	return symbols
+}
 
 
 
