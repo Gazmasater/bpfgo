@@ -592,19 +592,10 @@ if err != nil {
 
 
 
-
-client := &http.Client{Timeout: 10 * time.Second}
-req, _ := http.NewRequest("GET", "https://api.mexc.com/api/v3/exchangeInfo", nil)
-req.Header.Set("User-Agent", "Mozilla/5.0") // 💡 Критично
-
-resp, err := client.Do(req)
-if err != nil {
-	log.Printf("❌ Запрос exchangeInfo не удался: %v", err)
-	return nil
-}
-defer resp.Body.Close()
+["LIMIT","MARKET","LIMIT_MAKER"],"isSpotTradingAllowed":true,"isMarginTradingAllowed":false,"quoteAmountPrecision":"1","baseSizePrecision":"0","permissions":["SPOT"],"filters":[],"maxQuoteAmount":"2000000","makerCommission":"0","takerCommission":"0.0005","quoteAmountPrecisionMarket":"1","maxQuoteAmountMarket":"100000","fullName":"Fluence","tradeSideType":1,"st":false},{"symbol":"AURORAUSDT","status":"1","baseAsset":"AURORA","baseAssetPrecision":3,"quoteAsset":"USDT","quotePrecision":5,"quoteAssetPrecision":5,"baseCommissionPrecision":3,"quoteCommissionPrecision":5,"orderTypes":["LIMIT","MARKET","LIMIT_MAKER"],"isSpotTradingAllowed":true,"isMarginTradingAllowed":false,"quoteAmountPrecision":"1","baseSizePrecision":"0.001","permissions":["SPOT"],"filters":[],"maxQuoteAmount":"2000000","makerCommission":"0","takerCommission":"0.0005","quoteAmountPrecisionMarket":"1","maxQuoteAmountMarket":"100000","fullName":"Aurora","tradeSideType":1,"st":false},{"symbol":"LUNAUSDT","status":"1","baseAsset":"LUNA","baseAssetPrecision":2,"quoteAsset":"USDT","quotePrecision":4,"quoteAssetPrecision":4,"baseCommissionPrecision":2,"quoteCommissionPrecision":4,"orderTypes":["LIMIT","MARKET","LIMIT_MAKER"],"isSpotTradingAllowed":true,"isMarginTradingAllowed":false,"quoteAmountPrecision":"1","baseSizePrecision":"0.01","permissions":["SPOT"],"filters":[],"maxQuoteAmount":"2000000","makerCommission":"0","takerCommission":"0.0005","quoteAmountPrecisionMarket":"1","maxQuoteAmountMarket":"200000","fullName":"Terra","tradeSideType":1,"st":false},{"symbol":"BOTTOUSDT","status":"1","baseAsset":"BOTTO","baseAssetPrecision":2,"quoteAsset":"USDT","quotePrecision":4,"quoteAssetPrecision":4,"baseCommissionPrecision":2,"quoteCommissionPrecision":4,"orderTypes":["LIMIT","MARKET","LIMIT_MAKER"],"isSpotTradingAllowed":true,"isMarginTradingAllowed":false,"quoteAmountPrecision":"1","baseSizePrecision":"0","permissions":["SPOT"],"filters":[],"maxQuoteAmount":"2000000","makerCommission":"0","takerCommission":"0.0005","quoteAmountPrecisionMarket":"1","maxQuoteAmountMarket":"100000","fullName":"Botto","tradeSideType":1,"st":false},{"symbol":"NEOXUSDT","status":"1","baseAsset":"NEOX","baseAssetPrecision":2,"quoteAsset":"USDT","quotePrecision":6,"quoteAssetPrecision":6,"baseCommissionPrecision":2,"quoteCommissionPrecision":6,"orderTypes":["LIMIT","MARKET","LIMIT_MAKER"],"isSpotTradingAllowed":true,"isMarginTradingAllowed":false,"quoteAmountPrecision":"1","baseSizePrecision":"0","permissions":["SPOT"],"filters":[],"maxQuoteAmount":"2000000","makerCommission":"0","takerCommission":"0.0005","quoteAmountPrecisionMarket":"1","maxQuoteAmountMarket":"100000","fullName":"Neoxa","tradeSideType":1,"st":false},{"symbol":"HYPERUSDC","status":"1","baseAsset":"HYPER","baseAssetPrecision":2,"quoteAsset":"USDC","quotePrecision":5,"quoteAssetPrecision":5,"baseCommissionPrecision":2,"quoteCommissionPrecision":5,"orderTypes":["LIMIT","MARKET","LIMIT_MAKER"],"isSpotTradingAllowed":false,"isMarginTradingAllowed":false,"quoteAmountPrecision":"1","baseSizePrecision":"0","permissions":["SPOT"],"filters":[],"maxQuoteAmount":"2000000","makerCommission":"0","takerCommission":"0","quoteAmountPrecisionMarket":"1","maxQuoteAmountMarket":"100000","fullName":"Hyperlane","tradeSideType":1,"st":false},{"symbol":"FLDTUSDT","status":"1","baseAsset":"FLDT","baseAssetPrecision":2,"quoteAsset":"USDT","quotePrecision":5,"quoteAssetPrecision":5,"baseCommissionPrecision":2,"quoteCommissionPrecision":5,"orderTypes":["LIMIT","MARKET","LIMIT_MAKER"],"isSpotTradingAllowed":true,"isMarginTradingAllowed":false,"quoteAmountPrecision":"1","baseSizePrecision":"0","permissions":["SPOT"],"filters":[],"maxQuoteAmount":"2000000","makerCommission":"0","takerCommission":"0.0005","quoteAmountPrecisionMarket":"1","maxQuoteAmountMarket":"100000","fullName":"FluidTokens","tradeSideType":1,"st":false}]}
 
 
 
-data, _ := ioutil.ReadAll(resp.Body) // ← теперь тело «исчерпано»
-json.NewDecoder(resp.Body).Decode(&v) // ← ошибка EOF
+
+
+
