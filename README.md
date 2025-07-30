@@ -589,9 +589,7 @@ MEXC_SECRET_KEY=8ae390ad89f04bec97cb7b81413de813
 ✅ 1. Добавь метод в интерфейс Exchange
 В файле domain/exchange/exchange.go:
 
-go
-Копировать
-Редактировать
+
 type Exchange interface {
 	Name() string
 	FetchAvailableSymbols() map[string]bool
@@ -682,6 +680,39 @@ func createSignature(secret, query string) string {
 
 
 mexc := repository.NewMexcExchange(os.Getenv("MEXC_API_KEY"), os.Getenv("MEXC_SECRET_KEY"))
+
+
+
+
+package main
+
+import (
+	"cryptarb/internal/app"
+	"log"
+	"os"
+
+	"github.com/joho/godotenv"
+)
+
+func main() {
+
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Ошибка загрузки .env файла")
+	}
+
+	mexc := mexc.NewMexcExchange(os.Getenv("MEXC_API_KEY"), os.Getenv("MEXC_SECRET_KEY"))
+
+	ex := mexc.Mexc{}
+
+	_, err = app.New("triangles.json", ex)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	select {} // блокируем main, пока работает арбитраж
+}
+
 
 
 
