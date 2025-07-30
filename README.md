@@ -581,113 +581,11 @@ ________________________________________________________________________________
 
 
 
-func (a *Arbitrager) ExecuteTriangle(tri triangle.Triangle, amountUSDT float64) error {
-	if tri.A != "USDT" {
-		return fmt.Errorf("треугольник должен начинаться с USDT")
-	}
-
-	log.Printf("🔺 Выполняем арбитраж %s → %s → %s → %s (%.4f USDT)",
-		tri.A, tri.B, tri.C, tri.A, amountUSDT)
-
-	// Step 1: USDT → B
-	symbol1, ok1, rev1 := a.normalizeSymbolDir(tri.A, tri.B)
-	if !ok1 {
-		return fmt.Errorf("нет пары %s/%s", tri.A, tri.B)
-	}
-	ask1, err := a.exchange.GetBestAsk(symbol1)
-	if err != nil {
-		return fmt.Errorf("step 1 ask error (%s): %v", symbol1, err)
-	}
-	if rev1 {
-		ask1 = 1 / ask1
-	}
-	ask1Adj := ask1 * 1.0003
-	amountB := amountUSDT / ask1Adj
-
-	log.Printf("💱 Step 1: BUY %s for %.4f USDT @ %.6f (adj %.6f) ≈ %.6f",
-		tri.B, amountUSDT, ask1, ask1Adj, amountB)
-
-	side1 := "BUY"
-	// В Step 1 всегда покупаем B за USDT (quoteOrderQty)
-	order1, err := a.exchange.PlaceMarketOrder(symbol1, side1, amountUSDT)
-	if err != nil {
-		return fmt.Errorf("step 1 order failed: %v", err)
-	}
-	log.Printf("✅ Step 1: OrderID %s", order1)
-
-	// Step 2: B → C
-	symbol2, ok2, rev2 := a.normalizeSymbolDir(tri.B, tri.C)
-	if !ok2 {
-		return fmt.Errorf("нет пары %s/%s", tri.B, tri.C)
-	}
-	ask2, err := a.exchange.GetBestAsk(symbol2)
-	if err != nil {
-		return fmt.Errorf("step 2 ask error (%s): %v", symbol2, err)
-	}
-	if rev2 {
-		ask2 = 1 / ask2
-	}
-	ask2Adj := ask2 * 1.0003
-	amountC := amountB / ask2Adj
-
-	log.Printf("💱 Step 2: %s %s → %s @ %.6f (adj %.6f) ≈ %.6f",
-		map[bool]string{false: "BUY", true: "SELL"}[rev2],
-		tri.B, tri.C, ask2, ask2Adj, amountC)
-
-	var side2 string
-	var qty2 float64
-	if rev2 {
-		side2 = "SELL"
-		qty2 = amountB
-	} else {
-		side2 = "BUY"
-		qty2 = amountB
-	}
-	order2, err := a.exchange.PlaceMarketOrder(symbol2, side2, qty2)
-	if err != nil {
-		return fmt.Errorf("step 2 order failed: %v", err)
-	}
-	log.Printf("✅ Step 2: OrderID %s", order2)
-
-	// Step 3: C → USDT
-	symbol3, ok3, rev3 := a.normalizeSymbolDir(tri.C, tri.A)
-	if !ok3 {
-		return fmt.Errorf("нет пары %s/%s", tri.C, tri.A)
-	}
-	bid3, err := a.exchange.GetBestBid(symbol3)
-	if err != nil {
-		return fmt.Errorf("step 3 bid error (%s): %v", symbol3, err)
-	}
-	if rev3 {
-		bid3 = 1 / bid3
-	}
-	bid3Adj := bid3 * 0.9997
-	finalUSDT := amountC * bid3Adj
-
-	log.Printf("💱 Step 3: %s %s → USDT @ %.6f (adj %.6f) ≈ %.4f",
-		map[bool]string{false: "SELL", true: "BUY"}[rev3],
-		tri.C, bid3, bid3Adj, finalUSDT)
-
-	var side3 string
-	var qty3 float64
-	if rev3 {
-		side3 = "BUY"
-		qty3 = finalUSDT // не факт что корректно, зависит от API
-	} else {
-		side3 = "SELL"
-		qty3 = amountC
-	}
-	order3, err := a.exchange.PlaceMarketOrder(symbol3, side3, qty3)
-	if err != nil {
-		return fmt.Errorf("step 3 order failed: %v", err)
-	}
-	log.Printf("✅ Step 3: OrderID %s", order3)
-
-	log.Printf("🎯 Арбитраж завершён: с %.4f USDT получили ≈ %.4f USDT", amountUSDT, finalUSDT)
-	return nil
-}
-
-
-
+/07/31 00:05:29 🔺 Выполняем арбитраж USDT → LINK → USDC → USDT (3.5000 USDT)
+2025/07/31 00:05:30 💱 Step 1: BUY LINK for 3.5000 USDT @ 0.056915 (adj 0.056932) ≈ 61.476557
+2025/07/31 00:05:30 ✅ Step 1: OrderID C02__579347863436288000022
+2025/07/31 00:05:30 💱 Step 2: BUY LINK → USDC @ 17.590000 (adj 17.595277) ≈ 3.493924
+2025/07/31 00:05:30 ❌ Ошибка арбитража: step 2 order failed: order failed: {"msg":"Insufficient position","code":30004}
+^Csignal: interrupt
 
 
