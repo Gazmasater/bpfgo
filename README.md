@@ -579,68 +579,32 @@ func unpackPair(pair string) (string, string) {
 
 _________________________________________________________________________________________
 
-✅ Что нужно проверить
-1. Убедись, что FetchAvailableSymbols() возвращает нормальный список
-Добавь временный лог сразу после вызова:
-
-
-avail := ex.FetchAvailableSymbols()
-log.Printf("[DEBUG] Биржа вернула %d доступных пар", len(avail))
-Если 0 — значит ошибка на стороне mexc.FetchAvailableSymbols().
-
-2. Добавь отладку в triangle.Filter(...)
-В файл internal/domain/triangle/filter.go добавь:
-
-
-func Filter(ts []Triangle, available map[string]bool) []Triangle {
-	var out []Triangle
-	for _, t := range ts {
-		ok := func(a, b string) bool {
-			return available[a+b] || available[b+a]
-		}
-		if ok(t.A, t.B) && ok(t.B, t.C) && ok(t.A, t.C) {
-			out = append(out, t)
-		} else {
-			log.Printf("[FILTER ❌] %s/%s/%s → отсутствует пара: %v %v %v",
-				t.A, t.B, t.C,
-				available[t.A+t.B], available[t.B+t.C], available[t.A+t.C],
-			)
-		}
+func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
+	log.Println("🔍 Загружаем /api/v3/exchangeInfo")
+	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+	if err != nil {
+		log.Printf("❌ Не удалось получить пары: %v", err)
+		return nil
 	}
-	log.Printf("[FILTER ✅] Осталось треугольников после фильтрации: %d", len(out))
-	return out
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	log.Printf("📥 Ответ от /exchangeInfo: %s", string(body))
+
+
+
+client := &http.Client{Timeout: 10 * time.Second}
+req, _ := http.NewRequest("GET", "https://api.mexc.com/api/v3/exchangeInfo", nil)
+req.Header.Set("User-Agent", "Mozilla/5.0") // 💡 Критично
+
+resp, err := client.Do(req)
+if err != nil {
+	log.Printf("❌ Запрос exchangeInfo не удался: %v", err)
+	return nil
 }
+defer resp.Body.Close()
 
 
-2025/07/30 16:52:48 [GRAPH] CAW -> [USDC]
-2025/07/30 16:52:48 [GRAPH] PEAQ -> [USDT]
-2025/07/30 16:52:48 [GRAPH] VIDT -> [USDC]
-2025/07/30 16:52:48 [GRAPH] XRP -> [USDC EUR BTC USD1 USDE ETH USDT]
-2025/07/30 16:52:48 [GRAPH] BCH -> [USDT BTC]
-2025/07/30 16:52:48 [GRAPH] RBNT -> [USDC]
-2025/07/30 16:52:48 [GRAPH] LINK -> [USDT USDC ETH]
-2025/07/30 16:52:48 [GRAPH] PARTI -> [USDC]
-2025/07/30 16:52:48 [GRAPH] RAI -> [USDT]
-2025/07/30 16:52:48 [GRAPH] SERAPH -> [USDC]
-2025/07/30 16:52:48 [GRAPH] DSYNC -> [USDC]
-2025/07/30 16:52:48 [GRAPH] SOL -> [BTC USDT EUR USDC]
-2025/07/30 16:52:48 [GRAPH] USELESS -> [USDC]
-2025/07/30 16:52:48 [GRAPH] GHIBLI -> [USDC]
-2025/07/30 16:52:48 [GRAPH] OBT -> [USDC]
-2025/07/30 16:52:48 [GRAPH] AIOT -> [USDT]
-2025/07/30 16:52:48 [GRAPH] WAVES -> [USDT]
-2025/07/30 16:52:48 [GRAPH] WIF -> [EUR USDC]
-2025/07/30 16:52:48 [GRAPH] ONT -> [BTC]
-2025/07/30 16:52:48 [GRAPH] RFC -> [USDT]
-2025/07/30 16:52:48 [GRAPH] ATOM -> [BTC USDT]
-2025/07/30 16:52:48 [GRAPH] XMR -> [USDC]
-2025/07/30 16:52:48 [INFO] Found 612 directed triangles from 270 pairs
-2025/07/30 16:52:48 !!!!!!!![DEBUG] Биржа вернула 0 доступных пар
-2025/07/30 16:52:48 [FILTER ✅] Осталось треугольников после фильтрации: 0
-2025/07/30 16:52:48 [INIT] Loaded 0 triangles after filtering
-2025/07/30 16:52:48 [INIT] total raw pairs before filtering: 0
-2025/07/30 16:52:48 [INIT] total unique pairs after filtering: 0
-2025/07/30 16:52:48 [INIT] subscribing on: []
 
 
 
