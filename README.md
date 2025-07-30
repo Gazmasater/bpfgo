@@ -605,6 +605,12 @@ if err != nil {
 defer resp.Body.Close()
 
 
+etPrecision":5,"baseCommissionPrecision":2,"quoteCommissionPrecision":5,"orderTypes":["LIMIT","MARKET","LIMIT_MAKER"],"isSpotTradingAllowed":true,"isMarginTradingAllowed":false,"quoteAmountPrecision":"1","baseSizePrecision":"0","permissions":["SPOT"],"filters":[],"maxQuoteAmount":"2000000","makerCommission":"0","takerCommission":"0.0005","quoteAmountPrecisionMarket":"1","maxQuoteAmountMarket":"100000","fullName":"FluidTokens","tradeSideType":1,"st":false}]}
+2025/07/30 17:03:09 ❌ Ошибка декодирования пар: EOF
+2025/07/30 17:03:09 !!!!!!!![DEBUG] Биржа вернула 0 доступных пар
+2025/07/30 17:03:09 [FILTER ✅] Осталось треугольников после фильтрации: 0
+2025/07/30 17:03:09 [INIT] Loaded 0 triangles after filt
+
 
 
 
