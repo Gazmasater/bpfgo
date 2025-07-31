@@ -390,100 +390,6 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-type Arbitrager struct {
-	...
-	stepSizes map[string]float64
-	minQtys   map[string]float64
-}
-
-
-
-
-func New(ex exchange.Exchange) (*Arbitrager, error) {
-	// 1. Загружаем доступные пары и их ограничения
-	avail, stepSizes, minQtys := ex.FetchAvailableSymbols()
-	log.Printf("!!!!!!!![DEBUG] Биржа вернула %d доступных пар", len(avail))
-
-	// 2. Генерируем треугольники из этих пар
-	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("[INIT] Loaded %d triangles после построения", len(ts))
-
-	// 3. Собираем мапу индексов и список всех потенциальных подписок
-	trianglesByPair := make(map[string][]int)
-	var subPairsRaw []string
-	for i, tri := range ts {
-		ab := tri.A + tri.B // A→B
-		bc := tri.B + tri.C // B→C
-		ca := tri.C + tri.A // C→A
-
-		log.Printf("[TRI %2d] %s → %s → %s → %s (AB=%s BC=%s CA=%s)",
-			i, tri.A, tri.B, tri.C, tri.A, ab, bc, ca)
-
-		trianglesByPair[ab] = append(trianglesByPair[ab], i)
-		trianglesByPair[bc] = append(trianglesByPair[bc], i)
-		trianglesByPair[ca] = append(trianglesByPair[ca], i)
-
-		subPairsRaw = append(subPairsRaw, ab, bc, ca)
-	}
-	log.Printf("[INIT] total raw pairs before filtering: %d", len(subPairsRaw))
-
-	// 4. Фильтрация по доступным символам
-	uniq := make(map[string]struct{})
-	for _, p := range subPairsRaw {
-		if avail[p] {
-			uniq[p] = struct{}{}
-		} else {
-			log.Printf("[SKIP] %s not available on exchange", p)
-		}
-	}
-	var subPairs []string
-	for p := range uniq {
-		subPairs = append(subPairs, p)
-	}
-	log.Printf("[INIT] total unique pairs after filtering: %d", len(subPairs))
-	log.Printf("[INIT] subscribing on: %v", subPairs)
-
-	// 5. Создаём арбитражер
-	arb := &Arbitrager{
-		Triangles:       ts,
-		latest:          make(map[string]float64),
-		trianglesByPair: trianglesByPair,
-		realSymbols:     avail,
-		stepSizes:       stepSizes,
-		minQtys:         minQtys,
-		StartAmount:     0.5,
-		exchange:        ex,
-	}
-
-	// 6. Подписываемся чанками по maxPerConn
-	const maxPerConn = 20
-	for i := 0; i < len(subPairs); i += maxPerConn {
-		end := i + maxPerConn
-		if end > len(subPairs) {
-			end = len(subPairs)
-		}
-		chunk := subPairs[i:end]
-		log.Printf("[WS] subscribing chunk %d:%d: %v", i, end, chunk)
-
-		go func(pairs []string) {
-			for {
-				if err := ex.SubscribeDeals(pairs, arb.HandleRaw); err != nil {
-					log.Printf("[WS][%s] subscribe chunk error: %v; retrying…", ex.Name(), err)
-					time.Sleep(time.Second)
-					continue
-				}
-				return
-			}
-		}(chunk)
-	}
-
-	return arb, nil
-}
-
-
 func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64) {
 	availableSymbols := make(map[string]bool)
 	stepSizes := make(map[string]float64)
@@ -587,8 +493,6 @@ func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]floa
 	return availableSymbols, stepSizes, minQtys
 }
 
-
-	FetchAvailableSymbols() (map[string]bool, map[string]float64)
 
 
 
