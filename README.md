@@ -709,48 +709,51 @@ ________________________________________________________________________________
 
 
 
-func (m *MexcExchange) AnalyzeAllSymbols() {
+func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
+	availableSymbols := make(map[string]bool)
+
 	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
 		log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
-		return
+		return availableSymbols
 	}
 	defer resp.Body.Close()
 
 	var response struct {
 		Symbols []map[string]interface{} `json:"symbols"`
 	}
+
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		log.Printf("❌ Ошибка разбора JSON: %v", err)
-		return
+		return availableSymbols
 	}
 
-	var available []string
-	var excluded []string
+	var availableLog []string
+	var excludedLog []string
 
-	for _, s := range response.Symbols {
-		symbol, _ := s["symbol"].(string)
-		if symbol == "" {
+	for _, symbolData := range response.Symbols {
+		symbolName, ok := symbolData["symbol"].(string)
+		if !ok || symbolName == "" {
 			continue
 		}
 
 		reasons := []string{}
 
-		// Статус
-		status, _ := s["status"].(string)
+		// 1. status == "1"
+		status, _ := symbolData["status"].(string)
 		if status != "1" {
 			reasons = append(reasons, "status != 1")
 		}
 
-		// Разрешена ли спотовая торговля
-		spotAllowed, _ := s["isSpotTradingAllowed"].(bool)
+		// 2. isSpotTradingAllowed == true
+		spotAllowed, _ := symbolData["isSpotTradingAllowed"].(bool)
 		if !spotAllowed {
 			reasons = append(reasons, "spot trading not allowed")
 		}
 
-		// Есть ли MARKET-ордер
+		// 3. orderTypes содержит "MARKET"
 		hasMarket := false
-		if orders, ok := s["orderTypes"].([]interface{}); ok {
+		if orders, ok := symbolData["orderTypes"].([]interface{}); ok {
 			for _, o := range orders {
 				if os, ok := o.(string); ok && os == "MARKET" {
 					hasMarket = true
@@ -762,8 +765,8 @@ func (m *MexcExchange) AnalyzeAllSymbols() {
 			reasons = append(reasons, "no MARKET order")
 		}
 
-		// Шаг (precision)
-		stepStr, _ := s["baseSizePrecision"].(string)
+		// 4. baseSizePrecision > 0
+		stepStr, _ := symbolData["baseSizePrecision"].(string)
 		stepFloat, err := strconv.ParseFloat(stepStr, 64)
 		if err != nil || stepFloat <= 0 {
 			reasons = append(reasons, "baseSizePrecision = 0")
@@ -771,19 +774,21 @@ func (m *MexcExchange) AnalyzeAllSymbols() {
 
 		// Итог
 		if len(reasons) == 0 {
-			available = append(available, fmt.Sprintf("%s\t✅ stepSize=%s", symbol, stepStr))
+			availableSymbols[symbolName] = true
+			availableLog = append(availableLog, fmt.Sprintf("%s\t✅ stepSize=%s", symbolName, stepStr))
 		} else {
-			excluded = append(excluded, fmt.Sprintf("%s\t⛔ %s", symbol, strings.Join(reasons, ", ")))
+			excludedLog = append(excludedLog, fmt.Sprintf("%s\t⛔ %s", symbolName, strings.Join(reasons, ", ")))
 		}
 	}
 
-	// Сохраняем
-	_ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(available, "\n")), 0644)
-	_ = os.WriteFile("excluded_all_symbols.log", []byte(strings.Join(excluded, "\n")), 0644)
+	// Сохраняем лог-файлы
+	_ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(availableLog, "\n")), 0644)
+	_ = os.WriteFile("excluded_all_symbols.log", []byte(strings.Join(excludedLog, "\n")), 0644)
 
-	log.Printf("📊 Обработано пар: %d", len(available)+len(excluded))
-	log.Printf("✅ Подходящих: %d → available_all_symbols.log", len(available))
-	log.Printf("🚫 Исключено: %d → excluded_all_symbols.log", len(excluded))
+	log.Printf("✅ Всего подходящих пар: %d", len(availableSymbols))
+	log.Printf("📝 available_all_symbols.log и excluded_all_symbols.log сохранены")
+
+	return availableSymbols
 }
 
 
