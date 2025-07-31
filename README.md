@@ -711,8 +711,8 @@ ________________________________________________________________________________
 
 func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
 	availableSymbols := make(map[string]bool)
-	allSymbolStatuses := make(map[string]string)
-	var allLines []string
+	allLines := []string{}
+	excludedLines := []string{}
 
 	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
@@ -723,8 +723,10 @@ func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
 
 	var response struct {
 		Symbols []struct {
-			Symbol string `json:"symbol"`
-			Status string `json:"status"`
+			Symbol  string `json:"symbol"`
+			Filters []struct {
+				FilterType string `json:"filterType"`
+			} `json:"filters"`
 		}
 	}
 
@@ -734,30 +736,46 @@ func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
 	}
 
 	for _, s := range response.Symbols {
-		status := s.Status
-		allSymbolStatuses[s.Symbol] = status
+		hasLotSize := false
+		for _, f := range s.Filters {
+			if f.FilterType == "LOT_SIZE" {
+				hasLotSize = true
+				break
+			}
+		}
 
-		line := fmt.Sprintf("%s\t(status=%s)", s.Symbol, status)
+		line := fmt.Sprintf("%s\t(has LOT_SIZE=%v)", s.Symbol, hasLotSize)
 		allLines = append(allLines, line)
 
-		if status == "ENABLED" {
+		if hasLotSize {
 			availableSymbols[s.Symbol] = true
+		} else {
+			excludedLines = append(excludedLines, s.Symbol)
 		}
 	}
 
-	// 📝 Пишем в файл полный список
-	allFile := "all_symbols_with_status.log"
-	content := strings.Join(allLines, "\n")
-	if err := os.WriteFile(allFile, []byte(content), 0644); err != nil {
-		log.Printf("⚠️ Не удалось записать файл %s: %v", allFile, err)
+	// 📁 Записываем полный список с флагом LOT_SIZE
+	err = os.WriteFile("all_symbols_with_status.log", []byte(strings.Join(allLines, "\n")), 0644)
+	if err != nil {
+		log.Printf("⚠️ Не удалось записать all_symbols_with_status.log: %v", err)
 	} else {
-		log.Printf("📝 Полный список пар с их статусами записан в %s", allFile)
+		log.Printf("📝 Сохранён список всех пар в all_symbols_with_status.log")
 	}
 
-	log.Printf("✅ Всего пар: %d | Активных (ENABLED): %d", len(allSymbolStatuses), len(availableSymbols))
+	// 📁 Записываем исключённые пары
+	if len(excludedLines) > 0 {
+		err := os.WriteFile("excluded_symbols.log", []byte(strings.Join(excludedLines, "\n")), 0644)
+		if err != nil {
+			log.Printf("⚠️ Не удалось записать excluded_symbols.log: %v", err)
+		} else {
+			log.Printf("🚫 Исключено %d пар без LOT_SIZE — записано в excluded_symbols.log", len(excludedLines))
+		}
+	}
 
+	log.Printf("✅ Торгуемых пар: %d | Всего рассмотрено: %d", len(availableSymbols), len(response.Symbols))
 	return availableSymbols
 }
+
 
 
 
