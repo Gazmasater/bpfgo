@@ -402,18 +402,31 @@ func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]floa
 	}
 	defer resp.Body.Close()
 
-	var response struct {
+	// Чтение всего тела ответа
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("❌ Ошибка чтения тела ответа: %v", err)
+		return availableSymbols, stepSizes, minQtys
+	}
+
+	// Парсим в map
+	var rawData struct {
 		Symbols []map[string]interface{} `json:"symbols"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+	if err := json.Unmarshal(bodyBytes, &rawData); err != nil {
 		log.Printf("❌ Ошибка разбора JSON: %v", err)
 		return availableSymbols, stepSizes, minQtys
+	}
+
+	// Сохраняем полный JSON в файл
+	if err := os.WriteFile("all_symbols_full.json", bodyBytes, 0644); err != nil {
+		log.Printf("⚠️ Не удалось сохранить all_symbols_full.json: %v", err)
 	}
 
 	var availableLog []string
 	var excludedLog []string
 
-	for _, symbolData := range response.Symbols {
+	for _, symbolData := range rawData.Symbols {
 		symbolName, ok := symbolData["symbol"].(string)
 		if !ok || symbolName == "" {
 			continue
@@ -427,13 +440,13 @@ func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]floa
 			reasons = append(reasons, "status != 1")
 		}
 
-		// Разрешена ли спотовая торговля
+		// Спотовая торговля
 		spotAllowed, _ := symbolData["isSpotTradingAllowed"].(bool)
 		if !spotAllowed {
 			reasons = append(reasons, "spot trading not allowed")
 		}
 
-		// Поддерживает ли MARKET ордера
+		// MARKET ордера
 		hasMarket := false
 		if orders, ok := symbolData["orderTypes"].([]interface{}); ok {
 			for _, o := range orders {
@@ -447,19 +460,24 @@ func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]floa
 			reasons = append(reasons, "no MARKET order")
 		}
 
-		// Step size и minQty
+		// stepSize и minQty из filters
 		stepSize := 0.0
 		minQty := 0.0
-
 		if filters, ok := symbolData["filters"].([]interface{}); ok {
 			for _, f := range filters {
 				filter, _ := f.(map[string]interface{})
 				if filter["filterType"] == "LOT_SIZE" {
-					if stepStr, ok := filter["stepSize"].(string); ok {
-						stepSize, _ = strconv.ParseFloat(stepStr, 64)
+					switch v := filter["stepSize"].(type) {
+					case string:
+						stepSize, _ = strconv.ParseFloat(v, 64)
+					case float64:
+						stepSize = v
 					}
-					if minQtyStr, ok := filter["minQty"].(string); ok {
-						minQty, _ = strconv.ParseFloat(minQtyStr, 64)
+					switch v := filter["minQty"].(type) {
+					case string:
+						minQty, _ = strconv.ParseFloat(v, 64)
+					case float64:
+						minQty = v
 					}
 				}
 			}
@@ -484,11 +502,12 @@ func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]floa
 		}
 	}
 
+	// Лог в текстовые файлы
 	_ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(availableLog, "\n")), 0644)
 	_ = os.WriteFile("excluded_all_symbols.log", []byte(strings.Join(excludedLog, "\n")), 0644)
 
 	log.Printf("✅ Всего подходящих пар: %d", len(availableSymbols))
-	log.Printf("📝 available_all_symbols.log и excluded_all_symbols.log сохранены")
+	log.Printf("📁 Сохранено: all_symbols_full.json, available_all_symbols.log, excluded_all_symbols.log")
 
 	return availableSymbols, stepSizes, minQtys
 }
