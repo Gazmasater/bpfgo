@@ -390,96 +390,152 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64) {
-	availableSymbols := make(map[string]bool)
-	stepSizes := make(map[string]float64)
-	minQtys := make(map[string]float64) // будем использовать такую же точность, как и stepSize
+package filesystem
 
-	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-	if err != nil {
-		log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
-		return availableSymbols, stepSizes, minQtys
-	}
-	defer resp.Body.Close()
+import (
+	"cryptarb/internal/domain/triangle"
+	"log"
+)
 
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("❌ Ошибка чтения тела ответа: %v", err)
-		return availableSymbols, stepSizes, minQtys
-	}
+// LoadTrianglesFromSymbols строит треугольники из списка доступных пар (с учётом направлений BUY и SELL)
+func LoadTrianglesFromSymbols(available map[string]bool) ([]triangle.Triangle, error) {
+	graph := make(map[string][]string)
 
-	// Сохраняем весь JSON для анализа
-	_ = os.WriteFile("all_symbols_full.json", bodyBytes, 0644)
-
-	var raw struct {
-		Symbols []map[string]interface{} `json:"symbols"`
-	}
-	if err := json.Unmarshal(bodyBytes, &raw); err != nil {
-		log.Printf("❌ Ошибка разбора JSON: %v", err)
-		return availableSymbols, stepSizes, minQtys
-	}
-
-	var availableLog []string
-	var excludedLog []string
-
-	for _, s := range raw.Symbols {
-		symbol, _ := s["symbol"].(string)
-		if symbol == "" {
+	for symbol := range available {
+		base, quote := unpackPair(symbol)
+		if base == "" || quote == "" {
 			continue
 		}
 
-		var reasons []string
+		// Добавляем направление BUY и SELL
+		graph[quote] = append(graph[quote], base) // Покупка base за quote
+		graph[base] = append(graph[base], quote)  // Продажа base за quote
+	}
 
-		// Проверки
-		if s["status"] != "1" {
-			reasons = append(reasons, "status != 1")
-		}
+	var tris []triangle.Triangle
+	seen := make(map[[3]string]struct{})
 
-		if allowed, ok := s["isSpotTradingAllowed"].(bool); !ok || !allowed {
-			reasons = append(reasons, "spot trading not allowed")
-		}
-
-		orderTypes, _ := s["orderTypes"].([]interface{})
-		hasMarket := false
-		for _, o := range orderTypes {
-			if str, ok := o.(string); ok && str == "MARKET" {
-				hasMarket = true
-				break
+	for a, bList := range graph {
+		for _, b := range bList {
+			for _, c := range graph[b] {
+				for _, back := range graph[c] {
+					if back == a {
+						key := [3]string{a, b, c}
+						if _, ok := seen[key]; !ok {
+							seen[key] = struct{}{}
+							tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
+						}
+					}
+				}
 			}
-		}
-		if !hasMarket {
-			reasons = append(reasons, "no MARKET order")
-		}
-
-		// baseSizePrecision = шаг
-		stepStr, _ := s["baseSizePrecision"].(string)
-		step, err := strconv.ParseFloat(stepStr, 64)
-		if err != nil || step <= 0 {
-			reasons = append(reasons, "invalid baseSizePrecision")
-		}
-
-		if len(reasons) == 0 {
-			availableSymbols[symbol] = true
-			stepSizes[symbol] = step
-			minQtys[symbol] = step // допустим: минимум равен шагу
-			availableLog = append(availableLog, fmt.Sprintf("%s\t✅ step=%.8f", symbol, step))
-		} else {
-			excludedLog = append(excludedLog, fmt.Sprintf("%s\t⛔ %s", symbol, strings.Join(reasons, ", ")))
 		}
 	}
 
-	_ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(availableLog, "\n")), 0644)
-	_ = os.WriteFile("excluded_all_symbols.log", []byte(strings.Join(excludedLog, "\n")), 0644)
+	log.Printf("[TRIANGLE] Found %d triangles", len(tris))
+	return tris, nil
+}
 
-	log.Printf("✅ Подходящих пар: %d", len(availableSymbols))
-	log.Printf("📂 Сохранено: all_symbols_full.json, available_all_symbols.log, excluded_all_symbols.log")
+// unpackPair разбивает символ на base и quote по известным суффиксам
+func unpackPair(pair string) (string, string) {
+	quotes := []string{"USDT", "USDC", "BTC", "ETH", "EUR", "BRL", "USD1", "USDE"}
+	for _, q := range quotes {
+		if len(pair) > len(q) && pair[len(pair)-len(q):] == q {
+			return pair[:len(pair)-len(q)], q
+		}
+	}
+	return "", ""
+}
 
-	return availableSymbols, stepSizes, minQtys
+// expandAvailableSymbols добавляет инверсии пар (например: BTCUSDT → USDTBTC)
+func ExpandAvailableSymbols(raw map[string]bool) map[string]bool {
+	expanded := make(map[string]bool, len(raw)*2)
+	for symbol := range raw {
+		expanded[symbol] = true
+
+		base, quote := unpackPair(symbol)
+		if base != "" && quote != "" {
+			expanded[quote+base] = true // добавляем обратную пару
+		}
+	}
+	return expanded
 }
 
 
+func New(ex exchange.Exchange) (*Arbitrager, error) {
+	// 1. Загружаем доступные пары и фильтры
+	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
 
-availableLog = append(availableLog, fmt.Sprintf("%s\t✅ step=%s", symbol, strconv.FormatFloat(step, 'g', -1, 64)))
+	// 2. Добавляем инверсии символов
+	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
+	log.Printf("📊 Всего доступных пар (с инверсиями): %d", len(avail))
+
+	// 3. Строим треугольники
+	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
+	if err != nil {
+		return nil, fmt.Errorf("LoadTrianglesFromSymbols: %w", err)
+	}
+	log.Printf("[INIT] Загружено треугольников: %d", len(ts))
+
+	// 4. Создание карты индексов треугольников и подписываемых пар
+	trianglesByPair := make(map[string][]int)
+	var subPairsRaw []string
+	for i, tri := range ts {
+		ab := tri.A + tri.B
+		bc := tri.B + tri.C
+		ca := tri.C + tri.A
+
+		trianglesByPair[ab] = append(trianglesByPair[ab], i)
+		trianglesByPair[bc] = append(trianglesByPair[bc], i)
+		trianglesByPair[ca] = append(trianglesByPair[ca], i)
+
+		subPairsRaw = append(subPairsRaw, ab, bc, ca)
+	}
+
+	// 5. Фильтрация уникальных доступных пар
+	uniq := make(map[string]struct{})
+	for _, p := range subPairsRaw {
+		if avail[p] {
+			uniq[p] = struct{}{}
+		}
+	}
+	var subPairs []string
+	for p := range uniq {
+		subPairs = append(subPairs, p)
+	}
+	log.Printf("[INIT] Итог: подписываемся на %d уникальных пар", len(subPairs))
+
+	// 6. Создаём арбитражер
+	arb := &Arbitrager{
+		Triangles:       ts,
+		latest:          make(map[string]float64),
+		trianglesByPair: trianglesByPair,
+		realSymbols:     avail,
+		StartAmount:     0.5,
+		exchange:        ex,
+	}
+
+	// 7. Подписка чанками
+	const maxPerConn = 20
+	for i := 0; i < len(subPairs); i += maxPerConn {
+		end := i + maxPerConn
+		if end > len(subPairs) {
+			end = len(subPairs)
+		}
+		chunk := subPairs[i:end]
+		go func(pairs []string) {
+			for {
+				if err := ex.SubscribeDeals(pairs, arb.HandleRaw); err != nil {
+					log.Printf("[WS][%s] subscribe error: %v; retrying...", ex.Name(), err)
+					time.Sleep(time.Second)
+					continue
+				}
+				return
+			}
+		}(chunk)
+	}
+
+	return arb, nil
+}
 
 
 
