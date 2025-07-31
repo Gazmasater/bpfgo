@@ -711,7 +711,8 @@ ________________________________________________________________________________
 
 func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
 	availableSymbols := make(map[string]bool)
-	var disabledSymbols []string
+	allSymbolStatuses := make(map[string]string)
+	var allLines []string
 
 	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
@@ -733,31 +734,27 @@ func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
 	}
 
 	for _, s := range response.Symbols {
-		if s.Status == "ENABLED" {
+		status := s.Status
+		allSymbolStatuses[s.Symbol] = status
+
+		line := fmt.Sprintf("%s\t(status=%s)", s.Symbol, status)
+		allLines = append(allLines, line)
+
+		if status == "ENABLED" {
 			availableSymbols[s.Symbol] = true
-		} else {
-			disabledSymbols = append(disabledSymbols, fmt.Sprintf("%s\t(status=%s)", s.Symbol, s.Status))
 		}
 	}
 
-	log.Printf("✅ Загружено %d активных торговых пар", len(availableSymbols))
-
-	// 📜 Логируем отключённые пары
-	if len(disabledSymbols) > 0 {
-		log.Printf("🚫 Исключено %d пар (неактивны):", len(disabledSymbols))
-		for _, d := range disabledSymbols {
-			log.Printf("   - %s", d)
-		}
-
-		// 📁 Сохраняем в файл
-		logFile := "disabled_symbols.log"
-		content := strings.Join(disabledSymbols, "\n")
-		if err := os.WriteFile(logFile, []byte(content), 0644); err != nil {
-			log.Printf("⚠️ Не удалось записать файл %s: %v", logFile, err)
-		} else {
-			log.Printf("📝 Список исключённых пар сохранён в %s", logFile)
-		}
+	// 📝 Пишем в файл полный список
+	allFile := "all_symbols_with_status.log"
+	content := strings.Join(allLines, "\n")
+	if err := os.WriteFile(allFile, []byte(content), 0644); err != nil {
+		log.Printf("⚠️ Не удалось записать файл %s: %v", allFile, err)
+	} else {
+		log.Printf("📝 Полный список пар с их статусами записан в %s", allFile)
 	}
+
+	log.Printf("✅ Всего пар: %d | Активных (ENABLED): %d", len(allSymbolStatuses), len(availableSymbols))
 
 	return availableSymbols
 }
