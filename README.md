@@ -819,5 +819,15 @@ func (a *Arbitrager) ExecuteTriangle(tri triangle.Triangle, amountUSDT float64) 
 }
 
 
+025/07/31 04:49:16 [WS] subscribing chunk 80:85: [ULTIMAUSDC ADAUSDC XRPETH ETHBTC ETHUSDT]
+2025/07/31 04:49:45 🔺 ARB USDT/USDC/UNI profit=-0.8955%
+2025/07/31 04:49:45 🔺 Запуск арбитража по треугольнику: USDT → USDC → UNI → USDT
+2025/07/31 04:49:45 💰 Стартовая сумма: 3.5000 USDT
+2025/07/31 04:49:45 💱 Step 1: BUY USDC за 3.5000 USDT @ 0.999900 (adj 1.0001) ≈ 0.3499
+2025/07/31 04:49:45 ✅ Step 1: OrderID C02__579419399421710336022
+2025/07/31 04:49:46 💱 Step 2: BUY USDC → UNI @ 0.097982 (adj 0.0980) qty=0.0349
+2025/07/31 04:49:46 ❌ Ошибка арбитража: ❌ Step 2 order failed: order failed: {"msg":"The minimum transaction volume cannot be less than[1.000000000000000000000000000000]","code":30002,"_extend":{"quantity":"1"}}
+
+
 
 
