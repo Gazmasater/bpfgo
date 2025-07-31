@@ -709,56 +709,83 @@ ________________________________________________________________________________
 
 
 
-func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
-	availableSymbols := make(map[string]bool) // просто возвращаем пустую, если не используем
-
+func (m *MexcExchange) AnalyzeAllSymbols() {
 	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
 		log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
-		return availableSymbols
+		return
 	}
 	defer resp.Body.Close()
 
 	var response struct {
 		Symbols []map[string]interface{} `json:"symbols"`
 	}
-
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		log.Printf("❌ Ошибка разбора JSON: %v", err)
-		return availableSymbols
+		return
 	}
 
-	var ultimaSymbols []map[string]interface{}
+	var available []string
+	var excluded []string
 
-	for _, symbolData := range response.Symbols {
-		symbolName, ok := symbolData["symbol"].(string)
-		if !ok {
+	for _, s := range response.Symbols {
+		symbol, _ := s["symbol"].(string)
+		if symbol == "" {
 			continue
 		}
-		if strings.Contains(symbolName, "ULTIMA") {
-			ultimaSymbols = append(ultimaSymbols, symbolData)
+
+		reasons := []string{}
+
+		// Статус
+		status, _ := s["status"].(string)
+		if status != "1" {
+			reasons = append(reasons, "status != 1")
+		}
+
+		// Разрешена ли спотовая торговля
+		spotAllowed, _ := s["isSpotTradingAllowed"].(bool)
+		if !spotAllowed {
+			reasons = append(reasons, "spot trading not allowed")
+		}
+
+		// Есть ли MARKET-ордер
+		hasMarket := false
+		if orders, ok := s["orderTypes"].([]interface{}); ok {
+			for _, o := range orders {
+				if os, ok := o.(string); ok && os == "MARKET" {
+					hasMarket = true
+					break
+				}
+			}
+		}
+		if !hasMarket {
+			reasons = append(reasons, "no MARKET order")
+		}
+
+		// Шаг (precision)
+		stepStr, _ := s["baseSizePrecision"].(string)
+		stepFloat, err := strconv.ParseFloat(stepStr, 64)
+		if err != nil || stepFloat <= 0 {
+			reasons = append(reasons, "baseSizePrecision = 0")
+		}
+
+		// Итог
+		if len(reasons) == 0 {
+			available = append(available, fmt.Sprintf("%s\t✅ stepSize=%s", symbol, stepStr))
+		} else {
+			excluded = append(excluded, fmt.Sprintf("%s\t⛔ %s", symbol, strings.Join(reasons, ", ")))
 		}
 	}
 
-	// Сохраняем найденные ULTIMA-пары в файл
-	if len(ultimaSymbols) > 0 {
-		data, err := json.MarshalIndent(ultimaSymbols, "", "  ")
-		if err != nil {
-			log.Printf("❌ Ошибка сериализации JSON: %v", err)
-			return availableSymbols
-		}
-		err = os.WriteFile("ultima_raw.json", data, 0644)
-		if err != nil {
-			log.Printf("❌ Ошибка записи файла ultima_raw.json: %v", err)
-			return availableSymbols
-		}
-		log.Printf("✅ Найдено %d пар с 'ULTIMA', сохранено в ultima_raw.json", len(ultimaSymbols))
-	} else {
-		log.Println("ℹ️ Пар с 'ULTIMA' не найдено.")
-	}
+	// Сохраняем
+	_ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(available, "\n")), 0644)
+	_ = os.WriteFile("excluded_all_symbols.log", []byte(strings.Join(excluded, "\n")), 0644)
 
-	return availableSymbols
+	log.Printf("📊 Обработано пар: %d", len(available)+len(excluded))
+	log.Printf("✅ Подходящих: %d → available_all_symbols.log", len(available))
+	log.Printf("🚫 Исключено: %d → excluded_all_symbols.log", len(excluded))
 }
+
 
 
 
