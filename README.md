@@ -711,9 +711,8 @@ ________________________________________________________________________________
 
 func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
 	availableSymbols := make(map[string]bool)
-	allLines := []string{}
-	excludedLines := []string{}
 
+	// Запрашиваем exchangeInfo
 	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
 		log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
@@ -721,61 +720,46 @@ func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
 	}
 	defer resp.Body.Close()
 
-	var response struct {
-		Symbols []struct {
-			Symbol  string `json:"symbol"`
-			Filters []struct {
-				FilterType string `json:"filterType"`
-			} `json:"filters"`
-		}
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		log.Printf("❌ Ошибка декодирования exchangeInfo: %v", err)
+	// Читаем тело ответа
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("❌ Ошибка чтения тела ответа: %v", err)
 		return availableSymbols
 	}
 
-	for _, s := range response.Symbols {
-		hasLotSize := false
-		for _, f := range s.Filters {
-			if f.FilterType == "LOT_SIZE" {
-				hasLotSize = true
-				break
-			}
-		}
-
-		line := fmt.Sprintf("%s\t(has LOT_SIZE=%v)", s.Symbol, hasLotSize)
-		allLines = append(allLines, line)
-
-		if hasLotSize {
-			availableSymbols[s.Symbol] = true
-		} else {
-			excludedLines = append(excludedLines, s.Symbol)
-		}
-	}
-
-	// 📁 Записываем полный список с флагом LOT_SIZE
-	err = os.WriteFile("all_symbols_with_status.log", []byte(strings.Join(allLines, "\n")), 0644)
-	if err != nil {
-		log.Printf("⚠️ Не удалось записать all_symbols_with_status.log: %v", err)
+	// Сохраняем тело в файл
+	if err := os.WriteFile("exchangeInfo_raw.json", bodyBytes, 0644); err != nil {
+		log.Printf("⚠️ Не удалось записать exchangeInfo_raw.json: %v", err)
 	} else {
-		log.Printf("📝 Сохранён список всех пар в all_symbols_with_status.log")
+		log.Println("📄 Ответ exchangeInfo сохранён в файл exchangeInfo_raw.json")
 	}
 
-	// 📁 Записываем исключённые пары
-	if len(excludedLines) > 0 {
-		err := os.WriteFile("excluded_symbols.log", []byte(strings.Join(excludedLines, "\n")), 0644)
-		if err != nil {
-			log.Printf("⚠️ Не удалось записать excluded_symbols.log: %v", err)
-		} else {
-			log.Printf("🚫 Исключено %d пар без LOT_SIZE — записано в excluded_symbols.log", len(excludedLines))
+	// Пробуем распарсить JSON частично
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &parsed); err != nil {
+		log.Printf("❌ Ошибка разбора JSON: %v", err)
+		return availableSymbols
+	}
+
+	// Выводим первые 5 символов с фильтрами
+	symbolsRaw, ok := parsed["symbols"].([]interface{})
+	if !ok {
+		log.Println("❌ Поле 'symbols' не найдено в ответе")
+		return availableSymbols
+	}
+
+	for i, raw := range symbolsRaw {
+		if i >= 5 {
+			break
 		}
+		symJson, _ := json.MarshalIndent(raw, "", "  ")
+		log.Printf("🔍 SYMBOL %d:\n%s\n", i+1, string(symJson))
 	}
 
-	log.Printf("✅ Торгуемых пар: %d | Всего рассмотрено: %d", len(availableSymbols), len(response.Symbols))
+	// Возвращаем пустую карту — фильтрации пока не делаем
+	log.Printf("🧪 Только просмотр структуры. Торгуемые пары не извлекаются на этом этапе.")
 	return availableSymbols
 }
-
 
 
 
