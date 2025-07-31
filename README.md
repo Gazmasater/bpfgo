@@ -390,16 +390,71 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ cd cmd/cryptarb
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/08/01 00:18:06 ✅ Подходящих пар: 514
-2025/08/01 00:18:06 📂 Сохранено: all_symbols_full.json, available_all_symbols.log, excluded_all_symbols.log
-2025/08/01 00:18:06 📊 Всего доступных пар (с инверсиями): 1028
-2025/08/01 00:18:06 [TRIANGLE] Found 0 triangles
-2025/08/01 00:18:06 [INIT] Загружено треугольников: 0
-2025/08/01 00:18:06 [INIT] Итог: подписываемся на 0 уникальных пар
+package filesystem
 
+import (
+	"cryptarb/internal/domain/triangle"
+	"log"
+)
 
+// LoadTrianglesFromSymbols строит граф и находит треугольники на основе доступных символов
+func LoadTrianglesFromSymbols(baseQuote map[string][2]string) ([]triangle.Triangle, error) {
+	graph := make(map[string][]string)
+
+	for symbol, parts := range baseQuote {
+		base := parts[0]
+		quote := parts[1]
+		graph[quote] = append(graph[quote], base) // Покупка base за quote
+		graph[base] = append(graph[base], quote)  // Продажа base за quote
+	}
+
+	var tris []triangle.Triangle
+	seen := make(map[[3]string]struct{})
+
+	for a, bList := range graph {
+		for _, b := range bList {
+			for _, c := range graph[b] {
+				for _, back := range graph[c] {
+					if back == a {
+						key := [3]string{a, b, c}
+						if _, ok := seen[key]; !ok {
+							seen[key] = struct{}{}
+							tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
+						}
+					}
+				}
+			}
+		}
+	}
+
+	log.Printf("[TRIANGLE] Found %d triangles", len(tris))
+	return tris, nil
+}
+
+// ExpandAvailableSymbols добавляет инверсии символов и возвращает map: symbol → [base, quote]
+func ExpandAvailableSymbols(raw map[string]bool) map[string][2]string {
+	pairs := make(map[string][2]string)
+	for symbol := range raw {
+		base, quote := unpackPair(symbol)
+		if base != "" && quote != "" {
+			pairs[symbol] = [2]string{base, quote}
+			inv := quote + base
+			pairs[inv] = [2]string{quote, base} // обратная пара
+		}
+	}
+	return pairs
+}
+
+// unpackPair разбивает символ на base и quote по известным суффиксам
+func unpackPair(pair string) (string, string) {
+	quotes := []string{"USDT", "USDC", "BTC", "ETH", "EUR", "BRL", "USD1", "USDE"}
+	for _, q := range quotes {
+		if len(pair) > len(q) && pair[len(pair)-len(q):] == q {
+			return pair[:len(pair)-len(q)], q
+		}
+	}
+	return "", ""
+}
 
 
 
