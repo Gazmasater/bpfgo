@@ -392,7 +392,7 @@ _______________________________________________________________________________
 
 func New(ex exchange.Exchange) (*Arbitrager, error) {
 	// 1. Загружаем доступные пары и строим треугольники
-	avail := ex.FetchAvailableSymbols()
+	avail, _ := ex.FetchAvailableSymbols() // принимаем и stepSizes, но не используем пока
 
 	log.Printf("!!!!!!!![DEBUG] Биржа вернула %d доступных пар", len(avail))
 
@@ -406,9 +406,9 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 	trianglesByPair := make(map[string][]int)
 	var subPairsRaw []string
 	for i, tri := range ts {
-		ab := tri.A + tri.B // A→B
-		bc := tri.B + tri.C // B→C
-		ca := tri.C + tri.A // C→A
+		ab := tri.A + tri.B
+		bc := tri.B + tri.C
+		ca := tri.C + tri.A
 
 		log.Printf("[TRI %2d] %s → %s → %s → %s (AB=%s BC=%s CA=%s)",
 			i, tri.A, tri.B, tri.C, tri.A, ab, bc, ca)
@@ -419,6 +419,7 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 
 		subPairsRaw = append(subPairsRaw, ab, bc, ca)
 	}
+
 	log.Printf("[INIT] total raw pairs before filtering: %d", len(subPairsRaw))
 
 	// 3. Фильтрация по доступным символам
@@ -469,88 +470,6 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 	}
 
 	return arb, nil
-}
-
-
-func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64) {
-	availableSymbols := make(map[string]bool)
-	stepSizes := make(map[string]float64)
-
-	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-	if err != nil {
-		log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
-		return availableSymbols, stepSizes
-	}
-	defer resp.Body.Close()
-
-	var response struct {
-		Symbols []map[string]interface{} `json:"symbols"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		log.Printf("❌ Ошибка разбора JSON: %v", err)
-		return availableSymbols, stepSizes
-	}
-
-	var availableLog []string
-	var excludedLog []string
-
-	for _, symbolData := range response.Symbols {
-		symbolName, ok := symbolData["symbol"].(string)
-		if !ok || symbolName == "" {
-			continue
-		}
-
-		reasons := []string{}
-
-		// status
-		status, _ := symbolData["status"].(string)
-		if status != "1" {
-			reasons = append(reasons, "status != 1")
-		}
-
-		// spot trading
-		spotAllowed, _ := symbolData["isSpotTradingAllowed"].(bool)
-		if !spotAllowed {
-			reasons = append(reasons, "spot trading not allowed")
-		}
-
-		// MARKET order
-		hasMarket := false
-		if orders, ok := symbolData["orderTypes"].([]interface{}); ok {
-			for _, o := range orders {
-				if os, ok := o.(string); ok && os == "MARKET" {
-					hasMarket = true
-					break
-				}
-			}
-		}
-		if !hasMarket {
-			reasons = append(reasons, "no MARKET order")
-		}
-
-		// stepSize
-		stepStr, _ := symbolData["baseSizePrecision"].(string)
-		stepFloat, err := strconv.ParseFloat(stepStr, 64)
-		if err != nil || stepFloat <= 0 {
-			reasons = append(reasons, "baseSizePrecision = 0")
-		}
-
-		if len(reasons) == 0 {
-			availableSymbols[symbolName] = true
-			stepSizes[symbolName] = stepFloat
-			availableLog = append(availableLog, fmt.Sprintf("%s\t✅ stepSize=%s", symbolName, stepStr))
-		} else {
-			excludedLog = append(excludedLog, fmt.Sprintf("%s\t⛔ %s", symbolName, strings.Join(reasons, ", ")))
-		}
-	}
-
-	_ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(availableLog, "\n")), 0644)
-	_ = os.WriteFile("excluded_all_symbols.log", []byte(strings.Join(excludedLog, "\n")), 0644)
-
-	log.Printf("✅ Всего подходящих пар: %d", len(availableSymbols))
-	log.Printf("📝 available_all_symbols.log и excluded_all_symbols.log сохранены")
-
-	return availableSymbols, stepSizes
 }
 
 
