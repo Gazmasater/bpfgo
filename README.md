@@ -538,6 +538,18 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 }
 
 
+arb := &Arbitrager{
+	Triangles:       ts,
+	latest:          make(map[string]float64),
+	trianglesByPair: trianglesByPair,
+	realSymbols:     avail,
+	stepSizes:       stepSizes,  // 👈 добавлено
+	minQtys:         minQtys,    // 👈 добавлено
+	StartAmount:     0.5,
+	exchange:        ex,
+}
+
+
 
 
 
