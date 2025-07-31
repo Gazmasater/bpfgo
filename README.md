@@ -390,23 +390,7 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-func (a *Arbitrager) normalizeSymbolDir(base, quote string) (string, bool, bool) {
-	if _, ok := a.realSymbols[base+quote]; ok {
-		return base + quote, true, false
-	}
-	if _, ok := a.realSymbols[quote+base]; ok {
-		return quote + base, true, true
-	}
-	return "", false, false
-}
-
-
-type SymbolInfo struct {
-	Base   string
-	Quote  string
-	Step   float64
-	MinQty float64
-}
+realSymbols map[string]bool
 
 
 
