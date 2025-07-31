@@ -390,88 +390,31 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-func New(ex exchange.Exchange) (*Arbitrager, error) {
-	// 1. Загружаем доступные пары и строим треугольники
-	avail, _ := ex.FetchAvailableSymbols() // принимаем и stepSizes, но не используем пока
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "go-staticcheck",
+	"severity": 4,
+	"message": "field stepSizes is unused (U1000)",
+	"source": "go-staticcheck",
+	"startLineNumber": 22,
+	"startColumn": 2,
+	"endLineNumber": 22,
+	"endColumn": 32,
+	"origin": "extHost1"
+}]
 
-	log.Printf("!!!!!!!![DEBUG] Биржа вернула %d доступных пар", len(avail))
-
-	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("[INIT] Loaded %d triangles after построения", len(ts))
-
-	// 2. Собираем мапу индексов и список всех потенциальных подписок
-	trianglesByPair := make(map[string][]int)
-	var subPairsRaw []string
-	for i, tri := range ts {
-		ab := tri.A + tri.B
-		bc := tri.B + tri.C
-		ca := tri.C + tri.A
-
-		log.Printf("[TRI %2d] %s → %s → %s → %s (AB=%s BC=%s CA=%s)",
-			i, tri.A, tri.B, tri.C, tri.A, ab, bc, ca)
-
-		trianglesByPair[ab] = append(trianglesByPair[ab], i)
-		trianglesByPair[bc] = append(trianglesByPair[bc], i)
-		trianglesByPair[ca] = append(trianglesByPair[ca], i)
-
-		subPairsRaw = append(subPairsRaw, ab, bc, ca)
-	}
-
-	log.Printf("[INIT] total raw pairs before filtering: %d", len(subPairsRaw))
-
-	// 3. Фильтрация по доступным символам
-	uniq := make(map[string]struct{})
-	for _, p := range subPairsRaw {
-		if avail[p] {
-			uniq[p] = struct{}{}
-		} else {
-			log.Printf("[SKIP] %s not available on exchange", p)
-		}
-	}
-	var subPairs []string
-	for p := range uniq {
-		subPairs = append(subPairs, p)
-	}
-	log.Printf("[INIT] total unique pairs after filtering: %d", len(subPairs))
-	log.Printf("[INIT] subscribing on: %v", subPairs)
-
-	arb := &Arbitrager{
-		Triangles:       ts,
-		latest:          make(map[string]float64),
-		trianglesByPair: trianglesByPair,
-		realSymbols:     avail,
-		StartAmount:     0.5,
-		exchange:        ex,
-	}
-
-	// 4. Подписываемся чанками по maxPerConn
-	const maxPerConn = 20
-	for i := 0; i < len(subPairs); i += maxPerConn {
-		end := i + maxPerConn
-		if end > len(subPairs) {
-			end = len(subPairs)
-		}
-		chunk := subPairs[i:end]
-		log.Printf("[WS] subscribing chunk %d:%d: %v", i, end, chunk)
-
-		go func(pairs []string) {
-			for {
-				if err := ex.SubscribeDeals(pairs, arb.HandleRaw); err != nil {
-					log.Printf("[WS][%s] subscribe chunk error: %v; retrying…", ex.Name(), err)
-					time.Sleep(time.Second)
-					continue
-				}
-				return
-			}
-		}(chunk)
-	}
-
-	return arb, nil
-}
-
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "go-staticcheck",
+	"severity": 4,
+	"message": "field minQtys is unused (U1000)",
+	"source": "go-staticcheck",
+	"startLineNumber": 23,
+	"startColumn": 2,
+	"endLineNumber": 23,
+	"endColumn": 32,
+	"origin": "extHost1"
+}]
 
 
 
