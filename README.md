@@ -390,107 +390,20 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-func New(ex exchange.Exchange) (*Arbitrager, error) {
-	// 1. Загружаем доступные пары и фильтры
-	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
+realSymbols map[string][2]string
 
-	// 2. Добавляем инверсии символов
-	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
-	log.Printf("📊 Всего доступных пар (с инверсиями): %d", len(avail))
 
-	// 3. Строим треугольники
-	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
-	if err != nil {
-		return nil, fmt.Errorf("LoadTrianglesFromSymbols: %w", err)
-	}
-	log.Printf("[INIT] Загружено треугольников: %d", len(ts))
-
-	// 4. Создание карты индексов треугольников и подписываемых пар
-	trianglesByPair := make(map[string][]int)
-	var subPairsRaw []string
-	for i, tri := range ts {
-		ab := tri.A + tri.B
-		bc := tri.B + tri.C
-		ca := tri.C + tri.A
-
-		trianglesByPair[ab] = append(trianglesByPair[ab], i)
-		trianglesByPair[bc] = append(trianglesByPair[bc], i)
-		trianglesByPair[ca] = append(trianglesByPair[ca], i)
-
-		subPairsRaw = append(subPairsRaw, ab, bc, ca)
-	}
-
-	// 5. Фильтрация уникальных доступных пар
-	uniq := make(map[string]struct{})
-	for _, p := range subPairsRaw {
-		if avail[p] {
-			uniq[p] = struct{}{}
-		}
-	}
-	var subPairs []string
-	for p := range uniq {
-		subPairs = append(subPairs, p)
-	}
-	log.Printf("[INIT] Итог: подписываемся на %d уникальных пар", len(subPairs))
-
-	// 6. Создаём арбитражер
-	arb := &Arbitrager{
-		Triangles:       ts,
-		latest:          make(map[string]float64),
-		trianglesByPair: trianglesByPair,
-		realSymbols:     avail,
-		stepSizes:       stepSizes, // 👈 добавлено
-		minQtys:         minQtys,   // 👈 добавлено
-		StartAmount:     0.5,
-		exchange:        ex,
-	}
-
-	// 7. Подписка чанками
-	const maxPerConn = 20
-	for i := 0; i < len(subPairs); i += maxPerConn {
-		end := i + maxPerConn
-		if end > len(subPairs) {
-			end = len(subPairs)
-		}
-		chunk := subPairs[i:end]
-		go func(pairs []string) {
-			for {
-				if err := ex.SubscribeDeals(pairs, arb.HandleRaw); err != nil {
-					log.Printf("[WS][%s] subscribe error: %v; retrying...", ex.Name(), err)
-					time.Sleep(time.Second)
-					continue
-				}
-				return
-			}
-		}(chunk)
-	}
-
-	return arb, nil
+arb := &Arbitrager{
+	Triangles:       ts,
+	latest:          make(map[string]float64),
+	trianglesByPair: trianglesByPair,
+	realSymbols:     avail,       // теперь это map[string][2]string
+	stepSizes:       stepSizes,
+	minQtys:         minQtys,
+	StartAmount:     0.5,
+	exchange:        ex,
 }
 
-
-[{
-	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "IncompatibleAssign",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "IncompatibleAssign"
-		}
-	},
-	"severity": 8,
-	"message": "cannot use avail (variable of type map[string][2]string) as map[string]bool value in struct literal",
-	"source": "compiler",
-	"startLineNumber": 79,
-	"startColumn": 20,
-	"endLineNumber": 79,
-	"endColumn": 25,
-	"origin": "extHost1"
-}]
 
 
 
