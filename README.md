@@ -390,73 +390,64 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-package filesystem
+func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64) {
+    availableSymbols := make(map[string]bool)
+    stepSizes := make(map[string]float64)
+    minQtys := make(map[string]float64)
 
-import (
-	"log"
+    resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+    if err != nil {
+        log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
+        return availableSymbols, stepSizes, minQtys
+    }
+    defer resp.Body.Close()
 
-	"cryptarb/internal/domain/triangle"
-)
+    body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        log.Printf("❌ Ошибка чтения тела ответа: %v", err)
+        return availableSymbols, stepSizes, minQtys
+    }
 
-// ExpandAvailableSymbols добавляет обратные пары (BTCUSDT → USDTBTC)
-func ExpandAvailableSymbols(raw map[string]bool) map[string]bool {
-	expanded := make(map[string]bool, len(raw)*2)
-	for sym := range raw {
-		expanded[sym] = true
-		base, quote := unpackPair(sym)
-		if base != "" && quote != "" {
-			expanded[quote+base] = true
-		}
-	}
-	return expanded
-}
+    // Сохраняем весь JSON, если нужно
+    _ = os.WriteFile("all_symbols_full.json", body, 0644)
 
-// LoadTrianglesFromSymbols строит граф и находит все ориентированные треугольники
-func LoadTrianglesFromSymbols(avail map[string]bool) ([]triangle.Triangle, error) {
-	graph := make(map[string][]string)
-	for sym := range avail {
-		base, quote := unpackPair(sym)
-		if base == "" || quote == "" {
-			continue
-		}
-		// BUY: quote → base
-		graph[quote] = append(graph[quote], base)
-		// SELL: base → quote
-		graph[base] = append(graph[base], quote)
-	}
+    var data struct {
+        Symbols []map[string]interface{} `json:"symbols"`
+    }
+    if err := json.Unmarshal(body, &data); err != nil {
+        log.Printf("❌ Ошибка разбора JSON: %v", err)
+        return availableSymbols, stepSizes, minQtys
+    }
 
-	var tris []triangle.Triangle
-	seen := make(map[[3]string]struct{})
+    var logLines []string
 
-	for a, bs := range graph {
-		for _, b := range bs {
-			for _, c := range graph[b] {
-				for _, back := range graph[c] {
-					if back == a {
-						key := [3]string{a, b, c}
-						if _, ok := seen[key]; !ok {
-							seen[key] = struct{}{}
-							tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
-						}
-					}
-				}
-			}
-		}
-	}
+    for _, s := range data.Symbols {
+        sym, _ := s["symbol"].(string)
+        if sym == "" {
+            continue
+        }
 
-	log.Printf("[TRIANGLE] Found %d triangles", len(tris))
-	return tris, nil
-}
+        // Помечаем пару доступной
+        availableSymbols[sym] = true
 
-// unpackPair разбивает строку торговой пары на базу и котируемую валюту
-func unpackPair(pair string) (string, string) {
-	quotes := []string{"USDT", "USDC", "BTC", "ETH", "EUR", "BRL", "USD1", "USDE"}
-	for _, q := range quotes {
-		if len(pair) > len(q) && pair[len(pair)-len(q):] == q {
-			return pair[:len(pair)-len(q)], q
-		}
-	}
-	return "", ""
+        // Считываем baseSizePrecision как шаг
+        var step float64
+        if str, ok := s["baseSizePrecision"].(string); ok {
+            step, _ = strconv.ParseFloat(str, 64)
+        }
+        // Если не удалось спарсить — оставляем step=0
+
+        stepSizes[sym] = step
+        minQtys[sym]   = step // минимальный объём = шаг
+
+        logLines = append(logLines, fmt.Sprintf("%s\tstep=%g", sym, step))
+    }
+
+    // Запишем простой лог на всякий случай
+    _ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(logLines, "\n")), 0644)
+
+    log.Printf("✅ Всего пар: %d", len(availableSymbols))
+    return availableSymbols, stepSizes, minQtys
 }
 
 
