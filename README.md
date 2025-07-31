@@ -709,11 +709,13 @@ ________________________________________________________________________________
 
 
 
-func (m *MexcExchange) DumpUltimaSymbols() {
+func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
+	availableSymbols := make(map[string]bool) // просто возвращаем пустую, если не используем
+
 	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
 		log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
-		return
+		return availableSymbols
 	}
 	defer resp.Body.Close()
 
@@ -723,7 +725,7 @@ func (m *MexcExchange) DumpUltimaSymbols() {
 
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		log.Printf("❌ Ошибка разбора JSON: %v", err)
-		return
+		return availableSymbols
 	}
 
 	var ultimaSymbols []map[string]interface{}
@@ -738,25 +740,24 @@ func (m *MexcExchange) DumpUltimaSymbols() {
 		}
 	}
 
-	if len(ultimaSymbols) == 0 {
-		log.Println("ℹ️ Символов с 'ULTIMA' не найдено.")
-		return
+	// Сохраняем найденные ULTIMA-пары в файл
+	if len(ultimaSymbols) > 0 {
+		data, err := json.MarshalIndent(ultimaSymbols, "", "  ")
+		if err != nil {
+			log.Printf("❌ Ошибка сериализации JSON: %v", err)
+			return availableSymbols
+		}
+		err = os.WriteFile("ultima_raw.json", data, 0644)
+		if err != nil {
+			log.Printf("❌ Ошибка записи файла ultima_raw.json: %v", err)
+			return availableSymbols
+		}
+		log.Printf("✅ Найдено %d пар с 'ULTIMA', сохранено в ultima_raw.json", len(ultimaSymbols))
+	} else {
+		log.Println("ℹ️ Пар с 'ULTIMA' не найдено.")
 	}
 
-	// Сохраняем в файл
-	data, err := json.MarshalIndent(ultimaSymbols, "", "  ")
-	if err != nil {
-		log.Printf("❌ Ошибка сериализации JSON: %v", err)
-		return
-	}
-
-	err = os.WriteFile("ultima_raw.json", data, 0644)
-	if err != nil {
-		log.Printf("❌ Ошибка записи файла ultima_raw.json: %v", err)
-		return
-	}
-
-	log.Printf("✅ Найдено %d пар с 'ULTIMA', сохранено в ultima_raw.json", len(ultimaSymbols))
+	return availableSymbols
 }
 
 
