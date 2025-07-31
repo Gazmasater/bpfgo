@@ -709,126 +709,58 @@ ________________________________________________________________________________
 
 
 
-func roundQty(q float64) float64 {
-	return math.Floor(q*1e3) / 1e4 // до 3 знаков после запятой
+func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
+	availableSymbols := make(map[string]bool)
+	var disabledSymbols []string
+
+	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+	if err != nil {
+		log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
+		return availableSymbols
+	}
+	defer resp.Body.Close()
+
+	var response struct {
+		Symbols []struct {
+			Symbol string `json:"symbol"`
+			Status string `json:"status"`
+		}
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		log.Printf("❌ Ошибка декодирования exchangeInfo: %v", err)
+		return availableSymbols
+	}
+
+	for _, s := range response.Symbols {
+		if s.Status == "ENABLED" {
+			availableSymbols[s.Symbol] = true
+		} else {
+			disabledSymbols = append(disabledSymbols, fmt.Sprintf("%s\t(status=%s)", s.Symbol, s.Status))
+		}
+	}
+
+	log.Printf("✅ Загружено %d активных торговых пар", len(availableSymbols))
+
+	// 📜 Логируем отключённые пары
+	if len(disabledSymbols) > 0 {
+		log.Printf("🚫 Исключено %d пар (неактивны):", len(disabledSymbols))
+		for _, d := range disabledSymbols {
+			log.Printf("   - %s", d)
+		}
+
+		// 📁 Сохраняем в файл
+		logFile := "disabled_symbols.log"
+		content := strings.Join(disabledSymbols, "\n")
+		if err := os.WriteFile(logFile, []byte(content), 0644); err != nil {
+			log.Printf("⚠️ Не удалось записать файл %s: %v", logFile, err)
+		} else {
+			log.Printf("📝 Список исключённых пар сохранён в %s", logFile)
+		}
+	}
+
+	return availableSymbols
 }
-
-func round4(f float64) float64 {
-	return math.Floor(f*1e4) / 1e4 // до 4 знаков после запятой
-}
-
-func (a *Arbitrager) ExecuteTriangle(tri triangle.Triangle, amountUSDT float64) error {
-	if tri.A != "USDT" {
-		return fmt.Errorf("треугольник должен начинаться с USDT")
-	}
-
-	log.Printf("🔺 Запуск арбитража по треугольнику: %s → %s → %s → %s", tri.A, tri.B, tri.C, tri.A)
-	log.Printf("💰 Стартовая сумма: %.4f %s", round4(amountUSDT), tri.A)
-
-	// STEP 1: USDT → B
-	symbol1, ok1, rev1 := a.normalizeSymbolDir(tri.B, tri.A)
-	if !ok1 {
-		return fmt.Errorf("❌ нет пары %s/%s", tri.B, tri.A)
-	}
-
-	ask1, err := a.exchange.GetBestAsk(symbol1)
-	if err != nil {
-		return fmt.Errorf("❌ Step 1 ask error (%s): %v", symbol1, err)
-	}
-	if rev1 {
-		ask1 = 1 / ask1
-	}
-	ask1Adj := round4(ask1 * 1.0003)
-	amountB := roundQty(amountUSDT / ask1Adj)
-
-	log.Printf("💱 Step 1: BUY %s за %.4f USDT @ %.6f (adj %.4f) ≈ %.4f", tri.B, round4(amountUSDT), ask1, ask1Adj, amountB)
-	order1, err := a.exchange.PlaceMarketOrder(symbol1, "BUY", round4(amountUSDT))
-	if err != nil {
-		return fmt.Errorf("❌ Step 1 order failed: %v", err)
-	}
-	log.Printf("✅ Step 1: OrderID %s", order1)
-
-	// STEP 2: B → C
-	symbol2, ok2, rev2 := a.normalizeSymbolDir(tri.B, tri.C)
-	if !ok2 {
-		return fmt.Errorf("❌ нет пары %s/%s", tri.B, tri.C)
-	}
-
-	ask2, err := a.exchange.GetBestAsk(symbol2)
-	if err != nil {
-		return fmt.Errorf("❌ Step 2 ask error (%s): %v", symbol2, err)
-	}
-	if rev2 {
-		ask2 = 1 / ask2
-	}
-	ask2Adj := round4(ask2 * 1.0003)
-	amountC := roundQty(amountB / ask2Adj)
-
-	var side2 string
-	var qty2 float64
-	if rev2 {
-		side2 = "BUY"
-		qty2 = roundQty(amountB)
-	} else {
-		side2 = "SELL"
-		qty2 = roundQty(amountB)
-	}
-
-	log.Printf("💱 Step 2: %s %s → %s @ %.6f (adj %.4f) qty=%.4f", side2, tri.B, tri.C, ask2, ask2Adj, qty2)
-	order2, err := a.exchange.PlaceMarketOrder(symbol2, side2, qty2)
-	if err != nil {
-		return fmt.Errorf("❌ Step 2 order failed: %v", err)
-	}
-	log.Printf("✅ Step 2: OrderID %s", order2)
-
-	// STEP 3: C → USDT
-	symbol3, ok3, rev3 := a.normalizeSymbolDir(tri.C, tri.A)
-	if !ok3 {
-		return fmt.Errorf("❌ нет пары %s/%s", tri.C, tri.A)
-	}
-
-	bid3, err := a.exchange.GetBestBid(symbol3)
-	if err != nil {
-		return fmt.Errorf("❌ Step 3 bid error (%s): %v", symbol3, err)
-	}
-	if rev3 {
-		bid3 = 1 / bid3
-	}
-	bid3Adj := round4(bid3 * 0.9997)
-	finalUSDT := round4(amountC * bid3Adj)
-
-	var side3 string
-	var qty3 float64
-	if rev3 {
-		side3 = "BUY"
-		qty3 = roundQty(finalUSDT)
-	} else {
-		side3 = "SELL"
-		qty3 = roundQty(amountC)
-	}
-
-	log.Printf("💱 Step 3: %s %s → USDT @ %.6f (adj %.4f) qty=%.4f ≈ %.4f USDT", side3, tri.C, bid3, bid3Adj, qty3, finalUSDT)
-	order3, err := a.exchange.PlaceMarketOrder(symbol3, side3, qty3)
-	if err != nil {
-		return fmt.Errorf("❌ Step 3 order failed: %v", err)
-	}
-	log.Printf("✅ Step 3: OrderID %s", order3)
-
-	log.Printf("🎯 Арбитраж завершён: с %.4f USDT получили ≈ %.4f USDT", round4(amountUSDT), finalUSDT)
-	return nil
-}
-
-
-025/07/31 05:03:11 [WS] subscribing chunk 80:82: [AVAXUSDT PIUSD1]
-2025/07/31 05:03:13 🔺 ARB USDT/UNI/USDC profit=-0.8833%
-2025/07/31 05:03:13 🔺 Запуск арбитража по треугольнику: USDT → UNI → USDC → USDT
-2025/07/31 05:03:13 💰 Стартовая сумма: 5.0000 USDT
-2025/07/31 05:03:13 💱 Step 1: BUY UNI за 5.0000 USDT @ 10.140000 (adj 10.1430) ≈ 0.0492
-2025/07/31 05:03:13 ✅ Step 1: OrderID C02__579422788280975360022
-2025/07/31 05:03:14 💱 Step 2: SELL UNI → USDC @ 10.151100 (adj 10.1541) qty=0.0049
-2025/07/31 05:03:14 ❌ Ошибка арбитража: ❌ Step 2 order failed: order failed: {"msg":" quantity scale is invalid","code":400}
-^Csignal: interrupt
-gaz358@gaz358-BOD-WXX9:~/
 
 
 
