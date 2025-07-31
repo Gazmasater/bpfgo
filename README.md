@@ -390,71 +390,107 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-package filesystem
+func New(ex exchange.Exchange) (*Arbitrager, error) {
+	// 1. Загружаем доступные пары и фильтры
+	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
 
-import (
-	"cryptarb/internal/domain/triangle"
-	"log"
-)
+	// 2. Добавляем инверсии символов
+	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
+	log.Printf("📊 Всего доступных пар (с инверсиями): %d", len(avail))
 
-// LoadTrianglesFromSymbols строит граф и находит треугольники на основе доступных символов
-func LoadTrianglesFromSymbols(baseQuote map[string][2]string) ([]triangle.Triangle, error) {
-	graph := make(map[string][]string)
+	// 3. Строим треугольники
+	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
+	if err != nil {
+		return nil, fmt.Errorf("LoadTrianglesFromSymbols: %w", err)
+	}
+	log.Printf("[INIT] Загружено треугольников: %d", len(ts))
 
-	for symbol, parts := range baseQuote {
-		base := parts[0]
-		quote := parts[1]
-		graph[quote] = append(graph[quote], base) // Покупка base за quote
-		graph[base] = append(graph[base], quote)  // Продажа base за quote
+	// 4. Создание карты индексов треугольников и подписываемых пар
+	trianglesByPair := make(map[string][]int)
+	var subPairsRaw []string
+	for i, tri := range ts {
+		ab := tri.A + tri.B
+		bc := tri.B + tri.C
+		ca := tri.C + tri.A
+
+		trianglesByPair[ab] = append(trianglesByPair[ab], i)
+		trianglesByPair[bc] = append(trianglesByPair[bc], i)
+		trianglesByPair[ca] = append(trianglesByPair[ca], i)
+
+		subPairsRaw = append(subPairsRaw, ab, bc, ca)
 	}
 
-	var tris []triangle.Triangle
-	seen := make(map[[3]string]struct{})
+	// 5. Фильтрация уникальных доступных пар
+	uniq := make(map[string]struct{})
+	for _, p := range subPairsRaw {
+		if avail[p] {
+			uniq[p] = struct{}{}
+		}
+	}
+	var subPairs []string
+	for p := range uniq {
+		subPairs = append(subPairs, p)
+	}
+	log.Printf("[INIT] Итог: подписываемся на %d уникальных пар", len(subPairs))
 
-	for a, bList := range graph {
-		for _, b := range bList {
-			for _, c := range graph[b] {
-				for _, back := range graph[c] {
-					if back == a {
-						key := [3]string{a, b, c}
-						if _, ok := seen[key]; !ok {
-							seen[key] = struct{}{}
-							tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
-						}
-					}
+	// 6. Создаём арбитражер
+	arb := &Arbitrager{
+		Triangles:       ts,
+		latest:          make(map[string]float64),
+		trianglesByPair: trianglesByPair,
+		realSymbols:     avail,
+		stepSizes:       stepSizes, // 👈 добавлено
+		minQtys:         minQtys,   // 👈 добавлено
+		StartAmount:     0.5,
+		exchange:        ex,
+	}
+
+	// 7. Подписка чанками
+	const maxPerConn = 20
+	for i := 0; i < len(subPairs); i += maxPerConn {
+		end := i + maxPerConn
+		if end > len(subPairs) {
+			end = len(subPairs)
+		}
+		chunk := subPairs[i:end]
+		go func(pairs []string) {
+			for {
+				if err := ex.SubscribeDeals(pairs, arb.HandleRaw); err != nil {
+					log.Printf("[WS][%s] subscribe error: %v; retrying...", ex.Name(), err)
+					time.Sleep(time.Second)
+					continue
 				}
+				return
 			}
-		}
+		}(chunk)
 	}
 
-	log.Printf("[TRIANGLE] Found %d triangles", len(tris))
-	return tris, nil
+	return arb, nil
 }
 
-// ExpandAvailableSymbols добавляет инверсии символов и возвращает map: symbol → [base, quote]
-func ExpandAvailableSymbols(raw map[string]bool) map[string][2]string {
-	pairs := make(map[string][2]string)
-	for symbol := range raw {
-		base, quote := unpackPair(symbol)
-		if base != "" && quote != "" {
-			pairs[symbol] = [2]string{base, quote}
-			inv := quote + base
-			pairs[inv] = [2]string{quote, base} // обратная пара
-		}
-	}
-	return pairs
-}
 
-// unpackPair разбивает символ на base и quote по известным суффиксам
-func unpackPair(pair string) (string, string) {
-	quotes := []string{"USDT", "USDC", "BTC", "ETH", "EUR", "BRL", "USD1", "USDE"}
-	for _, q := range quotes {
-		if len(pair) > len(q) && pair[len(pair)-len(q):] == q {
-			return pair[:len(pair)-len(q)], q
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "IncompatibleAssign",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "IncompatibleAssign"
 		}
-	}
-	return "", ""
-}
+	},
+	"severity": 8,
+	"message": "cannot use avail (variable of type map[string][2]string) as map[string]bool value in struct literal",
+	"source": "compiler",
+	"startLineNumber": 79,
+	"startColumn": 20,
+	"endLineNumber": 79,
+	"endColumn": 25,
+	"origin": "extHost1"
+}]
 
 
 
