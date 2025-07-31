@@ -390,46 +390,10 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-func LoadTrianglesFromSymbols(available map[string]bool) ([]triangle.Triangle, error) {
-	// Строим граф
-	graph := make(map[string][]string)
-	for symbol := range available {
-		base, quote := unpackPair(symbol)
-		if base == "" || quote == "" {
-			continue
-		}
-		graph[quote] = append(graph[quote], base) // BUY
-		graph[base] = append(graph[base], quote) // SELL
-	}
-
-	// Поиск треугольников
-	var tris []triangle.Triangle
-	seen := make(map[[3]string]struct{})
-
-	for a, bList := range graph {
-		for _, b := range bList {
-			for _, c := range graph[b] {
-				for _, back := range graph[c] {
-					if back == a {
-						key := [3]string{a, b, c}
-						if _, ok := seen[key]; !ok {
-							seen[key] = struct{}{}
-							tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
-						}
-					}
-				}
-			}
-		}
-	}
-
-	log.Printf("[TRIANGLE] Found %d triangles", len(tris))
-	return tris, nil
-}
-
-
 func New(ex exchange.Exchange) (*Arbitrager, error) {
 	// 1. Загружаем доступные пары и строим треугольники
 	avail := ex.FetchAvailableSymbols()
+
 	log.Printf("!!!!!!!![DEBUG] Биржа вернула %d доступных пар", len(avail))
 
 	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
@@ -508,45 +472,89 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 }
 
 
+func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64) {
+	availableSymbols := make(map[string]bool)
+	stepSizes := make(map[string]float64)
 
-package main
-
-import (
-	"log"
-	"os"
-
-	"cryptarb/internal/app"
-	"cryptarb/internal/repository/mexc"
-
-	"github.com/joho/godotenv"
-)
-
-func main() {
-	// 1. Загружаем .env
-	err := godotenv.Load()
+	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
-		log.Fatal("❌ Не удалось загрузить .env:", err)
+		log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
+		return availableSymbols, stepSizes
+	}
+	defer resp.Body.Close()
+
+	var response struct {
+		Symbols []map[string]interface{} `json:"symbols"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		log.Printf("❌ Ошибка разбора JSON: %v", err)
+		return availableSymbols, stepSizes
 	}
 
-	apiKey := os.Getenv("MEXC_API_KEY")
-	secret := os.Getenv("MEXC_SECRET_KEY")
+	var availableLog []string
+	var excludedLog []string
 
-	if apiKey == "" || secret == "" {
-		log.Fatal("❌ API ключи не найдены в .env")
+	for _, symbolData := range response.Symbols {
+		symbolName, ok := symbolData["symbol"].(string)
+		if !ok || symbolName == "" {
+			continue
+		}
+
+		reasons := []string{}
+
+		// status
+		status, _ := symbolData["status"].(string)
+		if status != "1" {
+			reasons = append(reasons, "status != 1")
+		}
+
+		// spot trading
+		spotAllowed, _ := symbolData["isSpotTradingAllowed"].(bool)
+		if !spotAllowed {
+			reasons = append(reasons, "spot trading not allowed")
+		}
+
+		// MARKET order
+		hasMarket := false
+		if orders, ok := symbolData["orderTypes"].([]interface{}); ok {
+			for _, o := range orders {
+				if os, ok := o.(string); ok && os == "MARKET" {
+					hasMarket = true
+					break
+				}
+			}
+		}
+		if !hasMarket {
+			reasons = append(reasons, "no MARKET order")
+		}
+
+		// stepSize
+		stepStr, _ := symbolData["baseSizePrecision"].(string)
+		stepFloat, err := strconv.ParseFloat(stepStr, 64)
+		if err != nil || stepFloat <= 0 {
+			reasons = append(reasons, "baseSizePrecision = 0")
+		}
+
+		if len(reasons) == 0 {
+			availableSymbols[symbolName] = true
+			stepSizes[symbolName] = stepFloat
+			availableLog = append(availableLog, fmt.Sprintf("%s\t✅ stepSize=%s", symbolName, stepStr))
+		} else {
+			excludedLog = append(excludedLog, fmt.Sprintf("%s\t⛔ %s", symbolName, strings.Join(reasons, ", ")))
+		}
 	}
 
-	// 2. Создаём клиента биржи
-	ex := mexc.NewMexcExchange(apiKey, secret)
+	_ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(availableLog, "\n")), 0644)
+	_ = os.WriteFile("excluded_all_symbols.log", []byte(strings.Join(excludedLog, "\n")), 0644)
 
-	// 3. Запускаем арбитраж без triangles.json
-	_, err = app.New(ex)
-	if err != nil {
-		log.Fatal("❌ Ошибка запуска арбитража:", err)
-	}
+	log.Printf("✅ Всего подходящих пар: %d", len(availableSymbols))
+	log.Printf("📝 available_all_symbols.log и excluded_all_symbols.log сохранены")
 
-	// 4. Блокируем main
-	select {}
+	return availableSymbols, stepSizes
 }
+
+
+
 
 
 
