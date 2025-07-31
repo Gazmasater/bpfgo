@@ -390,31 +390,207 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-[{
-	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
-	"owner": "go-staticcheck",
-	"severity": 4,
-	"message": "field stepSizes is unused (U1000)",
-	"source": "go-staticcheck",
-	"startLineNumber": 22,
-	"startColumn": 2,
-	"endLineNumber": 22,
-	"endColumn": 32,
-	"origin": "extHost1"
-}]
+type Arbitrager struct {
+	...
+	stepSizes map[string]float64
+	minQtys   map[string]float64
+}
 
-[{
-	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
-	"owner": "go-staticcheck",
-	"severity": 4,
-	"message": "field minQtys is unused (U1000)",
-	"source": "go-staticcheck",
-	"startLineNumber": 23,
-	"startColumn": 2,
-	"endLineNumber": 23,
-	"endColumn": 32,
-	"origin": "extHost1"
-}]
+
+
+
+func New(ex exchange.Exchange) (*Arbitrager, error) {
+	// 1. Загружаем доступные пары и их ограничения
+	avail, stepSizes, minQtys := ex.FetchAvailableSymbols()
+	log.Printf("!!!!!!!![DEBUG] Биржа вернула %d доступных пар", len(avail))
+
+	// 2. Генерируем треугольники из этих пар
+	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("[INIT] Loaded %d triangles после построения", len(ts))
+
+	// 3. Собираем мапу индексов и список всех потенциальных подписок
+	trianglesByPair := make(map[string][]int)
+	var subPairsRaw []string
+	for i, tri := range ts {
+		ab := tri.A + tri.B // A→B
+		bc := tri.B + tri.C // B→C
+		ca := tri.C + tri.A // C→A
+
+		log.Printf("[TRI %2d] %s → %s → %s → %s (AB=%s BC=%s CA=%s)",
+			i, tri.A, tri.B, tri.C, tri.A, ab, bc, ca)
+
+		trianglesByPair[ab] = append(trianglesByPair[ab], i)
+		trianglesByPair[bc] = append(trianglesByPair[bc], i)
+		trianglesByPair[ca] = append(trianglesByPair[ca], i)
+
+		subPairsRaw = append(subPairsRaw, ab, bc, ca)
+	}
+	log.Printf("[INIT] total raw pairs before filtering: %d", len(subPairsRaw))
+
+	// 4. Фильтрация по доступным символам
+	uniq := make(map[string]struct{})
+	for _, p := range subPairsRaw {
+		if avail[p] {
+			uniq[p] = struct{}{}
+		} else {
+			log.Printf("[SKIP] %s not available on exchange", p)
+		}
+	}
+	var subPairs []string
+	for p := range uniq {
+		subPairs = append(subPairs, p)
+	}
+	log.Printf("[INIT] total unique pairs after filtering: %d", len(subPairs))
+	log.Printf("[INIT] subscribing on: %v", subPairs)
+
+	// 5. Создаём арбитражер
+	arb := &Arbitrager{
+		Triangles:       ts,
+		latest:          make(map[string]float64),
+		trianglesByPair: trianglesByPair,
+		realSymbols:     avail,
+		stepSizes:       stepSizes,
+		minQtys:         minQtys,
+		StartAmount:     0.5,
+		exchange:        ex,
+	}
+
+	// 6. Подписываемся чанками по maxPerConn
+	const maxPerConn = 20
+	for i := 0; i < len(subPairs); i += maxPerConn {
+		end := i + maxPerConn
+		if end > len(subPairs) {
+			end = len(subPairs)
+		}
+		chunk := subPairs[i:end]
+		log.Printf("[WS] subscribing chunk %d:%d: %v", i, end, chunk)
+
+		go func(pairs []string) {
+			for {
+				if err := ex.SubscribeDeals(pairs, arb.HandleRaw); err != nil {
+					log.Printf("[WS][%s] subscribe chunk error: %v; retrying…", ex.Name(), err)
+					time.Sleep(time.Second)
+					continue
+				}
+				return
+			}
+		}(chunk)
+	}
+
+	return arb, nil
+}
+
+
+func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64) {
+	availableSymbols := make(map[string]bool)
+	stepSizes := make(map[string]float64)
+	minQtys := make(map[string]float64)
+
+	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+	if err != nil {
+		log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
+		return availableSymbols, stepSizes, minQtys
+	}
+	defer resp.Body.Close()
+
+	var response struct {
+		Symbols []map[string]interface{} `json:"symbols"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		log.Printf("❌ Ошибка разбора JSON: %v", err)
+		return availableSymbols, stepSizes, minQtys
+	}
+
+	var availableLog []string
+	var excludedLog []string
+
+	for _, symbolData := range response.Symbols {
+		symbolName, ok := symbolData["symbol"].(string)
+		if !ok || symbolName == "" {
+			continue
+		}
+
+		reasons := []string{}
+
+		// Проверка статуса
+		status, _ := symbolData["status"].(string)
+		if status != "1" {
+			reasons = append(reasons, "status != 1")
+		}
+
+		// Разрешена ли спотовая торговля
+		spotAllowed, _ := symbolData["isSpotTradingAllowed"].(bool)
+		if !spotAllowed {
+			reasons = append(reasons, "spot trading not allowed")
+		}
+
+		// Поддерживает ли MARKET ордера
+		hasMarket := false
+		if orders, ok := symbolData["orderTypes"].([]interface{}); ok {
+			for _, o := range orders {
+				if os, ok := o.(string); ok && os == "MARKET" {
+					hasMarket = true
+					break
+				}
+			}
+		}
+		if !hasMarket {
+			reasons = append(reasons, "no MARKET order")
+		}
+
+		// Step size и minQty
+		stepSize := 0.0
+		minQty := 0.0
+
+		if filters, ok := symbolData["filters"].([]interface{}); ok {
+			for _, f := range filters {
+				filter, _ := f.(map[string]interface{})
+				if filter["filterType"] == "LOT_SIZE" {
+					if stepStr, ok := filter["stepSize"].(string); ok {
+						stepSize, _ = strconv.ParseFloat(stepStr, 64)
+					}
+					if minQtyStr, ok := filter["minQty"].(string); ok {
+						minQty, _ = strconv.ParseFloat(minQtyStr, 64)
+					}
+				}
+			}
+		}
+
+		if stepSize <= 0 {
+			reasons = append(reasons, "invalid stepSize")
+		}
+		if minQty <= 0 {
+			reasons = append(reasons, "invalid minQty")
+		}
+
+		if len(reasons) == 0 {
+			availableSymbols[symbolName] = true
+			stepSizes[symbolName] = stepSize
+			minQtys[symbolName] = minQty
+			availableLog = append(availableLog,
+				fmt.Sprintf("%s\t✅ step=%.8f minQty=%.8f", symbolName, stepSize, minQty))
+		} else {
+			excludedLog = append(excludedLog,
+				fmt.Sprintf("%s\t⛔ %s", symbolName, strings.Join(reasons, ", ")))
+		}
+	}
+
+	_ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(availableLog, "\n")), 0644)
+	_ = os.WriteFile("excluded_all_symbols.log", []byte(strings.Join(excludedLog, "\n")), 0644)
+
+	log.Printf("✅ Всего подходящих пар: %d", len(availableSymbols))
+	log.Printf("📝 available_all_symbols.log и excluded_all_symbols.log сохранены")
+
+	return availableSymbols, stepSizes, minQtys
+}
+
+
+
+
+
 
 
 
