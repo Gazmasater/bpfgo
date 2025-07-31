@@ -393,7 +393,7 @@ _______________________________________________________________________________
 func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64) {
 	availableSymbols := make(map[string]bool)
 	stepSizes := make(map[string]float64)
-	minQtys := make(map[string]float64)
+	minQtys := make(map[string]float64) // будем использовать такую же точность, как и stepSize
 
 	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
@@ -402,116 +402,80 @@ func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]floa
 	}
 	defer resp.Body.Close()
 
-	// Чтение всего тела ответа
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("❌ Ошибка чтения тела ответа: %v", err)
 		return availableSymbols, stepSizes, minQtys
 	}
 
-	// Парсим в map
-	var rawData struct {
+	// Сохраняем весь JSON для анализа
+	_ = os.WriteFile("all_symbols_full.json", bodyBytes, 0644)
+
+	var raw struct {
 		Symbols []map[string]interface{} `json:"symbols"`
 	}
-	if err := json.Unmarshal(bodyBytes, &rawData); err != nil {
+	if err := json.Unmarshal(bodyBytes, &raw); err != nil {
 		log.Printf("❌ Ошибка разбора JSON: %v", err)
 		return availableSymbols, stepSizes, minQtys
-	}
-
-	// Сохраняем полный JSON в файл
-	if err := os.WriteFile("all_symbols_full.json", bodyBytes, 0644); err != nil {
-		log.Printf("⚠️ Не удалось сохранить all_symbols_full.json: %v", err)
 	}
 
 	var availableLog []string
 	var excludedLog []string
 
-	for _, symbolData := range rawData.Symbols {
-		symbolName, ok := symbolData["symbol"].(string)
-		if !ok || symbolName == "" {
+	for _, s := range raw.Symbols {
+		symbol, _ := s["symbol"].(string)
+		if symbol == "" {
 			continue
 		}
 
-		reasons := []string{}
+		var reasons []string
 
-		// Проверка статуса
-		status, _ := symbolData["status"].(string)
-		if status != "1" {
+		// Проверки
+		if s["status"] != "1" {
 			reasons = append(reasons, "status != 1")
 		}
 
-		// Спотовая торговля
-		spotAllowed, _ := symbolData["isSpotTradingAllowed"].(bool)
-		if !spotAllowed {
+		if allowed, ok := s["isSpotTradingAllowed"].(bool); !ok || !allowed {
 			reasons = append(reasons, "spot trading not allowed")
 		}
 
-		// MARKET ордера
+		orderTypes, _ := s["orderTypes"].([]interface{})
 		hasMarket := false
-		if orders, ok := symbolData["orderTypes"].([]interface{}); ok {
-			for _, o := range orders {
-				if os, ok := o.(string); ok && os == "MARKET" {
-					hasMarket = true
-					break
-				}
+		for _, o := range orderTypes {
+			if str, ok := o.(string); ok && str == "MARKET" {
+				hasMarket = true
+				break
 			}
 		}
 		if !hasMarket {
 			reasons = append(reasons, "no MARKET order")
 		}
 
-		// stepSize и minQty из filters
-		stepSize := 0.0
-		minQty := 0.0
-		if filters, ok := symbolData["filters"].([]interface{}); ok {
-			for _, f := range filters {
-				filter, _ := f.(map[string]interface{})
-				if filter["filterType"] == "LOT_SIZE" {
-					switch v := filter["stepSize"].(type) {
-					case string:
-						stepSize, _ = strconv.ParseFloat(v, 64)
-					case float64:
-						stepSize = v
-					}
-					switch v := filter["minQty"].(type) {
-					case string:
-						minQty, _ = strconv.ParseFloat(v, 64)
-					case float64:
-						minQty = v
-					}
-				}
-			}
-		}
-
-		if stepSize <= 0 {
-			reasons = append(reasons, "invalid stepSize")
-		}
-		if minQty <= 0 {
-			reasons = append(reasons, "invalid minQty")
+		// baseSizePrecision = шаг
+		stepStr, _ := s["baseSizePrecision"].(string)
+		step, err := strconv.ParseFloat(stepStr, 64)
+		if err != nil || step <= 0 {
+			reasons = append(reasons, "invalid baseSizePrecision")
 		}
 
 		if len(reasons) == 0 {
-			availableSymbols[symbolName] = true
-			stepSizes[symbolName] = stepSize
-			minQtys[symbolName] = minQty
-			availableLog = append(availableLog,
-				fmt.Sprintf("%s\t✅ step=%.8f minQty=%.8f", symbolName, stepSize, minQty))
+			availableSymbols[symbol] = true
+			stepSizes[symbol] = step
+			minQtys[symbol] = step // допустим: минимум равен шагу
+			availableLog = append(availableLog, fmt.Sprintf("%s\t✅ step=%.8f", symbol, step))
 		} else {
-			excludedLog = append(excludedLog,
-				fmt.Sprintf("%s\t⛔ %s", symbolName, strings.Join(reasons, ", ")))
+			excludedLog = append(excludedLog, fmt.Sprintf("%s\t⛔ %s", symbol, strings.Join(reasons, ", ")))
 		}
 	}
 
-	// Лог в текстовые файлы
 	_ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(availableLog, "\n")), 0644)
 	_ = os.WriteFile("excluded_all_symbols.log", []byte(strings.Join(excludedLog, "\n")), 0644)
 
-	log.Printf("✅ Всего подходящих пар: %d", len(availableSymbols))
-	log.Printf("📁 Сохранено: all_symbols_full.json, available_all_symbols.log, excluded_all_symbols.log")
+	log.Printf("✅ Подходящих пар: %d", len(availableSymbols))
+	log.Printf("📂 Сохранено: all_symbols_full.json, available_all_symbols.log, excluded_all_symbols.log")
 
 	return availableSymbols, stepSizes, minQtys
 }
-
 
 
 
