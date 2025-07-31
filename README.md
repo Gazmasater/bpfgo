@@ -819,15 +819,16 @@ func (a *Arbitrager) ExecuteTriangle(tri triangle.Triangle, amountUSDT float64) 
 }
 
 
-025/07/31 04:49:16 [WS] subscribing chunk 80:85: [ULTIMAUSDC ADAUSDC XRPETH ETHBTC ETHUSDT]
-2025/07/31 04:49:45 🔺 ARB USDT/USDC/UNI profit=-0.8955%
-2025/07/31 04:49:45 🔺 Запуск арбитража по треугольнику: USDT → USDC → UNI → USDT
-2025/07/31 04:49:45 💰 Стартовая сумма: 3.5000 USDT
-2025/07/31 04:49:45 💱 Step 1: BUY USDC за 3.5000 USDT @ 0.999900 (adj 1.0001) ≈ 0.3499
-2025/07/31 04:49:45 ✅ Step 1: OrderID C02__579419399421710336022
-2025/07/31 04:49:46 💱 Step 2: BUY USDC → UNI @ 0.097982 (adj 0.0980) qty=0.0349
-2025/07/31 04:49:46 ❌ Ошибка арбитража: ❌ Step 2 order failed: order failed: {"msg":"The minimum transaction volume cannot be less than[1.000000000000000000000000000000]","code":30002,"_extend":{"quantity":"1"}}
-
+025/07/31 05:03:11 [WS] subscribing chunk 80:82: [AVAXUSDT PIUSD1]
+2025/07/31 05:03:13 🔺 ARB USDT/UNI/USDC profit=-0.8833%
+2025/07/31 05:03:13 🔺 Запуск арбитража по треугольнику: USDT → UNI → USDC → USDT
+2025/07/31 05:03:13 💰 Стартовая сумма: 5.0000 USDT
+2025/07/31 05:03:13 💱 Step 1: BUY UNI за 5.0000 USDT @ 10.140000 (adj 10.1430) ≈ 0.0492
+2025/07/31 05:03:13 ✅ Step 1: OrderID C02__579422788280975360022
+2025/07/31 05:03:14 💱 Step 2: SELL UNI → USDC @ 10.151100 (adj 10.1541) qty=0.0049
+2025/07/31 05:03:14 ❌ Ошибка арбитража: ❌ Step 2 order failed: order failed: {"msg":" quantity scale is invalid","code":400}
+^Csignal: interrupt
+gaz358@gaz358-BOD-WXX9:~/
 
 
 
