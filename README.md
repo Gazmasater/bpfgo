@@ -391,13 +391,39 @@ sudo apt install docker-compose-plugin -y
 _______________________________________________________________________________
 
 
-025/07/31 19:13:15 [INFO] Found 612 directed triangles from 270 pairs
-2025/07/31 19:13:15 ✅ Всего подходящих пар: 514
-2025/07/31 19:13:15 📝 available_all_symbols.log и excluded_all_symbols.log сохранены
-2025/07/31 19:13:15 !!!!!!!![DEBUG] Биржа вернула 514 доступных пар
-2025/07/31 19:13:15 [FILTER ✅] Осталось треугольников после фильтрации: 0
-2025/07/31 19:13:15 [INIT] Loaded 0 triangles after filtering
-2025/07/31 19:13:15 [INIT] total unique pairs after filtering: 0
-^Csignal: interrupt
+package triangle
+
+import "log"
+
+type Triangle struct{ A, B, C string }
+
+// Filter оставляет только те треугольники, пары в которых есть в available
+func Filter(ts []Triangle, available map[string]bool) []Triangle {
+	out := make([]Triangle, 0, len(ts))
+	var skipped int
+
+	for _, t := range ts {
+		ok := func(a, b string) bool {
+			return available[a+b] || available[b+a]
+		}
+
+		okAB := ok(t.A, t.B)
+		okBC := ok(t.B, t.C)
+		okCA := ok(t.C, t.A)
+
+		if okAB && okBC && okCA {
+			out = append(out, t)
+		} else {
+			skipped++
+			log.Printf("[❌ FILTER] %s-%s-%s excluded: AB=%v BC=%v CA=%v",
+				t.A, t.B, t.C, okAB, okBC, okCA)
+		}
+	}
+
+	log.Printf("[FILTER ✅] Осталось треугольников после фильтрации: %d (пропущено: %d)", len(out), skipped)
+
+	return out
+}
+
 
 
