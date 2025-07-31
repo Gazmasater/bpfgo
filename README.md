@@ -709,13 +709,95 @@ ________________________________________________________________________________
 
 
 
-025/07/31 03:30:24 🔺 ARB USDT/EUR/PI profit=-0.4968%
-2025/07/31 03:30:24 🔺 Запуск арбитража по треугольнику: USDT → EUR → PI → USDT
-2025/07/31 03:30:24 💰 Стартовая сумма: 3.5000 USDT
-2025/07/31 03:30:24 💱 Step 1: BUY EUR за 3.5000 USDT @ 1.144300 (adj 1.144643) ≈ 3.057000
-2025/07/31 03:30:24 ❌ Ошибка арбитража: ❌ Step 1 order failed: order failed: {"code":10007,"msg":"symbol not support api"}
-^Csignal: interrupt
+package app
 
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"math"
+	"net/http"
+	"strconv"
+)
+
+type SymbolFilter struct {
+	Symbol     string
+	StepSize   int     // кол-во знаков после запятой
+	MinQty     float64 // минимальное кол-во
+	APIEnabled bool    // можно ли торговать через API (неявно)
+}
+
+// Загрузка stepSize и minQty из API MEXC
+func LoadSymbolFilters() (map[string]SymbolFilter, error) {
+	type filter struct {
+		FilterType string `json:"filterType"`
+		StepSize   string `json:"stepSize"`
+		MinQty     string `json:"minQty"`
+	}
+	type symbolInfo struct {
+		Symbol        string   `json:"symbol"`
+		Status        string   `json:"status"`
+		IsSpotTrading bool     `json:"isSpotTrading"`
+		Filters       []filter `json:"filters"`
+	}
+	type response struct {
+		Symbols []symbolInfo `json:"symbols"`
+	}
+
+	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+	if err != nil {
+		return nil, fmt.Errorf("не удалось загрузить exchangeInfo: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var result response
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("ошибка декодирования exchangeInfo: %v", err)
+	}
+
+	filters := make(map[string]SymbolFilter)
+	for _, s := range result.Symbols {
+		if s.Status != "ENABLED" || !s.IsSpotTrading {
+			log.Printf("[SKIP] %s недоступен для спотовой торговли через API", s.Symbol)
+			continue
+		}
+		for _, f := range s.Filters {
+			if f.FilterType == "LOT_SIZE" {
+				step, err1 := parseDecimalPlaces(f.StepSize)
+				minQty, err2 := parseFloat(f.MinQty)
+				if err1 == nil && err2 == nil {
+					filters[s.Symbol] = SymbolFilter{
+						Symbol:     s.Symbol,
+						StepSize:   step,
+						MinQty:     minQty,
+						APIEnabled: true,
+					}
+				}
+			}
+		}
+	}
+	log.Printf("[FILTERS] Загружено %d торговых ограничений (stepSize)", len(filters))
+	return filters, nil
+}
+
+func parseDecimalPlaces(stepStr string) (int, error) {
+	for i, r := range stepStr {
+		if r == '.' {
+			return len(stepStr) - i - 1, nil
+		}
+	}
+	return 0, fmt.Errorf("invalid stepSize format: %s", stepStr)
+}
+
+func parseFloat(s string) (float64, error) {
+	return strconv.ParseFloat(s, 64)
+}
+
+// Округление вниз по stepSize
+func roundDown(val float64, decimals int) float64 {
+	factor := math.Pow(10, float64(decimals))
+	return math.Floor(val*factor) / factor
+}
 
 
 
