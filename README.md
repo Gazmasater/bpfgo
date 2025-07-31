@@ -390,11 +390,8 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-unc LoadTriangles(_ string) ([]triangle.Triangle, error) {
-
-	// Поиск направленных треугольников
-	var tris []triangle.Triangle
-	tris={
+func LoadTriangles(_ string) ([]triangle.Triangle, error) {
+	tris := []triangle.Triangle{
 		{"USDT", "BTC", "ETH"},
 		{"USDT", "XRP", "BTC"},
 	}
