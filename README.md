@@ -390,18 +390,196 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-realSymbols map[string][2]string
+package app
 
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"math"
+	"strconv"
+	"sync"
+	"time"
 
-arb := &Arbitrager{
-	Triangles:       ts,
-	latest:          make(map[string]float64),
-	trianglesByPair: trianglesByPair,
-	realSymbols:     avail,       // теперь это map[string][2]string
-	stepSizes:       stepSizes,
-	minQtys:         minQtys,
-	StartAmount:     0.5,
-	exchange:        ex,
+	"cryptarb/internal/domain/exchange"
+	"cryptarb/internal/domain/triangle"
+	"cryptarb/internal/repository/filesystem"
+)
+
+type Arbitrager struct {
+	Triangles       []triangle.Triangle
+	latest          map[string]float64
+	trianglesByPair map[string][]int
+
+	realSymbols map[string][2]string
+
+	stepSizes map[string]float64
+	minQtys   map[string]float64
+	mu        sync.Mutex
+
+	StartAmount float64
+	exchange    exchange.Exchange
+}
+
+func New(ex exchange.Exchange) (*Arbitrager, error) {
+	// 1. Загружаем доступные пары и фильтры
+	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
+
+	// 2. Добавляем инверсии символов
+	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
+	log.Printf("📊 Всего доступных пар (с инверсиями): %d", len(avail))
+
+	// 3. Строим треугольники
+	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
+	if err != nil {
+		return nil, fmt.Errorf("LoadTrianglesFromSymbols: %w", err)
+	}
+	log.Printf("[INIT] Загружено треугольников: %d", len(ts))
+
+	// 4. Создание карты индексов треугольников и подписываемых пар
+	trianglesByPair := make(map[string][]int)
+	var subPairsRaw []string
+	for i, tri := range ts {
+		ab := tri.A + tri.B
+		bc := tri.B + tri.C
+		ca := tri.C + tri.A
+
+		trianglesByPair[ab] = append(trianglesByPair[ab], i)
+		trianglesByPair[bc] = append(trianglesByPair[bc], i)
+		trianglesByPair[ca] = append(trianglesByPair[ca], i)
+
+		subPairsRaw = append(subPairsRaw, ab, bc, ca)
+	}
+
+	// 5. Фильтрация уникальных доступных пар
+	uniq := make(map[string]struct{})
+	for _, p := range subPairsRaw {
+		if avail[p] {
+			uniq[p] = struct{}{}
+		}
+	}
+	var subPairs []string
+	for p := range uniq {
+		subPairs = append(subPairs, p)
+	}
+	log.Printf("[INIT] Итог: подписываемся на %d уникальных пар", len(subPairs))
+
+	// 6. Создаём арбитражер
+	arb := &Arbitrager{
+		Triangles:       ts,
+		latest:          make(map[string]float64),
+		trianglesByPair: trianglesByPair,
+		realSymbols:     avail, // теперь это map[string][2]string
+		stepSizes:       stepSizes,
+		minQtys:         minQtys,
+		StartAmount:     0.5,
+		exchange:        ex,
+	}
+
+	// 7. Подписка чанками
+	const maxPerConn = 20
+	for i := 0; i < len(subPairs); i += maxPerConn {
+		end := i + maxPerConn
+		if end > len(subPairs) {
+			end = len(subPairs)
+		}
+		chunk := subPairs[i:end]
+		go func(pairs []string) {
+			for {
+				if err := ex.SubscribeDeals(pairs, arb.HandleRaw); err != nil {
+					log.Printf("[WS][%s] subscribe error: %v; retrying...", ex.Name(), err)
+					time.Sleep(time.Second)
+					continue
+				}
+				return
+			}
+		}(chunk)
+	}
+
+	return arb, nil
+}
+
+func (a *Arbitrager) normalizeSymbolDir(base, quote string) (string, bool, bool) {
+	if a.realSymbols[base+quote] {
+		return base + quote, true, false
+	}
+	if a.realSymbols[quote+base] {
+		return quote + base, true, true
+	}
+	return "", false, false
+}
+
+func (a *Arbitrager) HandleRaw(exchangeName string, raw []byte) {
+	var msg struct {
+		Symbol string `json:"s"`
+		Data   struct {
+			Deals []struct {
+				Price string `json:"p"`
+			} `json:"deals"`
+		} `json:"d"`
+	}
+	if err := json.Unmarshal(raw, &msg); err != nil || msg.Symbol == "" || len(msg.Data.Deals) == 0 {
+		return
+	}
+	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
+	if err != nil {
+		return
+	}
+	a.mu.Lock()
+	a.latest[msg.Symbol] = price
+	a.mu.Unlock()
+	a.Check(msg.Symbol)
+}
+
+func (a *Arbitrager) Check(symbol string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	indices := a.trianglesByPair[symbol]
+	if len(indices) == 0 {
+		return
+	}
+
+	nf := 0.9965 * 0.9965 * 0.9965
+
+	for _, i := range indices {
+		tri := a.Triangles[i]
+		ab, okAB, revAB := a.normalizeSymbolDir(tri.A, tri.B)
+		bc, okBC, revBC := a.normalizeSymbolDir(tri.B, tri.C)
+		ca, okCA, revCA := a.normalizeSymbolDir(tri.C, tri.A)
+		if !okAB || !okBC || !okCA {
+			continue
+		}
+		p1, ok1 := a.latest[ab]
+		p2, ok2 := a.latest[bc]
+		p3, ok3 := a.latest[ca]
+		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+			continue
+		}
+		if revAB {
+			p1 = 1 / p1
+		}
+		if revBC {
+			p2 = 1 / p2
+		}
+		if revCA {
+			p3 = 1 / p3
+		}
+		profitFactor := p1 * p2 * p3 * nf
+		profit := (profitFactor - 1) * 100
+		if profit > 0.3 && tri.A == "USDT" {
+			log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
+			// _ = a.ExecuteTriangle(tri, 5)
+		}
+	}
+}
+
+func roundToStep(symbol string, value float64, steps map[string]float64) float64 {
+	step := steps[symbol]
+	if step == 0 {
+		return value
+	}
+	return math.Floor(value/step) * step
 }
 
 
