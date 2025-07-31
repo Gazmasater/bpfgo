@@ -709,74 +709,54 @@ ________________________________________________________________________________
 
 
 
-func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
-	availableSymbols := make(map[string]bool)
-	validLog := []string{}
-	excludedLog := []string{}
-
+func (m *MexcExchange) DumpUltimaSymbols() {
 	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
 		log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
-		return availableSymbols
+		return
 	}
 	defer resp.Body.Close()
 
 	var response struct {
-		Symbols []struct {
-			Symbol               string   `json:"symbol"`
-			Status               string   `json:"status"`
-			IsSpotTradingAllowed bool     `json:"isSpotTradingAllowed"`
-			OrderTypes           []string `json:"orderTypes"`
-			BaseSizePrecision    string   `json:"baseSizePrecision"`
-		}
+		Symbols []map[string]interface{} `json:"symbols"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		log.Printf("❌ Ошибка декодирования exchangeInfo: %v", err)
-		return availableSymbols
+		log.Printf("❌ Ошибка разбора JSON: %v", err)
+		return
 	}
 
-	for _, s := range response.Symbols {
-		// Проверка статуса
-		if s.Status != "1" {
-			excludedLog = append(excludedLog, fmt.Sprintf("%s\t⛔ status != 1", s.Symbol))
-			continue
-		}
-		if !s.IsSpotTradingAllowed {
-			excludedLog = append(excludedLog, fmt.Sprintf("%s\t⛔ spot trading not allowed", s.Symbol))
-			continue
-		}
+	var ultimaSymbols []map[string]interface{}
 
-		hasMarket := false
-		for _, t := range s.OrderTypes {
-			if t == "MARKET" {
-				hasMarket = true
-				break
-			}
-		}
-		if !hasMarket {
-			excludedLog = append(excludedLog, fmt.Sprintf("%s\t⛔ no MARKET order support", s.Symbol))
+	for _, symbolData := range response.Symbols {
+		symbolName, ok := symbolData["symbol"].(string)
+		if !ok {
 			continue
 		}
-
-		stepSize, err := strconv.ParseFloat(s.BaseSizePrecision, 64)
-		if err != nil || stepSize <= 0 {
-			excludedLog = append(excludedLog, fmt.Sprintf("%s\t⛔ invalid stepSize: %s", s.Symbol, s.BaseSizePrecision))
-			continue
+		if strings.Contains(symbolName, "ULTIMA") {
+			ultimaSymbols = append(ultimaSymbols, symbolData)
 		}
-
-		availableSymbols[s.Symbol] = true
-		validLog = append(validLog, fmt.Sprintf("%s\t✅ stepSize=%s", s.Symbol, s.BaseSizePrecision))
 	}
 
-	// 📝 Сохраняем логи
-	_ = os.WriteFile("valid_symbols.log", []byte(strings.Join(validLog, "\n")), 0644)
-	_ = os.WriteFile("excluded_symbols.log", []byte(strings.Join(excludedLog, "\n")), 0644)
+	if len(ultimaSymbols) == 0 {
+		log.Println("ℹ️ Символов с 'ULTIMA' не найдено.")
+		return
+	}
 
-	log.Printf("✅ Найдено %d активных торговых пар", len(availableSymbols))
-	log.Printf("📝 valid_symbols.log и excluded_symbols.log сохранены")
+	// Сохраняем в файл
+	data, err := json.MarshalIndent(ultimaSymbols, "", "  ")
+	if err != nil {
+		log.Printf("❌ Ошибка сериализации JSON: %v", err)
+		return
+	}
 
-	return availableSymbols
+	err = os.WriteFile("ultima_raw.json", data, 0644)
+	if err != nil {
+		log.Printf("❌ Ошибка записи файла ultima_raw.json: %v", err)
+		return
+	}
+
+	log.Printf("✅ Найдено %d пар с 'ULTIMA', сохранено в ultima_raw.json", len(ultimaSymbols))
 }
 
 
