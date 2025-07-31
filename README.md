@@ -390,15 +390,28 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-func (a *Arbitrager) normalizeSymbolDir(base, quote string) (string, bool, bool) {
-    if a.realSymbols[base+quote] {
-        return base + quote, true, false
-    }
-    if a.realSymbols[quote+base] {
-        return quote + base, true, true
-    }
-    return "", false, false
-}
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "IncompatibleAssign",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "IncompatibleAssign"
+		}
+	},
+	"severity": 8,
+	"message": "cannot use avail (variable of type map[string][2]string) as map[string]bool value in struct literal",
+	"source": "compiler",
+	"startLineNumber": 81,
+	"startColumn": 20,
+	"endLineNumber": 81,
+	"endColumn": 25,
+	"origin": "extHost1"
+}]
 
 
 
