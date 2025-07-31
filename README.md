@@ -711,8 +711,9 @@ ________________________________________________________________________________
 
 func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
 	availableSymbols := make(map[string]bool)
+	validLog := []string{}
+	excludedLog := []string{}
 
-	// Запрашиваем exchangeInfo
 	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
 		log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
@@ -720,44 +721,61 @@ func (m *MexcExchange) FetchAvailableSymbols() map[string]bool {
 	}
 	defer resp.Body.Close()
 
-	// Читаем тело ответа
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("❌ Ошибка чтения тела ответа: %v", err)
-		return availableSymbols
-	}
-
-	// Сохраняем тело в файл
-	if err := os.WriteFile("exchangeInfo_raw.json", bodyBytes, 0644); err != nil {
-		log.Printf("⚠️ Не удалось записать exchangeInfo_raw.json: %v", err)
-	} else {
-		log.Println("📄 Ответ exchangeInfo сохранён в файл exchangeInfo_raw.json")
-	}
-
-	// Пробуем распарсить JSON частично
-	var parsed map[string]interface{}
-	if err := json.Unmarshal(bodyBytes, &parsed); err != nil {
-		log.Printf("❌ Ошибка разбора JSON: %v", err)
-		return availableSymbols
-	}
-
-	// Выводим первые 5 символов с фильтрами
-	symbolsRaw, ok := parsed["symbols"].([]interface{})
-	if !ok {
-		log.Println("❌ Поле 'symbols' не найдено в ответе")
-		return availableSymbols
-	}
-
-	for i, raw := range symbolsRaw {
-		if i >= 5 {
-			break
+	var response struct {
+		Symbols []struct {
+			Symbol               string   `json:"symbol"`
+			Status               string   `json:"status"`
+			IsSpotTradingAllowed bool     `json:"isSpotTradingAllowed"`
+			OrderTypes           []string `json:"orderTypes"`
+			BaseSizePrecision    string   `json:"baseSizePrecision"`
 		}
-		symJson, _ := json.MarshalIndent(raw, "", "  ")
-		log.Printf("🔍 SYMBOL %d:\n%s\n", i+1, string(symJson))
 	}
 
-	// Возвращаем пустую карту — фильтрации пока не делаем
-	log.Printf("🧪 Только просмотр структуры. Торгуемые пары не извлекаются на этом этапе.")
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		log.Printf("❌ Ошибка декодирования exchangeInfo: %v", err)
+		return availableSymbols
+	}
+
+	for _, s := range response.Symbols {
+		// Проверка статуса
+		if s.Status != "1" {
+			excludedLog = append(excludedLog, fmt.Sprintf("%s\t⛔ status != 1", s.Symbol))
+			continue
+		}
+		if !s.IsSpotTradingAllowed {
+			excludedLog = append(excludedLog, fmt.Sprintf("%s\t⛔ spot trading not allowed", s.Symbol))
+			continue
+		}
+
+		hasMarket := false
+		for _, t := range s.OrderTypes {
+			if t == "MARKET" {
+				hasMarket = true
+				break
+			}
+		}
+		if !hasMarket {
+			excludedLog = append(excludedLog, fmt.Sprintf("%s\t⛔ no MARKET order support", s.Symbol))
+			continue
+		}
+
+		stepSize, err := strconv.ParseFloat(s.BaseSizePrecision, 64)
+		if err != nil || stepSize <= 0 {
+			excludedLog = append(excludedLog, fmt.Sprintf("%s\t⛔ invalid stepSize: %s", s.Symbol, s.BaseSizePrecision))
+			continue
+		}
+
+		availableSymbols[s.Symbol] = true
+		validLog = append(validLog, fmt.Sprintf("%s\t✅ stepSize=%s", s.Symbol, s.BaseSizePrecision))
+	}
+
+	// 📝 Сохраняем логи
+	_ = os.WriteFile("valid_symbols.log", []byte(strings.Join(validLog, "\n")), 0644)
+	_ = os.WriteFile("excluded_symbols.log", []byte(strings.Join(excludedLog, "\n")), 0644)
+
+	log.Printf("✅ Найдено %d активных торговых пар", len(availableSymbols))
+	log.Printf("📝 valid_symbols.log и excluded_symbols.log сохранены")
+
 	return availableSymbols
 }
 
