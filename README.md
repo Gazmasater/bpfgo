@@ -391,411 +391,189 @@ sudo apt install docker-compose-plugin -y
 _______________________________________________________________________________
 
 
-package filesystem
+package app
 
 import (
-    "cryptarb/internal/domain/triangle"
-    "encoding/json"
-    "fmt"
-    "io"
-    "log"
-    "net/http"
-    "sort"
+	"encoding/json"
+	"fmt"
+	"log"
+	"math"
+	"strconv"
+	"sync"
+	"time"
+
+	"cryptarb/internal/domain/exchange"
+	"cryptarb/internal/domain/triangle"
+	"cryptarb/internal/repository/filesystem"
 )
 
-// LoadTriangles загружает все возможные треугольники с биржи MEXC
-func LoadTriangles(_ string) ([]triangle.Triangle, error) {
-    // 1) Получаем exchangeInfo
-    resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-    if err != nil {
-        return nil, fmt.Errorf("fetch exchangeInfo: %w", err)
-    }
-    defer resp.Body.Close()
+type Arbitrager struct {
+	Triangles       []triangle.Triangle
+	latest          map[string]float64
+	trianglesByPair map[string][]int
 
-    // 2) Читаем тело
-    body, err := io.ReadAll(resp.Body)
-    if err != nil {
-        return nil, fmt.Errorf("read exchangeInfo: %w", err)
-    }
+	realSymbols map[string]bool
+	stepSizes   map[string]float64
+	minQtys     map[string]float64
+	mu          sync.Mutex
 
-    // 3) Разбираем JSON: сразу top-level "symbols"
-    type symbolInfo struct {
-        Base  string `json:"baseAsset"`
-        Quote string `json:"quoteAsset"`
-    }
-    var payload struct {
-        Symbols []symbolInfo `json:"symbols"`
-    }
-    if err := json.Unmarshal(body, &payload); err != nil {
-        return nil, fmt.Errorf("unmarshal exchangeInfo: %w", err)
-    }
-
-    symbols := payload.Symbols
-    log.Printf("[DEBUG] fetched %d symbols", len(symbols))
-
-    // 4) Строим двунаправленный граф смежностей
-    //    edges[A][B] = true и edges[B][A] = true
-    edges := make(map[string]map[string]bool, len(symbols)*2)
-    assets := make(map[string]struct{}, len(symbols)*2)
-    for _, s := range symbols {
-        if s.Base == "" || s.Quote == "" {
-            continue
-        }
-        // инициализируем map-у по необходимости
-        if edges[s.Base] == nil {
-            edges[s.Base] = make(map[string]bool)
-        }
-        if edges[s.Quote] == nil {
-            edges[s.Quote] = make(map[string]bool)
-        }
-        // прямая и обратная «рёбра»
-        edges[s.Base][s.Quote] = true
-        edges[s.Quote][s.Base] = true
-
-        assets[s.Base] = struct{}{}
-        assets[s.Quote] = struct{}{}
-    }
-
-    // 5) Собираем список всех уникальных активов
-    var toks []string
-    for a := range assets {
-        toks = append(toks, a)
-    }
-    log.Printf("[INFO] Total unique assets: %d", len(toks))
-
-    // 6) Ищем все 3-циклы A → B → C → A
-    var tris []triangle.Triangle
-    seen := make(map[[3]string]struct{})
-
-    for a := range edges {
-        for b := range edges[a] {
-            for c := range edges[b] {
-                // если есть назад в A
-                if edges[c][a] {
-                    // дедупликация: сортируем имена
-                    keyArr := []string{a, b, c}
-                    sort.Strings(keyArr)
-                    key := [3]string{keyArr[0], keyArr[1], keyArr[2]}
-                    if _, ok := seen[key]; !ok {
-                        tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
-                        seen[key] = struct{}{}
-                    }
-                }
-            }
-        }
-    }
-
-    log.Printf("[INFO] Loaded %d triangles", len(tris))
-    return tris, nil
+	StartAmount float64
+	exchange exchange.Exchange
 }
 
-
-2025/07/28 01:13:04 [INIT] total unique pairs after filtering: 270
-2025/07/28 01:13:04 [INIT] subscribing on: [LINGOUSDT MXBRL KILOUSDT PEPEEUR DASHUSDT DOTBTC WAVESUSDT BTCUSDT ARUSDT RIOUSDC DSYNCUSDC USDCEUR BTCUSDC USD1USDT BUTTHOLEUSDT NMRUSDT WBTCUSDT FHEUSDC MELANIAUSD1 RWAUSDC ELDEUSDC BROCCOLIF3BUSDC ANKRUSDT ENAUSDE SUSDC PIEUR SPKUSDT BLUMUSDT LUNCUSDT DOGEEUR PLUMEUSDC ABTC ETHEUR WIFEUR MELANIAUSDC ICPUSDC UNIUSDC AVAXUSDT XRPUSDC MXBTC ONTBTC XMRUSDC PRAIUSDC ALCHUSDC SOLBTC SUIUSDT BANKUSDC KAIAUSDT QUBICUSDT USDCBRL LOTUSDT RFCUSDT ZBCNUSDC STOUSDT TAOUSDT USELESSUSDC ALGOUSDT XLMUSDT KEKIUSUSDC PNUTUSDT SUIUSDC FETUSDC HUSDT AERGOUSDT SOLUSDT ATOMBTC BDXUSDT NEOBTC FLYUSDC TONUSDC OMIUSDC BKNUSDT AVAXUSDC BUSDT TONEUR HBARUSDT NEWTUSDT SKATEUSDT ERAUSDC ZORAUSDT BTCUSD1 PUMPUSDC JASMYUSDT LAUSDT EURUSDT SHIBUSDT ADAUSDC REDUSDT RDOUSDC USDCUSDT TURBOUSDC KERNELUSDC BERAUSDT PUMPBTCUSDT BOOMUSDC BCHUSDT XRPEUR FARTCOINUSDC ARBUSDT RBNTUSDC ETHUSDC ULTIMAEUR LAUNCHCOINUSDC ETHUSD1 ENAUSDC TRUMPUSDT XCNUSDT LIBERTYUSD1 BTCEUR BNBUSDC VINEUSDT WCTUSDC AAVEUSDC CGPTUSDC MXEUR ULTIMAUSDC HYPEUSDT APEUSDT SOONUSDT WIFUSDC ACHUSDT XDCUSDC SNSUSDC EGL1USDT SAHARAUSDT CRVETH MUBARAKUSDC ETHBRL TRUMPEUR MELANIAEUR BABYUSDT ULTIMAUSDT FTTUSDT GHIBLIUSDC ETHBTC MNTUSDC INJUSDT LINKUSDT BTCBRL ETHUSDT SUIEUR KASUSDC FILUSDC NXPCUSDT DOODUSDC BTCUSDE RSRUSDT SUPRAUSDC BANKUSD1 B2USDT GRIFFAINUSDT XRPBTC BDXNUSDC 1DOLLARUSDT TAGUSD1 XRPUSD1 KASUSD1 TRXBTC SOSOUSDT EPTUSDT XRPUSDE MXETH BMTUSDT GUNUSDC TRUMPUSDC LTCUSDC MILKUSDT NPCUSDC MOREUSDT CUSDT TRUMPUSD1 ONDOUSDT LINKUSDC NODEUSDC LTCBTC XLMUSDC NAKAUSDC FLOCKUSDC RENDERUSDT PARTIUSDC XENUSDT SENUSDT DOLOUSDT RIOEUR SPXUSDC VIRTUALUSDT ENSUSDT ADAUSDT DOTUSDT RAIUSDT KAITOUSDT TIAUSDT SHIBUSDC TAOEUR MINAUSDT CRVUSDT MYXUSDT OXTETH APTUSDC BRLUSDT CAWUSDC LINKETH LTCEUR OPUSDT WBTCUSDC SERAPHUSDC MXUSDC HUMAUSDC DEXEUSDT USDRUSDT RAYUSDT OBTUSDC AIXBTUSDC AUSDC POPCATUSDC NILUSDT PEAQUSDT AZEROUSDT SXTUSDC PIUSD1 QTUMBTC SOLEUR ADABTC TRXUSDT HOMEUSDT VELVETUSDT RAREUSDT MXUSDT PEPEUSDC BEEUSDT BOMBUSDT KASUSDE WHITEUSDT SOLUSDC OMGUSDT NEARUSDT PIUSDT PENGUUSDT PROMPTUSDT HYPERUSDC SIGNUSDC TAOUSDC ATOMUSDT OBOLUSDT AI16ZUSDT SHMUSDT ASRRUSDT VIDTUSDC INITUSDC USDEUSDT WALUSDT UNIUSDT CORNUSDC KASEUR MOONPIGUSDT SNXUSDT ESUSDT BCHBTC DOGEUSDT ADAEUR AIOTUSDT BABYDOGEUSDT SOPHUSDT XRPETH IDOLUSDT SGCUSDC PEPEUSDT XRPUSDT ETCBTC AGTUSDT]
-2025/07/28 01:13:04 [WS] subscribing chunk 0:25: [LINGOUSDT MXBRL KILOUSDT PEPEEUR DASHUSDT DOTBTC WAVESUSDT BTCUSDT ARUSDT RIOUSDC DSYNCUSDC USDCEUR BTCUSDC USD1USDT BUTTHOLEUSDT NMRUSDT WBTCUSDT FHEUSDC MELANIAUSD1 RWAUSDC ELDEUSDC BROCCOLIF3BUSDC ANKRUSDT ENAUSDE SUSDC]
-2025/07/28 01:13:04 [WS] subscribing chunk 25:50: [PIEUR SPKUSDT BLUMUSDT LUNCUSDT DOGEEUR PLUMEUSDC ABTC ETHEUR WIFEUR MELANIAUSDC ICPUSDC UNIUSDC AVAXUSDT XRPUSDC MXBTC ONTBTC XMRUSDC PRAIUSDC ALCHUSDC SOLBTC SUIUSDT BANKUSDC KAIAUSDT QUBICUSDT USDCBRL]
-2025/07/28 01:13:04 [WS] subscribing chunk 50:75: [LOTUSDT RFCUSDT ZBCNUSDC STOUSDT TAOUSDT USELESSUSDC ALGOUSDT XLMUSDT KEKIUSUSDC PNUTUSDT SUIUSDC FETUSDC HUSDT AERGOUSDT SOLUSDT ATOMBTC BDXUSDT NEOBTC FLYUSDC TONUSDC OMIUSDC BKNUSDT AVAXUSDC BUSDT TONEUR]
-2025/07/28 01:13:04 [WS] subscribing chunk 75:100: [HBARUSDT NEWTUSDT SKATEUSDT ERAUSDC ZORAUSDT BTCUSD1 PUMPUSDC JASMYUSDT LAUSDT EURUSDT SHIBUSDT ADAUSDC REDUSDT RDOUSDC USDCUSDT TURBOUSDC KERNELUSDC BERAUSDT PUMPBTCUSDT BOOMUSDC BCHUSDT XRPEUR FARTCOINUSDC ARBUSDT RBNTUSDC]
-2025/07/28 01:13:04 [WS] subscribing chunk 100:125: [ETHUSDC ULTIMAEUR LAUNCHCOINUSDC ETHUSD1 ENAUSDC TRUMPUSDT XCNUSDT LIBERTYUSD1 BTCEUR BNBUSDC VINEUSDT WCTUSDC AAVEUSDC CGPTUSDC MXEUR ULTIMAUSDC HYPEUSDT APEUSDT SOONUSDT WIFUSDC ACHUSDT XDCUSDC SNSUSDC EGL1USDT SAHARAUSDT]
-2025/07/28 01:13:04 [WS] subscribing chunk 125:150: [CRVETH MUBARAKUSDC ETHBRL TRUMPEUR MELANIAEUR BABYUSDT ULTIMAUSDT FTTUSDT GHIBLIUSDC ETHBTC MNTUSDC INJUSDT LINKUSDT BTCBRL ETHUSDT SUIEUR KASUSDC FILUSDC NXPCUSDT DOODUSDC BTCUSDE RSRUSDT SUPRAUSDC BANKUSD1 B2USDT]
-2025/07/28 01:13:04 [WS] subscribing chunk 150:175: [GRIFFAINUSDT XRPBTC BDXNUSDC 1DOLLARUSDT TAGUSD1 XRPUSD1 KASUSD1 TRXBTC SOSOUSDT EPTUSDT XRPUSDE MXETH BMTUSDT GUNUSDC TRUMPUSDC LTCUSDC MILKUSDT NPCUSDC MOREUSDT CUSDT TRUMPUSD1 ONDOUSDT LINKUSDC NODEUSDC LTCBTC]
-2025/07/28 01:13:04 [WS] subscribing chunk 175:200: [XLMUSDC NAKAUSDC FLOCKUSDC RENDERUSDT PARTIUSDC XENUSDT SENUSDT DOLOUSDT RIOEUR SPXUSDC VIRTUALUSDT ENSUSDT ADAUSDT DOTUSDT RAIUSDT KAITOUSDT TIAUSDT SHIBUSDC TAOEUR MINAUSDT CRVUSDT MYXUSDT OXTETH APTUSDC BRLUSDT]
-2025/07/28 01:13:04 [WS] subscribing chunk 200:225: [CAWUSDC LINKETH LTCEUR OPUSDT WBTCUSDC SERAPHUSDC MXUSDC HUMAUSDC DEXEUSDT USDRUSDT RAYUSDT OBTUSDC AIXBTUSDC AUSDC POPCATUSDC NILUSDT PEAQUSDT AZEROUSDT SXTUSDC PIUSD1 QTUMBTC SOLEUR ADABTC TRXUSDT HOMEUSDT]
-2025/07/28 01:13:04 [WS] subscribing chunk 225:250: [VELVETUSDT RAREUSDT MXUSDT PEPEUSDC BEEUSDT BOMBUSDT KASUSDE WHITEUSDT SOLUSDC OMGUSDT NEARUSDT PIUSDT PENGUUSDT PROMPTUSDT HYPERUSDC SIGNUSDC TAOUSDC ATOMUSDT OBOLUSDT AI16ZUSDT SHMUSDT ASRRUSDT VIDTUSDC INITUSDC USDEUSDT]
-2025/07/28 01:13:04 [WS] subscribing chunk 250:270: [WALUSDT UNIUSDT CORNUSDC KASEUR MOONPIGUSDT SNXUSDT ESUSDT BCHBTC DOGEUSDT ADAEUR AIOTUSDT BABYDOGEUSDT SOPHUSDT XRPETH IDOLUSDT SGCUSDC PEPEUSDT XRPUSDT ETCBTC AGTUSDT]
-
-___________________________________________________________________________________________
-
-
-func LoadTriangles(_ string) ([]triangle.Triangle, error) {
-	// Все 270 пар
-	subPairs := []string{
-		"LINGOUSDT", "MXBRL", "KILOUSDT", "PEPEEUR", "DASHUSDT", "DOTBTC", "WAVESUSDT", "BTCUSDT", "ARUSDT", "RIOUSDC", "DSYNCUSDC", "USDCEUR", "BTCUSDC", "USD1USDT", "BUTTHOLEUSDT", "NMRUSDT", "WBTCUSDT", "FHEUSDC", "MELANIAUSD1", "RWAUSDC", "ELDEUSDC", "BROCCOLIF3BUSDC", "ANKRUSDT", "ENAUSDE", "SUSDC", "PIEUR", "SPKUSDT", "BLUMUSDT", "LUNCUSDT", "DOGEEUR", "PLUMEUSDC", "ABTC", "ETHEUR", "WIFEUR", "MELANIAUSDC", "ICPUSDC", "UNIUSDC", "AVAXUSDT", "XRPUSDC", "MXBTC", "ONTBTC", "XMRUSDC", "PRAIUSDC", "ALCHUSDC", "SOLBTC", "SUIUSDT", "BANKUSDC", "KAIAUSDT", "QUBICUSDT", "USDCBRL", "LOTUSDT", "RFCUSDT", "ZBCNUSDC", "STOUSDT", "TAOUSDT", "USELESSUSDC", "ALGOUSDT", "XLMUSDT", "KEKIUSUSDC", "PNUTUSDT", "SUIUSDC", "FETUSDC", "HUSDT", "AERGOUSDT", "SOLUSDT", "ATOMBTC", "BDXUSDT", "NEOBTC", "FLYUSDC", "TONUSDC", "OMIUSDC", "BKNUSDT", "AVAXUSDC", "BUSDT", "TONEUR", "HBARUSDT", "NEWTUSDT", "SKATEUSDT", "ERAUSDC", "ZORAUSDT", "BTCUSD1", "PUMPUSDC", "JASMYUSDT", "LAUSDT", "EURUSDT", "SHIBUSDT", "ADAUSDC", "REDUSDT", "RDOUSDC", "USDCUSDT", "TURBOUSDC", "KERNELUSDC", "BERAUSDT", "PUMPBTCUSDT", "BOOMUSDC", "BCHUSDT", "XRPEUR", "FARTCOINUSDC", "ARBUSDT", "RBNTUSDC", "ETHUSDC", "ULTIMAEUR", "LAUNCHCOINUSDC", "ETHUSD1", "ENAUSDC", "TRUMPUSDT", "XCNUSDT", "LIBERTYUSD1", "BTCEUR", "BNBUSDC", "VINEUSDT", "WCTUSDC", "AAVEUSDC", "CGPTUSDC", "MXEUR", "ULTIMAUSDC", "HYPEUSDT", "APEUSDT", "SOONUSDT", "WIFUSDC", "ACHUSDT", "XDCUSDC", "SNSUSDC", "EGL1USDT", "SAHARAUSDT", "CRVETH", "MUBARAKUSDC", "ETHBRL", "TRUMPEUR", "MELANIAEUR", "BABYUSDT", "ULTIMAUSDT", "FTTUSDT", "GHIBLIUSDC", "ETHBTC", "MNTUSDC", "INJUSDT", "LINKUSDT", "BTCBRL", "ETHUSDT", "SUIEUR", "KASUSDC", "FILUSDC", "NXPCUSDT", "DOODUSDC", "BTCUSDE", "RSRUSDT", "SUPRAUSDC", "BANKUSD1", "B2USDT", "GRIFFAINUSDT", "XRPBTC", "BDXNUSDC", "1DOLLARUSDT", "TAGUSD1", "XRPUSD1", "KASUSD1", "TRXBTC", "SOSOUSDT", "EPTUSDT", "XRPUSDE", "MXETH", "BMTUSDT", "GUNUSDC", "TRUMPUSDC", "LTCUSDC", "MILKUSDT", "NPCUSDC", "MOREUSDT", "CUSDT", "TRUMPUSD1", "ONDOUSDT", "LINKUSDC", "NODEUSDC", "LTCBTC", "XLMUSDC", "NAKAUSDC", "FLOCKUSDC", "RENDERUSDT", "PARTIUSDC", "XENUSDT", "SENUSDT", "DOLOUSDT", "RIOEUR", "SPXUSDC", "VIRTUALUSDT", "ENSUSDT", "ADAUSDT", "DOTUSDT", "RAIUSDT", "KAITOUSDT", "TIAUSDT", "SHIBUSDC", "TAOEUR", "MINAUSDT", "CRVUSDT", "MYXUSDT", "OXTETH", "APTUSDC", "BRLUSDT", "CAWUSDC", "LINKETH", "LTCEUR", "OPUSDT", "WBTCUSDC", "SERAPHUSDC", "MXUSDC", "HUMAUSDC", "DEXEUSDT", "USDRUSDT", "RAYUSDT", "OBTUSDC", "AIXBTUSDC", "AUSDC", "POPCATUSDC", "NILUSDT", "PEAQUSDT", "AZEROUSDT", "SXTUSDC", "PIUSD1", "QTUMBTC", "SOLEUR", "ADABTC", "TRXUSDT", "HOMEUSDT", "VELVETUSDT", "RAREUSDT", "MXUSDT", "PEPEUSDC", "BEEUSDT", "BOMBUSDT", "KASUSDE", "WHITEUSDT", "SOLUSDC", "OMGUSDT", "NEARUSDT", "PIUSDT", "PENGUUSDT", "PROMPTUSDT", "HYPERUSDC", "SIGNUSDC", "TAOUSDC", "ATOMUSDT", "OBOLUSDT", "AI16ZUSDT", "SHMUSDT", "ASRRUSDT", "VIDTUSDC", "INITUSDC", "USDEUSDT", "WALUSDT", "UNIUSDT", "CORNUSDC", "KASEUR", "MOONPIGUSDT", "SNXUSDT", "ESUSDT", "BCHBTC", "DOGEUSDT", "ADAEUR", "AIOTUSDT", "BABYDOGEUSDT", "SOPHUSDT", "XRPETH", "IDOLUSDT", "SGCUSDC", "PEPEUSDT", "XRPUSDT", "ETCBTC", "AGTUSDT",
-	}
-
-	// Построим направленный граф
-	edges := map[string]map[string]bool{}
-	for _, pair := range subPairs {
-		base, quote := unpackPair(pair)
-		if base == "" || quote == "" {
-			log.Printf("[SKIP] cannot unpack pair: %s", pair)
-			continue
-		}
-		if edges[base] == nil {
-			edges[base] = map[string]bool{}
-		}
-		edges[base][quote] = true
-	}
-
-	// Собираем уникальные активы
-	nodes := []string{}
-	seen := map[string]bool{}
-	for a := range edges {
-		if !seen[a] {
-			nodes = append(nodes, a)
-			seen[a] = true
-		}
-		for b := range edges[a] {
-			if !seen[b] {
-				nodes = append(nodes, b)
-				seen[b] = true
-			}
-		}
-	}
-
-	// Поиск треугольников
-	var tris []triangle.Triangle
-	uniq := map[[3]string]struct{}{}
-	for _, a := range nodes {
-		for b := range edges[a] {
-			for c := range edges[b] {
-				if edges[c][a] {
-					arr := []string{a, b, c}
-					sort.Strings(arr)
-					key := [3]string{arr[0], arr[1], arr[2]}
-					if _, ok := uniq[key]; !ok {
-						uniq[key] = struct{}{}
-						tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
-					}
-				}
-			}
-		}
-	}
-
-	log.Printf("[INFO] Found %d triangles from %d pairs", len(tris), len(subPairs))
-	return tris, nil
-}
-
-// Примитивный парсер базового и котируемого актива
-func unpackPair(pair string) (string, string) {
-	quotes := []string{"USDT", "USDC", "USDE", "BTC", "ETH", "EUR", "BRL", "USD1"}
-	for _, q := range quotes {
-		if len(pair) > len(q) && pair[len(pair)-len(q):] == q {
-			return pair[:len(pair)-len(q)], q
-		}
-	}
-	return "", ""
-}
-
-_________________________________________________________________________________________
-
-
-
-func (a *Arbitrager) ExecuteTriangle(tri triangle.Triangle, amountUSDT float64) error {
-	if tri.A != "USDT" {
-		return fmt.Errorf("треугольник должен начинаться с USDT")
-	}
-
-	log.Printf("🔺 Запуск арбитража по треугольнику: %s → %s → %s → %s", tri.A, tri.B, tri.C, tri.A)
-	log.Printf("💰 Стартовая сумма: %.4f %s", amountUSDT, tri.A)
-
-	// STEP 1: USDT → B
-	log.Println("📌 Step 1: Покупаем", tri.B, "за USDT")
-
-	symbol1, ok1, rev1 := a.normalizeSymbolDir(tri.B, tri.A) // всегда USDT → B
-	log.Printf("🔎 Step 1 symbol: %s (rev=%v)", symbol1, rev1)
-
-	if !ok1 {
-		return fmt.Errorf("❌ нет пары %s/%s", tri.B, tri.A)
-	}
-
-	ask1, err := a.exchange.GetBestAsk(symbol1)
+func New(path string, ex exchange.Exchange) (*Arbitrager, error) {
+	ts, err := filesystem.LoadTriangles(path)
 	if err != nil {
-		return fmt.Errorf("❌ Step 1 ask error (%s): %v", symbol1, err)
+		return nil, err
 	}
-	log.Printf("📊 Step 1 ask: %.6f", ask1)
+	avail, stepSizes := ex.FetchAvailableSymbols()
+	log.Printf("!!!!!!!![DEBUG] Биржа вернула %d доступных пар", len(avail))
 
-	if rev1 {
-		ask1 = 1 / ask1
-		log.Printf("🔁 Step 1 ask перевёрнут: %.6f", ask1)
-	}
+	ts = triangle.Filter(ts, avail)
+	log.Printf("[INIT] Loaded %d triangles after filtering", len(ts))
 
-	ask1Adj := ask1 * 1.0003
-	amountB := amountUSDT / ask1Adj
-	log.Printf("💱 Step 1: BUY %s за %.4f USDT @ %.6f (adj %.6f) ≈ %.6f",
-		tri.B, amountUSDT, ask1, ask1Adj, amountB)
-
-	order1, err := a.exchange.PlaceMarketOrder(symbol1, "BUY", amountUSDT)
-	if err != nil {
-		return fmt.Errorf("❌ Step 1 order failed: %v", err)
-	}
-	log.Printf("✅ Step 1: OrderID %s", order1)
-
-	// STEP 2: B → C
-	log.Println("📌 Step 2: Обмениваем", tri.B, "→", tri.C)
-
-	symbol2, ok2, rev2 := a.normalizeSymbolDir(tri.B, tri.C)
-	log.Printf("🔎 Step 2 symbol: %s (rev=%v)", symbol2, rev2)
-
-	if !ok2 {
-		return fmt.Errorf("❌ нет пары %s/%s", tri.B, tri.C)
+	trianglesByPair := make(map[string][]int)
+	var subPairsRaw []string
+	for i, tri := range ts {
+		ab := tri.A + tri.B
+		bc := tri.B + tri.C
+		ca := tri.C + tri.A
+		trianglesByPair[ab] = append(trianglesByPair[ab], i)
+		trianglesByPair[bc] = append(trianglesByPair[bc], i)
+		trianglesByPair[ca] = append(trianglesByPair[ca], i)
+		subPairsRaw = append(subPairsRaw, ab, bc, ca)
 	}
 
-	ask2, err := a.exchange.GetBestAsk(symbol2)
-	if err != nil {
-		return fmt.Errorf("❌ Step 2 ask error (%s): %v", symbol2, err)
-	}
-	log.Printf("📊 Step 2 ask: %.6f", ask2)
-
-	if rev2 {
-		ask2 = 1 / ask2
-		log.Printf("🔁 Step 2 ask перевёрнут: %.6f", ask2)
-	}
-
-	ask2Adj := ask2 * 1.0003
-	amountC := amountB / ask2Adj
-
-	side2 := "BUY"
-	qty2 := amountB
-	if rev2 {
-		side2 = "SELL"
-		qty2 = amountB
-	}
-
-	log.Printf("💱 Step 2: %s %s → %s: %.6f (adj %.6f) qty=%.6f",
-		side2, tri.B, tri.C, ask2, ask2Adj, qty2)
-
-	order2, err := a.exchange.PlaceMarketOrder(symbol2, side2, qty2)
-	if err != nil {
-		return fmt.Errorf("❌ Step 2 order failed: %v", err)
-	}
-	log.Printf("✅ Step 2: OrderID %s", order2)
-
-	// STEP 3: C → USDT
-	log.Println("📌 Step 3: Обмениваем", tri.C, "→ USDT")
-
-	symbol3, ok3, rev3 := a.normalizeSymbolDir(tri.C, tri.A)
-	log.Printf("🔎 Step 3 symbol: %s (rev=%v)", symbol3, rev3)
-
-	if !ok3 {
-		return fmt.Errorf("❌ нет пары %s/%s", tri.C, tri.A)
-	}
-
-	bid3, err := a.exchange.GetBestBid(symbol3)
-	if err != nil {
-		return fmt.Errorf("❌ Step 3 bid error (%s): %v", symbol3, err)
-	}
-	log.Printf("📊 Step 3 bid: %.6f", bid3)
-
-	if rev3 {
-		bid3 = 1 / bid3
-		log.Printf("🔁 Step 3 bid перевёрнут: %.6f", bid3)
-	}
-
-	bid3Adj := bid3 * 0.9997
-	finalUSDT := amountC * bid3Adj
-
-	side3 := "SELL"
-	qty3 := amountC
-	if rev3 {
-		side3 = "BUY"
-		qty3 = finalUSDT
-	}
-
-	log.Printf("💱 Step 3: %s %s → USDT @ %.6f (adj %.6f) qty=%.6f ≈ %.4f USDT",
-		side3, tri.C, bid3, bid3Adj, qty3, finalUSDT)
-
-	order3, err := a.exchange.PlaceMarketOrder(symbol3, side3, qty3)
-	if err != nil {
-		return fmt.Errorf("❌ Step 3 order failed: %v", err)
-	}
-	log.Printf("✅ Step 3: OrderID %s", order3)
-
-	log.Printf("🎯 Арбитраж завершён: с %.4f USDT получили ≈ %.4f USDT", amountUSDT, finalUSDT)
-	return nil
-}
-
-____________________________________________________________________________________
-
-
-
-func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64) {
-	availableSymbols := make(map[string]bool)
-	stepSizes := make(map[string]float64)
-
-	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-	if err != nil {
-		log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
-		return availableSymbols, stepSizes
-	}
-	defer resp.Body.Close()
-
-	var response struct {
-		Symbols []map[string]interface{} `json:"symbols"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		log.Printf("❌ Ошибка разбора JSON: %v", err)
-		return availableSymbols, stepSizes
-	}
-
-	var availableLog []string
-	var excludedLog []string
-
-	for _, symbolData := range response.Symbols {
-		symbolName, ok := symbolData["symbol"].(string)
-		if !ok || symbolName == "" {
-			continue
-		}
-
-		reasons := []string{}
-
-		// status
-		status, _ := symbolData["status"].(string)
-		if status != "1" {
-			reasons = append(reasons, "status != 1")
-		}
-
-		// spot trading
-		spotAllowed, _ := symbolData["isSpotTradingAllowed"].(bool)
-		if !spotAllowed {
-			reasons = append(reasons, "spot trading not allowed")
-		}
-
-		// MARKET order
-		hasMarket := false
-		if orders, ok := symbolData["orderTypes"].([]interface{}); ok {
-			for _, o := range orders {
-				if os, ok := o.(string); ok && os == "MARKET" {
-					hasMarket = true
-					break
-				}
-			}
-		}
-		if !hasMarket {
-			reasons = append(reasons, "no MARKET order")
-		}
-
-		// stepSize
-		stepStr, _ := symbolData["baseSizePrecision"].(string)
-		stepFloat, err := strconv.ParseFloat(stepStr, 64)
-		if err != nil || stepFloat <= 0 {
-			reasons = append(reasons, "baseSizePrecision = 0")
-		}
-
-		if len(reasons) == 0 {
-			availableSymbols[symbolName] = true
-			stepSizes[symbolName] = stepFloat
-			availableLog = append(availableLog, fmt.Sprintf("%s\t✅ stepSize=%s", symbolName, stepStr))
+	uniq := make(map[string]struct{})
+	for _, p := range subPairsRaw {
+		if avail[p] {
+			uniq[p] = struct{}{}
 		} else {
-			excludedLog = append(excludedLog, fmt.Sprintf("%s\t⛔ %s", symbolName, strings.Join(reasons, ", ")))
+			log.Printf("[SKIP] %s not available on exchange", p)
 		}
 	}
 
-	_ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(availableLog, "\n")), 0644)
-	_ = os.WriteFile("excluded_all_symbols.log", []byte(strings.Join(excludedLog, "\n")), 0644)
+	var subPairs []string
+	for p := range uniq {
+		subPairs = append(subPairs, p)
+	}
+	log.Printf("[INIT] total unique pairs after filtering: %d", len(subPairs))
 
-	log.Printf("✅ Всего подходящих пар: %d", len(availableSymbols))
-	log.Printf("📝 available_all_symbols.log и excluded_all_symbols.log сохранены")
+	arb := &Arbitrager{
+		Triangles:       ts,
+		latest:          make(map[string]float64),
+		trianglesByPair: trianglesByPair,
+		realSymbols:     avail,
+		stepSizes:       stepSizes,
+		minQtys:         make(map[string]float64),
+		StartAmount:     0.5,
+		exchange:        ex,
+	}
 
-	return availableSymbols, stepSizes
+	const maxPerConn = 20
+	for i := 0; i < len(subPairs); i += maxPerConn {
+		end := i + maxPerConn
+		if end > len(subPairs) {
+			end = len(subPairs)
+		}
+		chunk := subPairs[i:end]
+		go func(pairs []string) {
+			for {
+				if err := ex.SubscribeDeals(pairs, arb.HandleRaw); err != nil {
+					log.Printf("[WS][%s] subscribe chunk error: %v; retrying...", ex.Name(), err)
+					time.Sleep(time.Second)
+					continue
+				}
+				return
+			}
+		}(chunk)
+	}
+
+	return arb, nil
 }
 
+func (a *Arbitrager) normalizeSymbolDir(base, quote string) (string, bool, bool) {
+	if a.realSymbols[base+quote] {
+		return base + quote, true, false
+	}
+	if a.realSymbols[quote+base] {
+		return quote + base, true, true
+	}
+	return "", false, false
+}
 
-symbols, stepSizes := mexc.FetchAvailableSymbols()
+func (a *Arbitrager) HandleRaw(exchangeName string, raw []byte) {
+	var msg struct {
+		Symbol string `json:"s"`
+		Data struct {
+			Deals []struct {
+				Price string `json:"p"`
+			} `json:"deals"`
+		} `json:"d"`
+	}
+	if err := json.Unmarshal(raw, &msg); err != nil || msg.Symbol == "" || len(msg.Data.Deals) == 0 {
+		return
+	}
+	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
+	if err != nil {
+		return
+	}
+	a.mu.Lock()
+	a.latest[msg.Symbol] = price
+	a.mu.Unlock()
+	a.Check(msg.Symbol)
+}
 
-fmt.Println("StepSize для BTCUSDT:", stepSizes["BTCUSDT"])
+func (a *Arbitrager) Check(symbol string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 
+	indices := a.trianglesByPair[symbol]
+	if len(indices) == 0 {
+		return
+	}
 
+	nf := 0.9965 * 0.9965 * 0.9965
+
+	for _, i := range indices {
+		tri := a.Triangles[i]
+		ab, okAB, revAB := a.normalizeSymbolDir(tri.A, tri.B)
+		bc, okBC, revBC := a.normalizeSymbolDir(tri.B, tri.C)
+		ca, okCA, revCA := a.normalizeSymbolDir(tri.C, tri.A)
+		if !okAB || !okBC || !okCA {
+			continue
+		}
+		p1, ok1 := a.latest[ab]
+		p2, ok2 := a.latest[bc]
+		p3, ok3 := a.latest[ca]
+		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+			continue
+		}
+		if revAB {
+			p1 = 1 / p1
+		}
+		if revBC {
+			p2 = 1 / p2
+		}
+		if revCA {
+			p3 = 1 / p3
+		}
+		profitFactor := p1 * p2 * p3 * nf
+		profit := (profitFactor - 1) * 100
+		if profit > 0.3 && tri.A == "USDT" {
+			log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
+			// _ = a.ExecuteTriangle(tri, 5)
+		}
+	}
+}
+
+func roundToStep(symbol string, value float64, steps map[string]float64) float64 {
+	step := steps[symbol]
+	if step == 0 {
+		return value
+	}
+	return math.Floor(value/step) * step
+}
 
 
 
