@@ -479,6 +479,9 @@ func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]floa
 
 
 
+availableLog = append(availableLog, fmt.Sprintf("%s\t✅ step=%s", symbol, strconv.FormatFloat(step, 'g', -1, 64)))
+
+
 
 
 
