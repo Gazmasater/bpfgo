@@ -390,46 +390,97 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-  {
-    "A": "ULTIMA",
-    "B": "EUR",
-    "C": "USDC"
-  },
-  {
-    "A": "ULTIMA",
-    "B": "EUR",
-    "C": "USDT"
-  },
-  {
-    "A": "ULTIMA",
-    "B": "USDT",
-    "C": "USDE"
-  },
-  {
-    "A": "ULTIMA",
-    "B": "USDT",
-    "C": "EUR"
-  },
-  {
-    "A": "ULTIMA",
-    "B": "USDT",
-    "C": "USDC"
-  },
-  {
-    "A": "ULTIMA",
-    "B": "USDE",
-    "C": "USDT"
-  },
-  {
-    "A": "ULTIMA",
-    "B": "USDC",
-    "C": "EUR"
-  },
-  {
-    "A": "ULTIMA",
-    "B": "USDC",
-    "C": "USDT"
-  },
+func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64) {
+    availableSymbols := make(map[string]bool)
+    stepSizes := make(map[string]float64)
+    minQtys := make(map[string]float64)
+
+    resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+    if err != nil {
+        log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
+        return availableSymbols, stepSizes, minQtys
+    }
+    defer resp.Body.Close()
+
+    bodyBytes, err := io.ReadAll(resp.Body)
+    if err != nil {
+        log.Printf("❌ Ошибка чтения тела ответа: %v", err)
+        return availableSymbols, stepSizes, minQtys
+    }
+    _ = os.WriteFile("all_symbols_full.json", bodyBytes, 0644)
+
+    var raw struct {
+        Symbols []map[string]interface{} `json:"symbols"`
+    }
+    if err := json.Unmarshal(bodyBytes, &raw); err != nil {
+        log.Printf("❌ Ошибка разбора JSON: %v", err)
+        return availableSymbols, stepSizes, minQtys
+    }
+
+    var availableLog []string
+    var excludedLog  []string
+
+    for _, s := range raw.Symbols {
+        symbol, _ := s["symbol"].(string)
+        if symbol == "" {
+            continue
+        }
+
+        // --- Фильтр: только с ULTIMA ---
+        if !strings.HasPrefix(symbol, "ULTIMA") {
+            continue
+        }
+
+        var reasons []string
+
+        // Проверяем статус
+        if s["status"] != "1" {
+            reasons = append(reasons, "status != 1")
+        }
+        // Spot trading
+        if allowed, ok := s["isSpotTradingAllowed"].(bool); !ok || !allowed {
+            reasons = append(reasons, "spot trading not allowed")
+        }
+        // MARKET order
+        orderTypes, _ := s["orderTypes"].([]interface{})
+        hasMarket := false
+        for _, o := range orderTypes {
+            if str, ok := o.(string); ok && str == "MARKET" {
+                hasMarket = true
+                break
+            }
+        }
+        if !hasMarket {
+            reasons = append(reasons, "no MARKET order")
+        }
+        // baseSizePrecision → шаг
+        stepStr, _ := s["baseSizePrecision"].(string)
+        step, err := strconv.ParseFloat(stepStr, 64)
+        if err != nil || step <= 0 {
+            reasons = append(reasons, "invalid baseSizePrecision")
+        }
+
+        if len(reasons) == 0 {
+            availableSymbols[symbol] = true
+            stepSizes[symbol] = step
+            minQtys[symbol] = step
+            availableLog = append(availableLog,
+                fmt.Sprintf("%s\t✅ step=%s", symbol, strconv.FormatFloat(step, 'g', -1, 64)),
+            )
+        } else {
+            excludedLog = append(excludedLog,
+                fmt.Sprintf("%s\t⛔ %s", symbol, strings.Join(reasons, ", ")),
+            )
+        }
+    }
+
+    _ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(availableLog, "\n")), 0644)
+    _ = os.WriteFile("excluded_all_symbols.log", []byte(strings.Join(excludedLog, "\n")), 0644)
+
+    log.Printf("✅ Подходящих ULTIMA-пар: %d", len(availableSymbols))
+    return availableSymbols, stepSizes, minQtys
+}
+
 
 
 
