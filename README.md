@@ -390,65 +390,26 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64) {
-    availableSymbols := make(map[string]bool)
-    stepSizes := make(map[string]float64)
-    minQtys := make(map[string]float64)
-
-    resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-    if err != nil {
-        log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
-        return availableSymbols, stepSizes, minQtys
-    }
-    defer resp.Body.Close()
-
-    body, err := io.ReadAll(resp.Body)
-    if err != nil {
-        log.Printf("❌ Ошибка чтения тела ответа: %v", err)
-        return availableSymbols, stepSizes, minQtys
-    }
-
-    // Сохраняем весь JSON, если нужно
-    _ = os.WriteFile("all_symbols_full.json", body, 0644)
-
-    var data struct {
-        Symbols []map[string]interface{} `json:"symbols"`
-    }
-    if err := json.Unmarshal(body, &data); err != nil {
-        log.Printf("❌ Ошибка разбора JSON: %v", err)
-        return availableSymbols, stepSizes, minQtys
-    }
-
-    var logLines []string
-
-    for _, s := range data.Symbols {
-        sym, _ := s["symbol"].(string)
-        if sym == "" {
-            continue
-        }
-
-        // Помечаем пару доступной
-        availableSymbols[sym] = true
-
-        // Считываем baseSizePrecision как шаг
-        var step float64
-        if str, ok := s["baseSizePrecision"].(string); ok {
-            step, _ = strconv.ParseFloat(str, 64)
-        }
-        // Если не удалось спарсить — оставляем step=0
-
-        stepSizes[sym] = step
-        minQtys[sym]   = step // минимальный объём = шаг
-
-        logLines = append(logLines, fmt.Sprintf("%s\tstep=%g", sym, step))
-    }
-
-    // Запишем простой лог на всякий случай
-    _ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(logLines, "\n")), 0644)
-
-    log.Printf("✅ Всего пар: %d", len(availableSymbols))
-    return availableSymbols, stepSizes, minQtys
+// 3. Строим треугольники
+ts, err := filesystem.LoadTrianglesFromSymbols(avail)
+if err != nil {
+    return nil, fmt.Errorf("LoadTrianglesFromSymbols: %w", err)
 }
+log.Printf("[INIT] Загружено треугольников: %d", len(ts))
+
+// ——— Сохраняем треугольники в JSON-файл ———
+trianglesJSON, err := json.MarshalIndent(ts, "", "  ")
+if err != nil {
+    log.Printf("⚠️ Не удалось сериализовать треугольники: %v", err)
+} else {
+    if err := os.WriteFile("triangles_dump.json", trianglesJSON, 0644); err != nil {
+        log.Printf("⚠️ Не удалось сохранить triangles_dump.json: %v", err)
+    } else {
+        log.Printf("💾 Треугольники сохранены в triangles_dump.json")
+    }
+}
+// —————————————————————————————————————
+
 
 
 
