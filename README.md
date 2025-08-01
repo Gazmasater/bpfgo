@@ -390,24 +390,65 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-2025/08/01 22:49:46 🔺 ARB USDT/CAW/USDC profit=0.1326%
-2025/08/01 22:49:50 🔺 ARB USDT/CAW/USDC profit=0.1426%
-2025/08/01 22:49:53 🔺 ARB USDT/CAW/USDC profit=0.1326%
-2025/08/01 22:49:53 🔺 ARB USDT/CAW/USDC profit=0.1326%
-2025/08/01 22:49:53 🔺 ARB USDT/CAW/USDC profit=0.1326%
-2025/08/01 22:49:53 🔺 ARB USDT/CAW/USDC profit=0.1326%
-2025/08/01 22:49:53 🔺 ARB USDT/CAW/USDC profit=0.1426%
-2025/08/01 22:49:54 🔺 ARB USDT/CAW/USDC profit=0.1326%
-2025/08/01 22:49:54 🔺 ARB USDT/CAW/USDC profit=0.1426%
-2025/08/01 22:49:54 🔺 ARB USDT/CAW/USDC profit=0.1426%
-2025/08/01 22:49:54 🔺 ARB USDT/CAW/USDC profit=0.1426%
-2025/08/01 22:49:55 🔺 ARB USDT/CAW/USDC profit=0.1326%
-2025/08/01 22:49:55 🔺 ARB USDT/CAW/USDC profit=0.1326%
-2025/08/01 22:49:55 🔺 ARB USDT/CAW/USDC profit=0.1326%
-2025/08/01 22:49:55 🔺 ARB USDT/CAW/USDC profit=0.1426%
-2025/08/01 22:49:56 🔺 ARB USDT/CAW/USDC profit=0.1326%
-2025/08/01 22:49:56 🔺 ARB USDT/CAW/USDC profit=0.1326%
-2025/08/01 22:49:56 🔺 ARB USDT/CAW/USDC profit=0.13
+func (a *Arbitrager) Check(symbol string) {
+    a.mu.Lock()
+    defer a.mu.Unlock()
+
+    indices := a.trianglesByPair[symbol]
+    if len(indices) == 0 {
+        return
+    }
+
+    // учёт комиссий (пример)
+    nf := 0.9965 * 0.9965 * 0.9965
+
+    for _, i := range indices {
+        tri := a.Triangles[i]
+
+        ab, okAB, revAB := a.normalizeSymbolDir(tri.A, tri.B)
+        bc, okBC, revBC := a.normalizeSymbolDir(tri.B, tri.C)
+        ca, okCA, revCA := a.normalizeSymbolDir(tri.C, tri.A)
+        if !okAB || !okBC || !okCA {
+            continue
+        }
+
+        p1, ok1 := a.latest[ab]
+        p2, ok2 := a.latest[bc]
+        p3, ok3 := a.latest[ca]
+        if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+            continue
+        }
+
+        // корректируем инверсные пары
+        if revAB {
+            p1 = 1 / p1
+        }
+        if revBC {
+            p2 = 1 / p2
+        }
+        if revCA {
+            p3 = 1 / p3
+        }
+
+        // Получаем шаги (stepSize) для каждой пары
+        s1 := a.stepSizes[ab]
+        s2 := a.stepSizes[bc]
+        s3 := a.stepSizes[ca]
+
+        // Расчёт профита
+        profitFactor := p1 * p2 * p3 * nf
+        profit := (profitFactor - 1) * 100
+
+        if profit > 0.3 && tri.A == "USDT" {
+            log.Printf(
+                "🔺 ARB %s/%s/%s profit=%.4f%% (stepSizes: %s=%.8f, %s=%.8f, %s=%.8f)",
+                tri.A, tri.B, tri.C, profit,
+                ab, s1, bc, s2, ca, s3,
+            )
+        }
+    }
+}
+
 
 
 
