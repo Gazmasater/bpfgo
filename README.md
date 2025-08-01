@@ -415,7 +415,7 @@ func (a *Arbitrager) Check(symbol string) {
 
 	for _, i := range indices {
 		tri := a.Triangles[i]
-	
+
 		// Нормализация и получение цен
 		ab, okAB, revAB := a.normalizeSymbolDir(tri.A, tri.B)
 		bc, okBC, revBC := a.normalizeSymbolDir(tri.B, tri.C)
@@ -457,74 +457,42 @@ func (a *Arbitrager) Check(symbol string) {
 
 // executeTriangle выполняет три маркет-ордера по треугольнику tri, начиная с amount единиц tri.A
 func (a *Arbitrager) executeTriangle(tri triangle.Triangle, amount float64) error {
-	// 1) USDT -> CAW
-	ab, _, revAB := a.normalizeSymbolDir(tri.A, tri.B)
-	p1 := a.latest[ab]
-	if revAB {
-		p1 = 1 / p1
-	}
-	qty1 := math.Floor((amount/p1)/a.stepSizes[ab]) * a.stepSizes[ab]
+	// 1) USDT -> CAW: продаем USDT, получаем CAW
+	ab, _, _ := a.normalizeSymbolDir(tri.A, tri.B)
+	//_qty1_ — объём USDT для продажи
+	qty1 := math.Floor(amount/a.stepSizes[ab]) * a.stepSizes[ab]
 	if qty1 < a.minQtys[ab] {
 		return fmt.Errorf("qty1 %.8f < minQty %.8f", qty1, a.minQtys[ab])
 	}
-	if err := a.exchange.PlaceOrderFOK(ab, "BUY", qty1); err != nil {
-		return fmt.Errorf("PlaceOrderFOK %s BUY: %w", ab, err)
+	if _, err := a.exchange.PlaceMarketOrder(ab, "SELL", qty1); err != nil {
+		return fmt.Errorf("PlaceMarketOrder %s SELL: %w", ab, err)
 	}
 
-	// 2) CAW -> USDC
-	bc, _, revBC := a.normalizeSymbolDir(tri.B, tri.C)
+	// 2) CAW -> USDC: продаем CAW, получаем USDC
+	bc, _, _ := a.normalizeSymbolDir(tri.B, tri.C)
+	// рассчитываем на основании последней цены: сколько CAW у нас будет — около qty1/p1
 	p2 := a.latest[bc]
-	if revBC {
-		p2 = 1 / p2
-	}
-	qty2 := math.Floor((qty1*p2)/a.stepSizes[bc]) * a.stepSizes[bc]
+	qty2 := math.Floor((qty1/p2)/a.stepSizes[bc]) * a.stepSizes[bc]
 	if qty2 < a.minQtys[bc] {
 		return fmt.Errorf("qty2 %.8f < minQty %.8f", qty2, a.minQtys[bc])
 	}
-	if err := a.exchange.PlaceOrderFOK(bc, "BUY", qty2); err != nil {
-		return fmt.Errorf("PlaceOrderFOK %s BUY: %w", bc, err)
+	if _, err := a.exchange.PlaceMarketOrder(bc, "SELL", qty2); err != nil {
+		return fmt.Errorf("PlaceMarketOrder %s SELL: %w", bc, err)
 	}
 
-	// 3) USDC -> USDT
-	ca, _, revCA := a.normalizeSymbolDir(tri.C, tri.A)
+	// 3) USDC -> USDT: продаем USDC, получаем USDT
+	ca, _, _ := a.normalizeSymbolDir(tri.C, tri.A)
 	p3 := a.latest[ca]
-	if revCA {
-		p3 = 1 / p3
-	}
-	qty3 := math.Floor((qty2*p3)/a.stepSizes[ca]) * a.stepSizes[ca]
+	qty3 := math.Floor((qty2/p3)/a.stepSizes[ca]) * a.stepSizes[ca]
 	if qty3 < a.minQtys[ca] {
 		return fmt.Errorf("qty3 %.8f < minQty %.8f", qty3, a.minQtys[ca])
 	}
-	if err := a.exchange.PlaceOrderFOK(ca, "BUY", qty3); err != nil {
-		return fmt.Errorf("PlaceOrderFOK %s BUY: %w", ca, err)
+	if _, err := a.exchange.PlaceMarketOrder(ca, "SELL", qty3); err != nil {
+		return fmt.Errorf("PlaceMarketOrder %s SELL: %w", ca, err)
 	}
 
 	return nil
 }
-
-
-[{
-	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingFieldOrMethod",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingFieldOrMethod"
-		}
-	},
-	"severity": 8,
-	"message": "a.exchange.PlaceOrderFOK undefined (type exchange.Exchange has no field or method PlaceOrderFOK)",
-	"source": "compiler",
-	"startLineNumber": 218,
-	"startColumn": 23,
-	"endLineNumber": 218,
-	"endColumn": 36,
-	"origin": "extHost1"
-}]
 
 
 
