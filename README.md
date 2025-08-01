@@ -481,13 +481,13 @@ func (a *Arbitrager) executeTriangle(tri triangle.Triangle, amount float64) erro
 	}
 	// получаемый объём USDC
 	amtUSDC := qty1 * p2
-	// округление USDC по шагу для пары USDCCAW или CAWUSDC
-	qty2 := math.Floor(amtUSDC/a.stepSizes[ca]) * a.stepSizes[ca]
+	// округление USDC по шагу для пары CAWUSDC
+	qty2 := math.Floor(amtUSDC/a.stepSizes[bc]) * a.stepSizes[bc]
 	if qty2 < a.minQtys[bc] {
 		return fmt.Errorf("qty2 %.8f < minQty %.8f", qty2, a.minQtys[bc])
 	}
 	// SELL CAW to USDC
-	if _, err := a.exchange.PlaceMarketOrder(bc, "SELL", qty1); err != nil {
+	if _, err := a.exchange.PlaceMarketOrder(bc, "SELL", qty2); err != nil {
 		return fmt.Errorf("PlaceMarketOrder %s SELL: %w", bc, err)
 	}
 
@@ -508,6 +508,5 @@ func (a *Arbitrager) executeTriangle(tri triangle.Triangle, amount float64) erro
 
 	return nil
 }
-
 
 
