@@ -390,7 +390,118 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-2025/08/01 23:12:25 🔺 ARB USDT/CAW/USDC profit=0.7617% (stepSizes: CAWUSDT=100000.00000000, CAWUSDC=100000.00000000, USDCUSDT=1.00000000)
+package app
+
+import (
+	"fmt"
+	"log"
+	"math"
+
+	"cryptarb/internal/domain/triangle"
+)
+
+// Check проверяет и выполняет треугольный арбитраж для триугольников, включающих symbol
+func (a *Arbitrager) Check(symbol string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	indices := a.trianglesByPair[symbol]
+	if len(indices) == 0 {
+		return
+	}
+
+	nf := 0.9965 * 0.9965 * 0.9965
+	startAmount := a.StartAmount
+
+	for _, i := range indices {
+		tri := a.Triangles[i]
+	
+		// Нормализация и получение цен
+		ab, okAB, revAB := a.normalizeSymbolDir(tri.A, tri.B)
+		bc, okBC, revBC := a.normalizeSymbolDir(tri.B, tri.C)
+		ca, okCA, revCA := a.normalizeSymbolDir(tri.C, tri.A)
+		if !okAB || !okBC || !okCA {
+			continue
+		}
+
+		p1, ok1 := a.latest[ab]
+		p2, ok2 := a.latest[bc]
+		p3, ok3 := a.latest[ca]
+		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+			continue
+		}
+
+		if revAB {
+			p1 = 1 / p1
+		}
+		if revBC {
+			p2 = 1 / p2
+		}
+		if revCA {
+			p3 = 1 / p3
+		}
+
+		// Вычисление прибыли
+		profitFactor := p1 * p2 * p3 * nf
+		profit := (profitFactor - 1) * 100
+		if profit > 0.3 && tri.A == "USDT" {
+			// Выполнение треугольника
+			if err := a.executeTriangle(tri, startAmount); err != nil {
+				log.Printf("❌ Failed to execute triangle %s/%s/%s: %v", tri.A, tri.B, tri.C, err)
+			} else {
+				log.Printf("✅ Executed ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
+			}
+		}
+	}
+}
+
+// executeTriangle выполняет три маркет-ордера по треугольнику tri, начиная с amount единиц tri.A
+func (a *Arbitrager) executeTriangle(tri triangle.Triangle, amount float64) error {
+	// 1) USDT -> CAW
+	ab, _, revAB := a.normalizeSymbolDir(tri.A, tri.B)
+	p1 := a.latest[ab]
+	if revAB {
+		p1 = 1 / p1
+	}
+	qty1 := math.Floor((amount/p1)/a.stepSizes[ab]) * a.stepSizes[ab]
+	if qty1 < a.minQtys[ab] {
+		return fmt.Errorf("qty1 %.8f < minQty %.8f", qty1, a.minQtys[ab])
+	}
+	if err := a.exchange.PlaceOrderFOK(ab, "BUY", qty1); err != nil {
+		return fmt.Errorf("PlaceOrderFOK %s BUY: %w", ab, err)
+	}
+
+	// 2) CAW -> USDC
+	bc, _, revBC := a.normalizeSymbolDir(tri.B, tri.C)
+	p2 := a.latest[bc]
+	if revBC {
+		p2 = 1 / p2
+	}
+	qty2 := math.Floor((qty1*p2)/a.stepSizes[bc]) * a.stepSizes[bc]
+	if qty2 < a.minQtys[bc] {
+		return fmt.Errorf("qty2 %.8f < minQty %.8f", qty2, a.minQtys[bc])
+	}
+	if err := a.exchange.PlaceOrderFOK(bc, "BUY", qty2); err != nil {
+		return fmt.Errorf("PlaceOrderFOK %s BUY: %w", bc, err)
+	}
+
+	// 3) USDC -> USDT
+	ca, _, revCA := a.normalizeSymbolDir(tri.C, tri.A)
+	p3 := a.latest[ca]
+	if revCA {
+		p3 = 1 / p3
+	}
+	qty3 := math.Floor((qty2*p3)/a.stepSizes[ca]) * a.stepSizes[ca]
+	if qty3 < a.minQtys[ca] {
+		return fmt.Errorf("qty3 %.8f < minQty %.8f", qty3, a.minQtys[ca])
+	}
+	if err := a.exchange.PlaceOrderFOK(ca, "BUY", qty3); err != nil {
+		return fmt.Errorf("PlaceOrderFOK %s BUY: %w", ca, err)
+	}
+
+	return nil
+}
+
 
 
 
