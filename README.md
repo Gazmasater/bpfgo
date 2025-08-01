@@ -503,6 +503,30 @@ func (a *Arbitrager) executeTriangle(tri triangle.Triangle, amount float64) erro
 }
 
 
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "a.exchange.PlaceOrderFOK undefined (type exchange.Exchange has no field or method PlaceOrderFOK)",
+	"source": "compiler",
+	"startLineNumber": 218,
+	"startColumn": 23,
+	"endLineNumber": 218,
+	"endColumn": 36,
+	"origin": "extHost1"
+}]
+
+
 
 
 
