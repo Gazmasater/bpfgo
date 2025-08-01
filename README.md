@@ -391,108 +391,26 @@ sudo apt install docker-compose-plugin -y
 _______________________________________________________________________________
 
 func (m *MexcExchange) isValidSymbol(s map[string]interface{}) bool {
-    // 1. Активная пара
-    if s["status"] != "1" {
-        return false
-    }
-    // 2. Спот-торговля разрешена
-    if allowed, _ := s["isSpotTradingAllowed"].(bool); !allowed {
-        return false
-    }
-    // 3. Должна быть в спотовом сегменте
-    hasSpot := false
-    for _, p := range s["permissions"].([]interface{}) {
-        if str, ok := p.(string); ok && str == "SPOT" {
-            hasSpot = true
-            break
-        }
-    }
-    if !hasSpot {
-        return false
-    }
-    // 4. Должен поддерживаться MARKET-ордер
-    hasMarket := false
-    for _, o := range s["orderTypes"].([]interface{}) {
-        if str, ok := o.(string); ok && str == "MARKET" {
-            hasMarket = true
-            break
-        }
-    }
-    if !hasMarket {
-        return false
-    }
-    // 5. Шаг лота > 0
+    if s["status"] != "1" { return false }
+    if allowed, _ := s["isSpotTradingAllowed"].(bool); !allowed { return false }
+
+    // Optional: убираем permissions/SPOT
+    // убираем MARKET-order-check, если не критично
+
+    // Проверяем только шаг лота
     step := 0.0
     if str, ok := s["baseSizePrecision"].(string); ok {
         if v, err := strconv.ParseFloat(str, 64); err == nil {
             step = v
         }
     }
-    if step <= 0 {
-        return false
-    }
-    // 6. Достаточный лимит на маркет-ордера (>=100 USDT)
-    if str, ok := s["maxQuoteAmountMarket"].(string); ok {
-        if v, err := strconv.ParseFloat(str, 64); err == nil && v < 100.0 {
-            return false
-        }
-    }
-    // 7. Не слишком высокая комиссия тейкера (<=0.1%)
-    if str, ok := s["takerCommission"].(string); ok {
-        if v, err := strconv.ParseFloat(str, 64); err == nil && v > 0.001 {
-            return false
-        }
-    }
+    if step <= 0 { return false }
+
+    // Убрали maxQuoteAmountMarket и takerCommission
+
     return true
 }
 
-func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64) {
-    availableSymbols := make(map[string]bool)
-    stepSizes := make(map[string]float64)
-    minQtys := make(map[string]float64)
-
-    resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-    if err != nil {
-        log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
-        return availableSymbols, stepSizes, minQtys
-    }
-    defer resp.Body.Close()
-
-    body, err := io.ReadAll(resp.Body)
-    if err != nil {
-        log.Printf("❌ Ошибка чтения тела ответа: %v", err)
-        return availableSymbols, stepSizes, minQtys
-    }
-    _ = os.WriteFile("all_symbols_full.json", body, 0644)
-
-    var data struct {
-        Symbols []map[string]interface{} `json:"symbols"`
-    }
-    if err := json.Unmarshal(body, &data); err != nil {
-        log.Printf("❌ Ошибка разбора JSON: %v", err)
-        return availableSymbols, stepSizes, minQtys
-    }
-
-    var logLines []string
-    for _, s := range data.Symbols {
-        sym, _ := s["symbol"].(string)
-        if sym == "" || !m.isValidSymbol(s) {
-            continue
-        }
-
-        // Извлекаем step (гарантированно >0)
-        step, _ := strconv.ParseFloat(s["baseSizePrecision"].(string), 64)
-
-        availableSymbols[sym] = true
-        stepSizes[sym] = step
-        minQtys[sym] = step
-        logLines = append(logLines, fmt.Sprintf("%s\tstep=%g", sym, step))
-    }
-
-    _ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(logLines, "\n")), 0644)
-    log.Printf("✅ Подходящих пар: %d", len(availableSymbols))
-    return availableSymbols, stepSizes, minQtys
-}
 
 
 
