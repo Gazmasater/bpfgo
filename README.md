@@ -392,4 +392,5 @@ _______________________________________________________________________________
 
 
 
-:32:36 ❌ Failed to execute triangle USDT/CAW/USDC: qty1 0.00000000 < minQty 100000.00000000
+41:44 ❌ Failed to execute triangle BCH/USDC/USDT: PlaceMarketOrder BCHUSDC BUY: order failed: {"msg":"The minimum transaction volume cannot be less than[1.000000000000000000000000000000]","code":30002,"_extend":{"quantity":"1"}}
+^Csignal: interrupt
