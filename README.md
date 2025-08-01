@@ -478,12 +478,8 @@ func (a *Arbitrager) executeTriangle(tri triangle.Triangle, amount float64) erro
 		return fmt.Errorf("PlaceMarketOrder %s BUY: %w", ab, err)
 	}
 
-	// 2) CAW -> USDC: продажа полученного CAW для получения USDC
+	// 2) CAW -> USDC: продажа CAW для получения USDC
 	bc, _, revBC := a.normalizeSymbolDir(tri.B, tri.C)
-	p2 := a.latest[bc]
-	if revBC {
-		p2 = 1 / p2
-	}
 	amtCAW := amount * p1
 	if amtCAW < a.minQtys[bc] {
 		return fmt.Errorf("base amount CAW %.8f < minQty %.8f", amtCAW, a.minQtys[bc])
@@ -491,14 +487,14 @@ func (a *Arbitrager) executeTriangle(tri triangle.Triangle, amount float64) erro
 	if _, err := a.exchange.PlaceMarketOrder(bc, "SELL", amtCAW); err != nil {
 		return fmt.Errorf("PlaceMarketOrder %s SELL: %w", bc, err)
 	}
+	p2 := a.latest[bc]
+	if revBC {
+		p2 = 1 / p2
+	}
 	amtUSDC := amtCAW * p2
 
 	// 3) USDC -> USDT: продажа USDC для получения USDT
-	ca, _, revCA := a.normalizeSymbolDir(tri.C, tri.A)
-	p3 := a.latest[ca]
-	if revCA {
-		p3 = 1 / p3
-	}
+	ca, _, _ := a.normalizeSymbolDir(tri.C, tri.A)
 	// округление USDC по шагу ca (USDCUSDT)
 	qtyUSDC := math.Floor(amtUSDC/a.stepSizes[ca]) * a.stepSizes[ca]
 	if qtyUSDC < a.minQtys[ca] {
@@ -510,17 +506,3 @@ func (a *Arbitrager) executeTriangle(tri triangle.Triangle, amount float64) erro
 
 	return nil
 }
-
-
-[{
-	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
-	"owner": "go-staticcheck",
-	"severity": 4,
-	"message": "this value of p3 is never used (SA4006)",
-	"source": "go-staticcheck",
-	"startLineNumber": 246,
-	"startColumn": 3,
-	"endLineNumber": 246,
-	"endColumn": 14,
-	"origin": "extHost1"
-}]
