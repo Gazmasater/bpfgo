@@ -510,3 +510,17 @@ func (a *Arbitrager) executeTriangle(tri triangle.Triangle, amount float64) erro
 
 	return nil
 }
+
+
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "go-staticcheck",
+	"severity": 4,
+	"message": "this value of p3 is never used (SA4006)",
+	"source": "go-staticcheck",
+	"startLineNumber": 246,
+	"startColumn": 3,
+	"endLineNumber": 246,
+	"endColumn": 14,
+	"origin": "extHost1"
+}]
