@@ -390,25 +390,46 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-// 3. Строим треугольники
-ts, err := filesystem.LoadTrianglesFromSymbols(avail)
-if err != nil {
-    return nil, fmt.Errorf("LoadTrianglesFromSymbols: %w", err)
-}
-log.Printf("[INIT] Загружено треугольников: %d", len(ts))
-
-// ——— Сохраняем треугольники в JSON-файл ———
-trianglesJSON, err := json.MarshalIndent(ts, "", "  ")
-if err != nil {
-    log.Printf("⚠️ Не удалось сериализовать треугольники: %v", err)
-} else {
-    if err := os.WriteFile("triangles_dump.json", trianglesJSON, 0644); err != nil {
-        log.Printf("⚠️ Не удалось сохранить triangles_dump.json: %v", err)
-    } else {
-        log.Printf("💾 Треугольники сохранены в triangles_dump.json")
-    }
-}
-// —————————————————————————————————————
+  {
+    "A": "ULTIMA",
+    "B": "EUR",
+    "C": "USDC"
+  },
+  {
+    "A": "ULTIMA",
+    "B": "EUR",
+    "C": "USDT"
+  },
+  {
+    "A": "ULTIMA",
+    "B": "USDT",
+    "C": "USDE"
+  },
+  {
+    "A": "ULTIMA",
+    "B": "USDT",
+    "C": "EUR"
+  },
+  {
+    "A": "ULTIMA",
+    "B": "USDT",
+    "C": "USDC"
+  },
+  {
+    "A": "ULTIMA",
+    "B": "USDE",
+    "C": "USDT"
+  },
+  {
+    "A": "ULTIMA",
+    "B": "USDC",
+    "C": "EUR"
+  },
+  {
+    "A": "ULTIMA",
+    "B": "USDC",
+    "C": "USDT"
+  },
 
 
 
