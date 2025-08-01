@@ -390,6 +390,62 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
+func (m *MexcExchange) isValidSymbol(s map[string]interface{}) bool {
+    // 1. Активная пара
+    if s["status"] != "1" {
+        return false
+    }
+    // 2. Спот-торговля разрешена
+    if allowed, _ := s["isSpotTradingAllowed"].(bool); !allowed {
+        return false
+    }
+    // 3. Должна быть в спотовом сегменте
+    hasSpot := false
+    for _, p := range s["permissions"].([]interface{}) {
+        if str, ok := p.(string); ok && str == "SPOT" {
+            hasSpot = true
+            break
+        }
+    }
+    if !hasSpot {
+        return false
+    }
+    // 4. Должен поддерживаться MARKET-ордер
+    hasMarket := false
+    for _, o := range s["orderTypes"].([]interface{}) {
+        if str, ok := o.(string); ok && str == "MARKET" {
+            hasMarket = true
+            break
+        }
+    }
+    if !hasMarket {
+        return false
+    }
+    // 5. Шаг лота > 0
+    step := 0.0
+    if str, ok := s["baseSizePrecision"].(string); ok {
+        if v, err := strconv.ParseFloat(str, 64); err == nil {
+            step = v
+        }
+    }
+    if step <= 0 {
+        return false
+    }
+    // 6. Достаточный лимит на маркет-ордера (>=100 USDT)
+    if str, ok := s["maxQuoteAmountMarket"].(string); ok {
+        if v, err := strconv.ParseFloat(str, 64); err == nil && v < 100.0 {
+            return false
+        }
+    }
+    // 7. Не слишком высокая комиссия тейкера (<=0.1%)
+    if str, ok := s["takerCommission"].(string); ok {
+        if v, err := strconv.ParseFloat(str, 64); err == nil && v > 0.001 {
+            return false
+        }
+    }
+    return true
+}
+
 func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64) {
     availableSymbols := make(map[string]bool)
     stepSizes := make(map[string]float64)
@@ -402,82 +458,39 @@ func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]floa
     }
     defer resp.Body.Close()
 
-    bodyBytes, err := io.ReadAll(resp.Body)
+    body, err := io.ReadAll(resp.Body)
     if err != nil {
         log.Printf("❌ Ошибка чтения тела ответа: %v", err)
         return availableSymbols, stepSizes, minQtys
     }
-    _ = os.WriteFile("all_symbols_full.json", bodyBytes, 0644)
+    _ = os.WriteFile("all_symbols_full.json", body, 0644)
 
-    var raw struct {
+    var data struct {
         Symbols []map[string]interface{} `json:"symbols"`
     }
-    if err := json.Unmarshal(bodyBytes, &raw); err != nil {
+    if err := json.Unmarshal(body, &data); err != nil {
         log.Printf("❌ Ошибка разбора JSON: %v", err)
         return availableSymbols, stepSizes, minQtys
     }
 
-    var availableLog []string
-    var excludedLog  []string
-
-    for _, s := range raw.Symbols {
-        symbol, _ := s["symbol"].(string)
-        if symbol == "" {
+    var logLines []string
+    for _, s := range data.Symbols {
+        sym, _ := s["symbol"].(string)
+        if sym == "" || !m.isValidSymbol(s) {
             continue
         }
 
-        // --- Фильтр: только с ULTIMA ---
-        if !strings.HasPrefix(symbol, "ULTIMA") {
-            continue
-        }
+        // Извлекаем step (гарантированно >0)
+        step, _ := strconv.ParseFloat(s["baseSizePrecision"].(string), 64)
 
-        var reasons []string
-
-        // Проверяем статус
-        if s["status"] != "1" {
-            reasons = append(reasons, "status != 1")
-        }
-        // Spot trading
-        if allowed, ok := s["isSpotTradingAllowed"].(bool); !ok || !allowed {
-            reasons = append(reasons, "spot trading not allowed")
-        }
-        // MARKET order
-        orderTypes, _ := s["orderTypes"].([]interface{})
-        hasMarket := false
-        for _, o := range orderTypes {
-            if str, ok := o.(string); ok && str == "MARKET" {
-                hasMarket = true
-                break
-            }
-        }
-        if !hasMarket {
-            reasons = append(reasons, "no MARKET order")
-        }
-        // baseSizePrecision → шаг
-        stepStr, _ := s["baseSizePrecision"].(string)
-        step, err := strconv.ParseFloat(stepStr, 64)
-        if err != nil || step <= 0 {
-            reasons = append(reasons, "invalid baseSizePrecision")
-        }
-
-        if len(reasons) == 0 {
-            availableSymbols[symbol] = true
-            stepSizes[symbol] = step
-            minQtys[symbol] = step
-            availableLog = append(availableLog,
-                fmt.Sprintf("%s\t✅ step=%s", symbol, strconv.FormatFloat(step, 'g', -1, 64)),
-            )
-        } else {
-            excludedLog = append(excludedLog,
-                fmt.Sprintf("%s\t⛔ %s", symbol, strings.Join(reasons, ", ")),
-            )
-        }
+        availableSymbols[sym] = true
+        stepSizes[sym] = step
+        minQtys[sym] = step
+        logLines = append(logLines, fmt.Sprintf("%s\tstep=%g", sym, step))
     }
 
-    _ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(availableLog, "\n")), 0644)
-    _ = os.WriteFile("excluded_all_symbols.log", []byte(strings.Join(excludedLog, "\n")), 0644)
-
-    log.Printf("✅ Подходящих ULTIMA-пар: %d", len(availableSymbols))
+    _ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(logLines, "\n")), 0644)
+    log.Printf("✅ Подходящих пар: %d", len(availableSymbols))
     return availableSymbols, stepSizes, minQtys
 }
 
