@@ -390,28 +390,90 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-func (m *MexcExchange) isValidSymbol(s map[string]interface{}) bool {
-    if s["status"] != "1" { return false }
-    if allowed, _ := s["isSpotTradingAllowed"].(bool); !allowed { return false }
+func New(ex exchange.Exchange) (*Arbitrager, error) {
+	// 1. Загружаем реальные (неинвертированные) пары и фильтры
+	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
+	avail := rawSymbols
+	log.Printf("📊 Всего доступных пар: %d", len(avail))
 
-    // Optional: убираем permissions/SPOT
-    // убираем MARKET-order-check, если не критично
+	// 2. Строим треугольники только на основе реальных пар
+	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
+	if err != nil {
+		return nil, fmt.Errorf("LoadTrianglesFromSymbols: %w", err)
+	}
+	log.Printf("[INIT] Загружено треугольников: %d", len(ts))
 
-    // Проверяем только шаг лота
-    step := 0.0
-    if str, ok := s["baseSizePrecision"].(string); ok {
-        if v, err := strconv.ParseFloat(str, 64); err == nil {
-            step = v
-        }
-    }
-    if step <= 0 { return false }
+	// Опционально: дамп треугольников в файл
+	if trianglesJSON, err := json.MarshalIndent(ts, "", "  "); err == nil {
+		if err := os.WriteFile("triangles_dump.json", trianglesJSON, 0644); err != nil {
+			log.Printf("⚠️ Не удалось сохранить triangles_dump.json: %v", err)
+		} else {
+			log.Printf("💾 Треугольники сохранены в triangles_dump.json")
+		}
+	}
 
-    // Убрали maxQuoteAmountMarket и takerCommission
+	// 3. Создаем карту индексов треугольников и собираем пары для подписки
+	trianglesByPair := make(map[string][]int)
+	var subPairsRaw []string
+	for i, tri := range ts {
+		ab := tri.A + tri.B
+		bc := tri.B + tri.C
+		ca := tri.C + tri.A
 
-    return true
+		trianglesByPair[ab] = append(trianglesByPair[ab], i)
+		trianglesByPair[bc] = append(trianglesByPair[bc], i)
+		trianglesByPair[ca] = append(trianglesByPair[ca], i)
+
+		subPairsRaw = append(subPairsRaw, ab, bc, ca)
+	}
+
+	// 4. Фильтрация подписываемых пар только по rawSymbols
+	uniq := make(map[string]struct{})
+	for _, p := range subPairsRaw {
+		if rawSymbols[p] {
+			uniq[p] = struct{}{}
+		}
+	}
+	var subPairs []string
+	for p := range uniq {
+		subPairs = append(subPairs, p)
+	}
+	log.Printf("[INIT] Итог: подписываемся на %d уникальных пар", len(subPairs))
+
+	// 5. Создаем арбитражер
+	arb := &Arbitrager{
+		Triangles:       ts,
+		latest:          make(map[string]float64),
+		trianglesByPair: trianglesByPair,
+		realSymbols:     rawSymbols,
+		stepSizes:       stepSizes,
+		minQtys:         minQtys,
+		StartAmount:     0.5,
+		exchange:        ex,
+	}
+
+	// 6. Подписка чанками
+	const maxPerConn = 20
+	for i := 0; i < len(subPairs); i += maxPerConn {
+		end := i + maxPerConn
+		if end > len(subPairs) {
+			end = len(subPairs)
+		}
+		chunk := subPairs[i:end]
+		go func(pairs []string) {
+			for {
+				if err := ex.SubscribeDeals(pairs, arb.HandleRaw); err != nil {
+					log.Printf("[WS][%s] subscribe error: %v; retrying.", ex.Name(), err)
+					time.Sleep(time.Second)
+					continue
+				}
+				return
+			}
+		}(chunk)
+	}
+
+	return arb, nil
 }
-
-
 
 
 
