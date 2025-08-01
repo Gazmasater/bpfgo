@@ -390,11 +390,124 @@ sudo apt install docker-compose-plugin -y
 
 _______________________________________________________________________________
 
-025/08/01 23:44:37 📶 [MEXC] Pong after 265.390937ms
-2025/08/01 23:44:39 ❌ Failed to execute triangle USDT/CAW/USDC: qty1 0.00000000 < minQty 100000.00000000
-2025/08/01 23:44:40 ❌ Failed to execute triangle USDT/CAW/USDC: qty1 0.00000000 < minQty 100000.00000000
-2025/08/01 23:44:41 ❌ Failed to execute triangle USDT/CAW/USDC: qty1 0.00000000 < minQty 100000.00000000
+package app
 
+import (
+	"fmt"
+	"log"
+	"math"
+
+	"cryptarb/internal/domain/triangle"
+)
+
+// Check проверяет и выполняет треугольный арбитраж для триугольников, включающих symbol
+func (a *Arbitrager) Check(symbol string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	indices := a.trianglesByPair[symbol]
+	if len(indices) == 0 {
+		return
+	}
+
+	nf := 0.9965 * 0.9965 * 0.9965
+	startAmount := a.StartAmount
+
+	for _, i := range indices {
+		tri := a.Triangles[i]
+
+		// Нормализация и получение цен
+		ab, okAB, revAB := a.normalizeSymbolDir(tri.A, tri.B)
+		bc, okBC, revBC := a.normalizeSymbolDir(tri.B, tri.C)
+		ca, okCA, revCA := a.normalizeSymbolDir(tri.C, tri.A)
+		if !okAB || !okBC || !okCA {
+			continue
+		}
+
+		p1, ok1 := a.latest[ab]
+		p2, ok2 := a.latest[bc]
+		p3, ok3 := a.latest[ca]
+		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+			continue
+		}
+
+		if revAB {
+			p1 = 1 / p1
+		}
+		if revBC {
+			p2 = 1 / p2
+		}
+		if revCA {
+			p3 = 1 / p3
+		}
+
+		// Расчёт прибыли
+		profitFactor := p1 * p2 * p3 * nf
+		profit := (profitFactor - 1) * 100
+		if profit > 0.3 && tri.A == "USDT" {
+			// Выполнение треугольника при условии потенциала
+			if err := a.executeTriangle(tri, startAmount); err != nil {
+				log.Printf("❌ Failed to execute triangle %s/%s/%s: %v", tri.A, tri.B, tri.C, err)
+			} else {
+				log.Printf("✅ Executed ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
+			}
+		}
+	}
+}
+
+// executeTriangle выполняет три маркет-ордера по треугольнику tri, начиная с amount единиц tri.A
+func (a *Arbitrager) executeTriangle(tri triangle.Triangle, amount float64) error {
+	// 1) USDT -> CAW: покупка CAW за USDT
+	ab, _, revAB := a.normalizeSymbolDir(tri.A, tri.B)
+	p1 := a.latest[ab]
+	if revAB {
+		p1 = 1 / p1
+	}
+	// количество CAW для покупки
+	qty1 := math.Floor((amount/p1)/a.stepSizes[ab]) * a.stepSizes[ab]
+	if qty1 < a.minQtys[ab] {
+		return fmt.Errorf("qty1 %.8f < minQty %.8f", qty1, a.minQtys[ab])
+	}
+	// BUY CAW using USDT
+	if _, err := a.exchange.PlaceMarketOrder(ab, "BUY", qty1); err != nil {
+		return fmt.Errorf("PlaceMarketOrder %s BUY: %w", ab, err)
+	}
+
+	// 2) CAW -> USDC: продажа CAW для получения USDC
+	bc, _, revBC := a.normalizeSymbolDir(tri.B, tri.C)
+	p2 := a.latest[bc]
+	if revBC {
+		p2 = 1 / p2
+	}
+	// получаемый объём USDC
+	amtUSDC := qty1 * p2
+	// округление USDC по шагу для пары USDCCAW или CAWUSDC
+	qty2 := math.Floor(amtUSDC/a.stepSizes[ca]) * a.stepSizes[ca]
+	if qty2 < a.minQtys[bc] {
+		return fmt.Errorf("qty2 %.8f < minQty %.8f", qty2, a.minQtys[bc])
+	}
+	// SELL CAW to USDC
+	if _, err := a.exchange.PlaceMarketOrder(bc, "SELL", qty1); err != nil {
+		return fmt.Errorf("PlaceMarketOrder %s SELL: %w", bc, err)
+	}
+
+	// 3) USDC -> USDT: продажа USDC для получения USDT
+	ca, _, revCA := a.normalizeSymbolDir(tri.C, tri.A)
+	p3 := a.latest[ca]
+	if revCA {
+		p3 = 1 / p3
+	}
+	// количество USDT после продажи USDC
+	qty3 := math.Floor((qty2*p3)/a.stepSizes[ca]) * a.stepSizes[ca]
+	if qty3 < a.minQtys[ca] {
+		return fmt.Errorf("qty3 %.8f < minQty %.8f", qty3, a.minQtys[ca])
+	}
+	if _, err := a.exchange.PlaceMarketOrder(ca, "SELL", qty3); err != nil {
+		return fmt.Errorf("PlaceMarketOrder %s SELL: %w", ca, err)
+	}
+
+	return nil
+}
 
 
 
