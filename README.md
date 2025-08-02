@@ -410,9 +410,9 @@ type Arbitrager struct {
 	latest          map[string]float64
 	trianglesByPair map[string][]int
 
-	// origSymbols — реальные торговые пары из API биржи
+	// Реальные пары из API биржи
 	origSymbols map[string]bool
-	// availSymbols — расширенный граф (оригинальные + инверсии)
+	// Расширенный граф (оригинальные + инверсии) для построения треугольников
 	availSymbols map[string]bool
 
 	stepSizes map[string]float64
@@ -423,7 +423,7 @@ type Arbitrager struct {
 	exchange    exchange.Exchange
 }
 
-// New создаёт новый экземпляр Arbitrager с корректными символами
+// New создаёт новый экземпляр Arbitrager с корректными списками символов и треугольниками
 func New(ex exchange.Exchange) (*Arbitrager, error) {
 	// 1. Получаем оригинальные символы и параметры из API биржи
 	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
@@ -432,17 +432,22 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
 	log.Printf("📊 Всего подписываемых пар (с инверсиями): %d", len(avail))
 
-	// 3. Строим треугольники по расширенному графу
+	// 3. Строим все возможные треугольники
 	ts := buildTriangles(avail)
-	trianglesByPair := groupByPair(ts)
 
-	// 4. Инициализируем структуру Arbitrager
+	// 4. Фильтруем треугольники: оставляем только те, у которых ВСЕ три стороны существуют в rawSymbols
+	ts = filterTriangles(ts, rawSymbols)
+
+	// 5. Группируем треугольники по символам, используя origSymbols для определения направления
+	trianglesByPair := groupByPair(ts, rawSymbols)
+
+	// 6. Инициализируем Arbitrager
 	arb := &Arbitrager{
 		Triangles:       ts,
 		latest:          make(map[string]float64),
 		trianglesByPair: trianglesByPair,
-		origSymbols:     rawSymbols,   // реальные пары
-		availSymbols:    avail,        // для подписки и графа
+		origSymbols:     rawSymbols,
+		availSymbols:    avail,
 		stepSizes:       stepSizes,
 		minQtys:         minQtys,
 		StartAmount:     0.5,
@@ -451,24 +456,49 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 	return arb, nil
 }
 
-// normalizeSymbolDir определяет, какую пару и в каком направлении использовать
-func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, ok bool, rev bool) {
-	// пробуем оба направления в расширенном графе
-	forward := base + quote
-	reverse := quote + base
-	if a.availSymbols[forward] {
-		// rev=true, если нет прямой пары в API
-		rev = !a.origSymbols[forward]
-		return forward, true, rev
+// filterTriangles оставляет только те треугольники, где все стороны существуют в origSymbols (в любой ориентации)
+func filterTriangles(ts []triangle.Triangle, orig map[string]bool) []triangle.Triangle {
+	var result []triangle.Triangle
+	for _, tri := range ts {
+		if (orig[tri.A+tri.B] || orig[tri.B+tri.A]) &&
+			(orig[tri.B+tri.C] || orig[tri.C+tri.B]) &&
+			(orig[tri.C+tri.A] || orig[tri.A+tri.C]) {
+			result = append(result, tri)
+		}
 	}
-	if a.availSymbols[reverse] {
-		rev = !a.origSymbols[reverse]
-		return reverse, true, rev
+	return result
+}
+
+// groupByPair группирует индексы треугольников по каждому ребру, выбирая направление из origSymbols
+func groupByPair(ts []triangle.Triangle, orig map[string]bool) map[string][]int {
+	m := make(map[string][]int)
+	for i, tri := range ts {
+		edges := [][2]string{{tri.A, tri.B}, {tri.B, tri.C}, {tri.C, tri.A}}
+		for _, e := range edges {
+			base, quote := e[0], e[1]
+			// если оригинальная пара base+quote
+			if orig[base+quote] {
+				m[base+quote] = append(m[base+quote], i)
+			} else {
+				m[quote+base] = append(m[quote+base], i)
+			}
+		}
+	}
+	return m
+}
+
+// normalizeSymbolDir возвращает название символа и флаг rev, используя только origSymbols
+func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, rev bool, ok bool) {
+	if a.origSymbols[base+quote] {
+		return base + quote, false, true
+	}
+	if a.origSymbols[quote+base] {
+		return quote + base, true, true
 	}
 	return "", false, false
 }
 
-// buildTriangles использует LoadTrianglesFromSymbols для получения всех треугольников
+// buildTriangles использует LoadTrianglesFromSymbols для получения всех треугольников по графу
 func buildTriangles(avail map[string]bool) []triangle.Triangle {
 	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
 	if err != nil {
@@ -476,18 +506,6 @@ func buildTriangles(avail map[string]bool) []triangle.Triangle {
 		return nil
 	}
 	return ts
-}
-
-// groupByPair группирует индексы треугольников по каждому ребру пары
-func groupByPair(ts []triangle.Triangle) map[string][]int {
-	trianglesByPair := make(map[string][]int)
-	for i, tri := range ts {
-		pairs := []string{tri.A + tri.B, tri.B + tri.C, tri.C + tri.A}
-		for _, sym := range pairs {
-			trianglesByPair[sym] = append(trianglesByPair[sym], i)
-		}
-	}
-	return trianglesByPair
 }
 
 func (a *Arbitrager) HandleRaw(exchangeName string, raw []byte) {
@@ -525,21 +543,21 @@ func (a *Arbitrager) Check(symbol string) {
 
 	for _, i := range indices {
 		tri := a.Triangles[i]
-		// нормализация направлений и флагов реверса
-		ab, okAB, revAB := a.normalizeSymbolDir(tri.A, tri.B)
-		bc, okBC, revBC := a.normalizeSymbolDir(tri.B, tri.C)
-		ca, okCA, revCA := a.normalizeSymbolDir(tri.C, tri.A)
+		// получаем символ и направление для каждой стороны
+		ab, revAB, okAB := a.normalizeSymbolDir(tri.A, tri.B)
+		bc, revBC, okBC := a.normalizeSymbolDir(tri.B, tri.C)
+		ca, revCA, okCA := a.normalizeSymbolDir(tri.C, tri.A)
 		if !okAB || !okBC || !okCA {
 			continue
 		}
-		// получение последних цен
+		// получаем последние цены
 		p1, ok1 := a.latest[ab]
 		p2, ok2 := a.latest[bc]
 		p3, ok3 := a.latest[ca]
 		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
 			continue
 		}
-		// пересчет цены при инверсии
+		// учитываем реверс, если требуется
 		if revAB {
 			p1 = 1 / p1
 		}
