@@ -392,433 +392,125 @@ _______________________________________________________________________________
 
 
 
-2025/08/02 04:36:13 ✅ Подходящих пар: 557
-2025/08/02 04:36:13 📊 Всего доступных пар: 557
-2025/08/02 04:36:13 [TRIANGLE] Found 234 triangles
-2025/08/02 04:36:13 [INIT] Загружено треугольников: 234
-2025/08/02 04:36:13 💾 Треугольники сохранены в triangles_dump.json
-2025/08/02 04:36:13 [INIT] Итог: подписываемся на 72 уникальных пар
-PROFIT= +Inf
-PROFIT= +Inf
-PROFIT= +Inf
-2025/08/02 04:36:14 ❌ price not available for USDCUSDT
-PROFIT= +Inf
-PROFIT= +Inf
-PROFIT= +Inf
-2025/08/02 04:36:14 ❌ price not available for USDCUSDT
-PROFIT= +Inf
-PROFIT= +Inf
-PROFIT= +Inf
-2025/08/02 04:36:14 ❌ price not available for USDCUSDT
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= +Inf
-PROFIT= NaN
-PROFIT= +Inf
-PROFIT= +Inf
-PROFIT= NaN
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for ADAUSDT
-PROFIT= +Inf
-PROFIT= +Inf
-2025/08/02 04:36:14 ❌ price not available for USDCUSDT
-PROFIT= +Inf
-PROFIT= +Inf
-PROFIT= +Inf
-PROFIT= +Inf
-2025/08/02 04:36:14 ❌ price not available for USDCUSDT
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= +Inf
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= -100
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= -100
-PROFIT= +Inf
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= -100
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= -100
-PROFIT= -100
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for ENSUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for DOGEUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for MINAUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for XENUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for NEARUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for CAWUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for TRXUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for BCHUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for AZEROUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for AAVEUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for AVAXUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for RAYUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for LUNCUSDT
-PROFIT= -100
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for LTCUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for FTTUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for UNIUSDT
-PROFIT= -100
-PROFIT= +Inf
-2025/08/02 04:36:14 ❌ price not available for ADAUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for JASMYUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for MXUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for OPUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for ALGOUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for WAVESUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for SHIBUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for ATOMUSDT
-PROFIT= -100
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for APEUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for FILUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for WBTCUSDT
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= -100
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= +Inf
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= -100
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= -100
-PROFIT= +Inf
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= -100
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= -100
-PROFIT= -100
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for ENSUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for DOGEUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for MINAUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for XENUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for NEARUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for CAWUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for TRXUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for BCHUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for AZEROUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for AAVEUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for AVAXUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for RAYUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for LUNCUSDT
-PROFIT= -100
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for LTCUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for FTTUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for UNIUSDT
-PROFIT= -100
-PROFIT= +Inf
-2025/08/02 04:36:14 ❌ price not available for ADAUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for JASMYUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for MXUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for OPUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for ALGOUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for WAVESUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for SHIBUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for ATOMUSDT
-PROFIT= -100
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for APEUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for FILUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for WBTCUSDT
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= -100
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= +Inf
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= -100
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= -100
-PROFIT= +Inf
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= -100
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= -100
-PROFIT= -100
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for ENSUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for DOGEUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for MINAUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for XENUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for NEARUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for CAWUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for TRXUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for BCHUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for AZEROUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for AAVEUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for AVAXUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for RAYUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for LUNCUSDT
-PROFIT= -100
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for LTCUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for FTTUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for UNIUSDT
-PROFIT= -100
-PROFIT= +Inf
-2025/08/02 04:36:14 ❌ price not available for ADAUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for JASMYUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for MXUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for OPUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for ALGOUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for WAVESUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for SHIBUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for ATOMUSDT
-PROFIT= -100
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for APEUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for FILUSDT
-PROFIT= NaN
-2025/08/02 04:36:14 ❌ price not available for WBTCUSDT
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= NaN
-PROFIT= -100
-PROFIT= +Inf
-PROFIT= NaN
-PROFIT= +Inf
-PROFIT= NaN
-PROFIT= +Inf
-PROFIT= NaN
-PROFIT= -1.080999391210724
-PROFIT= -1.0809993912107352
-PROFIT= -1.0809993912107352
-PROFIT= -1.080999391210724
-PROFIT= -1.0809993912107352
-PROFIT= -1.0809993912107352
-PROFIT= -1.0672185329481665
-PROFIT= -1.0672185329481554
-PROFIT= -1.0672185329481665
-PROFIT= -1.0672185329481665
-PROFIT= -1.0672185329481554
-PROFIT= -1.0672185329481665
-PROFIT= -1.080999391210724
-PROFIT= -1.0809993912107352
-PROFIT= -1.0809993912107352
-PROFIT= -1.0672185329481665
-PROFIT= -1.0672185329481554
-PROFIT= -1.0672185329481665
-PROFIT= +Inf
-PROFIT= NaN
-PROFIT= +Inf
-PROFIT= NaN
-PROFIT= +Inf
-PROFIT= NaN
-PROFIT= -100
-PROFIT= -100
-PROFIT= -100
-PROFIT= -100
-PROFIT= -100
-PROFIT= -100
-PROFIT= +Inf
-PROFIT= +Inf
-PROFIT= +Inf
-^Csignal: interrupt
+package app
+
+import (
+	"fmt"
+	"log"
+	"math"
+
+	"cryptarb/internal/domain/triangle"
+)
+
+// roundQuantity округляет qty вниз к шагу step
+func roundQuantity(qty, step float64) float64 {
+	return math.Floor(qty/step) * step
+}
+
+// convertPair конвертирует amountX единиц валюты X в валюту Y, возвращает количество Y или ошибку
+func (a *Arbitrager) convertPair(X, Y string, amountX float64) (float64, error) {
+	// формируем символ и определяем направление
+	sym, ok, rev := a.normalizeSymbolDir(X, Y)
+	if !ok {
+		return 0, fmt.Errorf("symbol not available: %s/%s", X, Y)
+	}
+	// проверяем наличие цены
+	price, ok := a.latest[sym]
+	if !ok || price <= 0 {
+		return 0, fmt.Errorf("price not available or non-positive for %s", sym)
+	}
+	// выбираем сторону и вычисляем rawY
+	var rawY float64
+	side := "SELL"
+	if rev {
+		side = "BUY"
+		rawY = amountX / price // если rev, amountX — quote (цена), rawY = сколько купим
+	} else {
+		rawY = amountX * price // amountX в базовой, rawY — quote
+	}
+	// округляем по шагу
+	step := a.stepSizes[sym]
+	qtyY := roundQuantity(rawY, step)
+	// проверяем минимум
+	if qtyY < a.minQtys[sym] {
+		return 0, fmt.Errorf("converted qty %.8f < minQty %.8f for %s", qtyY, a.minQtys[sym], sym)
+	}
+	// совершаем ордер
+	if _, err := a.exchange.PlaceMarketOrder(sym, side, amountX); err != nil {
+		return 0, fmt.Errorf("PlaceMarketOrder %s %s: %w", sym, side, err)
+	}
+	return qtyY, nil
+}
+
+// Check проверяет и при положительном арбитраже выполняет три конвертации
+func (a *Arbitrager) Check(updatedSymbol string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	indices := a.trianglesByPair[updatedSymbol]
+	if len(indices) == 0 {
+		return
+	}
+
+	const feeFactor = 0.9965 * 0.9965 * 0.9965
+	start := a.StartAmount
+
+	for _, idx := range indices {
+		tri := a.Triangles[idx]
+
+		// проверяем наличие цен для трёх пар
+		syms := []struct{ s string; X, Y string }{
+			{tri.A + tri.B, tri.A, tri.B},
+			{tri.B + tri.C, tri.B, tri.C},
+			{tri.C + tri.A, tri.C, tri.A},
+		}
+		prices := make([]float64, 3)
+		for i, ent := range syms {
+			p, ok := a.latest[ent.s]
+			if !ok || p <= 0 {
+				log.Printf("❌ price not available for %s", ent.s)
+				continue
+			}
+			// корректируем для rev
+			_, _, rev := a.normalizeSymbolDir(ent.X, ent.Y)
+			if rev {
+				prices[i] = 1 / p
+			} else {
+				prices[i] = p
+			}
+		}
+		// если хоть один элемент ==0, пропускаем
+		if prices[0] == 0 || prices[1] == 0 || prices[2] == 0 {
+			continue
+		}
+
+		// вычисляем профит
+		profit := (prices[0] * prices[1] * prices[2] * feeFactor - 1) * 100
+		if profit <= 0.3 || tri.A != "USDT" {
+			continue
+		}
+
+		// выполняем треугольник
+		qtyB, err := a.convertPair(tri.A, tri.B, start)
+		if err != nil {
+			log.Printf("❌ %v", err)
+			continue
+		}
+		qtyC, err := a.convertPair(tri.B, tri.C, qtyB)
+		if err != nil {
+			log.Printf("❌ %v", err)
+			continue
+		}
+		_, err = a.convertPair(tri.C, tri.A, qtyC)
+		if err != nil {
+			log.Printf("❌ %v", err)
+			continue
+		}
+
+		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
+	}
+}
+
 
 
 
