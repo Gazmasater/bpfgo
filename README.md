@@ -421,6 +421,7 @@ type Arbitrager struct {
 	exchange    exchange.Exchange
 }
 
+// New создаёт новый экземпляр Arbitrager с корректной инициализацией realSymbols
 func New(ex exchange.Exchange) (*Arbitrager, error) {
 	// 1. Получаем оригинальные символы и параметры из API биржи
 	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
@@ -458,15 +459,26 @@ func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, ok b
 	return "", false, false
 }
 
-// Заготовки для вспомогательных функций
-func buildTriangles(avail map[string][2]string) [][]string {
-	// реализация поиска треугольников
-	return nil
+// buildTriangles использует LoadTrianglesFromSymbols для получения всех треугольников
+func buildTriangles(avail map[string]bool) []triangle.Triangle {
+	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
+	if err != nil {
+		log.Printf("⚠️ buildTriangles: ошибка LoadTrianglesFromSymbols: %v", err)
+		return nil
+	}
+	return ts
 }
 
-func groupByPair(ts [][]string) map[string][][]string {
-	// группировка треугольников по ребрам
-	return nil
+// groupByPair группирует индексы треугольников по каждому ребру пары
+func groupByPair(ts []triangle.Triangle) map[string][]int {
+	trianglesByPair := make(map[string][]int)
+	for i, tri := range ts {
+		pairs := []string{tri.A + tri.B, tri.B + tri.C, tri.C + tri.A}
+		for _, sym := range pairs {
+			trianglesByPair[sym] = append(trianglesByPair[sym], i)
+		}
+	}
+	return trianglesByPair
 }
 
 func (a *Arbitrager) HandleRaw(exchangeName string, raw []byte) {
@@ -527,79 +539,7 @@ func (a *Arbitrager) Check(symbol string) {
 		}
 		profitFactor := p1 * p2 * p3 * nf
 		profit := (profitFactor - 1) * 100
-		//	if profit > 0.3 && tri.A == "USDT" {
 		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
-		//	}
 	}
 }
-
-
-[{
-	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "IncompatibleAssign",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "IncompatibleAssign"
-		}
-	},
-	"severity": 8,
-	"message": "cannot use avail (variable of type map[string]bool) as map[string][2]string value in argument to buildTriangles",
-	"source": "compiler",
-	"startLineNumber": 39,
-	"startColumn": 23,
-	"endLineNumber": 39,
-	"endColumn": 28,
-	"origin": "extHost1"
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "IncompatibleAssign",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "IncompatibleAssign"
-		}
-	},
-	"severity": 8,
-	"message": "cannot use ts (variable of type [][]string) as []triangle.Triangle value in struct literal",
-	"source": "compiler",
-	"startLineNumber": 44,
-	"startColumn": 20,
-	"endLineNumber": 44,
-	"endColumn": 22,
-	"origin": "extHost1"
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "IncompatibleAssign",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "IncompatibleAssign"
-		}
-	},
-	"severity": 8,
-	"message": "cannot use trianglesByPair (variable of type map[string][][]string) as map[string][]int value in struct literal",
-	"source": "compiler",
-	"startLineNumber": 46,
-	"startColumn": 20,
-	"endLineNumber": 46,
-	"endColumn": 35,
-	"origin": "extHost1"
-}]
 
