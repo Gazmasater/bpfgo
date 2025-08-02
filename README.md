@@ -392,8 +392,131 @@ _______________________________________________________________________________
 
 
 
-2025/08/02 04:23:29 [INIT] Итог: подписываемся на 72 уникальных пар
-2025/08/02 04:23:30 ❌ PlaceMarketOrder DOGEUSDC BUY: order failed: {"msg":"amount is invalid","code":400}
-2025/08/02 04:23:30 ❌ PlaceMarketOrder DOGEUSDC BUY: order failed: {"msg":"amount is invalid","code":400}
+package app
+
+import (
+	"fmt"
+	"log"
+	"math"
+
+	"cryptarb/internal/domain/triangle"
+)
+
+// roundQuantity округляет qty вниз к ближайшему шагу step
+func roundQuantity(qty, step float64) float64 {
+	return math.Floor(qty/step) * step
+}
+
+// convertPair конвертирует amount единиц актива X в актив Y через маркет-ордер
+// возвращает фактическое количество Y после исполнения
+func (a *Arbitrager) convertPair(X, Y string, amountX float64) (float64, error) {
+	// получаем символ и флаг ревёрса
+	sym, ok, rev := a.normalizeSymbolDir(X, Y)
+	if !ok {
+		return 0, fmt.Errorf("pair not supported: %s/%s", X, Y)
+	}
+	// определяем цену Y за 1 X
+	price := a.latest[sym]
+	if price == 0 {
+		return 0, fmt.Errorf("price not available for %s", sym)
+	}
+	if rev {
+		price = 1 / price
+	}
+
+	// сколько актива Y потециально получим без учёта шага
+	rawY := amountX * price
+
+	// определяем объём базового актива для ордера
+	// если rev=false, sym=X+Y, базовый актив=X => объём = amountX
+	// если rev=true, sym=Y+X, базовый актив=Y => объём = rawY
+	baseQty := amountX
+	if rev {
+		baseQty = rawY
+	}
+
+	// проверяем минимальный объём и округляем по шагу
+	step := a.stepSizes[sym]
+	minQty := a.minQtys[sym]
+	qty := roundQuantity(baseQty, step)
+	if qty < minQty {
+		return 0, fmt.Errorf("order qty %.8f < minQty %.8f for %s", qty, minQty, sym)
+	}
+
+	// выбираем сторону ордера: rev=false -> SELL X, rev=true -> BUY Y
+	side := "SELL"
+	if rev {
+		side = "BUY"
+	}
+
+	// отправляем маркет-ордер с базовым объёмом
+	if _, err := a.exchange.PlaceMarketOrder(sym, side, qty); err != nil {
+		return 0, fmt.Errorf("PlaceMarketOrder %s %s %.8f: %w", sym, side, qty, err)
+	}
+
+	// возвращаем фактическое количество Y после округлённого ордера
+	// rawY скорректируем под округлённый базовый объём
+	executedY := qty
+	if !rev {
+		// при SELL базового X, получаем Y: executedY = qty * price
+		executedY = qty * price
+	}
+	// при BUY базового Y, executedY = qty (кол-во Y)
+
+	return executedY, nil
+}
+
+// Check проверяет и выполняет треугольный арбитраж для триугольников, включающих symbol
+func (a *Arbitrager) Check(symbol string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	indices := a.trianglesByPair[symbol]
+	if len(indices) == 0 {
+		return
+	}
+
+	nf := 0.9965 * 0.9965 * 0.9965
+	start := a.StartAmount
+
+	for _, idx := range indices {
+		tri := a.Triangles[idx]
+
+		// получаем и корректируем цены для расчёта профита
+		ab, okAB, revAB := a.normalizeSymbolDir(tri.A, tri.B)
+		bc, okBC, revBC := a.normalizeSymbolDir(tri.B, tri.C)
+		ca, okCA, revCA := a.normalizeSymbolDir(tri.C, tri.A)
+		if !okAB || !okBC || !okCA {
+			continue
+		}
+		p1 := a.latest[ab]; if revAB { p1 = 1/p1 }
+		p2 := a.latest[bc]; if revBC { p2 = 1/p2 }
+		p3 := a.latest[ca]; if revCA { p3 = 1/p3 }
+
+		profit := (p1 * p2 * p3 * nf - 1) * 100
+		if profit <= 0.3 || tri.A != "USDT" {
+			continue
+		}
+
+		// если арбитраж еволожителен — выполняем три конвертации
+		qtyB, err := a.convertPair(tri.A, tri.B, start)
+		if err != nil {
+			log.Printf("❌ %v", err)
+			continue
+		}
+		qtyC, err := a.convertPair(tri.B, tri.C, qtyB)
+		if err != nil {
+			log.Printf("❌ %v", err)
+			continue
+		}
+		_, err = a.convertPair(tri.C, tri.A, qtyC)
+		if err != nil {
+			log.Printf("❌ %v", err)
+			continue
+		}
+
+		log.Printf("✅ Executed ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
+	}
+}
 
 
