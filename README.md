@@ -405,14 +405,15 @@ import (
 	"cryptarb/internal/repository/filesystem"
 )
 
+// Arbitrager выполняет арбитражные проверки по треугольным парам
 type Arbitrager struct {
 	Triangles       []triangle.Triangle
 	latest          map[string]float64
 	trianglesByPair map[string][]int
 
-	// Реальные пары из API биржи
+	// origSymbols — реальные торговые пары из API биржи
 	origSymbols map[string]bool
-	// Расширенный граф (оригинальные + инверсии) для построения треугольников
+	// availSymbols — расширенный граф (оригинальные + инверсии)
 	availSymbols map[string]bool
 
 	stepSizes map[string]float64
@@ -423,7 +424,7 @@ type Arbitrager struct {
 	exchange    exchange.Exchange
 }
 
-// New создаёт новый экземпляр Arbitrager с корректными списками символов и треугольниками
+// New создаёт новый экземпляр Arbitrager с корректными символами и треугольниками
 func New(ex exchange.Exchange) (*Arbitrager, error) {
 	// 1. Получаем оригинальные символы и параметры из API биржи
 	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
@@ -432,10 +433,10 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
 	log.Printf("📊 Всего подписываемых пар (с инверсиями): %d", len(avail))
 
-	// 3. Строим все возможные треугольники
+	// 3. Строим все возможные треугольники по расширенному графу
 	ts := buildTriangles(avail)
 
-	// 4. Фильтруем треугольники: оставляем только те, у которых ВСЕ три стороны существуют в rawSymbols
+	// 4. Фильтруем треугольники: оставляем только те, у которых все стороны существуют в rawSymbols
 	ts = filterTriangles(ts, rawSymbols)
 
 	// 5. Группируем треугольники по символам, используя origSymbols для определения направления
@@ -456,7 +457,7 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 	return arb, nil
 }
 
-// filterTriangles оставляет только те треугольники, где все стороны существуют в origSymbols (в любой ориентации)
+// filterTriangles оставляет только те треугольники, где все три стороны существуют в origSymbols
 func filterTriangles(ts []triangle.Triangle, orig map[string]bool) []triangle.Triangle {
 	var result []triangle.Triangle
 	for _, tri := range ts {
@@ -469,14 +470,13 @@ func filterTriangles(ts []triangle.Triangle, orig map[string]bool) []triangle.Tr
 	return result
 }
 
-// groupByPair группирует индексы треугольников по каждому ребру, выбирая направление из origSymbols
+// groupByPair группирует индексы треугольников по каждому ребру с учётом направления из origSymbols
 func groupByPair(ts []triangle.Triangle, orig map[string]bool) map[string][]int {
 	m := make(map[string][]int)
 	for i, tri := range ts {
 		edges := [][2]string{{tri.A, tri.B}, {tri.B, tri.C}, {tri.C, tri.A}}
 		for _, e := range edges {
 			base, quote := e[0], e[1]
-			// если оригинальная пара base+quote
 			if orig[base+quote] {
 				m[base+quote] = append(m[base+quote], i)
 			} else {
@@ -487,7 +487,7 @@ func groupByPair(ts []triangle.Triangle, orig map[string]bool) map[string][]int 
 	return m
 }
 
-// normalizeSymbolDir возвращает название символа и флаг rev, используя только origSymbols
+// normalizeSymbolDir возвращает символ для запроса цены и флаг реверса на основе origSymbols
 func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, rev bool, ok bool) {
 	if a.origSymbols[base+quote] {
 		return base + quote, false, true
@@ -498,7 +498,7 @@ func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, rev 
 	return "", false, false
 }
 
-// buildTriangles использует LoadTrianglesFromSymbols для получения всех треугольников по графу
+// buildTriangles загружает все возможные треугольники по расширенному графу символов
 func buildTriangles(avail map[string]bool) []triangle.Triangle {
 	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
 	if err != nil {
@@ -508,6 +508,7 @@ func buildTriangles(avail map[string]bool) []triangle.Triangle {
 	return ts
 }
 
+// HandleRaw обрабатывает необработанное сообщение из биржи и обновляет цену
 func (a *Arbitrager) HandleRaw(exchangeName string, raw []byte) {
 	var msg struct {
 		Symbol string `json:"s"`
@@ -530,11 +531,13 @@ func (a *Arbitrager) HandleRaw(exchangeName string, raw []byte) {
 	a.Check(msg.Symbol)
 }
 
+// Check выполняет проверку по символу на наличие арбитражных возможностей
 func (a *Arbitrager) Check(symbol string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	indices := a.trianglesByPair[symbol]
+	log.Printf("🛠️ Check called for symbol=%s, triangle indices=%v", symbol, indices)
 	if len(indices) == 0 {
 		return
 	}
@@ -543,31 +546,42 @@ func (a *Arbitrager) Check(symbol string) {
 
 	for _, i := range indices {
 		tri := a.Triangles[i]
-		// получаем символ и направление для каждой стороны
+		log.Printf("🔍 Triangle %d: %s->%s->%s", i, tri.A, tri.B, tri.C)
 		ab, revAB, okAB := a.normalizeSymbolDir(tri.A, tri.B)
 		bc, revBC, okBC := a.normalizeSymbolDir(tri.B, tri.C)
 		ca, revCA, okCA := a.normalizeSymbolDir(tri.C, tri.A)
+		log.Printf(
+			"   normalize: AB=%s (ok=%v, rev=%v), BC=%s (ok=%v, rev=%v), CA=%s (ok=%v, rev=%v)",
+			ab, okAB, revAB, bc, okBC, revBC, ca, okCA, revCA,
+		)
 		if !okAB || !okBC || !okCA {
 			continue
 		}
-		// получаем последние цены
+
 		p1, ok1 := a.latest[ab]
 		p2, ok2 := a.latest[bc]
 		p3, ok3 := a.latest[ca]
-		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+		if !ok1 || !ok2 || !ok3 {
+			log.Printf("   missing prices: %s ok1=%v, %s ok2=%v, %s ok3=%v", ab, ok1, bc, ok2, ca, ok3)
 			continue
 		}
-		// учитываем реверс, если требуется
+		if p1 == 0 || p2 == 0 || p3 == 0 {
+			log.Printf("   zero prices: %s=%f, %s=%f, %s=%f", ab, p1, bc, p2, ca, p3)
+			continue
+		}
+		log.Printf("   prices before rev: %s=%f, %s=%f, %s=%f", ab, p1, bc, p2, ca, p3)
 		if revAB {
 			p1 = 1 / p1
+			log.Printf("   reversed AB price: %f", p1)
 		}
 		if revBC {
 			p2 = 1 / p2
+			log.Printf("   reversed BC price: %f", p2)
 		}
 		if revCA {
 			p3 = 1 / p3
+			log.Printf("   reversed CA price: %f", p3)
 		}
-		// расчет прибыли
 		profitFactor := p1 * p2 * p3 * nf
 		profit := (profitFactor - 1) * 100
 		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
