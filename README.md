@@ -392,9 +392,151 @@ _______________________________________________________________________________
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ cd cmd/cryptarb
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/08/02 05:41:43 ✅ Подходящих пар: 557
-2025/08/02 05:41:43 📊 Всего подписываемых пар (с инверсиями): 1114
-2025/08/02 05:41:43 [TRIANGLE] Found 234 triangles
+package app
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"strconv"
+	"sync"
+
+	"cryptarb/internal/domain/exchange"
+	"cryptarb/internal/domain/triangle"
+	"cryptarb/internal/repository/filesystem"
+)
+
+// Arbitrager выполняет арбитражные проверки по треугольным парам
+// и хранит состояния актуальных цен
+
+type Arbitrager struct {
+	Triangles       []triangle.Triangle
+	latest          map[string]float64
+	trianglesByPair map[string][]int
+
+	// origSymbols — оригинальные торговые пары из API биржи
+	origSymbols map[string]bool
+	// availSymbols — расширенный граф (оригиналы + инверсии) для построения треугольников и подписки
+	availSymbols map[string]bool
+
+	stepSizes map[string]float64
+	minQtys   map[string]float64
+	mu        sync.Mutex
+
+	StartAmount float64
+	exchange    exchange.Exchange
+}
+
+// New создаёт новый Arbitrager, инициализируя списки символов и треугольников
+func New(ex exchange.Exchange) (*Arbitrager, error) {
+	// получаем оригинальные пары и параметры из API
+	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
+
+	// строим расширенный граф (добавляем инверсии)
+	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
+	log.Printf("📊 Всего подписываемых пар (с инверсиями): %d", len(avail))
+
+	// загружаем ВСЕ треугольники по расширенному графу
+	tsAll, err := filesystem.LoadTrianglesFromSymbols(avail)
+	if err != nil {
+		return nil, fmt.Errorf("LoadTrianglesFromSymbols: %w", err)
+	}
+
+	// фильтруем: оставляем только треугольники, где все три стороны есть в оригинальных парах
+	ts := triangle.Filter(tsAll, rawSymbols)
+
+	// строим индексы треугольников по реальным символам
+	trianglesByPair := make(map[string][]int)
+	for i, tri := range ts {
+		ab, _, _ := normalizeSymbolDir(rawSymbols, tri.A, tri.B)
+		bc, _, _ := normalizeSymbolDir(rawSymbols, tri.B, tri.C)
+		ca, _, _ := normalizeSymbolDir(rawSymbols, tri.C, tri.A)
+
+		trianglesByPair[ab] = append(trianglesByPair[ab], i)
+		trianglesByPair[bc] = append(trianglesByPair[bc], i)
+		trianglesByPair[ca] = append(trianglesByPair[ca], i)
+	}
+
+	// создаём Arbitrager
+	arb := &Arbitrager{
+		Triangles:       ts,
+		latest:          make(map[string]float64),
+		trianglesByPair: trianglesByPair,
+		origSymbols:     rawSymbols,
+		availSymbols:    avail,
+		stepSizes:       stepSizes,
+		minQtys:         minQtys,
+		StartAmount:     0.5,
+		exchange:        ex,
+	}
+	return arb, nil
+}
+
+// normalizeSymbolDir проверяет направление запроса цены по оригинальным парам
+func normalizeSymbolDir(orig map[string]bool, base, quote string) (symbol string, rev bool, ok bool) {
+	if orig[base+quote] {
+		return base + quote, false, true
+	}
+	if orig[quote+base] {
+		return quote + base, true, true
+	}
+	return "", false, false
+}
+
+// HandleRaw обновляет цену по входящему сообщению и запускает проверку
+func (a *Arbitrager) HandleRaw(_ string, raw []byte) {
+	var msg struct {
+		Symbol string `json:"s"`
+		Data   struct {
+			Deals []struct {
+				Price string `json:"p"`
+			} `json:"deals"`
+		} `json:"d"`
+	}
+	if err := json.Unmarshal(raw, &msg); err != nil || msg.Symbol == "" || len(msg.Data.Deals) == 0 {
+		return
+	}
+	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
+	if err != nil {
+		return
+	}
+	a.mu.Lock()
+	a.latest[msg.Symbol] = price
+	a.mu.Unlock()
+	a.Check(msg.Symbol)
+}
+
+// Check рассчитывает прибыль по всем треугольникам, затрагивающим symbol
+func (a *Arbitrager) Check(symbol string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	indices := a.trianglesByPair[symbol]
+	if len(indices) == 0 {
+		return
+	}
+	// учёт комиссий трижды
+	nf := 0.9965 * 0.9965 * 0.9965
+	for _, idx := range indices {
+		tri := a.Triangles[idx]
+		ab, revAB, okAB := normalizeSymbolDir(a.origSymbols, tri.A, tri.B)
+		bc, revBC, okBC := normalizeSymbolDir(a.origSymbols, tri.B, tri.C)
+		ca, revCA, okCA := normalizeSymbolDir(a.origSymbols, tri.C, tri.A)
+		if !okAB || !okBC || !okCA {
+			continue
+		}
+		p1, ok1 := a.latest[ab]
+		p2, ok2 := a.latest[bc]
+		p3, ok3 := a.latest[ca]
+		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+			continue
+		}
+		if revAB { p1 = 1 / p1 }
+		if revBC { p2 = 1 / p2 }
+		if revCA { p3 = 1 / p3 }
+		profitFactor := p1 * p2 * p3 * nf
+		profit := (profitFactor - 1) * 100
+		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
+	}
+}
 
