@@ -392,74 +392,214 @@ _______________________________________________________________________________
 
 
 
-package arbitrager
+package app
 
 import (
-    "log"
+	"encoding/json"
+	"log"
+	"strconv"
+	"sync"
 
-    "your_project/filesystem"
-    "your_project/exchange"
+	"cryptarb/internal/domain/exchange"
+	"cryptarb/internal/domain/triangle"
+	"cryptarb/internal/repository/filesystem"
 )
 
 type Arbitrager struct {
-    Triangles       [][]string
-    latest          map[string]float64
-    trianglesByPair map[string][][]string
-    realSymbols     map[string][2]string
-    stepSizes       map[string]float64
-    minQtys         map[string]float64
-    StartAmount     float64
-    exchange        exchange.Exchange
+	Triangles       []triangle.Triangle
+	latest          map[string]float64
+	trianglesByPair map[string][]int
+
+	// realSymbols теперь map[string]bool
+	realSymbols map[string]bool
+
+	stepSizes map[string]float64
+	minQtys   map[string]float64
+	mu        sync.Mutex
+
+	StartAmount float64
+	exchange    exchange.Exchange
 }
 
-// New создаёт новый экземпляр Arbitrager с корректной инициализацией realSymbols
 func New(ex exchange.Exchange) (*Arbitrager, error) {
-    // 1. Получаем оригинальные символы и параметры из API биржи
-    rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
+	// 1. Получаем оригинальные символы и параметры из API биржи
+	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
 
-    // 2. Расширяем граф для подписки инверсиями пар
-    avail := filesystem.ExpandAvailableSymbols(rawSymbols)
-    log.Printf("📊 Всего доступных пар (с инверсиями): %d", len(avail))
+	// 2. Расширяем граф для подписки инверсиями пар
+	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
+	log.Printf("📊 Всего доступных пар (с инверсиями): %d", len(avail))
 
-    // 3. Строим треугольники по расширенному графу
-    ts := buildTriangles(avail)
-    trianglesByPair := groupByPair(ts)
+	// 3. Строим треугольники по расширенному графу
+	ts := buildTriangles(avail)
+	trianglesByPair := groupByPair(ts)
 
-    // 4. Инициализируем структуру Arbitrager
-    arb := &Arbitrager{
-        Triangles:       ts,
-        latest:          make(map[string]float64),
-        trianglesByPair: trianglesByPair,
-        realSymbols:     rawSymbols, // используем только реальные пары из API
-        stepSizes:       stepSizes,
-        minQtys:         minQtys,
-        StartAmount:     0.5,
-        exchange:        ex,
-    }
-    return arb, nil
+	// 4. Инициализируем структуру Arbitrager
+	arb := &Arbitrager{
+		Triangles:       ts,
+		latest:          make(map[string]float64),
+		trianglesByPair: trianglesByPair,
+		realSymbols:     rawSymbols, // используем только реальные пары из API
+		stepSizes:       stepSizes,
+		minQtys:         minQtys,
+		StartAmount:     0.5,
+		exchange:        ex,
+	}
+	return arb, nil
 }
 
 // normalizeSymbolDir определяет направление символа и флаг реверса
 func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, ok bool, rev bool) {
-    if a.realSymbols[base+quote] {
-        return base + quote, true, false
-    }
-    if a.realSymbols[quote+base] {
-        return quote + base, true, true
-    }
-    return "", false, false
+	if a.realSymbols[base+quote] {
+		return base + quote, true, false
+	}
+	if a.realSymbols[quote+base] {
+		return quote + base, true, true
+	}
+	return "", false, false
 }
 
 // Заготовки для вспомогательных функций
 func buildTriangles(avail map[string][2]string) [][]string {
-    // реализация поиска треугольников
-    return nil
+	// реализация поиска треугольников
+	return nil
 }
 
 func groupByPair(ts [][]string) map[string][][]string {
-    // группировка треугольников по ребрам
-    return nil
+	// группировка треугольников по ребрам
+	return nil
+}
+
+func (a *Arbitrager) HandleRaw(exchangeName string, raw []byte) {
+	var msg struct {
+		Symbol string `json:"s"`
+		Data   struct {
+			Deals []struct {
+				Price string `json:"p"`
+			} `json:"deals"`
+		} `json:"d"`
+	}
+	if err := json.Unmarshal(raw, &msg); err != nil || msg.Symbol == "" || len(msg.Data.Deals) == 0 {
+		return
+	}
+	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
+	if err != nil {
+		return
+	}
+	a.mu.Lock()
+	a.latest[msg.Symbol] = price
+	a.mu.Unlock()
+	a.Check(msg.Symbol)
+}
+
+func (a *Arbitrager) Check(symbol string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	indices := a.trianglesByPair[symbol]
+	if len(indices) == 0 {
+		return
+	}
+
+	nf := 0.9965 * 0.9965 * 0.9965
+
+	for _, i := range indices {
+		tri := a.Triangles[i]
+		ab, okAB, revAB := a.normalizeSymbolDir(tri.A, tri.B)
+		bc, okBC, revBC := a.normalizeSymbolDir(tri.B, tri.C)
+		ca, okCA, revCA := a.normalizeSymbolDir(tri.C, tri.A)
+		if !okAB || !okBC || !okCA {
+			continue
+		}
+		p1, ok1 := a.latest[ab]
+		p2, ok2 := a.latest[bc]
+		p3, ok3 := a.latest[ca]
+		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+			continue
+		}
+		if revAB {
+			p1 = 1 / p1
+		}
+		if revBC {
+			p2 = 1 / p2
+		}
+		if revCA {
+			p3 = 1 / p3
+		}
+		profitFactor := p1 * p2 * p3 * nf
+		profit := (profitFactor - 1) * 100
+		//	if profit > 0.3 && tri.A == "USDT" {
+		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
+		//	}
+	}
 }
 
 
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "IncompatibleAssign",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "IncompatibleAssign"
+		}
+	},
+	"severity": 8,
+	"message": "cannot use avail (variable of type map[string]bool) as map[string][2]string value in argument to buildTriangles",
+	"source": "compiler",
+	"startLineNumber": 39,
+	"startColumn": 23,
+	"endLineNumber": 39,
+	"endColumn": 28,
+	"origin": "extHost1"
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "IncompatibleAssign",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "IncompatibleAssign"
+		}
+	},
+	"severity": 8,
+	"message": "cannot use ts (variable of type [][]string) as []triangle.Triangle value in struct literal",
+	"source": "compiler",
+	"startLineNumber": 44,
+	"startColumn": 20,
+	"endLineNumber": 44,
+	"endColumn": 22,
+	"origin": "extHost1"
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "IncompatibleAssign",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "IncompatibleAssign"
+		}
+	},
+	"severity": 8,
+	"message": "cannot use trianglesByPair (variable of type map[string][][]string) as map[string][]int value in struct literal",
+	"source": "compiler",
+	"startLineNumber": 46,
+	"startColumn": 20,
+	"endLineNumber": 46,
+	"endColumn": 35,
+	"origin": "extHost1"
+}]
 
