@@ -392,125 +392,74 @@ _______________________________________________________________________________
 
 
 
-package app
+package arbitrager
 
 import (
-	"fmt"
-	"log"
-	"math"
+    "log"
 
-	"cryptarb/internal/domain/triangle"
+    "your_project/filesystem"
+    "your_project/exchange"
 )
 
-// roundQuantity округляет qty вниз к шагу step
-func roundQuantity(qty, step float64) float64 {
-	return math.Floor(qty/step) * step
+type Arbitrager struct {
+    Triangles       [][]string
+    latest          map[string]float64
+    trianglesByPair map[string][][]string
+    realSymbols     map[string][2]string
+    stepSizes       map[string]float64
+    minQtys         map[string]float64
+    StartAmount     float64
+    exchange        exchange.Exchange
 }
 
-// convertPair конвертирует amountX единиц валюты X в валюту Y, возвращает количество Y или ошибку
-func (a *Arbitrager) convertPair(X, Y string, amountX float64) (float64, error) {
-	// формируем символ и определяем направление
-	sym, ok, rev := a.normalizeSymbolDir(X, Y)
-	if !ok {
-		return 0, fmt.Errorf("symbol not available: %s/%s", X, Y)
-	}
-	// проверяем наличие цены
-	price, ok := a.latest[sym]
-	if !ok || price <= 0 {
-		return 0, fmt.Errorf("price not available or non-positive for %s", sym)
-	}
-	// выбираем сторону и вычисляем rawY
-	var rawY float64
-	side := "SELL"
-	if rev {
-		side = "BUY"
-		rawY = amountX / price // если rev, amountX — quote (цена), rawY = сколько купим
-	} else {
-		rawY = amountX * price // amountX в базовой, rawY — quote
-	}
-	// округляем по шагу
-	step := a.stepSizes[sym]
-	qtyY := roundQuantity(rawY, step)
-	// проверяем минимум
-	if qtyY < a.minQtys[sym] {
-		return 0, fmt.Errorf("converted qty %.8f < minQty %.8f for %s", qtyY, a.minQtys[sym], sym)
-	}
-	// совершаем ордер
-	if _, err := a.exchange.PlaceMarketOrder(sym, side, amountX); err != nil {
-		return 0, fmt.Errorf("PlaceMarketOrder %s %s: %w", sym, side, err)
-	}
-	return qtyY, nil
+// New создаёт новый экземпляр Arbitrager с корректной инициализацией realSymbols
+func New(ex exchange.Exchange) (*Arbitrager, error) {
+    // 1. Получаем оригинальные символы и параметры из API биржи
+    rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
+
+    // 2. Расширяем граф для подписки инверсиями пар
+    avail := filesystem.ExpandAvailableSymbols(rawSymbols)
+    log.Printf("📊 Всего доступных пар (с инверсиями): %d", len(avail))
+
+    // 3. Строим треугольники по расширенному графу
+    ts := buildTriangles(avail)
+    trianglesByPair := groupByPair(ts)
+
+    // 4. Инициализируем структуру Arbitrager
+    arb := &Arbitrager{
+        Triangles:       ts,
+        latest:          make(map[string]float64),
+        trianglesByPair: trianglesByPair,
+        realSymbols:     rawSymbols, // используем только реальные пары из API
+        stepSizes:       stepSizes,
+        minQtys:         minQtys,
+        StartAmount:     0.5,
+        exchange:        ex,
+    }
+    return arb, nil
 }
 
-// Check проверяет и при положительном арбитраже выполняет три конвертации
-func (a *Arbitrager) Check(updatedSymbol string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	indices := a.trianglesByPair[updatedSymbol]
-	if len(indices) == 0 {
-		return
-	}
-
-	const feeFactor = 0.9965 * 0.9965 * 0.9965
-	start := a.StartAmount
-
-	for _, idx := range indices {
-		tri := a.Triangles[idx]
-
-		// проверяем наличие цен для трёх пар
-		syms := []struct{ s string; X, Y string }{
-			{tri.A + tri.B, tri.A, tri.B},
-			{tri.B + tri.C, tri.B, tri.C},
-			{tri.C + tri.A, tri.C, tri.A},
-		}
-		prices := make([]float64, 3)
-		for i, ent := range syms {
-			p, ok := a.latest[ent.s]
-			if !ok || p <= 0 {
-				log.Printf("❌ price not available for %s", ent.s)
-				continue
-			}
-			// корректируем для rev
-			_, _, rev := a.normalizeSymbolDir(ent.X, ent.Y)
-			if rev {
-				prices[i] = 1 / p
-			} else {
-				prices[i] = p
-			}
-		}
-		// если хоть один элемент ==0, пропускаем
-		if prices[0] == 0 || prices[1] == 0 || prices[2] == 0 {
-			continue
-		}
-
-		// вычисляем профит
-		profit := (prices[0] * prices[1] * prices[2] * feeFactor - 1) * 100
-		if profit <= 0.3 || tri.A != "USDT" {
-			continue
-		}
-
-		// выполняем треугольник
-		qtyB, err := a.convertPair(tri.A, tri.B, start)
-		if err != nil {
-			log.Printf("❌ %v", err)
-			continue
-		}
-		qtyC, err := a.convertPair(tri.B, tri.C, qtyB)
-		if err != nil {
-			log.Printf("❌ %v", err)
-			continue
-		}
-		_, err = a.convertPair(tri.C, tri.A, qtyC)
-		if err != nil {
-			log.Printf("❌ %v", err)
-			continue
-		}
-
-		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
-	}
+// normalizeSymbolDir определяет направление символа и флаг реверса
+func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, ok bool, rev bool) {
+    if a.realSymbols[base+quote] {
+        return base + quote, true, false
+    }
+    if a.realSymbols[quote+base] {
+        return quote + base, true, true
+    }
+    return "", false, false
 }
 
+// Заготовки для вспомогательных функций
+func buildTriangles(avail map[string][2]string) [][]string {
+    // реализация поиска треугольников
+    return nil
+}
+
+func groupByPair(ts [][]string) map[string][][]string {
+    // группировка треугольников по ребрам
+    return nil
+}
 
 
 
