@@ -410,8 +410,10 @@ type Arbitrager struct {
 	latest          map[string]float64
 	trianglesByPair map[string][]int
 
-	// realSymbols теперь map[string]bool
-	realSymbols map[string]bool
+	// origSymbols — реальные торговые пары из API биржи
+	origSymbols map[string]bool
+	// availSymbols — расширенный граф (оригинальные + инверсии)
+	availSymbols map[string]bool
 
 	stepSizes map[string]float64
 	minQtys   map[string]float64
@@ -421,14 +423,14 @@ type Arbitrager struct {
 	exchange    exchange.Exchange
 }
 
-// New создаёт новый экземпляр Arbitrager с корректной инициализацией realSymbols
+// New создаёт новый экземпляр Arbitrager с корректными символами
 func New(ex exchange.Exchange) (*Arbitrager, error) {
 	// 1. Получаем оригинальные символы и параметры из API биржи
 	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
 
 	// 2. Расширяем граф для подписки инверсиями пар
 	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
-	log.Printf("📊 Всего доступных пар (с инверсиями): %d", len(avail))
+	log.Printf("📊 Всего подписываемых пар (с инверсиями): %d", len(avail))
 
 	// 3. Строим треугольники по расширенному графу
 	ts := buildTriangles(avail)
@@ -439,7 +441,8 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 		Triangles:       ts,
 		latest:          make(map[string]float64),
 		trianglesByPair: trianglesByPair,
-		realSymbols:     rawSymbols, // используем только реальные пары из API
+		origSymbols:     rawSymbols,   // реальные пары
+		availSymbols:    avail,        // для подписки и графа
 		stepSizes:       stepSizes,
 		minQtys:         minQtys,
 		StartAmount:     0.5,
@@ -448,13 +451,19 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 	return arb, nil
 }
 
-// normalizeSymbolDir определяет направление символа и флаг реверса
+// normalizeSymbolDir определяет, какую пару и в каком направлении использовать
 func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, ok bool, rev bool) {
-	if a.realSymbols[base+quote] {
-		return base + quote, true, false
+	// пробуем оба направления в расширенном графе
+	forward := base + quote
+	reverse := quote + base
+	if a.availSymbols[forward] {
+		// rev=true, если нет прямой пары в API
+		rev = !a.origSymbols[forward]
+		return forward, true, rev
 	}
-	if a.realSymbols[quote+base] {
-		return quote + base, true, true
+	if a.availSymbols[reverse] {
+		rev = !a.origSymbols[reverse]
+		return reverse, true, rev
 	}
 	return "", false, false
 }
@@ -516,18 +525,21 @@ func (a *Arbitrager) Check(symbol string) {
 
 	for _, i := range indices {
 		tri := a.Triangles[i]
+		// нормализация направлений и флагов реверса
 		ab, okAB, revAB := a.normalizeSymbolDir(tri.A, tri.B)
 		bc, okBC, revBC := a.normalizeSymbolDir(tri.B, tri.C)
 		ca, okCA, revCA := a.normalizeSymbolDir(tri.C, tri.A)
 		if !okAB || !okBC || !okCA {
 			continue
 		}
+		// получение последних цен
 		p1, ok1 := a.latest[ab]
 		p2, ok2 := a.latest[bc]
 		p3, ok3 := a.latest[ca]
 		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
 			continue
 		}
+		// пересчет цены при инверсии
 		if revAB {
 			p1 = 1 / p1
 		}
@@ -537,6 +549,7 @@ func (a *Arbitrager) Check(symbol string) {
 		if revCA {
 			p3 = 1 / p3
 		}
+		// расчет прибыли
 		profitFactor := p1 * p2 * p3 * nf
 		profit := (profitFactor - 1) * 100
 		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
