@@ -539,6 +539,8 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 
 	// Сохраняем цену и запускаем проверку
 	a.mu.Lock()
+	// Читаем только необходимые мапы под замком
+	indices := a.trianglesByPair[msg.Symbol]
 	a.latest[msg.Symbol] = price
 	a.mu.Unlock()
 	a.Check(msg.Symbol)
@@ -546,11 +548,11 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 
 // Check проверяет все треугольники, связанные с символом.
 func (a *Arbitrager) Check(symbol string) {
-	a.mu.Lock()
-	indices := a.trianglesByPair[symbol]
-	priceMap := a.latest
-	f := a.realSymbols
-	a.mu.Unlock()
+	// Считываем под замком
+	 a.mu.Lock()
+	 indices := a.trianglesByPair[symbol]
+	 priceMap := a.latest
+	 a.mu.Unlock()
 
 	if len(indices) == 0 {
 		return
@@ -575,16 +577,15 @@ func (a *Arbitrager) Check(symbol string) {
 			continue
 		}
 
-		// инверсия
+		// применяем инверсию
 		if rev1 { p1 = 1 / p1 }
 		if rev2 { p2 = 1 / p2 }
 		if rev3 { p3 = 1 / p3 }
 
-		// прибыль
+		// рассчитываем и выводим прибыль
 		profit := (p1 * p2 * p3 * nf - 1) * 100
 		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
 	}
 }
-
 
 
