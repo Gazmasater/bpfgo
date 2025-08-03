@@ -433,7 +433,6 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 	}
 	log.Printf("[INIT] Треугольников найдено: %d", len(ts))
 
-	// Сохраняем для отладки
 	if data, err := json.MarshalIndent(ts, "", "  "); err == nil {
 		_ = os.WriteFile("triangles_dump.json", data, 0644)
 	}
@@ -512,7 +511,7 @@ func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, ok b
 
 // HandleRaw обрабатывает каждое WS-сообщение.
 func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
-	// Разбор JSON
+	// 1) Разбор JSON
 	var msg struct {
 		Symbol string `json:"symbol"`
 		Data   struct {
@@ -520,34 +519,42 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &msg); err != nil {
-		log.Printf("unmarshal WS: %v, raw=%s", err, raw)
+		log.Printf("unmarshal WS error: %v, raw=%s", err, raw)
 		return
 	}
+	// Debug: полученное сообщение
+	log.Printf("WS Msg: symbol=%q deals=%d", msg.Symbol, len(msg.Data.Deals))
+
 	if msg.Symbol == "" || len(msg.Data.Deals) == 0 {
 		return
 	}
 
-	// Парсим цену
+	// 2) Парсим цену
 	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
 	if err != nil {
-		log.Printf("parse price: %v", err)
+		log.Printf("parse price error: %v, priceStr=%s", err, msg.Data.Deals[0].Price)
 		return
 	}
+	log.Printf("HandleRaw: symbol=%s price=%.8f", msg.Symbol, price)
 
-	// Сохраняем цену
+	// 3) Сохраняем цену
 	a.mu.Lock()
 	a.latest[msg.Symbol] = price
 	a.mu.Unlock()
 
-	// Проверяем треугольники
+	// 4) Проверяем треугольники
 	a.Check(msg.Symbol)
 }
 
 // Check проверяет все треугольники, связанные с символом.
 func (a *Arbitrager) Check(symbol string) {
+	// Debug: проверяемый символ и индексы
 	a.mu.Lock()
 	indices := a.trianglesByPair[symbol]
+	priceMap := a.latest
 	a.mu.Unlock()
+	log.Printf("Check: symbol=%s indices=%v", symbol, indices)
+
 	if len(indices) == 0 {
 		return
 	}
@@ -556,18 +563,22 @@ func (a *Arbitrager) Check(symbol string) {
 
 	for _, idx := range indices {
 		tri := a.Triangles[idx]
-		// получаем символы и флаги инверсии
+		// получаем подписанные пары и флаги инверсии
 		ab, ok1, rev1 := a.normalizeSymbolDir(tri.A, tri.B)
 		bc, ok2, rev2 := a.normalizeSymbolDir(tri.B, tri.C)
 		ca, ok3, rev3 := a.normalizeSymbolDir(tri.C, tri.A)
+		log.Printf("Triangle: %s/%s/%s using %s(rev=%v), %s(rev=%v), %s(rev=%v)",
+			tri.A, tri.B, tri.C, ab, rev1, bc, rev2, ca, rev3)
 		if !ok1 || !ok2 || !ok3 {
 			continue
 		}
 
 		// читаем цены
-		p1, ok1 := a.latest[ab]
-		p2, ok2 := a.latest[bc]
-		p3, ok3 := a.latest[ca]
+		p1, ok1 := priceMap[ab]
+		p2, ok2 := priceMap[bc]
+		p3, ok3 := priceMap[ca]
+		log.Printf("Prices: %s=%.8f(ok=%v), %s=%.8f(ok=%v), %s=%.8f(ok=%v)",
+			ab, p1, ok1, bc, p2, ok2, ca, p3, ok3)
 		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
 			continue
 		}
@@ -576,23 +587,16 @@ func (a *Arbitrager) Check(symbol string) {
 		if rev1 { p1 = 1 / p1 }
 		if rev2 { p2 = 1 / p2 }
 		if rev3 { p3 = 1 / p3 }
+		log.Printf("Inverted Prices: p1=%.8f, p2=%.8f, p3=%.8f", p1, p2, p3)
 
 		// рассчитываем прибыль
 		profitFactor := p1 * p2 * p3 * nf
 		profit := (profitFactor - 1) * 100
 
-		// Выводим все результаты (положительные и отрицательные)
+		// Выводим результат
 		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
 	}
 }
 
-
-
-az358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/08/03 20:38:03 ✅ Подходящих пар: 557
-2025/08/03 20:38:03 📊 Доступные пары (с инверсиями): 1114
-2025/08/03 20:38:03 [TRIANGLE] Found 234 triangles
-2025/08/03 20:38:03 [INIT] Треугольников найдено: 234
-2025/08/03 20:38:03 [INIT] Подписка на пар: 144 шт.
 
 
