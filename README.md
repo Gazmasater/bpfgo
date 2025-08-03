@@ -511,159 +511,80 @@ func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, ok b
 
 // HandleRaw обрабатывает каждое WS-сообщение.
 func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
-	// 1) Разбор JSON
+	// Структура согласно MEXC протобуферному каналу publicdeals
 	var msg struct {
-		Symbol string `json:"symbol"`
-		Data   struct {
-			Deals []struct{ Price string `json:"price"` } `json:"deals"`
-		} `json:"data"`
+		Channel     string `json:"channel"`
+		Symbol      string `json:"symbol"`
+		PublicDeals struct {
+			DealsList []struct {
+				Price string `json:"price"`
+			} `json:"dealsList"`
+		} `json:"publicdeals"`
 	}
 	if err := json.Unmarshal(raw, &msg); err != nil {
 		log.Printf("unmarshal WS error: %v, raw=%s", err, raw)
 		return
 	}
-	// Debug: полученное сообщение
-	log.Printf("WS Msg: symbol=%q deals=%d", msg.Symbol, len(msg.Data.Deals))
-
-	if msg.Symbol == "" || len(msg.Data.Deals) == 0 {
+	// Игнорируем системные/пустые сообщения
+	if msg.Symbol == "" || len(msg.PublicDeals.DealsList) == 0 {
 		return
 	}
 
-	// 2) Парсим цену
-	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
+	// Парсим цену первой сделки
+	price, err := strconv.ParseFloat(msg.PublicDeals.DealsList[0].Price, 64)
 	if err != nil {
-		log.Printf("parse price error: %v, priceStr=%s", err, msg.Data.Deals[0].Price)
+		log.Printf("parse price error: %v, priceStr=%v", err, msg.PublicDeals.DealsList[0].Price)
 		return
 	}
-	log.Printf("HandleRaw: symbol=%s price=%.8f", msg.Symbol, price)
 
-	// 3) Сохраняем цену
+	// Сохраняем цену и запускаем проверку
 	a.mu.Lock()
 	a.latest[msg.Symbol] = price
 	a.mu.Unlock()
-
-	// 4) Проверяем треугольники
 	a.Check(msg.Symbol)
 }
 
 // Check проверяет все треугольники, связанные с символом.
 func (a *Arbitrager) Check(symbol string) {
-	// Debug: проверяемый символ и индексы
 	a.mu.Lock()
 	indices := a.trianglesByPair[symbol]
 	priceMap := a.latest
+	f := a.realSymbols
 	a.mu.Unlock()
-	log.Printf("Check: symbol=%s indices=%v", symbol, indices)
 
 	if len(indices) == 0 {
 		return
 	}
 
 	nf := 0.9965 * 0.9965 * 0.9965
-
 	for _, idx := range indices {
 		tri := a.Triangles[idx]
-		// получаем подписанные пары и флаги инверсии
+		// символы и флаги инверсии
 		ab, ok1, rev1 := a.normalizeSymbolDir(tri.A, tri.B)
 		bc, ok2, rev2 := a.normalizeSymbolDir(tri.B, tri.C)
 		ca, ok3, rev3 := a.normalizeSymbolDir(tri.C, tri.A)
-		log.Printf("Triangle: %s/%s/%s using %s(rev=%v), %s(rev=%v), %s(rev=%v)",
-			tri.A, tri.B, tri.C, ab, rev1, bc, rev2, ca, rev3)
 		if !ok1 || !ok2 || !ok3 {
 			continue
 		}
 
-		// читаем цены
-		p1, ok1 := priceMap[ab]
-		p2, ok2 := priceMap[bc]
-		p3, ok3 := priceMap[ca]
-		log.Printf("Prices: %s=%.8f(ok=%v), %s=%.8f(ok=%v), %s=%.8f(ok=%v)",
-			ab, p1, ok1, bc, p2, ok2, ca, p3, ok3)
-		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
+		// получаем цены
+		p1, ex1 := priceMap[ab]
+		p2, ex2 := priceMap[bc]
+		p3, ex3 := priceMap[ca]
+		if !ex1 || !ex2 || !ex3 || p1 == 0 || p2 == 0 || p3 == 0 {
 			continue
 		}
 
-		// инвертируем при необходимости
+		// инверсия
 		if rev1 { p1 = 1 / p1 }
 		if rev2 { p2 = 1 / p2 }
 		if rev3 { p3 = 1 / p3 }
-		log.Printf("Inverted Prices: p1=%.8f, p2=%.8f, p3=%.8f", p1, p2, p3)
 
-		// рассчитываем прибыль
-		profitFactor := p1 * p2 * p3 * nf
-		profit := (profitFactor - 1) * 100
-
-		// Выводим результат
+		// прибыль
+		profit := (p1 * p2 * p3 * nf - 1) * 100
 		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
 	}
 }
-
-
-
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:24 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
-2025/08/03 20:51:25 WS Msg: symbol="" deals=0
 
 
 
