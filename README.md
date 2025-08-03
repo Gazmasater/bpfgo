@@ -589,3 +589,6 @@ func (a *Arbitrager) Check(symbol string) {
 }
 
 
+indices := a.trianglesByPair[msg.Symbol]
+
+
