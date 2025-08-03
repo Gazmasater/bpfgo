@@ -665,3 +665,17 @@ func (a *Arbitrager) Check(symbol string) {
 	}
 }
 
+
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "go-staticcheck",
+	"severity": 4,
+	"message": "syntax error: non-declaration statement outside function body (compile)",
+	"source": "go-staticcheck",
+	"startLineNumber": 198,
+	"startColumn": 2,
+	"endLineNumber": 198,
+	"endColumn": 51,
+	"origin": "extHost1"
+}]
+
