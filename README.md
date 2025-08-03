@@ -618,4 +618,6 @@ func (a *Arbitrager) Check(symbol string) {
 	}
 }
 
+2025/08/03 22:23:08 🔺 ARB USDT/LUNC/USDC profit=0.4081%
+2025/08/03 22:23:08 🔺 ARB USDT/LUNC/USDC profit=0.6111%
 
