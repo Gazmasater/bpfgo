@@ -408,16 +408,8 @@ import (
 	"cryptarb/internal/domain/triangle"
 	"cryptarb/internal/repository/filesystem"
 	"encoding/json"
-	"fmt"
-	"log"
-	"os"
-	"strconv"
-	"sync"
-	"time"
-
-	"cryptarb/internal/domain/exchange"
-	"cryptarb/internal/domain/triangle"
-	"cryptarb/internal/repository/filesystem"
+	
+	
 )
 
 // Arbitrager ищет треугольные арбитражные возможности на бирже.
@@ -601,6 +593,7 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 			} `json:"deals"`
 		} `json:"d"`
 	}
+	
 	if err := json.Unmarshal(raw, &msg); err != nil {
 		log.Printf("unmarshal WS error: %v, raw=%s", err, raw)
 		return
@@ -680,12 +673,25 @@ func (a *Arbitrager) Check(symbol string) {
 
 	log.Printf("HandleRaw raw: %s", raw)
 
- if err := json.Unmarshal(raw, &msg); err != nil {
+
+
+	if err := json.Unmarshal(raw, &msg); err != nil {
 		log.Printf("unmarshal WS error: %v, raw=%s", err, raw)
 		return
 	}
 
- 
+ [{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "go-staticcheck",
+	"severity": 4,
+	"message": "syntax error: non-declaration statement outside function body (compile)",
+	"source": "go-staticcheck",
+	"startLineNumber": 203,
+	"startColumn": 2,
+	"endLineNumber": 203,
+	"endColumn": 51,
+	"origin": "extHost1"
+}]
 
 
 
