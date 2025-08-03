@@ -410,12 +410,12 @@ import (
 
 // Arbitrager ищет треугольные арбитражные возможности на бирже.
 type Arbitrager struct {
-	Triangles       []triangle.Triangle      // Все допустимые треугольники
-	latest          map[string]float64       // Последние цены по парам
-	trianglesByPair map[string][]int         // Индексы треугольников по паре
-	realSymbols     map[string]bool          // Доступные пары (с инверсиями)
-	stepSizes       map[string]float64       // Шаг лота
-	minQtys         map[string]float64       // Мин. объём
+	Triangles       []triangle.Triangle // Все допустимые треугольники
+	latest          map[string]float64  // Последние цены по парам
+	trianglesByPair map[string][]int    // Индексы треугольников по паре
+	realSymbols     map[string]bool     // Доступные пары (с инверсиями)
+	stepSizes       map[string]float64  // Шаг лота
+	minQtys         map[string]float64  // Мин. объём
 	mu              sync.Mutex
 	StartAmount     float64
 	exchange        exchange.Exchange
@@ -539,20 +539,20 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 
 	// Сохраняем цену и запускаем проверку
 	a.mu.Lock()
-	// Читаем только необходимые мапы под замком
-	indices := a.trianglesByPair[msg.Symbol]
+	// Запись цены в latest
 	a.latest[msg.Symbol] = price
 	a.mu.Unlock()
+	// Проверяем треугольники для этого символа
 	a.Check(msg.Symbol)
 }
 
 // Check проверяет все треугольники, связанные с символом.
 func (a *Arbitrager) Check(symbol string) {
 	// Считываем под замком
-	 a.mu.Lock()
-	 indices := a.trianglesByPair[symbol]
-	 priceMap := a.latest
-	 a.mu.Unlock()
+	a.mu.Lock()
+	indices := a.trianglesByPair[symbol]
+	priceMap := a.latest
+	a.mu.Unlock()
 
 	if len(indices) == 0 {
 		return
@@ -561,6 +561,7 @@ func (a *Arbitrager) Check(symbol string) {
 	nf := 0.9965 * 0.9965 * 0.9965
 	for _, idx := range indices {
 		tri := a.Triangles[idx]
+
 		// символы и флаги инверсии
 		ab, ok1, rev1 := a.normalizeSymbolDir(tri.A, tri.B)
 		bc, ok2, rev2 := a.normalizeSymbolDir(tri.B, tri.C)
@@ -587,8 +588,5 @@ func (a *Arbitrager) Check(symbol string) {
 		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
 	}
 }
-
-
-indices := a.trianglesByPair[msg.Symbol]
 
 
