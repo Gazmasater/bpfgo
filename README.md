@@ -600,3 +600,70 @@ func (a *Arbitrager) Check(symbol string) {
 
 
 
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:24 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+2025/08/03 20:51:25 WS Msg: symbol="" deals=0
+
+
+
