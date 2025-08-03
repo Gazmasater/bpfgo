@@ -490,6 +490,7 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 					time.Sleep(time.Second)
 					continue
 				}
+				log.Printf("[WS][%s] subscribed to channels: %v", ex.Name(), pairs)
 				return
 			}
 		}(chunk)
@@ -511,6 +512,9 @@ func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, ok b
 
 // HandleRaw обрабатывает каждое WS-сообщение.
 func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
+	// Debug: выводим сырое сообщение
+	log.Printf("HandleRaw raw: %s", raw)
+
 	// Структура согласно MEXC протобуферному каналу publicdeals
 	var msg struct {
 		Channel     string `json:"channel"`
@@ -527,6 +531,7 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 	}
 	// Игнорируем системные/пустые сообщения
 	if msg.Symbol == "" || len(msg.PublicDeals.DealsList) == 0 {
+		log.Printf("HandleRaw skipped: no symbol or dealsList empty")
 		return
 	}
 
@@ -536,10 +541,10 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 		log.Printf("parse price error: %v, priceStr=%v", err, msg.PublicDeals.DealsList[0].Price)
 		return
 	}
+	log.Printf("HandleRaw parsed: symbol=%s price=%.8f", msg.Symbol, price)
 
 	// Сохраняем цену и запускаем проверку
 	a.mu.Lock()
-	// Запись цены в latest
 	a.latest[msg.Symbol] = price
 	a.mu.Unlock()
 	// Проверяем треугольники для этого символа
@@ -553,6 +558,7 @@ func (a *Arbitrager) Check(symbol string) {
 	indices := a.trianglesByPair[symbol]
 	priceMap := a.latest
 	a.mu.Unlock()
+	log.Printf("Check start: symbol=%s indices=%v", symbol, indices)
 
 	if len(indices) == 0 {
 		return
@@ -566,6 +572,8 @@ func (a *Arbitrager) Check(symbol string) {
 		ab, ok1, rev1 := a.normalizeSymbolDir(tri.A, tri.B)
 		bc, ok2, rev2 := a.normalizeSymbolDir(tri.B, tri.C)
 		ca, ok3, rev3 := a.normalizeSymbolDir(tri.C, tri.A)
+		log.Printf("Triangle check: %s/%s/%s -> %s(rev=%v), %s(rev=%v), %s(rev=%v)",
+			tri.A, tri.B, tri.C, ab, rev1, bc, rev2, ca, rev3)
 		if !ok1 || !ok2 || !ok3 {
 			continue
 		}
@@ -574,6 +582,8 @@ func (a *Arbitrager) Check(symbol string) {
 		p1, ex1 := priceMap[ab]
 		p2, ex2 := priceMap[bc]
 		p3, ex3 := priceMap[ca]
+		log.Printf("Prices raw: %s=%.8f(ok=%v), %s=%.8f(ok=%v), %s=%.8f(ok=%v)",
+			ab, p1, ex1, bc, p2, ex2, ca, p3, ex3)
 		if !ex1 || !ex2 || !ex3 || p1 == 0 || p2 == 0 || p3 == 0 {
 			continue
 		}
@@ -582,18 +592,12 @@ func (a *Arbitrager) Check(symbol string) {
 		if rev1 { p1 = 1 / p1 }
 		if rev2 { p2 = 1 / p2 }
 		if rev3 { p3 = 1 / p3 }
+		log.Printf("Prices inv: p1=%.8f, p2=%.8f, p3=%.8f", p1, p2, p3)
 
 		// рассчитываем и выводим прибыль
 		profit := (p1 * p2 * p3 * nf - 1) * 100
 		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
 	}
 }
-
-
-2025/08/03 21:11:28 ✅ Подходящих пар: 557
-2025/08/03 21:11:28 📊 Доступные пары (с инверсиями): 1114
-2025/08/03 21:11:28 [TRIANGLE] Found 234 triangles
-2025/08/03 21:11:28 [INIT] Треугольников найдено: 234
-2025/08/03 21:11:28 [INIT] Подписка на пар: 144 шт.
 
 
