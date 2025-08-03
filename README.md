@@ -407,9 +407,6 @@ import (
 	"cryptarb/internal/domain/exchange"
 	"cryptarb/internal/domain/triangle"
 	"cryptarb/internal/repository/filesystem"
-	"encoding/json"
-	
-	
 )
 
 // Arbitrager ищет треугольные арбитражные возможности на бирже.
@@ -523,15 +520,12 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 		Msg  string `json:"msg"`
 	}
 	if err := json.Unmarshal(raw, &ack); err == nil && ack.Code == 0 {
-		// Парсим текст месседжа, чтобы исключить заблокированные пары
 		const prefixFail = "Not Subscribed successfully! ["
 		if parts := strings.Split(ack.Msg, prefixFail); len(parts) == 2 {
 			blocked := strings.Split(strings.TrimSuffix(parts[1], "].  Reason： Blocked! \""), ",")
 			for _, ch := range blocked {
-				// извлекаем символ после последнего '@'
 				if idx := strings.LastIndex(ch, "@"); idx != -1 {
 					sym := ch[idx+1:]
-					// помечаем как недоступный
 					a.mu.Lock()
 					a.realSymbols[sym] = false
 					a.mu.Unlock()
@@ -558,13 +552,11 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 		log.Printf("unmarshal WS error: %v, raw=%s", err, raw)
 		return
 	}
-	// Игнорируем системные/пустые сообщения
 	if msg.Symbol == "" || len(msg.Data.Deals) == 0 {
 		log.Printf("HandleRaw skipped: no symbol or deals empty (symbol=%q, deals=%d)", msg.Symbol, len(msg.Data.Deals))
 		return
 	}
 
-	// Парсим цену первой сделки
 	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
 	if err != nil {
 		log.Printf("parse price error: %v, priceStr=%v", err, msg.Data.Deals[0].Price)
@@ -572,126 +564,58 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 	}
 	log.Printf("HandleRaw parsed: symbol=%s price=%.8f", msg.Symbol, price)
 
-	// Сохраняем цену и запускаем проверку
 	a.mu.Lock()
-	// Запись цены в latest
 	a.latest[msg.Symbol] = price
 	a.mu.Unlock()
-	// Проверяем треугольники для этого символа
-	a.Check(msg.Symbol)
-}
-	// Debug: выводим сырое сообщение
-	log.Printf("HandleRaw raw: %s", raw)
 
-	// Структура для разбора формата MEXC public deals
-	var msg struct {
-		Channel string `json:"c"`
-		Symbol  string `json:"s"`
-		Data    struct {
-			Deals []struct {
-				Price string `json:"p"`
-			} `json:"deals"`
-		} `json:"d"`
-	}
-	
-	if err := json.Unmarshal(raw, &msg); err != nil {
-		log.Printf("unmarshal WS error: %v, raw=%s", err, raw)
-		return
-	}
-	// Игнорируем системные/пустые сообщения
-	if msg.Symbol == "" || len(msg.Data.Deals) == 0 {
-		log.Printf("HandleRaw skipped: no symbol or deals empty")
-		return
-	}
-
-	// Парсим цену первой сделки
-	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
-	if err != nil {
-		log.Printf("parse price error: %v, priceStr=%v", err, msg.Data.Deals[0].Price)
-		return
-	}
-	log.Printf("HandleRaw parsed: symbol=%s price=%.8f", msg.Symbol, price)
-
-	// Сохраняем цену и запускаем проверку
-	a.mu.Lock()
-	// Запись цены в latest
-	a.latest[msg.Symbol] = price
-	a.mu.Unlock()
-	// Проверяем треугольники для этого символа
 	a.Check(msg.Symbol)
 }
 
 // Check проверяет все треугольники, связанные с символом.
 func (a *Arbitrager) Check(symbol string) {
-	// Считываем под замком
 	a.mu.Lock()
 	indices := a.trianglesByPair[symbol]
 	priceMap := a.latest
 	a.mu.Unlock()
-	log.Printf("Check start: symbol=%s indices=%v", symbol, indices)
 
 	if len(indices) == 0 {
 		return
 	}
 
+	// С учётом торговых комиссий
 	nf := 0.9965 * 0.9965 * 0.9965
+
 	for _, idx := range indices {
 		tri := a.Triangles[idx]
 
-		// Символы и флаги инверсии
 		ab, ok1, rev1 := a.normalizeSymbolDir(tri.A, tri.B)
 		bc, ok2, rev2 := a.normalizeSymbolDir(tri.B, tri.C)
 		ca, ok3, rev3 := a.normalizeSymbolDir(tri.C, tri.A)
-		log.Printf("Triangle check: %s/%s/%s -> %s(rev=%v), %s(rev=%v), %s(rev=%v)",
-			tri.A, tri.B, tri.C, ab, rev1, bc, rev2, ca, rev3)
 		if !ok1 || !ok2 || !ok3 {
 			continue
 		}
 
-		// Получаем цены
 		p1, ex1 := priceMap[ab]
 		p2, ex2 := priceMap[bc]
 		p3, ex3 := priceMap[ca]
-		log.Printf("Prices raw: %s=%.8f(ok=%v), %s=%.8f(ok=%v), %s=%.8f(ok=%v)",
-			ab, p1, ex1, bc, p2, ex2, ca, p3, ex3)
 		if !ex1 || !ex2 || !ex3 || p1 == 0 || p2 == 0 || p3 == 0 {
 			continue
 		}
 
-		// Применяем инверсию
-		if rev1 { p1 = 1 / p1 }
-		if rev2 { p2 = 1 / p2 }
-		if rev3 { p3 = 1 / p3 }
-		log.Printf("Prices inv: p1=%.8f, p2=%.8f, p3=%.8f", p1, p2, p3)
+		if rev1 {
+			p1 = 1 / p1
+		}
+		if rev2 {
+			p2 = 1 / p2
+		}
+		if rev3 {
+			p3 = 1 / p3
+		}
 
-		// Рассчитываем и выводим прибыль
 		profit := (p1 * p2 * p3 * nf - 1) * 100
 		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
 	}
 }
-
-
-	log.Printf("HandleRaw raw: %s", raw)
-
-
-
-	if err := json.Unmarshal(raw, &msg); err != nil {
-		log.Printf("unmarshal WS error: %v, raw=%s", err, raw)
-		return
-	}
-
- [{
-	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
-	"owner": "go-staticcheck",
-	"severity": 4,
-	"message": "syntax error: non-declaration statement outside function body (compile)",
-	"source": "go-staticcheck",
-	"startLineNumber": 203,
-	"startColumn": 2,
-	"endLineNumber": 203,
-	"endColumn": 51,
-	"origin": "extHost1"
-}]
 
 
 
