@@ -678,4 +678,14 @@ func (a *Arbitrager) Check(symbol string) {
 }
 
 
+	log.Printf("HandleRaw raw: %s", raw)
+
+ if err := json.Unmarshal(raw, &msg); err != nil {
+		log.Printf("unmarshal WS error: %v, raw=%s", err, raw)
+		return
+	}
+
+ 
+
+
 
