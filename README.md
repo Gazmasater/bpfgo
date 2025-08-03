@@ -408,66 +408,52 @@ import (
 	"cryptarb/internal/repository/filesystem"
 )
 
+// Arbitrager ищет треугольные арбитражные возможности на бирже.
 type Arbitrager struct {
-	Triangles       []triangle.Triangle
-	latest          map[string]float64
-	trianglesByPair map[string][]int
-
-	// realSymbols теперь map[string]bool
-	realSymbols map[string]bool
-
-	stepSizes map[string]float64
-	minQtys   map[string]float64
-	mu        sync.Mutex
-
-	StartAmount float64
-	exchange    exchange.Exchange
+	Triangles       []triangle.Triangle      // Все допустимые треугольники
+	latest          map[string]float64       // Последние цены по парам
+	trianglesByPair map[string][]int         // Индексы треугольников по паре
+	realSymbols     map[string]bool          // Доступные пары (с инверсиями)
+	stepSizes       map[string]float64       // Шаг лота
+	minQtys         map[string]float64       // Мин. объём
+	mu              sync.Mutex
+	StartAmount     float64
+	exchange        exchange.Exchange
 }
 
+// New создаёт и инициализирует арбитражер.
 func New(ex exchange.Exchange) (*Arbitrager, error) {
-	// 1. Загружаем доступные пары и фильтры
 	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
-
-	// 2. Добавляем инверсии символов
 	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
-	log.Printf("📊 Всего доступных пар (с инверсиями): %d", len(avail))
+	log.Printf("📊 Доступные пары (с инверсиями): %d", len(avail))
 
-	// 3. Строим треугольники
 	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
 	if err != nil {
-		return nil, fmt.Errorf("LoadTrianglesFromSymbols: %w", err)
+		return nil, fmt.Errorf("LoadTriangles: %w", err)
 	}
-	log.Printf("[INIT] Загружено треугольников: %d", len(ts))
+	log.Printf("[INIT] Треугольников найдено: %d", len(ts))
 
-	trianglesJSON, err := json.MarshalIndent(ts, "", "  ")
-	if err != nil {
-		log.Printf("⚠️ Не удалось сериализовать треугольники: %v", err)
-	} else {
-		if err := os.WriteFile("triangles_dump.json", trianglesJSON, 0644); err != nil {
-			log.Printf("⚠️ Не удалось сохранить triangles_dump.json: %v", err)
-		} else {
-			log.Printf("💾 Треугольники сохранены в triangles_dump.json")
-		}
+	// Сохраняем для отладки
+	if data, err := json.MarshalIndent(ts, "", "  "); err == nil {
+		_ = os.WriteFile("triangles_dump.json", data, 0644)
 	}
 
-	// 4. Создание карты индексов треугольников и подписываемых пар
+	// Индексация по паре
 	trianglesByPair := make(map[string][]int)
-	var subPairsRaw []string
+	var subRaw []string
 	for i, tri := range ts {
 		ab := tri.A + tri.B
 		bc := tri.B + tri.C
 		ca := tri.C + tri.A
-
 		trianglesByPair[ab] = append(trianglesByPair[ab], i)
 		trianglesByPair[bc] = append(trianglesByPair[bc], i)
 		trianglesByPair[ca] = append(trianglesByPair[ca], i)
-
-		subPairsRaw = append(subPairsRaw, ab, bc, ca)
+		subRaw = append(subRaw, ab, bc, ca)
 	}
 
-	// 5. Фильтрация уникальных доступных пар
+	// Уникальные пары для подписки
 	uniq := make(map[string]struct{})
-	for _, p := range subPairsRaw {
+	for _, p := range subRaw {
 		if avail[p] {
 			uniq[p] = struct{}{}
 		}
@@ -476,21 +462,20 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 	for p := range uniq {
 		subPairs = append(subPairs, p)
 	}
-	log.Printf("[INIT] Итог: подписываемся на %d уникальных пар", len(subPairs))
+	log.Printf("[INIT] Подписка на пар: %d шт.", len(subPairs))
 
-	// 6. Создаём арбитражер
 	arb := &Arbitrager{
 		Triangles:       ts,
 		latest:          make(map[string]float64),
 		trianglesByPair: trianglesByPair,
-		realSymbols:     avail, // теперь map[string]bool
+		realSymbols:     avail,
 		stepSizes:       stepSizes,
 		minQtys:         minQtys,
 		StartAmount:     0.5,
 		exchange:        ex,
 	}
 
-	// 7. Подписка чанками
+	// WS подписки чанками по 20
 	const maxPerConn = 20
 	for i := 0; i < len(subPairs); i += maxPerConn {
 		end := i + maxPerConn
@@ -500,8 +485,9 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 		chunk := subPairs[i:end]
 		go func(pairs []string) {
 			for {
-				if err := ex.SubscribeDeals(pairs, arb.HandleRaw); err != nil {
-					log.Printf("[WS][%s] subscribe error: %v; retrying...", ex.Name(), err)
+				err := ex.SubscribeDeals(pairs, arb.HandleRaw)
+				if err != nil {
+					log.Printf("[WS][%s] subscribe error: %v, retrying...", ex.Name(), err)
 					time.Sleep(time.Second)
 					continue
 				}
@@ -513,8 +499,8 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 	return arb, nil
 }
 
-func (a *Arbitrager) normalizeSymbolDir(base, quote string) (string, bool, bool) {
-	// теперь realSymbols содержит только bool
+// normalizeSymbolDir собирает правильный символ и указывает, нужно ли инвертировать цену.
+func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, ok bool, invert bool) {
 	if a.realSymbols[base+quote] {
 		return base + quote, true, false
 	}
@@ -524,67 +510,79 @@ func (a *Arbitrager) normalizeSymbolDir(base, quote string) (string, bool, bool)
 	return "", false, false
 }
 
-func (a *Arbitrager) HandleRaw(exchangeName string, raw []byte) {
+// HandleRaw обрабатывает каждое WS-сообщение.
+func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
+	// Разбор JSON
 	var msg struct {
-		Symbol string `json:"s"`
+		Symbol string `json:"symbol"`
 		Data   struct {
-			Deals []struct {
-				Price string `json:"p"`
-			} `json:"deals"`
-		} `json:"d"`
+			Deals []struct{ Price string `json:"price"` } `json:"deals"`
+		} `json:"data"`
 	}
-	if err := json.Unmarshal(raw, &msg); err != nil || msg.Symbol == "" || len(msg.Data.Deals) == 0 {
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		log.Printf("unmarshal WS: %v, raw=%s", err, raw)
 		return
 	}
+	if msg.Symbol == "" || len(msg.Data.Deals) == 0 {
+		return
+	}
+
+	// Парсим цену
 	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
 	if err != nil {
+		log.Printf("parse price: %v", err)
 		return
 	}
+
+	// Сохраняем цену
 	a.mu.Lock()
 	a.latest[msg.Symbol] = price
 	a.mu.Unlock()
+
+	// Проверяем треугольники
 	a.Check(msg.Symbol)
 }
 
+// Check проверяет все треугольники, связанные с символом.
 func (a *Arbitrager) Check(symbol string) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
-
 	indices := a.trianglesByPair[symbol]
+	a.mu.Unlock()
 	if len(indices) == 0 {
 		return
 	}
 
 	nf := 0.9965 * 0.9965 * 0.9965
 
-	for _, i := range indices {
-		tri := a.Triangles[i]
-		ab, okAB, revAB := a.normalizeSymbolDir(tri.A, tri.B)
-		bc, okBC, revBC := a.normalizeSymbolDir(tri.B, tri.C)
-		ca, okCA, revCA := a.normalizeSymbolDir(tri.C, tri.A)
-		if !okAB || !okBC || !okCA {
+	for _, idx := range indices {
+		tri := a.Triangles[idx]
+		// получаем символы и флаги инверсии
+		ab, ok1, rev1 := a.normalizeSymbolDir(tri.A, tri.B)
+		bc, ok2, rev2 := a.normalizeSymbolDir(tri.B, tri.C)
+		ca, ok3, rev3 := a.normalizeSymbolDir(tri.C, tri.A)
+		if !ok1 || !ok2 || !ok3 {
 			continue
 		}
+
+		// читаем цены
 		p1, ok1 := a.latest[ab]
 		p2, ok2 := a.latest[bc]
 		p3, ok3 := a.latest[ca]
 		if !ok1 || !ok2 || !ok3 || p1 == 0 || p2 == 0 || p3 == 0 {
 			continue
 		}
-		if revAB {
-			p1 = 1 / p1
-		}
-		if revBC {
-			p2 = 1 / p2
-		}
-		if revCA {
-			p3 = 1 / p3
-		}
+
+		// инвертируем при необходимости
+		if rev1 { p1 = 1 / p1 }
+		if rev2 { p2 = 1 / p2 }
+		if rev3 { p3 = 1 / p3 }
+
+		// рассчитываем прибыль
 		profitFactor := p1 * p2 * p3 * nf
 		profit := (profitFactor - 1) * 100
-		if profit > 0.3 && tri.A == "USDT" {
-			log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
-		}
+
+		// Выводим все результаты (положительные и отрицательные)
+		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
 	}
 }
 
