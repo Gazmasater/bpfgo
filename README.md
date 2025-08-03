@@ -512,6 +512,70 @@ func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, ok b
 
 // HandleRaw обрабатывает каждое WS-сообщение.
 func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
+	// Обработка ACK сообщений подписки
+	var ack struct {
+		ID   int64  `json:"id"`
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+	}
+	if err := json.Unmarshal(raw, &ack); err == nil && ack.Code == 0 {
+		// Парсим текст месседжа, чтобы исключить заблокированные пары
+		const prefixFail = "Not Subscribed successfully! ["
+		if parts := strings.Split(ack.Msg, prefixFail); len(parts) == 2 {
+			blocked := strings.Split(strings.TrimSuffix(parts[1], "].  Reason： Blocked! \""), ",")
+			for _, ch := range blocked {
+				// извлекаем символ после последнего '@'
+				if idx := strings.LastIndex(ch, "@"); idx != -1 {
+					sym := ch[idx+1:]
+					// помечаем как недоступный
+					a.mu.Lock()
+					a.realSymbols[sym] = false
+					a.mu.Unlock()
+				}
+			}
+			return
+		}
+	}
+
+	// Debug: выводим сырое сообщение
+	log.Printf("HandleRaw raw: %s", raw)
+
+	// Структура для разбора формата MEXC public deals
+	var msg struct {
+		Channel string `json:"c"`
+		Symbol  string `json:"s"`
+		Data    struct {
+			Deals []struct {
+				Price string `json:"p"`
+			} `json:"deals"`
+		} `json:"d"`
+	}
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		log.Printf("unmarshal WS error: %v, raw=%s", err, raw)
+		return
+	}
+	// Игнорируем системные/пустые сообщения
+	if msg.Symbol == "" || len(msg.Data.Deals) == 0 {
+		log.Printf("HandleRaw skipped: no symbol or deals empty (symbol=%q, deals=%d)", msg.Symbol, len(msg.Data.Deals))
+		return
+	}
+
+	// Парсим цену первой сделки
+	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
+	if err != nil {
+		log.Printf("parse price error: %v, priceStr=%v", err, msg.Data.Deals[0].Price)
+		return
+	}
+	log.Printf("HandleRaw parsed: symbol=%s price=%.8f", msg.Symbol, price)
+
+	// Сохраняем цену и запускаем проверку
+	a.mu.Lock()
+	// Запись цены в latest
+	a.latest[msg.Symbol] = price
+	a.mu.Unlock()
+	// Проверяем треугольники для этого символа
+	a.Check(msg.Symbol)
+}
 	// Debug: выводим сырое сообщение
 	log.Printf("HandleRaw raw: %s", raw)
 
@@ -601,79 +665,3 @@ func (a *Arbitrager) Check(symbol string) {
 	}
 }
 
-
-
-
-2025/08/03 21:28:09 Prices raw: USDTAZERO=0.00000000(ok=false), AZEROUSDC=0.00000000(ok=false), USDCUSDT=0.99990000(ok=true)
-2025/08/03 21:28:09 Triangle check: USDT/TRX/USDC -> USDTTRX(rev=false), TRXUSDC(rev=false), USDCUSDT(rev=false)
-2025/08/03 21:28:09 Prices raw: USDTTRX=0.00000000(ok=false), TRXUSDC=0.00000000(ok=false), USDCUSDT=0.99990000(ok=true)
-2025/08/03 21:28:09 Triangle check: USDT/CAW/USDC -> USDTCAW(rev=false), CAWUSDC(rev=false), USDCUSDT(rev=false)
-2025/08/03 21:28:09 Prices raw: USDTCAW=0.00000000(ok=false), CAWUSDC=0.00000000(ok=false), USDCUSDT=0.99990000(ok=true)
-2025/08/03 21:28:09 Triangle check: USDT/ALGO/USDC -> USDTALGO(rev=false), ALGOUSDC(rev=false), USDCUSDT(rev=false)
-2025/08/03 21:28:09 Prices raw: USDTALGO=0.00000000(ok=false), ALGOUSDC=0.00000000(ok=false), USDCUSDT=0.99990000(ok=true)
-2025/08/03 21:28:09 Triangle check: USDT/SHIB/USDC -> USDTSHIB(rev=false), SHIBUSDC(rev=false), USDCUSDT(rev=false)
-2025/08/03 21:28:09 Prices raw: USDTSHIB=0.00000000(ok=false), SHIBUSDC=0.00000000(ok=false), USDCUSDT=0.99990000(ok=true)
-2025/08/03 21:28:09 Triangle check: USDT/XRP/USDC -> USDTXRP(rev=false), XRPUSDC(rev=false), USDCUSDT(rev=false)
-2025/08/03 21:28:09 Prices raw: USDTXRP=0.00000000(ok=false), XRPUSDC=0.00000000(ok=false), USDCUSDT=0.99990000(ok=true)
-2025/08/03 21:28:09 Triangle check: MINA/USDC/USDT -> MINAUSDC(rev=false), USDCUSDT(rev=false), USDTMINA(rev=false)
-2025/08/03 21:28:09 Prices raw: MINAUSDC=0.00000000(ok=false), USDCUSDT=0.99990000(ok=true), USDTMINA=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: DOGE/USDC/USDT -> DOGEUSDC(rev=false), USDCUSDT(rev=false), USDTDOGE(rev=false)
-2025/08/03 21:28:09 Prices raw: DOGEUSDC=0.00000000(ok=false), USDCUSDT=0.99990000(ok=true), USDTDOGE=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: SHIB/USDC/USDT -> SHIBUSDC(rev=false), USDCUSDT(rev=false), USDTSHIB(rev=false)
-2025/08/03 21:28:09 Prices raw: SHIBUSDC=0.00000000(ok=false), USDCUSDT=0.99990000(ok=true), USDTSHIB=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: FIL/USDC/USDT -> FILUSDC(rev=false), USDCUSDT(rev=false), USDTFIL(rev=false)
-2025/08/03 21:28:09 Prices raw: FILUSDC=0.00000000(ok=false), USDCUSDT=0.99990000(ok=true), USDTFIL=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: APE/USDC/USDT -> APEUSDC(rev=false), USDCUSDT(rev=false), USDTAPE(rev=false)
-2025/08/03 21:28:09 Prices raw: APEUSDC=0.00000000(ok=false), USDCUSDT=0.99990000(ok=true), USDTAPE=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: UNI/USDC/USDT -> UNIUSDC(rev=false), USDCUSDT(rev=false), USDTUNI(rev=false)
-2025/08/03 21:28:09 Prices raw: UNIUSDC=0.00000000(ok=false), USDCUSDT=0.99990000(ok=true), USDTUNI=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: MX/USDC/USDT -> MXUSDC(rev=false), USDCUSDT(rev=false), USDTMX(rev=false)
-2025/08/03 21:28:09 Prices raw: MXUSDC=0.00000000(ok=false), USDCUSDT=0.99990000(ok=true), USDTMX=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: BCH/USDC/USDT -> BCHUSDC(rev=false), USDCUSDT(rev=false), USDTBCH(rev=false)
-2025/08/03 21:28:09 Prices raw: BCHUSDC=0.00000000(ok=false), USDCUSDT=0.99990000(ok=true), USDTBCH=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: AAVE/USDC/USDT -> AAVEUSDC(rev=false), USDCUSDT(rev=false), USDTAAVE(rev=false)
-2025/08/03 21:28:09 Prices raw: AAVEUSDC=0.00000000(ok=false), USDCUSDT=0.99990000(ok=true), USDTAAVE=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: XEN/USDC/USDT -> XENUSDC(rev=false), USDCUSDT(rev=false), USDTXEN(rev=false)
-2025/08/03 21:28:09 Prices raw: XENUSDC=0.00000000(ok=false), USDCUSDT=0.99990000(ok=true), USDTXEN=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/OP -> USDCUSDT(rev=false), USDTOP(rev=false), OPUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTOP=0.00000000(ok=false), OPUSDC=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/AAVE -> USDCUSDT(rev=false), USDTAAVE(rev=false), AAVEUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTAAVE=0.00000000(ok=false), AAVEUSDC=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/ADA -> USDCUSDT(rev=false), USDTADA(rev=false), ADAUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTADA=0.00000000(ok=false), ADAUSDC=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/ATOM -> USDCUSDT(rev=false), USDTATOM(rev=false), ATOMUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTATOM=0.00000000(ok=false), ATOMUSDC=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/APE -> USDCUSDT(rev=false), USDTAPE(rev=false), APEUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTAPE=0.00000000(ok=false), APEUSDC=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/NEAR -> USDCUSDT(rev=false), USDTNEAR(rev=false), NEARUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTNEAR=0.00000000(ok=false), NEARUSDC=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/MINA -> USDCUSDT(rev=false), USDTMINA(rev=false), MINAUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTMINA=0.00000000(ok=false), MINAUSDC=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/UNI -> USDCUSDT(rev=false), USDTUNI(rev=false), UNIUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTUNI=0.00000000(ok=false), UNIUSDC=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/ENS -> USDCUSDT(rev=false), USDTENS(rev=false), ENSUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTENS=0.00000000(ok=false), ENSUSDC=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/WAVES -> USDCUSDT(rev=false), USDTWAVES(rev=false), WAVESUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTWAVES=0.00000000(ok=false), WAVESUSDC=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/SOL -> USDCUSDT(rev=false), USDTSOL(rev=false), SOLUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTSOL=0.00000000(ok=false), SOLUSDC=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/BCH -> USDCUSDT(rev=false), USDTBCH(rev=false), BCHUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTBCH=0.00000000(ok=false), BCHUSDC=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/AVAX -> USDCUSDT(rev=false), USDTAVAX(rev=false), AVAXUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTAVAX=0.00000000(ok=false), AVAXUSDC=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/LUNC -> USDCUSDT(rev=false), USDTLUNC(rev=false), LUNCUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTLUNC=0.00000000(ok=false), LUNCUSDC=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/XEN -> USDCUSDT(rev=false), USDTXEN(rev=false), XENUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTXEN=0.00000000(ok=false), XENUSDC=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/MX -> USDCUSDT(rev=false), USDTMX(rev=false), MXUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTMX=0.00000000(ok=false), MXUSDC=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/DOGE -> USDCUSDT(rev=false), USDTDOGE(rev=false), DOGEUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTDOGE=0.00000000(ok=false), DOGEUSDC=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/LTC -> USDCUSDT(rev=false), USDTLTC(rev=false), LTCUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTLTC=0.00000000(ok=false), LTCUSDC=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/WBTC -> USDCUSDT(rev=false), USDTWBTC(rev=false), WBTCUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTWBTC=0.00000000(ok=false), WBTCUSDC=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/RAY -> USDCUSDT(rev=false), USDTRAY(rev=false), RAYUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTRAY=0.00000000(ok=false), RAYUSDC=0.00000000(ok=false)
-2025/08/03 21:28:09 Triangle check: USDC/USDT/FIL -> USDCUSDT(rev=false), USDTFIL(rev=false), FILUSDC(rev=false)
-2025/08/03 21:28:09 Prices raw: USDCUSDT=0.99990000(ok=true), USDTFIL=0.00000000(ok=false), FILUSDC=0.00000000(ok=false)
