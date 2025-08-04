@@ -418,6 +418,32 @@ Showing top 10 nodes out of 44
 (pprof) 
 
 
+az358@gaz358-BOD-WXX9:~/myprog/crypt$ go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
+Fetching profile over HTTP from http://localhost:6060/debug/pprof/profile?seconds=30
+Saved profile in /home/gaz358/pprof/pprof.cryptarb.samples.cpu.017.pb.gz
+File: cryptarb
+Build ID: d58f3c0cd337874a0c993c0cb2d2bb8860416ca1
+Type: cpu
+Time: 2025-08-05 01:36:56 MSK
+Duration: 30s, Total samples = 100ms ( 0.33%)
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 100ms, 100% of 100ms total
+Showing top 10 nodes out of 59
+      flat  flat%   sum%        cum   cum%
+      30ms 30.00% 30.00%       30ms 30.00%  internal/runtime/syscall.Syscall6
+      20ms 20.00% 50.00%       20ms 20.00%  runtime.futex
+      10ms 10.00% 60.00%       10ms 10.00%  crypto/internal/fips140/aes/gcm.gcmAesDec
+      10ms 10.00% 70.00%       10ms 10.00%  crypto/tls.(*halfConn).incSeq (inline)
+      10ms 10.00% 80.00%       10ms 10.00%  internal/poll.(*fdMutex).rwlock
+      10ms 10.00% 90.00%       10ms 10.00%  runtime.memmove
+      10ms 10.00%   100%       20ms 20.00%  runtime.netpoll
+         0     0%   100%       50ms 50.00%  bufio.(*Reader).Peek
+         0     0%   100%       50ms 50.00%  bufio.(*Reader).fill
+         0     0%   100%       30ms 30.00%  bytes.(*Buffer).ReadFrom
+(pprof) 
+
+
 
 
 
