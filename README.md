@@ -404,32 +404,21 @@ go tool pprof http://localhost:6060/debug/pprof/heap
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go tool pprof http://localhost:6060/debug/pprof/heap
-Fetching profile over HTTP from http://localhost:6060/debug/pprof/heap
-Saved profile in /home/gaz358/pprof/pprof.cryptarb.alloc_objects.alloc_space.inuse_objects.inuse_space.006.pb.gz
-File: cryptarb
-Build ID: 4373533d9812851cd2b31b3025e5246e6d5d89dc
-Type: inuse_space
-Time: 2025-08-05 02:38:52 MSK
-Entering interactive mode (type "help" for commands, "o" for options)
-(pprof) top
-Showing nodes accounting for 2064.43kB, 100% of 2064.43kB total
-Showing top 10 nodes out of 15
-      flat  flat%   sum%        cum   cum%
-    1539kB 74.55% 74.55%     1539kB 74.55%  runtime.allocm
-  525.43kB 25.45%   100%   525.43kB 25.45%  cryptarb/internal/repository/mexc.(*MexcExchange).FetchAvailableSymbols
-         0     0%   100%   525.43kB 25.45%  cryptarb/internal/app.New
-         0     0%   100%   525.43kB 25.45%  main.main
-         0     0%   100%   525.43kB 25.45%  runtime.main
-         0     0%   100%     1026kB 49.70%  runtime.mcall
-         0     0%   100%      513kB 24.85%  runtime.mstart
-         0     0%   100%      513kB 24.85%  runtime.mstart0
-         0     0%   100%      513kB 24.85%  runtime.mstart1
-         0     0%   100%     1539kB 74.55%  runtime.newm
+(pprof) list FetchAvailableSymbols
+Total: 2.52MB
+ROUTINE ======================== cryptarb/internal/repository/mexc.(*MexcExchange).FetchAvailableSymbols in /home/gaz358/myprog/crypt/internal/repository/mexc/mex.go
+  525.43kB   525.43kB (flat, cum) 20.40% of Total
+         .          .    183:func (m *MexcExchange) FetchAvailableSymbols() (
+         .          .    184:   map[string]bool, map[string]float64, map[string]float64,
+         .          .    185:) {
+         .          .    186:   // 1) Карты сразу с capacity
+         .          .    187:   const estimated = 1024
+         .          .    188:   available := make(map[string]bool, estimated)
+  525.43kB   525.43kB    189:   steps := make(map[string]float64, estimated)
+         .          .    190:   minQs := make(map[string]float64, estimated)
+         .          .    191:
+         .          .    192:   // 2) Клиент без HTTP/2 и без gzip
+         .          .    193:   transport := &http.Transport{
+         .          .    194:           DisableCompression: true,
 (pprof) 
-
-
-az358@gaz358-BOD-WXX9:~/myprog/crypt$ (pprof) list FetchAvailableSymbols
-bash: syntax error near unexpected token `list'
-
 
