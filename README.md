@@ -397,3 +397,19 @@ http://localhost:6060/debug/pprof/
 go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
 
 
+(pprof) top
+Showing nodes accounting for 130ms, 100% of 130ms total
+Showing top 10 nodes out of 62
+      flat  flat%   sum%        cum   cum%
+      40ms 30.77% 30.77%       40ms 30.77%  internal/runtime/syscall.Syscall6
+      10ms  7.69% 38.46%       10ms  7.69%  encoding/json.stateBeginValue
+      10ms  7.69% 46.15%       10ms  7.69%  encoding/json.unquoteBytes
+      10ms  7.69% 53.85%       10ms  7.69%  memeqbody
+      10ms  7.69% 61.54%       10ms  7.69%  runtime.(*spanSet).push
+      10ms  7.69% 69.23%       10ms  7.69%  runtime.ifaceeq
+      10ms  7.69% 76.92%       10ms  7.69%  runtime.memclrNoHeapPointers
+      10ms  7.69% 84.62%       10ms  7.69%  runtime.nextFreeFast
+      10ms  7.69% 92.31%       10ms  7.69%  runtime.typePointers.next
+      10ms  7.69%   100%       10ms  7.69%  strconv.ParseFloat
+(pprof) 
+
