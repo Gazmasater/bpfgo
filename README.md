@@ -555,3 +555,125 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 }
 
 
+2025/08/04 20:07:37 [HandleRaw] symbol: LTCUSDT
+2025/08/04 20:07:37 [HandleRaw] priceStr=119.24
+2025/08/04 20:07:37 [HandleRaw] parsed price=119.24000000
+2025/08/04 20:07:37 [HandleRaw] Calling Check(LTCUSDT)
+2025/08/04 20:07:37 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@LTCUSDT","d":{"deals":[{"p":"119.23","v":"0.0506","S":2,"t":1754327257691}],"e":"spot@public.deals.v3.api"},"s":"LTCUSDT","t":1754327257694}
+2025/08/04 20:07:37 [HandleRaw] symbol: LTCUSDT
+2025/08/04 20:07:37 [HandleRaw] priceStr=119.23
+2025/08/04 20:07:37 [HandleRaw] parsed price=119.23000000
+2025/08/04 20:07:37 [HandleRaw] Calling Check(LTCUSDT)
+2025/08/04 20:07:37 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@AVAXUSDT","d":{"deals":[{"p":"22.76","v":"5.40","S":1,"t":1754327257686}],"e":"spot@public.deals.v3.api"},"s":"AVAXUSDT","t":1754327257688}
+2025/08/04 20:07:37 [HandleRaw] symbol: AVAXUSDT
+2025/08/04 20:07:37 [HandleRaw] priceStr=22.76
+2025/08/04 20:07:37 [HandleRaw] parsed price=22.76000000
+2025/08/04 20:07:37 [HandleRaw] Calling Check(AVAXUSDT)
+2025/08/04 20:07:37 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@AVAXUSDT","d":{"deals":[{"p":"22.76","v":"6.60","S":2,"t":1754327257686}],"e":"spot@public.deals.v3.api"},"s":"AVAXUSDT","t":1754327257689}
+2025/08/04 20:07:37 [HandleRaw] symbol: AVAXUSDT
+2025/08/04 20:07:37 [HandleRaw] priceStr=22.76
+2025/08/04 20:07:37 [HandleRaw] parsed price=22.76000000
+2025/08/04 20:07:37 [HandleRaw] Calling Check(AVAXUSDT)
+2025/08/04 20:07:37 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@AVAXUSDT","d":{"deals":[{"p":"22.76","v":"4.60","S":1,"t":1754327257686}],"e":"spot@public.deals.v3.api"},"s":"AVAXUSDT","t":1754327257689}
+2025/08/04 20:07:37 [HandleRaw] symbol: AVAXUSDT
+2025/08/04 20:07:37 [HandleRaw] priceStr=22.76
+2025/08/04 20:07:37 [HandleRaw] parsed price=22.76000000
+2025/08/04 20:07:37 [HandleRaw] Calling Check(AVAXUSDT)
+2025/08/04 20:07:37 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@AVAXUSDT","d":{"deals":[{"p":"22.76","v":"6.12","S":1,"t":1754327257687}],"e":"spot@public.deals.v3.api"},"s":"AVAXUSDT","t":1754327257689}
+2025/08/04 20:07:37 [HandleRaw] symbol: AVAXUSDT
+2025/08/04 20:07:37 [HandleRaw] priceStr=22.76
+2025/08/04 20:07:37 [HandleRaw] parsed price=22.76000000
+2025/08/04 20:07:37 [HandleRaw] Calling Check(AVAXUSDT)
+2025/08/04 20:07:37 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@AVAXUSDC","d":{"deals":[{"p":"22.765","v":"0.28","S":2,"t":1754327257745}],"e":"spot@public.deals.v3.api"},"s":"AVAXUSDC","t":1754327257749}
+2025/08/04 20:07:37 [HandleRaw] symbol: AVAXUSDC
+2025/08/04 20:07:37 [HandleRaw] priceStr=22.765
+2025/08/04 20:07:37 [HandleRaw] parsed price=22.76500000
+2025/08/04 20:07:37 [HandleRaw] Calling Check(AVAXUSDC)
+2025/08/04 20:07:37 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@AVAXUSDC","d":{"deals":[{"p":"22.775","v":"0.30","S":2,"t":1754327257745}],"e":"spot@public.deals.v3.api"},"s":"AVAXUSDC","t":1754327257749}
+2025/08/04 20:07:37 [HandleRaw] symbol: AVAXUSDC
+2025/08/04 20:07:37 [HandleRaw] priceStr=22.775
+2025/08/04 20:07:37 [HandleRaw] parsed price=22.77500000
+2025/08/04 20:07:37 [HandleRaw] Calling Check(AVAXUSDC)
+2025/08/04 20:07:37 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@AVAXUSDC","d":{"deals":[{"p":"22.774","v":"0.16","S":1,"t":1754327257745}],"e":"spot@public.deals.v3.api"},"s":"AVAXUSDC","t":1754327257749}
+2025/08/04 20:07:37 [HandleRaw] symbol: AVAXUSDC
+2025/08/04 20:07:37 [HandleRaw] priceStr=22.774
+2025/08/04 20:07:37 [HandleRaw] parsed price=22.77400000
+2025/08/04 20:07:37 [HandleRaw] Calling Check(AVAXUSDC)
+2025/08/04 20:07:37 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@AVAXUSDC","d":{"deals":[{"p":"22.757","v":"0.26","S":2,"t":1754327257745}],"e":"spot@public.deals.v3.api"},"s":"AVAXUSDC","t":1754327257749}
+2025/08/04 20:07:37 [HandleRaw] symbol: AVAXUSDC
+2025/08/04 20:07:37 [HandleRaw] priceStr=22.757
+2025/08/04 20:07:37 [HandleRaw] parsed price=22.75700000
+2025/08/04 20:07:37 [HandleRaw] Calling Check(AVAXUSDC)
+2025/08/04 20:07:37 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@AVAXUSDC","d":{"deals":[{"p":"22.771","v":"0.29","S":1,"t":1754327257746}],"e":"spot@public.deals.v3.api"},"s":"AVAXUSDC","t":1754327257749}
+2025/08/04 20:07:37 [HandleRaw] symbol: AVAXUSDC
+2025/08/04 20:07:37 [HandleRaw] priceStr=22.771
+2025/08/04 20:07:37 [HandleRaw] parsed price=22.77100000
+2025/08/04 20:07:37 [HandleRaw] Calling Check(AVAXUSDC)
+2025/08/04 20:07:37 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@AVAXUSDC","d":{"deals":[{"p":"22.776","v":"0.25","S":2,"t":1754327257746}],"e":"spot@public.deals.v3.api"},"s":"AVAXUSDC","t":1754327257749}
+2025/08/04 20:07:37 [HandleRaw] symbol: AVAXUSDC
+2025/08/04 20:07:37 [HandleRaw] priceStr=22.776
+2025/08/04 20:07:37 [HandleRaw] parsed price=22.77600000
+2025/08/04 20:07:37 [HandleRaw] Calling Check(AVAXUSDC)
+2025/08/04 20:07:37 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@AVAXUSDC","d":{"deals":[{"p":"22.762","v":"0.17","S":1,"t":1754327257746}],"e":"spot@public.deals.v3.api"},"s":"AVAXUSDC","t":1754327257749}
+2025/08/04 20:07:37 [HandleRaw] symbol: AVAXUSDC
+2025/08/04 20:07:37 [HandleRaw] priceStr=22.762
+2025/08/04 20:07:37 [HandleRaw] parsed price=22.76200000
+2025/08/04 20:07:37 [HandleRaw] Calling Check(AVAXUSDC)
+2025/08/04 20:07:37 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@AVAXUSDC","d":{"deals":[{"p":"22.769","v":"0.11","S":2,"t":1754327257748}],"e":"spot@public.deals.v3.api"},"s":"AVAXUSDC","t":1754327257752}
+2025/08/04 20:07:37 [HandleRaw] symbol: AVAXUSDC
+2025/08/04 20:07:37 [HandleRaw] priceStr=22.769
+2025/08/04 20:07:37 [HandleRaw] parsed price=22.76900000
+2025/08/04 20:07:37 [HandleRaw] Calling Check(AVAXUSDC)
+2025/08/04 20:07:37 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@LTCUSDC","d":{"deals":[{"p":"119.225","v":"0.05","S":1,"t":1754327257776}],"e":"spot@public.deals.v3.api"},"s":"LTCUSDC","t":1754327257778}
+2025/08/04 20:07:37 [HandleRaw] symbol: LTCUSDC
+2025/08/04 20:07:37 [HandleRaw] priceStr=119.225
+2025/08/04 20:07:37 [HandleRaw] parsed price=119.22500000
+2025/08/04 20:07:37 [HandleRaw] Calling Check(LTCUSDC)
+2025/08/04 20:07:37 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@ETHUSDC","d":{"deals":[{"p":"3710.92","v":"0.00028","S":2,"t":1754327257775}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDC","t":1754327257778}
+2025/08/04 20:07:37 [HandleRaw] symbol: ETHUSDC
+2025/08/04 20:07:37 [HandleRaw] priceStr=3710.92
+2025/08/04 20:07:37 [HandleRaw] parsed price=3710.92000000
+2025/08/04 20:07:37 [HandleRaw] Calling Check(ETHUSDC)
+2025/08/04 20:07:37 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@LTCBTC","d":{"deals":[{"p":"0.0010317","v":"0.051","S":2,"t":1754327257756}],"e":"spot@public.deals.v3.api"},"s":"LTCBTC","t":1754327257760}
+2025/08/04 20:07:37 [HandleRaw] symbol: LTCBTC
+2025/08/04 20:07:37 [HandleRaw] priceStr=0.0010317
+2025/08/04 20:07:37 [HandleRaw] parsed price=0.00103170
+2025/08/04 20:07:37 [HandleRaw] Calling Check(LTCBTC)
+2025/08/04 20:07:37 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"169.18","v":"0.459","S":2,"t":1754327257809}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1754327257819}
+2025/08/04 20:07:37 [HandleRaw] symbol: SOLUSDT
+2025/08/04 20:07:37 [HandleRaw] priceStr=169.18
+2025/08/04 20:07:37 [HandleRaw] parsed price=169.18000000
+2025/08/04 20:07:37 [HandleRaw] Calling Check(SOLUSDT)
+2025/08/04 20:07:37 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@SOLUSDT","d":{"deals":[{"p":"169.18","v":"0.610","S":2,"t":1754327257809}],"e":"spot@public.deals.v3.api"},"s":"SOLUSDT","t":1754327257819}
+2025/08/04 20:07:37 [HandleRaw] symbol: SOLUSDT
+2025/08/04 20:07:37 [HandleRaw] priceStr=169.18
+2025/08/04 20:07:37 [HandleRaw] parsed price=169.18000000
+2025/08/04 20:07:37 [HandleRaw] Calling Check(SOLUSDT)
+2025/08/04 20:07:37 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@ETHUSDC","d":{"deals":[{"p":"3710.92","v":"0.00028","S":2,"t":1754327257865}],"e":"spot@public.deals.v3.api"},"s":"ETHUSDC","t":1754327257868}
+2025/08/04 20:07:37 [HandleRaw] symbol: ETHUSDC
+2025/08/04 20:07:37 [HandleRaw] priceStr=3710.92
+2025/08/04 20:07:37 [HandleRaw] parsed price=3710.92000000
+2025/08/04 20:07:37 [HandleRaw] Calling Check(ETHUSDC)
+2025/08/04 20:07:38 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@OPUSDT","d":{"deals":[{"p":"0.711","v":"21.44","S":1,"t":1754327258008}],"e":"spot@public.deals.v3.api"},"s":"OPUSDT","t":1754327258012}
+2025/08/04 20:07:38 [HandleRaw] symbol: OPUSDT
+2025/08/04 20:07:38 [HandleRaw] priceStr=0.711
+2025/08/04 20:07:38 [HandleRaw] parsed price=0.71100000
+2025/08/04 20:07:38 [HandleRaw] Calling Check(OPUSDT)
+2025/08/04 20:07:38 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@DOGEUSDT","d":{"deals":[{"p":"0.20908","v":"33.53","S":1,"t":1754327258063}],"e":"spot@public.deals.v3.api"},"s":"DOGEUSDT","t":1754327258065}
+2025/08/04 20:07:38 [HandleRaw] symbol: DOGEUSDT
+2025/08/04 20:07:38 [HandleRaw] priceStr=0.20908
+2025/08/04 20:07:38 [HandleRaw] parsed price=0.20908000
+2025/08/04 20:07:38 [HandleRaw] Calling Check(DOGEUSDT)
+2025/08/04 20:07:38 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@DOGEUSDT","d":{"deals":[{"p":"0.20908","v":"74.70","S":2,"t":1754327258064}],"e":"spot@public.deals.v3.api"},"s":"DOGEUSDT","t":1754327258068}
+2025/08/04 20:07:38 [HandleRaw] symbol: DOGEUSDT
+2025/08/04 20:07:38 [HandleRaw] priceStr=0.20908
+2025/08/04 20:07:38 [HandleRaw] parsed price=0.20908000
+2025/08/04 20:07:38 [HandleRaw] Calling Check(DOGEUSDT)
+2025/08/04 20:07:38 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@DOGEUSDT","d":{"deals":[{"p":"0.20908","v":"41.77","S":2,"t":1754327258064}],"e":"spot@public.deals.v3.api"},"s":"DOGEUSDT","t":1754327258068}
+2025/08/04 20:07:38 [HandleRaw] symbol: DOGEUSDT
+2025/08/04 20:07:38 [HandleRaw] priceStr=0.20908
+2025/08/04 20:07:38 [HandleRaw] parsed price=0.20908000
+2025/08/04 20:07:38 [HandleRaw] Calling Check(DOGEUSDT)
+2025/08/04 20:07:38 [HandleRaw] raw: {"c":"spot@public.deals.v3.api@USDCUSDT","d":{"deals":[{"p":"0.9999","v":"432.18","S":2,"t":1754327258113}],"e":"spot@public.deals.v3.api"},"s":"USDCUSDT","t":1754327258116}
+
+
