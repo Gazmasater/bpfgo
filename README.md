@@ -403,78 +403,26 @@ go tool pprof http://localhost:6060/debug/pprof/heap
 
 
 
-func (m *MexcExchange) FetchAvailableSymbols() (
-    map[string]bool, map[string]float64, map[string]float64,
-) {
-    // 1) Карты сразу с capacity
-    const estimated = 1024
-    available := make(map[string]bool, estimated)
-    steps     := make(map[string]float64, estimated)
-    minQs     := make(map[string]float64, estimated)
-
-    // 2) Клиент без HTTP/2 и без gzip
-    transport := &http.Transport{
-        DisableCompression: true,
-        TLSNextProto:       make(map[string]func(string, *tls.Conn) http.RoundTripper),
-    }
-    client := &http.Client{
-        Timeout:   10 * time.Second,
-        Transport: transport,
-    }
-
-    resp, err := client.Get("https://api.mexc.com/api/v3/exchangeInfo")
-    if err != nil {
-        log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
-        return available, steps, minQs
-    }
-    defer resp.Body.Close()
-
-    dec := json.NewDecoder(resp.Body)
-    // Проматываем до "symbols"
-    for {
-        tok, err := dec.Token()
-        if err != nil {
-            log.Printf("❌ Не найдено поле symbols: %v", err)
-            return available, steps, minQs
-        }
-        if key, ok := tok.(string); ok && key == "symbols" {
-            break
-        }
-    }
-    dec.Token() // '['
-
-    // 3) Предварительно reserve для logLines → убираем growSlice
-    logLines := make([]string, 0, estimated)
-
-    type symInfo struct {
-        Symbol               string `json:"symbol"`
-        Status               string `json:"status"`
-        IsSpotTradingAllowed bool   `json:"isSpotTradingAllowed"`
-        BaseSizePrecision    string `json:"baseSizePrecision"`
-    }
-
-    for dec.More() {
-        var s symInfo
-        if err := dec.Decode(&s); err != nil {
-            log.Printf("❌ Ошибка декодирования: %v", err)
-            return available, steps, minQs
-        }
-        if s.Status != "1" || !s.IsSpotTradingAllowed {
-            continue
-        }
-        step, _ := strconv.ParseFloat(s.BaseSizePrecision, 64)
-        if step <= 0 {
-            continue
-        }
-        available[s.Symbol] = true
-        steps[s.Symbol]     = step
-        minQs[s.Symbol]     = step
-        logLines = append(logLines, fmt.Sprintf("%s\tstep=%g", s.Symbol, step))
-    }
-    dec.Token() // ']'
-
-    _ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(logLines, "\n")), 0644)
-    log.Printf("✅ Подходящих пар: %d", len(available))
-    return available, steps, minQs
-}
-
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go tool pprof http://localhost:6060/debug/pprof/heap
+Fetching profile over HTTP from http://localhost:6060/debug/pprof/heap
+Saved profile in /home/gaz358/pprof/pprof.cryptarb.alloc_objects.alloc_space.inuse_objects.inuse_space.005.pb.gz
+File: cryptarb
+Build ID: 4373533d9812851cd2b31b3025e5246e6d5d89dc
+Type: inuse_space
+Time: 2025-08-05 02:28:36 MSK
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 4627.27kB, 100% of 4627.27kB total
+Showing top 10 nodes out of 55
+      flat  flat%   sum%        cum   cum%
+    1539kB 33.26% 33.26%  2051.22kB 44.33%  runtime.allocm
+ 1025.56kB 22.16% 55.42%  1025.56kB 22.16%  encoding/pem.Decode
+  525.43kB 11.36% 66.78%   525.43kB 11.36%  cryptarb/internal/repository/mexc.(*MexcExchange).FetchAvailableSymbols
+  512.56kB 11.08% 77.85%   512.56kB 11.08%  sync.(*Pool).pinSlow
+  512.50kB 11.08% 88.93%   512.50kB 11.08%  crypto/internal/fips140/bigmod.(*Nat).montgomeryMul
+  512.22kB 11.07%   100%   512.22kB 11.07%  runtime.malg
+         0     0%   100%  1037.99kB 22.43%  cryptarb/internal/app.New
+         0     0%   100%   512.50kB 11.08%  cryptarb/internal/app.New.func1
+         0     0%   100%   512.56kB 11.08%  cryptarb/internal/repository/filesystem.LoadTrianglesFromSymbols
+         0     0%   100%   512.56kB 11.08%  cryptarb/internal/repository/filesystem.LoadTrianglesFromSymbols.Printf.func1
+(pprof) 
