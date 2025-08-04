@@ -591,5 +591,30 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 }
 
 
+az358@gaz358-BOD-WXX9:~/myprog/crypt$ go tool pprof http://localhost:6060/debug/pprof/heap
+Fetching profile over HTTP from http://localhost:6060/debug/pprof/heap
+Saved profile in /home/gaz358/pprof/pprof.cryptarb.alloc_objects.alloc_space.inuse_objects.inuse_space.001.pb.gz
+File: cryptarb
+Build ID: d58f3c0cd337874a0c993c0cb2d2bb8860416ca1
+Type: inuse_space
+Time: 2025-08-05 01:49:26 MSK
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 10485.18kB, 100% of 10485.18kB total
+Showing top 10 nodes out of 45
+      flat  flat%   sum%        cum   cum%
+ 3075.38kB 29.33% 29.33%  3075.38kB 29.33%  reflect.mapassign_faststr0
+ 2560.04kB 24.42% 53.75%  2560.04kB 24.42%  encoding/json.(*decodeState).literalStore
+ 1774.65kB 16.93% 70.67%  1774.65kB 16.93%  io.ReadAll
+    1539kB 14.68% 85.35%     1539kB 14.68%  runtime.allocm
+  512.05kB  4.88% 90.23%   512.05kB  4.88%  runtime.(*scavengerState).init
+  512.05kB  4.88% 95.12%   512.05kB  4.88%  runtime.acquireSudog
+  512.02kB  4.88%   100%   512.02kB  4.88%  syscall.anyToSockaddr
+         0     0%   100%  7410.07kB 70.67%  cryptarb/internal/app.New
+         0     0%   100%  7410.07kB 70.67%  cryptarb/internal/repository/mexc.(*MexcExchange).FetchAvailableSymbols
+         0     0%   100%  5635.42kB 53.75%  encoding/json.(*decodeState).array
+(pprof) 
+
+
 
 
