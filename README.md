@@ -403,84 +403,26 @@ go tool pprof http://localhost:6060/debug/pprof/heap
 
 
 
-func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64) {
-    // Предварительное предположение о размере (чтобы сразу зарезервировать мапы)
-    const estimated = 1024
-    availableSymbols := make(map[string]bool, estimated)
-    stepSizes       := make(map[string]float64, estimated)
-    minQtys         := make(map[string]float64, estimated)
-
-    // Отключаем компрессию на уровне HTTP-транспорта:
-    client := &http.Client{
-        Timeout: 10 * time.Second,
-        Transport: &http.Transport{
-            DisableCompression: true,
-        },
-    }
-
-    resp, err := client.Get("https://api.mexc.com/api/v3/exchangeInfo")
-    if err != nil {
-        log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
-        return availableSymbols, stepSizes, minQtys
-    }
-    defer resp.Body.Close()
-
-    dec := json.NewDecoder(resp.Body)
-
-    // Проматываем до поля "symbols"
-    for {
-        tok, err := dec.Token()
-        if err != nil {
-            log.Printf("❌ Не удалось найти поле symbols: %v", err)
-            return availableSymbols, stepSizes, minQtys
-        }
-        if key, ok := tok.(string); ok && key == "symbols" {
-            break
-        }
-    }
-    // Ожидаем начало массива [
-    if delim, err := dec.Token(); err != nil || delim != json.Delim('[') {
-        log.Printf("❌ Ожидаем начало массива symbols: %v", err)
-        return availableSymbols, stepSizes, minQtys
-    }
-
-    // Структура с нужными полями
-    type symInfo struct {
-        Symbol                string  `json:"symbol"`
-        Status                string  `json:"status"`
-        IsSpotTradingAllowed  bool    `json:"isSpotTradingAllowed"`
-        BaseSizePrecision     string  `json:"baseSizePrecision"`
-    }
-
-    var logLines []string
-
-    // Декодим по одному элементу и сразу обрабатываем
-    for dec.More() {
-        var s symInfo
-        if err := dec.Decode(&s); err != nil {
-            log.Printf("❌ Ошибка декодирования одного элемента symbols: %v", err)
-            return availableSymbols, stepSizes, minQtys
-        }
-        if s.Status != "1" || !s.IsSpotTradingAllowed {
-            continue
-        }
-        step, err := strconv.ParseFloat(s.BaseSizePrecision, 64)
-        if err != nil || step <= 0 {
-            continue
-        }
-
-        availableSymbols[s.Symbol] = true
-        stepSizes[s.Symbol]       = step
-        minQtys[s.Symbol]         = step
-        logLines = append(logLines, fmt.Sprintf("%s\tstep=%g", s.Symbol, step))
-    }
-
-    // Дополнительный токен: конец массива ]
-    dec.Token()
-
-    // Пишем лог-файл и возвращаем
-    _ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(logLines, "\n")), 0644)
-    log.Printf("✅ Подходящих пар: %d", len(availableSymbols))
-    return availableSymbols, stepSizes, minQtys
-}
-
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go tool pprof http://localhost:6060/debug/pprof/heap
+Fetching profile over HTTP from http://localhost:6060/debug/pprof/heap
+Saved profile in /home/gaz358/pprof/pprof.cryptarb.alloc_objects.alloc_space.inuse_objects.inuse_space.003.pb.gz
+File: cryptarb
+Build ID: d9b8050b0f31c41c65894b3c380dfc1652edaeb4
+Type: inuse_space
+Time: 2025-08-05 02:20:23 MSK
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 3621.82kB, 100% of 3621.82kB total
+Showing top 10 nodes out of 41
+      flat  flat%   sum%        cum   cum%
+    1539kB 42.49% 42.49%     1539kB 42.49%  runtime.allocm
+  532.26kB 14.70% 57.19%   532.26kB 14.70%  bytes.growSlice
+  525.43kB 14.51% 71.70%   525.43kB 14.51%  cryptarb/internal/repository/mexc.(*MexcExchange).FetchAvailableSymbols
+  513.12kB 14.17% 85.86%   513.12kB 14.17%  vendor/golang.org/x/net/http2/hpack.newInternalNode
+  512.01kB 14.14%   100%   512.01kB 14.14%  cryptarb/internal/repository/filesystem.LoadTrianglesFromSymbols
+         0     0%   100%   532.26kB 14.70%  bufio.(*Reader).Read
+         0     0%   100%   532.26kB 14.70%  bytes.(*Buffer).Grow (inline)
+         0     0%   100%   532.26kB 14.70%  bytes.(*Buffer).grow
+         0     0%   100%  1037.44kB 28.64%  cryptarb/internal/app.New
+         0     0%   100%   532.26kB 14.70%  crypto/tls.(*Conn).Read
+(pprof) 
