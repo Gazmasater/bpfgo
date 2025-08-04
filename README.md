@@ -403,102 +403,26 @@ go tool pprof http://localhost:6060/debug/pprof/heap
 
 
 
-func (m *MexcExchange) PlaceMarketOrder(symbol, side string, quantity float64) (string, error) {
-    endpoint := "https://api.mexc.com/api/v3/order"
-    timestamp := strconv.FormatInt(time.Now().UnixMilli(), 10)
-
-    // Запрос тела
-    params := make(map[string]string, 5)
-    params["symbol"] = symbol
-    params["side"]   = strings.ToUpper(side) // "BUY" или "SELL"
-    params["type"]   = "MARKET"
-    if side == "BUY" {
-        params["quoteOrderQty"] = fmt.Sprintf("%.4f", quantity)
-    } else {
-        params["quantity"] = fmt.Sprintf("%.6f", quantity)
-    }
-
-    // Собираем строку запроса
-    q := url.Values{}
-    for k, v := range params {
-        q.Set(k, v)
-    }
-    q.Set("timestamp", timestamp)
-
-    // Подпись
-    sig := createSignature(m.apiSecret, q.Encode())
-    q.Set("signature", sig)
-
-    // Отправляем
-    req, _ := http.NewRequest("POST", endpoint+"?"+q.Encode(), nil)
-    req.Header.Set("X-MEXC-APIKEY", m.apiKey)
-
-    client := &http.Client{Timeout: 10 * time.Second}
-    resp, err := client.Do(req)
-    if err != nil {
-        return "", fmt.Errorf("HTTP error: %v", err)
-    }
-    defer resp.Body.Close()
-
-    // В случае ошибки читаем тело, чтобы вернуть текст
-    if resp.StatusCode != http.StatusOK {
-        body, _ := io.ReadAll(resp.Body)
-        return "", fmt.Errorf("order failed: %s", string(body))
-    }
-
-    // Декодируем сразу из тела
-    var result struct {
-        OrderID string `json:"orderId"`
-    }
-    dec := json.NewDecoder(resp.Body)
-    if err := dec.Decode(&result); err != nil {
-        return "", fmt.Errorf("decode error: %v", err)
-    }
-
-    return result.OrderID, nil
-}
-
-
-
-func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64) {
-    availableSymbols := make(map[string]bool, 256)
-    stepSizes       := make(map[string]float64, 256)
-    minQtys         := make(map[string]float64, 256)
-
-    resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-    if err != nil {
-        log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
-        return availableSymbols, stepSizes, minQtys
-    }
-    defer resp.Body.Close()
-
-    // Декодируем напрямую из resp.Body
-    var data struct {
-        Symbols []map[string]interface{} `json:"symbols"`
-    }
-    dec := json.NewDecoder(resp.Body)
-    if err := dec.Decode(&data); err != nil {
-        log.Printf("❌ Ошибка разбора JSON: %v", err)
-        return availableSymbols, stepSizes, minQtys
-    }
-
-    var logLines []string
-    for _, s := range data.Symbols {
-        sym, _ := s["symbol"].(string)
-        if sym == "" || !m.isValidSymbol(s) {
-            continue
-        }
-        step, _ := strconv.ParseFloat(s["baseSizePrecision"].(string), 64)
-
-        availableSymbols[sym] = true
-        stepSizes[sym]         = step
-        minQtys[sym]           = step
-        logLines = append(logLines, fmt.Sprintf("%s\tstep=%g", sym, step))
-    }
-
-    // Сохраняем результат в лог-файл
-    _ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(logLines, "\n")), 0644)
-    log.Printf("✅ Подходящих пар: %d", len(availableSymbols))
-    return availableSymbols, stepSizes, minQtys
-}
-
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go tool pprof http://localhost:6060/debug/pprof/heap
+Fetching profile over HTTP from http://localhost:6060/debug/pprof/heap
+Saved profile in /home/gaz358/pprof/pprof.cryptarb.alloc_objects.alloc_space.inuse_objects.inuse_space.002.pb.gz
+File: cryptarb
+Build ID: e8c184447d9082b3d7fbf13790860856c1a0c556
+Type: inuse_space
+Time: 2025-08-05 02:11:53 MSK
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 6701.03kB, 100% of 6701.03kB total
+Showing top 10 nodes out of 38
+      flat  flat%   sum%        cum   cum%
+ 2086.21kB 31.13% 31.13%  2600.21kB 38.80%  encoding/json.(*Decoder).refill
+    2052kB 30.62% 61.75%     2052kB 30.62%  runtime.allocm
+     514kB  7.67% 69.43%      514kB  7.67%  bufio.NewReaderSize (inline)
+  512.56kB  7.65% 77.07%   512.56kB  7.65%  reflect.mapassign_faststr0
+  512.23kB  7.64% 84.72%   512.23kB  7.64%  crypto/tls.(*Config).Clone
+  512.01kB  7.64% 92.36%   512.01kB  7.64%  encoding/json.(*decodeState).convertNumber
+  512.01kB  7.64%   100%  1024.02kB 15.28%  encoding/json.(*decodeState).literalStore
+         0     0%   100%      514kB  7.67%  bufio.NewReader (inline)
+         0     0%   100%      514kB  7.67%  compress/gzip.(*Reader).Reset
+         0     0%   100%      514kB  7.67%  compress/gzip.NewReader (inline)
+(pprof) 
