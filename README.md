@@ -509,3 +509,27 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 }
 
 
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "any.Get(\"id\").IsNil undefined (type jsoniter.Any has no field or method IsNil)",
+	"source": "compiler",
+	"startLineNumber": 129,
+	"startColumn": 20,
+	"endLineNumber": 129,
+	"endColumn": 25,
+	"origin": "extHost1"
+}]
+
+
