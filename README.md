@@ -461,7 +461,6 @@ Showing top 10 nodes out of 67
 package arbitrage
 
 import (
-    "log"
     "strconv"
     "strings"
     "sync"
@@ -486,14 +485,14 @@ type Arbitrager struct {
 func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
     any := json.Get(raw)
 
-    // 1) Попытка распознать ACK
+    // 1) Обработка ACK подписки:
+    //    считаем ACK только если есть id, code, msg и при этом нет поля символа "s"
     if any.Get("id").ValueType() != jsoniter.NilValue &&
         any.Get("code").ValueType() != jsoniter.NilValue &&
-        any.Get("msg").ValueType() != jsoniter.NilValue {
+        any.Get("msg").ValueType() != jsoniter.NilValue &&
+        any.Get("s").ValueType() == jsoniter.NilValue {
 
-        code := any.Get("code").ToInt()
-        log.Printf("[HandleRaw] ACK detected, code=%d", code)
-        if code == 0 {
+        if any.Get("code").ToInt() == 0 {
             const prefixFail = "Not Subscribed successfully! ["
             msg := any.Get("msg").ToString()
             if parts := strings.Split(msg, prefixFail); len(parts) == 2 {
@@ -505,7 +504,6 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
                     if idx := strings.LastIndex(ch, "@"); idx != -1 {
                         sym := ch[idx+1:]
                         a.realSymbols[sym] = false
-                        log.Printf("[HandleRaw] Mark unsubscribed: %s", sym)
                     }
                 }
                 a.mu.Unlock()
@@ -514,192 +512,46 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
         return
     }
 
-    // 2) Получаем символ
-    sym := any.Get("s").ToString()
+    // 2) Получаем symbol — если его нет, это не рыночное сообщение
+    symAny := any.Get("s")
+    if symAny.ValueType() == jsoniter.NilValue {
+        return
+    }
+    sym := symAny.ToString()
     if sym == "" {
-        log.Printf("[HandleRaw] no \"s\" field, skipping")
         return
     }
-    log.Printf("[HandleRaw] got symbol: %s", sym)
 
-    // 3) Проверяем, подписаны ли мы на этот символ
+    // 3) Фильтр по подписке и доступности
     if ok := a.realSymbols[sym]; !ok {
-        log.Printf("[HandleRaw] symbol %s not in realSymbols, skip", sym)
         return
     }
-
-    // 4) Фильтруем только те пары, по которым есть треугольники
     if _, ok := a.trianglesByPair[sym]; !ok {
-        log.Printf("[HandleRaw] no triangles for %s, skip", sym)
         return
     }
 
-    // 5) Достаём массив deals
-    dealsAny := any.Get("d").Get("deals")
-    if dealsAny.ValueType() != jsoniter.ArrayValue {
-        log.Printf("[HandleRaw] no deals array for %s", sym)
+    // 4) Достаём первую цену из deals
+    deals := any.Get("d").Get("deals")
+    if deals.ValueType() != jsoniter.ArrayValue || deals.Size() == 0 {
         return
     }
-    if dealsAny.Size() == 0 {
-        log.Printf("[HandleRaw] empty deals for %s", sym)
-        return
-    }
-
-    // 6) Первую цену
-    priceStr := dealsAny.Get(0).Get("p").ToString()
+    priceStr := deals.Get(0).Get("p").ToString()
     if priceStr == "" {
-        log.Printf("[HandleRaw] empty price string for %s", sym)
         return
     }
-    log.Printf("[HandleRaw] price string: %s", priceStr)
 
-    // 7) Парсим в float
+    // 5) Конвертируем в float и сохраняем
     price, err := strconv.ParseFloat(priceStr, 64)
     if err != nil {
-        log.Printf("[HandleRaw] parse price error: %v", err)
         return
     }
-    log.Printf("[HandleRaw] parsed price: %.8f", price)
-
-    // 8) Запись и проверка
     a.mu.Lock()
     a.latest[sym] = price
     a.mu.Unlock()
-    log.Printf("[HandleRaw] calling Check(%s)", sym)
+
+    // 6) Проверяем арбитражные треугольники
     a.Check(sym)
 }
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/08/04 19:54:52 📈 Profiler доступен на http://localhost:6060/debug/pprof/
-2025/08/04 19:54:52 ✅ Подходящих пар: 557
-2025/08/04 19:54:52 📊 Доступные пары (с инверсиями): 1114
-2025/08/04 19:54:52 [TRIANGLE] Found 234 triangles
-2025/08/04 19:54:52 [INIT] Треугольников найдено: 234
-2025/08/04 19:54:52 [INIT] Подписка на пар: 144 шт.
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCAPE
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTAAVE
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCBCH
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: BTCLTC
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCUNI
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCSHIB].  Reason： Blocked! 
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCAZERO
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCAVAX
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCMX
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCLUNC
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCSOL
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTLTC
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTWAVES
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTATOM].  Reason： Blocked! 
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTUNI
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCAAVE
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: BTCSOL
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: BTCATOM
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCDOGE
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTBCH
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTMINA
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTTRX
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCBTC
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCWAVES].  Reason： Blocked! 
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTAZERO
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCCAW
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCRAY
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTCAW
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTAVAX
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTBNB
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: BTCTRX
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTRAY
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCALGO].  Reason： Blocked! 
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCWBTC
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTXEN
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTNEAR
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCFIL
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCJASMY
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTXRP
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCADA
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCMINA
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: BTCETH
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTFIL
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTENS
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCOP].  Reason： Blocked! 
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTOP
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTFTT
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTJASMY
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTLUNC
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCBNB
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCATOM
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTWBTC
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTSOL
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCETH
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCLTC
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTDOGE
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTMX
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCXEN
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTALGO].  Reason： Blocked! 
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCFTT
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTADA
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCXRP
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCNEAR
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCENS
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: BTCBCH
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCTRX
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: BTCXRP
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTAPE
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTUSDC
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTSHIB].  Reason： Blocked! 
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: ETHUNI
-2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: BTCADA].  Reason： Blocked! 
-2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
-
 
 
 
