@@ -403,26 +403,78 @@ go tool pprof http://localhost:6060/debug/pprof/heap
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go tool pprof http://localhost:6060/debug/pprof/heap
-Fetching profile over HTTP from http://localhost:6060/debug/pprof/heap
-Saved profile in /home/gaz358/pprof/pprof.cryptarb.alloc_objects.alloc_space.inuse_objects.inuse_space.003.pb.gz
-File: cryptarb
-Build ID: d9b8050b0f31c41c65894b3c380dfc1652edaeb4
-Type: inuse_space
-Time: 2025-08-05 02:20:23 MSK
-Entering interactive mode (type "help" for commands, "o" for options)
-(pprof) top
-Showing nodes accounting for 3621.82kB, 100% of 3621.82kB total
-Showing top 10 nodes out of 41
-      flat  flat%   sum%        cum   cum%
-    1539kB 42.49% 42.49%     1539kB 42.49%  runtime.allocm
-  532.26kB 14.70% 57.19%   532.26kB 14.70%  bytes.growSlice
-  525.43kB 14.51% 71.70%   525.43kB 14.51%  cryptarb/internal/repository/mexc.(*MexcExchange).FetchAvailableSymbols
-  513.12kB 14.17% 85.86%   513.12kB 14.17%  vendor/golang.org/x/net/http2/hpack.newInternalNode
-  512.01kB 14.14%   100%   512.01kB 14.14%  cryptarb/internal/repository/filesystem.LoadTrianglesFromSymbols
-         0     0%   100%   532.26kB 14.70%  bufio.(*Reader).Read
-         0     0%   100%   532.26kB 14.70%  bytes.(*Buffer).Grow (inline)
-         0     0%   100%   532.26kB 14.70%  bytes.(*Buffer).grow
-         0     0%   100%  1037.44kB 28.64%  cryptarb/internal/app.New
-         0     0%   100%   532.26kB 14.70%  crypto/tls.(*Conn).Read
-(pprof) 
+func (m *MexcExchange) FetchAvailableSymbols() (
+    map[string]bool, map[string]float64, map[string]float64,
+) {
+    // 1) Карты сразу с capacity
+    const estimated = 1024
+    available := make(map[string]bool, estimated)
+    steps     := make(map[string]float64, estimated)
+    minQs     := make(map[string]float64, estimated)
+
+    // 2) Клиент без HTTP/2 и без gzip
+    transport := &http.Transport{
+        DisableCompression: true,
+        TLSNextProto:       make(map[string]func(string, *tls.Conn) http.RoundTripper),
+    }
+    client := &http.Client{
+        Timeout:   10 * time.Second,
+        Transport: transport,
+    }
+
+    resp, err := client.Get("https://api.mexc.com/api/v3/exchangeInfo")
+    if err != nil {
+        log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
+        return available, steps, minQs
+    }
+    defer resp.Body.Close()
+
+    dec := json.NewDecoder(resp.Body)
+    // Проматываем до "symbols"
+    for {
+        tok, err := dec.Token()
+        if err != nil {
+            log.Printf("❌ Не найдено поле symbols: %v", err)
+            return available, steps, minQs
+        }
+        if key, ok := tok.(string); ok && key == "symbols" {
+            break
+        }
+    }
+    dec.Token() // '['
+
+    // 3) Предварительно reserve для logLines → убираем growSlice
+    logLines := make([]string, 0, estimated)
+
+    type symInfo struct {
+        Symbol               string `json:"symbol"`
+        Status               string `json:"status"`
+        IsSpotTradingAllowed bool   `json:"isSpotTradingAllowed"`
+        BaseSizePrecision    string `json:"baseSizePrecision"`
+    }
+
+    for dec.More() {
+        var s symInfo
+        if err := dec.Decode(&s); err != nil {
+            log.Printf("❌ Ошибка декодирования: %v", err)
+            return available, steps, minQs
+        }
+        if s.Status != "1" || !s.IsSpotTradingAllowed {
+            continue
+        }
+        step, _ := strconv.ParseFloat(s.BaseSizePrecision, 64)
+        if step <= 0 {
+            continue
+        }
+        available[s.Symbol] = true
+        steps[s.Symbol]     = step
+        minQs[s.Symbol]     = step
+        logLines = append(logLines, fmt.Sprintf("%s\tstep=%g", s.Symbol, step))
+    }
+    dec.Token() // ']'
+
+    _ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(logLines, "\n")), 0644)
+    log.Printf("✅ Подходящих пар: %d", len(available))
+    return available, steps, minQs
+}
+
