@@ -458,9 +458,82 @@ Showing top 10 nodes out of 67
 
 
 
-// 3) Проверяем realSymbols: именно существование ключа и что он true
-	subscribed, exists := a.realSymbols[sym]
-	if !exists {
-		log.Printf("[HandleRaw] %s not in realSymbols map", sym)
-		return
-	}
+var (
+    // префиксы, по которым будем искать в []byte
+    idKey     = []byte(`"id":`)
+    code0Key  = []byte(`"code":0`)
+    sKey      = []byte(`"s":"`)
+    pKey      = []byte(`"p":"`)
+    prefixFail = "Not Subscribed successfully! ["
+)
+
+func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
+    // 1) ACK-подписка: есть `"id":` и `"code":0`, но нет поля `"s":`
+    if bytes.Contains(raw, idKey) &&
+       bytes.Contains(raw, code0Key) &&
+       !bytes.Contains(raw, sKey) {
+
+        // разбираем текст ошибки подписки — только руками, без JSON
+        start := bytes.Index(raw, []byte(prefixFail))
+        if start >= 0 {
+            start += len(prefixFail)
+            // найдём конец списка заблокированных через `].  Reason`
+            end := bytes.Index(raw[start:], []byte("].  Reason"))
+            if end > 0 {
+                blockedList := raw[start : start+end]
+                for _, ch := range strings.Split(string(blockedList), ",") {
+                    if idx := strings.LastIndex(ch, "@"); idx != -1 {
+                        sym := ch[idx+1:]
+                        a.mu.Lock()
+                        a.realSymbols[sym] = false
+                        a.mu.Unlock()
+                    }
+                }
+            }
+        }
+        return
+    }
+
+    // 2) Находим symbol: "s":"XXX"
+    i := bytes.Index(raw, sKey)
+    if i < 0 {
+        return
+    }
+    i += len(sKey)
+    j := bytes.IndexByte(raw[i:], '"')
+    if j < 0 {
+        return
+    }
+    sym := string(raw[i : i+j])
+
+    // 3) Фильтры: подписка и треугольники
+    if ok, ex := a.realSymbols[sym]; !ex || !ok {
+        return
+    }
+    if _, ex := a.trianglesByPair[sym]; !ex {
+        return
+    }
+
+    // 4) Находим цену: "p":"YYY"
+    i = bytes.Index(raw, pKey)
+    if i < 0 {
+        return
+    }
+    i += len(pKey)
+    j = bytes.IndexByte(raw[i:], '"')
+    if j < 0 {
+        return
+    }
+    priceBytes := raw[i : i+j]
+    price, err := strconv.ParseFloat(string(priceBytes), 64)
+    if err != nil {
+        return
+    }
+
+    // 5) Обновляем и проверяем
+    a.mu.Lock()
+    a.latest[sym] = price
+    a.mu.Unlock()
+    a.Check(sym)
+}
+
