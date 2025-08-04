@@ -413,3 +413,27 @@ Showing top 10 nodes out of 62
       10ms  7.69%   100%       10ms  7.69%  strconv.ParseFloat
 (pprof) 
 
+
+func (a *Arbitrager) HandleRaw(exchangeName string, raw []byte) {
+	symbol, err := jsonparser.GetString(raw, "s")
+	if err != nil || symbol == "" {
+		return
+	}
+
+	priceStr, err := jsonparser.GetString(raw, "d", "deals", "[0]", "p")
+	if err != nil || priceStr == "" {
+		return
+	}
+
+	price, err := strconv.ParseFloat(priceStr, 64)
+	if err != nil {
+		return
+	}
+
+	a.mu.Lock()
+	a.latest[symbol] = price
+	a.mu.Unlock()
+
+	a.Check(symbol)
+}
+
