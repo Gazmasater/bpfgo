@@ -402,3 +402,34 @@ go tool pprof http://localhost:6060/debug/pprof/heap
 
 (pprof) list FetchAvailableSymbols
 
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go tool pprof http://localhost:6060/debug/pprof/heap
+Fetching profile over HTTP from http://localhost:6060/debug/pprof/heap
+Saved profile in /home/gaz358/pprof/pprof.cryptarb.alloc_objects.alloc_space.inuse_objects.inuse_space.006.pb.gz
+File: cryptarb
+Build ID: 4373533d9812851cd2b31b3025e5246e6d5d89dc
+Type: inuse_space
+Time: 2025-08-05 02:38:52 MSK
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 2064.43kB, 100% of 2064.43kB total
+Showing top 10 nodes out of 15
+      flat  flat%   sum%        cum   cum%
+    1539kB 74.55% 74.55%     1539kB 74.55%  runtime.allocm
+  525.43kB 25.45%   100%   525.43kB 25.45%  cryptarb/internal/repository/mexc.(*MexcExchange).FetchAvailableSymbols
+         0     0%   100%   525.43kB 25.45%  cryptarb/internal/app.New
+         0     0%   100%   525.43kB 25.45%  main.main
+         0     0%   100%   525.43kB 25.45%  runtime.main
+         0     0%   100%     1026kB 49.70%  runtime.mcall
+         0     0%   100%      513kB 24.85%  runtime.mstart
+         0     0%   100%      513kB 24.85%  runtime.mstart0
+         0     0%   100%      513kB 24.85%  runtime.mstart1
+         0     0%   100%     1539kB 74.55%  runtime.newm
+(pprof) 
+
+
+az358@gaz358-BOD-WXX9:~/myprog/crypt$ (pprof) list FetchAvailableSymbols
+bash: syntax error near unexpected token `list'
+
+
