@@ -454,6 +454,32 @@ Showing top 10 nodes out of 67
 (pprof) 
 
 
+az358@gaz358-BOD-WXX9:~/myprog/crypt$ go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
+Fetching profile over HTTP from http://localhost:6060/debug/pprof/profile?seconds=30
+Saved profile in /home/gaz358/pprof/pprof.cryptarb.samples.cpu.012.pb.gz
+File: cryptarb
+Build ID: 4b4ef03c1c40450744136a477782f1c9c14a6cdb
+Type: cpu
+Time: 2025-08-04 23:33:46 MSK
+Duration: 30s, Total samples = 110ms ( 0.37%)
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 110ms, 100% of 110ms total
+Showing top 10 nodes out of 47
+      flat  flat%   sum%        cum   cum%
+      40ms 36.36% 36.36%       40ms 36.36%  internal/runtime/syscall.Syscall6
+      10ms  9.09% 45.45%       10ms  9.09%  internal/runtime/maps.ctrlGroup.matchH2
+      10ms  9.09% 54.55%       10ms  9.09%  runtime.(*mcache).prepareForSweep
+      10ms  9.09% 63.64%       10ms  9.09%  runtime.(*timeHistogram).record
+      10ms  9.09% 72.73%       10ms  9.09%  runtime.concatstrings
+      10ms  9.09% 81.82%       10ms  9.09%  runtime.nanotime1
+      10ms  9.09% 90.91%       10ms  9.09%  runtime.pollInfo.closing (inline)
+      10ms  9.09%   100%       10ms  9.09%  runtime.runqget
+         0     0%   100%       20ms 18.18%  bufio.(*Reader).Peek
+         0     0%   100%       20ms 18.18%  bufio.(*Reader).fill
+(pprof) 
+
+
 
 
 
