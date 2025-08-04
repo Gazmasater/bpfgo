@@ -484,157 +484,169 @@ Showing top 10 nodes out of 47
 
 
 
-package app
-
-import (
-	"bytes"
-	"log"
-	"strconv"
-	"sync"
-)
-
-// PrecomputedLeg хранит заранее вычисленные данные по каждому leg.
-type PrecomputedLeg struct {
-	Symbol string
-	Invert bool
+// PairInfo содержит заранее вычисленные конкатенации
+type PairInfo struct {
+	Base         string
+	Quote        string
+	Symbol       string // base+quote
+	Reverse      string // quote+base
+	WSChannel    string // spot@public.deals.v3.api@symbol
 }
 
-// OptimizedTriangle хранит заранее вычисленные legs.
-type OptimizedTriangle struct {
-	AB PrecomputedLeg
-	BC PrecomputedLeg
-	CA PrecomputedLeg
-	A, B, C string
-}
-
-// Arbitrager оптимизированный.
+// Arbitrager структура
 type Arbitrager struct {
-	Triangles       []OptimizedTriangle
-	latest          map[string]float64
-	trianglesByPair map[string][]int
-	realSymbols     map[string]bool
-	mu              sync.Mutex
-	StartAmount     float64
+	Triangles        []triangle.Triangle
+	latest           map[string]float64
+	trianglesByPair  map[string][]int
+	realSymbols      map[string]bool
+	stepSizes        map[string]float64
+	minQtys          map[string]float64
+	mu               sync.Mutex
+	StartAmount      float64
+	exchange         exchange.Exchange
+	pairsInfo        map[string]PairInfo // Новое поле с заранее вычисленными данными
 }
 
-// PrecomputeTriangles оптимизирует и заранее вычисляет символы и инверсии.
-func PrecomputeTriangles(tris []triangle.Triangle, avail map[string]bool) []OptimizedTriangle {
-	out := make([]OptimizedTriangle, 0, len(tris))
 
-	for _, tri := range tris {
-		ab, okAB, invAB := normalizeSymbolDirStatic(tri.A, tri.B, avail)
-		bc, okBC, invBC := normalizeSymbolDirStatic(tri.B, tri.C, avail)
-		ca, okCA, invCA := normalizeSymbolDirStatic(tri.C, tri.A, avail)
+func New(ex exchange.Exchange) (*Arbitrager, error) {
+	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
+	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
 
-		if !okAB || !okBC || !okCA {
-			continue
+	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
+	if err != nil {
+		return nil, err
+	}
+
+	trianglesByPair := make(map[string][]int)
+	pairsInfo := make(map[string]PairInfo) // здесь заранее сохраняем конкатенации
+
+	for i, tri := range ts {
+		pairs := [][2]string{{tri.A, tri.B}, {tri.B, tri.C}, {tri.C, tri.A}}
+
+		for _, p := range pairs {
+			base, quote := p[0], p[1]
+			symbol := base + quote
+			reverse := quote + base
+
+			if _, exists := pairsInfo[symbol]; !exists {
+				pairsInfo[symbol] = PairInfo{
+					Base:      base,
+					Quote:     quote,
+					Symbol:    symbol,
+					Reverse:   reverse,
+					WSChannel: "spot@public.deals.v3.api@" + symbol,
+				}
+			}
+
+			trianglesByPair[symbol] = append(trianglesByPair[symbol], i)
+		}
+	}
+
+	arb := &Arbitrager{
+		Triangles:       ts,
+		latest:          make(map[string]float64),
+		trianglesByPair: trianglesByPair,
+		realSymbols:     avail,
+		stepSizes:       stepSizes,
+		minQtys:         minQtys,
+		StartAmount:     0.5,
+		exchange:        ex,
+		pairsInfo:       pairsInfo,
+	}
+
+	// WS подписки чанками по 20
+	const maxPerConn = 20
+	subPairs := make([]string, 0, len(pairsInfo))
+	for sym := range pairsInfo {
+		subPairs = append(subPairs, sym)
+	}
+
+	for i := 0; i < len(subPairs); i += maxPerConn {
+		end := i + maxPerConn
+		if end > len(subPairs) {
+			end = len(subPairs)
+		}
+		chunk := subPairs[i:end]
+
+		var channels []string
+		for _, sym := range chunk {
+			channels = append(channels, arb.pairsInfo[sym].WSChannel)
 		}
 
-		out = append(out, OptimizedTriangle{
-			AB: PrecomputedLeg{Symbol: ab, Invert: invAB},
-			BC: PrecomputedLeg{Symbol: bc, Invert: invBC},
-			CA: PrecomputedLeg{Symbol: ca, Invert: invCA},
-			A:  tri.A, B: tri.B, C: tri.C,
-		})
+		go func(pairs []string) {
+			for {
+				err := ex.SubscribeDeals(pairs, arb.HandleRaw)
+				if err != nil {
+					log.Printf("[WS][%s] subscribe error: %v, retrying...", ex.Name(), err)
+					time.Sleep(time.Second)
+					continue
+				}
+				log.Printf("[WS][%s] subscribed to channels: %v", ex.Name(), pairs)
+				return
+			}
+		}(channels)
 	}
 
-	return out
+	return arb, nil
 }
 
-func normalizeSymbolDirStatic(base, quote string, avail map[string]bool) (symbol string, ok bool, invert bool) {
-	if avail[base+quote] {
-		return base + quote, true, false
+
+
+func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, ok bool, invert bool) {
+	symbol = base + quote
+	if a.realSymbols[symbol] {
+		return symbol, true, false
 	}
-	if avail[quote+base] {
-		return quote + base, true, true
+	reverse := quote + base
+	if a.realSymbols[reverse] {
+		return reverse, true, true
 	}
 	return "", false, false
 }
 
+
 func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
-	// парсим symbol
-	sym := parseSymbol(raw)
-	if sym == "" {
+	// извлечение символа из raw (как было)
+	i := bytes.Index(raw, sKey)
+	if i < 0 {
+		return
+	}
+	i += len(sKey)
+	j := bytes.IndexByte(raw[i:], '"')
+	if j < 0 {
+		return
+	}
+	sym := string(raw[i : i+j])
+
+	// теперь проверяем через pairsInfo
+	info, exists := a.pairsInfo[sym]
+	if !exists || !a.realSymbols[info.Symbol] {
 		return
 	}
 
+	// извлечение цены (как было)
+	i = bytes.Index(raw, pKey)
+	if i < 0 {
+		return
+	}
+	i += len(pKey)
+	j = bytes.IndexByte(raw[i:], '"')
+	if j < 0 {
+		return
+	}
+	priceBytes := raw[i : i+j]
+	price, err := strconv.ParseFloat(string(priceBytes), 64)
+	if err != nil {
+		return
+	}
+
+	// обновление цены
 	a.mu.Lock()
-	price, ok := parsePrice(raw)
-	if !ok {
-		a.mu.Unlock()
-		return
-	}
-
-	a.latest[sym] = price
+	a.latest[info.Symbol] = price
 	a.mu.Unlock()
 
-	a.Check(sym)
+	a.Check(info.Symbol)
 }
 
-func parseSymbol(raw []byte) string {
-	key := []byte(`"s":"`)
-	i := bytes.Index(raw, key)
-	if i < 0 {
-		return ""
-	}
-	i += len(key)
-	j := bytes.IndexByte(raw[i:], '"')
-	if j < 0 {
-		return ""
-	}
-	return string(raw[i : i+j])
-}
 
-func parsePrice(raw []byte) (float64, bool) {
-	key := []byte(`"p":"`)
-	i := bytes.Index(raw, key)
-	if i < 0 {
-		return 0, false
-	}
-	i += len(key)
-	j := bytes.IndexByte(raw[i:], '"')
-	if j < 0 {
-		return 0, false
-	}
-	price, err := strconv.ParseFloat(string(raw[i:i+j]), 64)
-	if err != nil {
-		return 0, false
-	}
-	return price, true
-}
-
-func (a *Arbitrager) Check(symbol string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	indices := a.trianglesByPair[symbol]
-	nf := 0.9965 * 0.9965 * 0.9965
-
-	for _, idx := range indices {
-		tri := a.Triangles[idx]
-
-		p1, ex1 := a.latest[tri.AB.Symbol]
-		p2, ex2 := a.latest[tri.BC.Symbol]
-		p3, ex3 := a.latest[tri.CA.Symbol]
-
-		if !ex1 || !ex2 || !ex3 || p1 == 0 || p2 == 0 || p3 == 0 {
-			continue
-		}
-
-		if tri.AB.Invert {
-			p1 = 1 / p1
-		}
-		if tri.BC.Invert {
-			p2 = 1 / p2
-		}
-		if tri.CA.Invert {
-			p3 = 1 / p3
-		}
-
-		profit := (p1*p2*p3*nf - 1) * 100
-		if profit > 0 && tri.A == "USDT" {
-			log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
-		}
-	}
-}
 
