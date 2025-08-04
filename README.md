@@ -404,21 +404,96 @@ go tool pprof http://localhost:6060/debug/pprof/heap
 
 
 
-(pprof) list FetchAvailableSymbols
-Total: 2.52MB
-ROUTINE ======================== cryptarb/internal/repository/mexc.(*MexcExchange).FetchAvailableSymbols in /home/gaz358/myprog/crypt/internal/repository/mexc/mex.go
-  525.43kB   525.43kB (flat, cum) 20.40% of Total
-         .          .    183:func (m *MexcExchange) FetchAvailableSymbols() (
-         .          .    184:   map[string]bool, map[string]float64, map[string]float64,
-         .          .    185:) {
-         .          .    186:   // 1) Карты сразу с capacity
-         .          .    187:   const estimated = 1024
-         .          .    188:   available := make(map[string]bool, estimated)
-  525.43kB   525.43kB    189:   steps := make(map[string]float64, estimated)
-         .          .    190:   minQs := make(map[string]float64, estimated)
-         .          .    191:
-         .          .    192:   // 2) Клиент без HTTP/2 и без gzip
-         .          .    193:   transport := &http.Transport{
-         .          .    194:           DisableCompression: true,
-(pprof) 
+func (m *MexcExchange) FetchAvailableSymbols() (
+    map[string]bool, map[string]float64, map[string]float64,
+) {
+    // 1) HTTP-клиент без gzip и без HTTP/2
+    transport := &http.Transport{
+        DisableCompression: true,
+        TLSNextProto:       make(map[string]func(string, *tls.Conn) http.RoundTripper),
+    }
+    client := &http.Client{
+        Timeout:   10 * time.Second,
+        Transport: transport,
+    }
+
+    resp, err := client.Get("https://api.mexc.com/api/v3/exchangeInfo")
+    if err != nil {
+        log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
+        return nil, nil, nil
+    }
+    defer resp.Body.Close()
+
+    dec := json.NewDecoder(resp.Body)
+
+    // Проматываем до ключа "symbols"
+    for {
+        tok, err := dec.Token()
+        if err != nil {
+            log.Printf("❌ Не нашли поле symbols: %v", err)
+            return nil, nil, nil
+        }
+        if key, ok := tok.(string); ok && key == "symbols" {
+            break
+        }
+    }
+    // Ожидаем '['
+    if _, err := dec.Token(); err != nil {
+        log.Printf("❌ Ожидаем '[': %v", err)
+        return nil, nil, nil
+    }
+
+    // Вспомогательная структура и слайс валидных
+    type symInfo struct {
+        Symbol               string `json:"symbol"`
+        Status               string `json:"status"`
+        IsSpotTradingAllowed bool   `json:"isSpotTradingAllowed"`
+        BaseSizePrecision    string `json:"baseSizePrecision"`
+    }
+    type valid struct {
+        sym  string
+        step float64
+    }
+    valids := make([]valid, 0, 64) // пусть начальный cap будет небольшой
+
+    // 2) Стримим по одному, фильтруем и собираем валидные
+    for dec.More() {
+        var s symInfo
+        if err := dec.Decode(&s); err != nil {
+            log.Printf("❌ Ошибка Decode: %v", err)
+            return nil, nil, nil
+        }
+        if s.Status != "1" || !s.IsSpotTradingAllowed {
+            continue
+        }
+        step, err := strconv.ParseFloat(s.BaseSizePrecision, 64)
+        if err != nil || step <= 0 {
+            continue
+        }
+        valids = append(valids, valid{s.Symbol, step})
+    }
+    // Закрываем массив ']'
+    dec.Token()
+
+    // 3) Теперь точно знаем n
+    n := len(valids)
+    available := make(map[string]bool, n)
+    stepSizes := make(map[string]float64, n)
+    minQtys   := make(map[string]float64, n)
+
+    // Заполняем
+    var logLines []string
+    logLines = make([]string, 0, n)
+    for _, v := range valids {
+        available[v.sym] = true
+        stepSizes[v.sym] = v.step
+        minQtys[v.sym]   = v.step
+        logLines = append(logLines, fmt.Sprintf("%s\tstep=%g", v.sym, v.step))
+    }
+
+    _ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(logLines, "\n")), 0644)
+    log.Printf("✅ Подходящих пар: %d", n)
+
+    return available, stepSizes, minQtys
+}
 
