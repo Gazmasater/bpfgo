@@ -403,26 +403,84 @@ go tool pprof http://localhost:6060/debug/pprof/heap
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go tool pprof http://localhost:6060/debug/pprof/heap
-Fetching profile over HTTP from http://localhost:6060/debug/pprof/heap
-Saved profile in /home/gaz358/pprof/pprof.cryptarb.alloc_objects.alloc_space.inuse_objects.inuse_space.002.pb.gz
-File: cryptarb
-Build ID: e8c184447d9082b3d7fbf13790860856c1a0c556
-Type: inuse_space
-Time: 2025-08-05 02:11:53 MSK
-Entering interactive mode (type "help" for commands, "o" for options)
-(pprof) top
-Showing nodes accounting for 6701.03kB, 100% of 6701.03kB total
-Showing top 10 nodes out of 38
-      flat  flat%   sum%        cum   cum%
- 2086.21kB 31.13% 31.13%  2600.21kB 38.80%  encoding/json.(*Decoder).refill
-    2052kB 30.62% 61.75%     2052kB 30.62%  runtime.allocm
-     514kB  7.67% 69.43%      514kB  7.67%  bufio.NewReaderSize (inline)
-  512.56kB  7.65% 77.07%   512.56kB  7.65%  reflect.mapassign_faststr0
-  512.23kB  7.64% 84.72%   512.23kB  7.64%  crypto/tls.(*Config).Clone
-  512.01kB  7.64% 92.36%   512.01kB  7.64%  encoding/json.(*decodeState).convertNumber
-  512.01kB  7.64%   100%  1024.02kB 15.28%  encoding/json.(*decodeState).literalStore
-         0     0%   100%      514kB  7.67%  bufio.NewReader (inline)
-         0     0%   100%      514kB  7.67%  compress/gzip.(*Reader).Reset
-         0     0%   100%      514kB  7.67%  compress/gzip.NewReader (inline)
-(pprof) 
+func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64) {
+    // Предварительное предположение о размере (чтобы сразу зарезервировать мапы)
+    const estimated = 1024
+    availableSymbols := make(map[string]bool, estimated)
+    stepSizes       := make(map[string]float64, estimated)
+    minQtys         := make(map[string]float64, estimated)
+
+    // Отключаем компрессию на уровне HTTP-транспорта:
+    client := &http.Client{
+        Timeout: 10 * time.Second,
+        Transport: &http.Transport{
+            DisableCompression: true,
+        },
+    }
+
+    resp, err := client.Get("https://api.mexc.com/api/v3/exchangeInfo")
+    if err != nil {
+        log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
+        return availableSymbols, stepSizes, minQtys
+    }
+    defer resp.Body.Close()
+
+    dec := json.NewDecoder(resp.Body)
+
+    // Проматываем до поля "symbols"
+    for {
+        tok, err := dec.Token()
+        if err != nil {
+            log.Printf("❌ Не удалось найти поле symbols: %v", err)
+            return availableSymbols, stepSizes, minQtys
+        }
+        if key, ok := tok.(string); ok && key == "symbols" {
+            break
+        }
+    }
+    // Ожидаем начало массива [
+    if delim, err := dec.Token(); err != nil || delim != json.Delim('[') {
+        log.Printf("❌ Ожидаем начало массива symbols: %v", err)
+        return availableSymbols, stepSizes, minQtys
+    }
+
+    // Структура с нужными полями
+    type symInfo struct {
+        Symbol                string  `json:"symbol"`
+        Status                string  `json:"status"`
+        IsSpotTradingAllowed  bool    `json:"isSpotTradingAllowed"`
+        BaseSizePrecision     string  `json:"baseSizePrecision"`
+    }
+
+    var logLines []string
+
+    // Декодим по одному элементу и сразу обрабатываем
+    for dec.More() {
+        var s symInfo
+        if err := dec.Decode(&s); err != nil {
+            log.Printf("❌ Ошибка декодирования одного элемента symbols: %v", err)
+            return availableSymbols, stepSizes, minQtys
+        }
+        if s.Status != "1" || !s.IsSpotTradingAllowed {
+            continue
+        }
+        step, err := strconv.ParseFloat(s.BaseSizePrecision, 64)
+        if err != nil || step <= 0 {
+            continue
+        }
+
+        availableSymbols[s.Symbol] = true
+        stepSizes[s.Symbol]       = step
+        minQtys[s.Symbol]         = step
+        logLines = append(logLines, fmt.Sprintf("%s\tstep=%g", s.Symbol, step))
+    }
+
+    // Дополнительный токен: конец массива ]
+    dec.Token()
+
+    // Пишем лог-файл и возвращаем
+    _ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(logLines, "\n")), 0644)
+    log.Printf("✅ Подходящих пар: %d", len(availableSymbols))
+    return availableSymbols, stepSizes, minQtys
+}
+
