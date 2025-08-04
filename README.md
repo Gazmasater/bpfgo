@@ -497,3 +497,33 @@ func (m *MexcExchange) FetchAvailableSymbols() (
     return available, stepSizes, minQtys
 }
 
+
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go tool pprof http://localhost:6060/debug/pprof/heap
+Fetching profile over HTTP from http://localhost:6060/debug/pprof/heap
+Saved profile in /home/gaz358/pprof/pprof.cryptarb.alloc_objects.alloc_space.inuse_objects.inuse_space.008.pb.gz
+File: cryptarb
+Build ID: 0b9736d25f08520070715f602ec1ccfea5320a11
+Type: inuse_space
+Time: 2025-08-05 02:54:56 MSK
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 1545.79kB, 100% of 1545.79kB total
+Showing top 10 nodes out of 23
+      flat  flat%   sum%        cum   cum%
+  520.04kB 33.64% 33.64%   520.04kB 33.64%  cryptarb/internal/repository/filesystem.LoadTrianglesFromSymbols
+     513kB 33.19% 66.83%      513kB 33.19%  runtime.allocm
+  512.75kB 33.17%   100%   512.75kB 33.17%  crypto/x509.parseCertificate
+         0     0%   100%   520.04kB 33.64%  cryptarb/internal/app.New
+         0     0%   100%   512.75kB 33.17%  crypto/tls.(*Conn).HandshakeContext
+         0     0%   100%   512.75kB 33.17%  crypto/tls.(*Conn).clientHandshake
+         0     0%   100%   512.75kB 33.17%  crypto/tls.(*Conn).handshakeContext
+         0     0%   100%   512.75kB 33.17%  crypto/tls.(*Conn).verifyServerCertificate
+         0     0%   100%   512.75kB 33.17%  crypto/tls.(*certCache).newCert
+         0     0%   100%   512.75kB 33.17%  crypto/tls.(*clientHandshakeStateTLS13).handshake
+(pprof) 
+
+(pprof) list FetchAvailableSymbols
+no matches found for regexp: FetchAvailableSymbols
+
+
+
