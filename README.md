@@ -400,29 +400,5 @@ go tool pprof http://localhost:6060/debug/pprof/heap
 (pprof) top
 
 
+(pprof) list FetchAvailableSymbols
 
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go tool pprof http://localhost:6060/debug/pprof/heap
-Fetching profile over HTTP from http://localhost:6060/debug/pprof/heap
-Saved profile in /home/gaz358/pprof/pprof.cryptarb.alloc_objects.alloc_space.inuse_objects.inuse_space.005.pb.gz
-File: cryptarb
-Build ID: 4373533d9812851cd2b31b3025e5246e6d5d89dc
-Type: inuse_space
-Time: 2025-08-05 02:28:36 MSK
-Entering interactive mode (type "help" for commands, "o" for options)
-(pprof) top
-Showing nodes accounting for 4627.27kB, 100% of 4627.27kB total
-Showing top 10 nodes out of 55
-      flat  flat%   sum%        cum   cum%
-    1539kB 33.26% 33.26%  2051.22kB 44.33%  runtime.allocm
- 1025.56kB 22.16% 55.42%  1025.56kB 22.16%  encoding/pem.Decode
-  525.43kB 11.36% 66.78%   525.43kB 11.36%  cryptarb/internal/repository/mexc.(*MexcExchange).FetchAvailableSymbols
-  512.56kB 11.08% 77.85%   512.56kB 11.08%  sync.(*Pool).pinSlow
-  512.50kB 11.08% 88.93%   512.50kB 11.08%  crypto/internal/fips140/bigmod.(*Nat).montgomeryMul
-  512.22kB 11.07%   100%   512.22kB 11.07%  runtime.malg
-         0     0%   100%  1037.99kB 22.43%  cryptarb/internal/app.New
-         0     0%   100%   512.50kB 11.08%  cryptarb/internal/app.New.func1
-         0     0%   100%   512.56kB 11.08%  cryptarb/internal/repository/filesystem.LoadTrianglesFromSymbols
-         0     0%   100%   512.56kB 11.08%  cryptarb/internal/repository/filesystem.LoadTrianglesFromSymbols.Printf.func1
-(pprof) 
