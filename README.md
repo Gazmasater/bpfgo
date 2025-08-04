@@ -397,77 +397,26 @@ http://localhost:6060/debug/pprof/
 go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
 
 
-(pprof) top
-Showing nodes accounting for 130ms, 100% of 130ms total
-Showing top 10 nodes out of 62
-      flat  flat%   sum%        cum   cum%
-      40ms 30.77% 30.77%       40ms 30.77%  internal/runtime/syscall.Syscall6
-      10ms  7.69% 38.46%       10ms  7.69%  encoding/json.stateBeginValue
-      10ms  7.69% 46.15%       10ms  7.69%  encoding/json.unquoteBytes
-      10ms  7.69% 53.85%       10ms  7.69%  memeqbody
-      10ms  7.69% 61.54%       10ms  7.69%  runtime.(*spanSet).push
-      10ms  7.69% 69.23%       10ms  7.69%  runtime.ifaceeq
-      10ms  7.69% 76.92%       10ms  7.69%  runtime.memclrNoHeapPointers
-      10ms  7.69% 84.62%       10ms  7.69%  runtime.nextFreeFast
-      10ms  7.69% 92.31%       10ms  7.69%  runtime.typePointers.next
-      10ms  7.69%   100%       10ms  7.69%  strconv.ParseFloat
-(pprof) 
 
 
 
-Build ID: 18dfa87cfc416462058286251d48f916dc0060b6
-Type: cpu
-Time: 2025-08-04 18:11:58 MSK
-Duration: 30s, Total samples = 220ms ( 0.73%)
 Entering interactive mode (type "help" for commands, "o" for options)
 (pprof) top
-Showing nodes accounting for 170ms, 77.27% of 220ms total
-Showing top 10 nodes out of 91
+Showing nodes accounting for 100ms, 100% of 100ms total
+Showing top 10 nodes out of 44
       flat  flat%   sum%        cum   cum%
-      50ms 22.73% 22.73%       50ms 22.73%  internal/runtime/syscall.Syscall6
-      30ms 13.64% 36.36%       30ms 13.64%  runtime.nextFreeFast (inline)
-      20ms  9.09% 45.45%       20ms  9.09%  runtime.mapaccess1_faststr
-      10ms  4.55% 50.00%       20ms  9.09%  encoding/json.(*decodeState).array
-      10ms  4.55% 54.55%       30ms 13.64%  encoding/json.(*scanner).pushParseState
-      10ms  4.55% 59.09%       60ms 27.27%  encoding/json.checkValid
-      10ms  4.55% 63.64%       10ms  4.55%  encoding/json.state1
-      10ms  4.55% 68.18%       10ms  4.55%  encoding/json.stateInString
-      10ms  4.55% 72.73%       10ms  4.55%  internal/poll.(*fdMutex).rwunlock
-      10ms  4.55% 77.27%       20ms  9.09%  runtime.(*mcache).prepareForSweep
+      30ms 30.00% 30.00%       30ms 30.00%  internal/runtime/syscall.Syscall6
+      20ms 20.00% 50.00%       20ms 20.00%  runtime.futex
+      10ms 10.00% 60.00%       10ms 10.00%  aeshashbody
+      10ms 10.00% 70.00%       10ms 10.00%  bytes.(*Reader).Len (inline)
+      10ms 10.00% 80.00%       10ms 10.00%  indexbody
+      10ms 10.00% 90.00%       10ms 10.00%  runtime.nanotime
+      10ms 10.00%   100%       10ms 10.00%  runtime.releasep
+         0     0%   100%       60ms 60.00%  bufio.(*Reader).Peek
+         0     0%   100%       60ms 60.00%  bufio.(*Reader).fill
+         0     0%   100%       50ms 50.00%  bytes.(*Buffer).ReadFrom
 (pprof) 
 
-
-
-howing nodes accounting for 120ms, 100% of 120ms total
-Showing top 10 nodes out of 67
-      flat  flat%   sum%        cum   cum%
-      20ms 16.67% 16.67%       20ms 16.67%  internal/runtime/syscall.Syscall6
-      20ms 16.67% 33.33%       20ms 16.67%  runtime.futex
-      10ms  8.33% 41.67%       40ms 33.33%  bytes.(*Buffer).ReadFrom
-      10ms  8.33% 50.00%       10ms  8.33%  crypto/tls.(*halfConn).decrypt
-      10ms  8.33% 58.33%       10ms  8.33%  github.com/json-iterator/go.(*Iterator).readPositiveFloat64
-      10ms  8.33% 66.67%       10ms  8.33%  github.com/json-iterator/go.locatePath
-      10ms  8.33% 75.00%       20ms 16.67%  runtime.entersyscall
-      10ms  8.33% 83.33%       10ms  8.33%  runtime.heapSetTypeNoHeader
-      10ms  8.33% 91.67%       10ms  8.33%  runtime.memclrNoHeapPointers
-      10ms  8.33%   100%       30ms 25.00%  runtime.schedule
-(pprof) 
-
-
-Showing nodes accounting for 90ms, 100% of 90ms total
-Showing top 10 nodes out of 54
-      flat  flat%   sum%        cum   cum%
-      20ms 22.22% 22.22%       20ms 22.22%  internal/runtime/syscall.Syscall6
-      10ms 11.11% 33.33%       20ms 22.22%  crypto/internal/fips140/aes/gcm.(*GCMForTLS13).Open
-      10ms 11.11% 44.44%       10ms 11.11%  crypto/internal/fips140/aes/gcm.gcmAesDec
-      10ms 11.11% 55.56%       10ms 11.11%  internal/poll.ignoringEINTRIO (inline)
-      10ms 11.11% 66.67%       10ms 11.11%  internal/runtime/maps.ctrlGroup.matchH2
-      10ms 11.11% 77.78%       10ms 11.11%  runtime.execute
-      10ms 11.11% 88.89%       10ms 11.11%  runtime.mapaccess2_faststr
-      10ms 11.11%   100%       10ms 11.11%  runtime.memmove
-         0     0%   100%       30ms 33.33%  bufio.(*Reader).Peek
-         0     0%   100%       30ms 33.33%  bufio.(*Reader).fill
-(pprof) 
 
 
 
