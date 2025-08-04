@@ -415,7 +415,7 @@ Showing top 10 nodes out of 62
 
 
 func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
-	// Обработка ACK как раньше
+	// 1. Обработка ACK-сообщений подписки
 	var ack struct {
 		ID   int64  `json:"id"`
 		Code int    `json:"code"`
@@ -423,55 +423,64 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 	}
 	if err := json.Unmarshal(raw, &ack); err == nil && ack.Code == 0 {
 		const prefixFail = "Not Subscribed successfully! ["
-		if strings.HasPrefix(ack.Msg, prefixFail) {
-			blocked := strings.Split(strings.TrimSuffix(strings.TrimPrefix(ack.Msg, prefixFail), "].  Reason： Blocked! \""), ",")
+		if parts := strings.Split(ack.Msg, prefixFail); len(parts) == 2 {
+			blocked := strings.Split(strings.TrimSuffix(parts[1], "].  Reason： Blocked! \""), ",")
 			for _, ch := range blocked {
 				if idx := strings.LastIndex(ch, "@"); idx != -1 {
 					sym := ch[idx+1:]
 					a.mu.Lock()
 					a.realSymbols[sym] = false
 					a.mu.Unlock()
+					log.Printf("[WS][ACK] ⚠️ Заблокирована пара: %s", sym)
 				}
 			}
 			return
 		}
 	}
 
-	var (
-		symbol, priceStr string
-	)
-
-	symbol, err := jsonparser.GetString(raw, "s")
-	if err != nil {
-		log.Printf("❌ symbol parse error: %v", err)
+	// 2. Парсинг JSON
+	var msg struct {
+		Channel string `json:"c"`
+		Symbol  string `json:"s"`
+		Data    struct {
+			Deals []struct {
+				Price string `json:"p"`
+			} `json:"deals"`
+		} `json:"d"`
+	}
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		log.Printf("[WS][ERR] ❌ Ошибка парсинга JSON: %v\nRAW: %s", err, string(raw))
 		return
 	}
 
-	found := false
-	_, err = jsonparser.ArrayEach(raw, func(value []byte, _ jsonparser.ValueType, _ int, _ error) {
-		if found {
-			return
-		}
-		found = true
-		priceStr, err = jsonparser.GetString(value, "p")
-	}, "d", "deals")
-	if err != nil || !found {
-		log.Printf("❌ deal parse error: %v", err)
+	// 3. Проверка полей
+	if msg.Symbol == "" {
+		log.Printf("[WS][SKIP] ❗ Пустой symbol, raw: %s", string(raw))
+		return
+	}
+	if len(msg.Data.Deals) == 0 {
+		log.Printf("[WS][SKIP] ❗ Пустой список deals по символу %s", msg.Symbol)
 		return
 	}
 
+	// 4. Парсинг цены
+	priceStr := msg.Data.Deals[0].Price
 	price, err := strconv.ParseFloat(priceStr, 64)
 	if err != nil {
-		log.Printf("❌ parseFloat error: %v, input: %s", err, priceStr)
+		log.Printf("[WS][ERR] ❌ Ошибка преобразования цены: %v, str=%s", err, priceStr)
 		return
 	}
 
-	// Обновляем latest
+	// 5. Успешный тик
+	log.Printf("[WS][TICK] ✅ %s = %.8f", msg.Symbol, price)
+
+	// 6. Запись latest
 	a.mu.Lock()
-	a.latest[symbol] = price
+	a.latest[msg.Symbol] = price
 	a.mu.Unlock()
 
-	a.Check(symbol)
+	// 7. Проверка треугольников
+	a.Check(msg.Symbol)
 }
 
 
