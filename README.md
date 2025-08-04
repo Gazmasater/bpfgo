@@ -440,32 +440,24 @@ Showing top 10 nodes out of 91
 
 
 import (
-    "encoding/json"
-    "log"
     "strconv"
     "strings"
     "sync"
+
+    jsoniter "github.com/json-iterator/go"
 )
 
-func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
-    // 1) Распаковываем только корневые поля в «конверте»
-    type envelope struct {
-        ID     *int64           `json:"id"`
-        Code   *int             `json:"code"`
-        Msg    *string          `json:"msg"`
-        Symbol *string          `json:"s"`
-        Data   json.RawMessage `json:"d"`
-    }
-    var env envelope
-    if err := json.Unmarshal(raw, &env); err != nil {
-        log.Printf("invalid JSON envelope: %v", err)
-        return
-    }
+var json = jsoniter.ConfigFastest
 
-    // 2) Если это ACK подписки — обрабатываем блокировку каналов
-    if env.ID != nil && env.Code != nil && *env.Code == 0 && env.Msg != nil {
+func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
+    // Парсим JSON с помощью jsoniter.Get — без рефлексии encoding/json
+    any := json.Get(raw)
+
+    // 1) Обработка ACK подписки
+    if !any.Get("id").IsNil() && any.Get("code").ToInt() == 0 {
         const prefixFail = "Not Subscribed successfully! ["
-        if parts := strings.Split(*env.Msg, prefixFail); len(parts) == 2 {
+        msg := any.Get("msg").ToString()
+        if parts := strings.Split(msg, prefixFail); len(parts) == 2 {
             blocked := strings.Split(
                 strings.TrimSuffix(parts[1], "].  Reason： Blocked! \""), ",",
             )
@@ -481,46 +473,39 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
         return
     }
 
-    // 3) Иначе — торговые данные
-    if env.Symbol == nil || len(env.Data) == 0 {
-        // нет символа или пустое тело данных
-        return
-    }
-    symbol := *env.Symbol
-
-    // 3.1) Быстрый фильтр: нас интересуют только символы с треугольниками
-    if _, ok := a.trianglesByPair[symbol]; !ok {
+    // 2) Читаем symbol
+    sym := any.Get("s").ToString()
+    if sym == "" {
         return
     }
 
-    // 3.2) Глубокий парсинг только массива deals
-    type dealItem struct {
-        Price string `json:"p"`
-    }
-    var body struct {
-        Deals []dealItem `json:"deals"`
-    }
-    if err := json.Unmarshal(env.Data, &body); err != nil {
-        log.Printf("unmarshal deals error: %v", err)
-        return
-    }
-    if len(body.Deals) == 0 {
+    // 3) Быстрый фильтр: интересуют только символы с треугольниками
+    if _, ok := a.trianglesByPair[sym]; !ok {
         return
     }
 
-    // 3.3) Преобразуем строку в float и сохраняем под мьютексом
-    price, err := strconv.ParseFloat(body.Deals[0].Price, 64)
+    // 4) Дёргаем первую цену из массива deals
+    priceStr := any.
+        Get("d").
+        Get("deals").
+        Get(0).
+        Get("p").
+        ToString()
+    if priceStr == "" {
+        return
+    }
+
+    // 5) Преобразуем в float
+    price, err := strconv.ParseFloat(priceStr, 64)
     if err != nil {
-        log.Printf("parse price error: %v, priceStr=%q", err, body.Deals[0].Price)
         return
     }
 
+    // 6) Сохраняем и запускаем проверку
     a.mu.Lock()
-    a.latest[symbol] = price
+    a.latest[sym] = price
     a.mu.Unlock()
-
-    // 4) Запускаем проверку арбитражных треугольников
-    a.Check(symbol)
+    a.Check(sym)
 }
 
 
