@@ -403,10 +403,102 @@ go tool pprof http://localhost:6060/debug/pprof/heap
 
 
 
-data, _ := io.ReadAll(resp.Body)
-json.Unmarshal(data, &dst)
+func (m *MexcExchange) PlaceMarketOrder(symbol, side string, quantity float64) (string, error) {
+    endpoint := "https://api.mexc.com/api/v3/order"
+    timestamp := strconv.FormatInt(time.Now().UnixMilli(), 10)
+
+    // Запрос тела
+    params := make(map[string]string, 5)
+    params["symbol"] = symbol
+    params["side"]   = strings.ToUpper(side) // "BUY" или "SELL"
+    params["type"]   = "MARKET"
+    if side == "BUY" {
+        params["quoteOrderQty"] = fmt.Sprintf("%.4f", quantity)
+    } else {
+        params["quantity"] = fmt.Sprintf("%.6f", quantity)
+    }
+
+    // Собираем строку запроса
+    q := url.Values{}
+    for k, v := range params {
+        q.Set(k, v)
+    }
+    q.Set("timestamp", timestamp)
+
+    // Подпись
+    sig := createSignature(m.apiSecret, q.Encode())
+    q.Set("signature", sig)
+
+    // Отправляем
+    req, _ := http.NewRequest("POST", endpoint+"?"+q.Encode(), nil)
+    req.Header.Set("X-MEXC-APIKEY", m.apiKey)
+
+    client := &http.Client{Timeout: 10 * time.Second}
+    resp, err := client.Do(req)
+    if err != nil {
+        return "", fmt.Errorf("HTTP error: %v", err)
+    }
+    defer resp.Body.Close()
+
+    // В случае ошибки читаем тело, чтобы вернуть текст
+    if resp.StatusCode != http.StatusOK {
+        body, _ := io.ReadAll(resp.Body)
+        return "", fmt.Errorf("order failed: %s", string(body))
+    }
+
+    // Декодируем сразу из тела
+    var result struct {
+        OrderID string `json:"orderId"`
+    }
+    dec := json.NewDecoder(resp.Body)
+    if err := dec.Decode(&result); err != nil {
+        return "", fmt.Errorf("decode error: %v", err)
+    }
+
+    return result.OrderID, nil
+}
 
 
-dec := json.NewDecoder(resp.Body)
-dec.Decode(&dst)
+
+func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64) {
+    availableSymbols := make(map[string]bool, 256)
+    stepSizes       := make(map[string]float64, 256)
+    minQtys         := make(map[string]float64, 256)
+
+    resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+    if err != nil {
+        log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
+        return availableSymbols, stepSizes, minQtys
+    }
+    defer resp.Body.Close()
+
+    // Декодируем напрямую из resp.Body
+    var data struct {
+        Symbols []map[string]interface{} `json:"symbols"`
+    }
+    dec := json.NewDecoder(resp.Body)
+    if err := dec.Decode(&data); err != nil {
+        log.Printf("❌ Ошибка разбора JSON: %v", err)
+        return availableSymbols, stepSizes, minQtys
+    }
+
+    var logLines []string
+    for _, s := range data.Symbols {
+        sym, _ := s["symbol"].(string)
+        if sym == "" || !m.isValidSymbol(s) {
+            continue
+        }
+        step, _ := strconv.ParseFloat(s["baseSizePrecision"].(string), 64)
+
+        availableSymbols[sym] = true
+        stepSizes[sym]         = step
+        minQtys[sym]           = step
+        logLines = append(logLines, fmt.Sprintf("%s\tstep=%g", sym, step))
+    }
+
+    // Сохраняем результат в лог-файл
+    _ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(logLines, "\n")), 0644)
+    log.Printf("✅ Подходящих пар: %d", len(availableSymbols))
+    return availableSymbols, stepSizes, minQtys
+}
 
