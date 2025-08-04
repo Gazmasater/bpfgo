@@ -649,4 +649,18 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 }
 
 
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "go-staticcheck",
+	"severity": 4,
+	"message": "m[string(key)] would be more efficient than k := string(key); m[k] (SA6001)",
+	"source": "go-staticcheck",
+	"startLineNumber": 155,
+	"startColumn": 9,
+	"endLineNumber": 155,
+	"endColumn": 29,
+	"origin": "extHost1"
+}]
+
+
 
