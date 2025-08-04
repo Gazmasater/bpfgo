@@ -392,232 +392,51 @@ _______________________________________________________________________________
 
 
 
-package app
+package main
 
 import (
-	"encoding/json"
-	"fmt"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
 
-	"cryptarb/internal/domain/exchange"
-	"cryptarb/internal/domain/triangle"
-	"cryptarb/internal/repository/filesystem"
+	"cryptarb/internal/app"
+	"cryptarb/internal/repository/mexc"
+
+	"github.com/joho/godotenv"
 )
 
-// Arbitrager ищет треугольные арбитражные возможности на бирже.
-type Arbitrager struct {
-	Triangles       []triangle.Triangle // Все допустимые треугольники
-	latest          map[string]float64  // Последние цены по парам
-	trianglesByPair map[string][]int    // Индексы треугольников по паре
-	realSymbols     map[string]bool     // Доступные пары (с инверсиями)
-	stepSizes       map[string]float64  // Шаг лота
-	minQtys         map[string]float64  // Мин. объём
-	mu              sync.Mutex
-	StartAmount     float64
-	exchange        exchange.Exchange
-}
+func main() {
+	// 🧪 Включаем pprof
+	go func() {
+		log.Println("📈 Profiler доступен на http://localhost:6060/debug/pprof/")
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 
-// New создаёт и инициализирует арбитражер.
-func New(ex exchange.Exchange) (*Arbitrager, error) {
-	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
-	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
-	log.Printf("📊 Доступные пары (с инверсиями): %d", len(avail))
-
-	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
+	// 1. Загружаем .env
+	err := godotenv.Load()
 	if err != nil {
-		return nil, fmt.Errorf("LoadTriangles: %w", err)
-	}
-	log.Printf("[INIT] Треугольников найдено: %d", len(ts))
-
-	if data, err := json.MarshalIndent(ts, "", "  "); err == nil {
-		_ = os.WriteFile("triangles_dump.json", data, 0644)
+		log.Fatal("❌ Не удалось загрузить .env:", err)
 	}
 
-	// Индексация по паре
-	trianglesByPair := make(map[string][]int)
-	var subRaw []string
-	for i, tri := range ts {
-		ab := tri.A + tri.B
-		bc := tri.B + tri.C
-		ca := tri.C + tri.A
-		trianglesByPair[ab] = append(trianglesByPair[ab], i)
-		trianglesByPair[bc] = append(trianglesByPair[bc], i)
-		trianglesByPair[ca] = append(trianglesByPair[ca], i)
-		subRaw = append(subRaw, ab, bc, ca)
+	apiKey := os.Getenv("MEXC_API_KEY")
+	secret := os.Getenv("MEXC_SECRET_KEY")
+
+	if apiKey == "" || secret == "" {
+		log.Fatal("❌ API ключи не найдены в .env")
 	}
 
-	// Уникальные пары для подписки
-	uniq := make(map[string]struct{})
-	for _, p := range subRaw {
-		if avail[p] {
-			uniq[p] = struct{}{}
-		}
-	}
-	var subPairs []string
-	for p := range uniq {
-		subPairs = append(subPairs, p)
-	}
-	log.Printf("[INIT] Подписка на пар: %d шт.", len(subPairs))
+	// 2. Создаём клиента биржи
+	ex := mexc.NewMexcExchange(apiKey, secret)
 
-	arb := &Arbitrager{
-		Triangles:       ts,
-		latest:          make(map[string]float64),
-		trianglesByPair: trianglesByPair,
-		realSymbols:     avail,
-		stepSizes:       stepSizes,
-		minQtys:         minQtys,
-		StartAmount:     0.5,
-		exchange:        ex,
-	}
-
-	// WS подписки чанками по 20
-	const maxPerConn = 20
-	for i := 0; i < len(subPairs); i += maxPerConn {
-		end := i + maxPerConn
-		if end > len(subPairs) {
-			end = len(subPairs)
-		}
-		chunk := subPairs[i:end]
-		go func(pairs []string) {
-			for {
-				err := ex.SubscribeDeals(pairs, arb.HandleRaw)
-				if err != nil {
-					log.Printf("[WS][%s] subscribe error: %v, retrying...", ex.Name(), err)
-					time.Sleep(time.Second)
-					continue
-				}
-				log.Printf("[WS][%s] subscribed to channels: %v", ex.Name(), pairs)
-				return
-			}
-		}(chunk)
-	}
-
-	return arb, nil
-}
-
-// normalizeSymbolDir собирает правильный символ и указывает, нужно ли инвертировать цену.
-// Убираем здесь блокировки — метод зовётся внутри Check под мьютексом.
-func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, ok bool, invert bool) {
-	if a.realSymbols[base+quote] {
-		return base + quote, true, false
-	}
-	if a.realSymbols[quote+base] {
-		return quote + base, true, true
-	}
-	return "", false, false
-}
-
-// HandleRaw обрабатывает каждое WS-сообщение.
-func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
-	// Обработка ACK сообщений подписки
-	var ack struct {
-		ID   int64  `json:"id"`
-		Code int    `json:"code"`
-		Msg  string `json:"msg"`
-	}
-	if err := json.Unmarshal(raw, &ack); err == nil && ack.Code == 0 {
-		const prefixFail = "Not Subscribed successfully! ["
-		if parts := strings.Split(ack.Msg, prefixFail); len(parts) == 2 {
-			blocked := strings.Split(strings.TrimSuffix(parts[1], "].  Reason： Blocked! \""), ",")
-			for _, ch := range blocked {
-				if idx := strings.LastIndex(ch, "@"); idx != -1 {
-					sym := ch[idx+1:]
-					a.mu.Lock()
-					a.realSymbols[sym] = false
-					a.mu.Unlock()
-				}
-			}
-			return
-		}
-	}
-
-	log.Printf("HandleRaw raw: %s", raw)
-
-	var msg struct {
-		Channel string `json:"c"`
-		Symbol  string `json:"s"`
-		Data    struct {
-			Deals []struct {
-				Price string `json:"p"`
-			} `json:"deals"`
-		} `json:"d"`
-	}
-	if err := json.Unmarshal(raw, &msg); err != nil {
-		log.Printf("unmarshal WS error: %v, raw=%s", err, raw)
-		return
-	}
-	if msg.Symbol == "" || len(msg.Data.Deals) == 0 {
-		log.Printf("HandleRaw skipped: no symbol or deals empty")
-		return
-	}
-
-	price, err := strconv.ParseFloat(msg.Data.Deals[0].Price, 64)
+	// 3. Запускаем арбитраж без triangles.json
+	_, err = app.New(ex)
 	if err != nil {
-		log.Printf("parse price error: %v, priceStr=%v", err, msg.Data.Deals[0].Price)
-		return
+		log.Fatal("❌ Ошибка запуска арбитража:", err)
 	}
-	log.Printf("HandleRaw parsed: symbol=%s price=%.8f", msg.Symbol, price)
 
-	// Записываем цену под мьютексом
-	a.mu.Lock()
-	a.latest[msg.Symbol] = price
-	a.mu.Unlock()
-
-	// Проверяем треугольники
-	a.Check(msg.Symbol)
+	// 4. Блокируем main
+	select {}
 }
 
-// Check проверяет все треугольники, связанные с символом.
-// Весь метод выполняется под мьютексом, чтобы избежать concurrent map read/write.
-func (a *Arbitrager) Check(symbol string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	indices := a.trianglesByPair[symbol]
-	if len(indices) == 0 {
-		return
-	}
-
-	// С учётом торговых комиссий
-	nf := 0.9965 * 0.9965 * 0.9965
-
-	for _, idx := range indices {
-		tri := a.Triangles[idx]
-
-		ab, ok1, rev1 := a.normalizeSymbolDir(tri.A, tri.B)
-		bc, ok2, rev2 := a.normalizeSymbolDir(tri.B, tri.C)
-		ca, ok3, rev3 := a.normalizeSymbolDir(tri.C, tri.A)
-		if !ok1 || !ok2 || !ok3 {
-			continue
-		}
-
-		p1, ex1 := a.latest[ab]
-		p2, ex2 := a.latest[bc]
-		p3, ex3 := a.latest[ca]
-		if !ex1 || !ex2 || !ex3 || p1 == 0 || p2 == 0 || p3 == 0 {
-			continue
-		}
-
-		if rev1 {
-			p1 = 1 / p1
-		}
-		if rev2 {
-			p2 = 1 / p2
-		}
-		if rev3 {
-			p3 = 1 / p3
-		}
-
-		profit := (p1 * p2 * p3 * nf - 1) * 100
-		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
-	}
-}
-
-2025/08/03 22:23:08 🔺 ARB USDT/LUNC/USDC profit=0.4081%
-2025/08/03 22:23:08 🔺 ARB USDT/LUNC/USDC profit=0.6111%
 
