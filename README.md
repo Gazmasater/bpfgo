@@ -450,11 +450,12 @@ import (
 var json = jsoniter.ConfigFastest
 
 func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
-    // Парсим JSON с помощью jsoniter.Get — без рефлексии encoding/json
+    // Парсим корневой JSON без рефлексии
     any := json.Get(raw)
 
     // 1) Обработка ACK подписки
-    if !any.Get("id").IsNil() && any.Get("code").ToInt() == 0 {
+    // Проверяем, что поле "id" присутствует (не Nil) и код == 0
+    if any.Get("id").ValueType() != jsoniter.NilValue && any.Get("code").ToInt() == 0 {
         const prefixFail = "Not Subscribed successfully! ["
         msg := any.Get("msg").ToString()
         if parts := strings.Split(msg, prefixFail); len(parts) == 2 {
@@ -473,18 +474,18 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
         return
     }
 
-    // 2) Читаем symbol
+    // 2) Получаем символ
     sym := any.Get("s").ToString()
     if sym == "" {
         return
     }
 
-    // 3) Быстрый фильтр: интересуют только символы с треугольниками
+    // 3) Фильтруем по нужным парам
     if _, ok := a.trianglesByPair[sym]; !ok {
         return
     }
 
-    // 4) Дёргаем первую цену из массива deals
+    // 4) Достаём цену первой сделки
     priceStr := any.
         Get("d").
         Get("deals").
@@ -495,7 +496,7 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
         return
     }
 
-    // 5) Преобразуем в float
+    // 5) Конвертируем в float
     price, err := strconv.ParseFloat(priceStr, 64)
     if err != nil {
         return
@@ -509,27 +510,5 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 }
 
 
-[{
-	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
-	"owner": "_generated_diagnostic_collection_name_#1",
-	"code": {
-		"value": "MissingFieldOrMethod",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingFieldOrMethod"
-		}
-	},
-	"severity": 8,
-	"message": "any.Get(\"id\").IsNil undefined (type jsoniter.Any has no field or method IsNil)",
-	"source": "compiler",
-	"startLineNumber": 129,
-	"startColumn": 20,
-	"endLineNumber": 129,
-	"endColumn": 25,
-	"origin": "extHost1"
-}]
 
 
