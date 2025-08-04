@@ -396,6 +396,10 @@ http://localhost:6060/debug/pprof/
 
 go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
 
+go tool pprof http://localhost:6060/debug/pprof/heap
+(pprof) top
+
+
 
 
 
