@@ -414,8 +414,8 @@ Showing top 10 nodes out of 62
 (pprof) 
 
 
-func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
-	// 1. Обработка ACK-сообщений подписки
+func (a *Arbitrager) HandleRaw(_ string, raw []byte) {
+	// 1. Обработка ACK сообщений
 	var ack struct {
 		ID   int64  `json:"id"`
 		Code int    `json:"code"`
@@ -423,8 +423,11 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 	}
 	if err := json.Unmarshal(raw, &ack); err == nil && ack.Code == 0 {
 		const prefixFail = "Not Subscribed successfully! ["
-		if parts := strings.Split(ack.Msg, prefixFail); len(parts) == 2 {
-			blocked := strings.Split(strings.TrimSuffix(parts[1], "].  Reason： Blocked! \""), ",")
+		if strings.HasPrefix(ack.Msg, prefixFail) {
+			blocked := strings.Split(
+				strings.TrimSuffix(strings.TrimPrefix(ack.Msg, prefixFail), "].  Reason： Blocked! \""),
+				",",
+			)
 			for _, ch := range blocked {
 				if idx := strings.LastIndex(ch, "@"); idx != -1 {
 					sym := ch[idx+1:]
@@ -438,177 +441,58 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 		}
 	}
 
-	// 2. Парсинг JSON
-	var msg struct {
-		Channel string `json:"c"`
-		Symbol  string `json:"s"`
-		Data    struct {
-			Deals []struct {
-				Price string `json:"p"`
-			} `json:"deals"`
-		} `json:"d"`
-	}
-	if err := json.Unmarshal(raw, &msg); err != nil {
-		log.Printf("[WS][ERR] ❌ Ошибка парсинга JSON: %v\nRAW: %s", err, string(raw))
-		return
-	}
-
-	// 3. Проверка полей
-	if msg.Symbol == "" {
-		log.Printf("[WS][SKIP] ❗ Пустой symbol, raw: %s", string(raw))
-		return
-	}
-	if len(msg.Data.Deals) == 0 {
-		log.Printf("[WS][SKIP] ❗ Пустой список deals по символу %s", msg.Symbol)
-		return
-	}
-
-	// 4. Парсинг цены
-	priceStr := msg.Data.Deals[0].Price
-	price, err := strconv.ParseFloat(priceStr, 64)
+	// 2. Получаем symbol (s)
+	symbolRaw, _, _, err := jsonparser.Get(raw, "s")
 	if err != nil {
-		log.Printf("[WS][ERR] ❌ Ошибка преобразования цены: %v, str=%s", err, priceStr)
+		log.Printf("[WS][ERR] ❌ Не удалось получить symbol: %v\nRAW: %s", err, string(raw))
+		return
+	}
+	symbol := string(symbolRaw)
+	if symbol == "" {
+		log.Printf("[WS][ERR] ❌ symbol пустой\nRAW: %s", string(raw))
 		return
 	}
 
-	// 5. Успешный тик
-	log.Printf("[WS][TICK] ✅ %s = %.8f", msg.Symbol, price)
+	// 3. Ищем первую цену в deals
+	found := false
+	var price float64
 
-	// 6. Запись latest
+	_, err = jsonparser.ArrayEach(raw, func(value []byte, _ jsonparser.ValueType, _ int, _ error) {
+		if found {
+			return
+		}
+		priceRaw, _, _, err := jsonparser.Get(value, "p")
+		if err != nil {
+			log.Printf("[WS][ERR] ❌ Не удалось получить поле 'p': %v | deal: %s", err, string(value))
+			return
+		}
+		priceStr := string(priceRaw)
+		price, err = strconv.ParseFloat(priceStr, 64)
+		if err != nil {
+			log.Printf("[WS][ERR] ❌ Ошибка преобразования цены: %v, str=%s", err, priceStr)
+			return
+		}
+		found = true
+	}, "d", "deals")
+
+	if err != nil {
+		log.Printf("[WS][ERR] ❌ Ошибка в ArrayEach: %v\nRAW: %s", err, string(raw))
+		return
+	}
+	if !found {
+		log.Printf("[WS][SKIP] ❗ В сообщении нет сделок\nRAW: %s", string(raw))
+		return
+	}
+
+	log.Printf("[WS][TICK] ✅ %s = %.8f", symbol, price)
+
+	// 4. Обновляем latest
 	a.mu.Lock()
-	a.latest[msg.Symbol] = price
+	a.latest[symbol] = price
 	a.mu.Unlock()
 
-	// 7. Проверка треугольников
-	a.Check(msg.Symbol)
+	// 5. Проверяем треугольники
+	a.Check(symbol)
 }
 
-
-
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTBCH
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTAAVE
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: BTCBCH
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCTRX
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTJASMY
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCWBTC
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTXEN
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTNEAR
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTWAVES].  Reason： Blocked! 
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCLUNC
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: BTCTRX
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTFIL
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTSHIB
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCFIL
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTLTC
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTAVAX
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCFTT
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTFTT
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCXRP
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: BTCLTC
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCMX
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: BTCETH
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTAZERO
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCBCH
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCWAVES].  Reason： Blocked! 
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTUNI
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCAAVE
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: BTCSOL
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCAPE
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: BTCATOM
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCENS
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCSOL
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTMINA
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTCAW
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTRAY].  Reason： Blocked! 
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCAVAX
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCBTC
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTUSDC
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTALGO
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCOP].  Reason： Blocked! 
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTSOL
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTWBTC
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTADA
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCATOM
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCNEAR
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCETH
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCRAY
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: BTCXRP
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCJASMY
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTMX
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTTRX
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCXEN
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTLUNC].  Reason： Blocked! 
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTOP
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCLTC
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCADA
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCMINA
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTENS
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: BTCADA
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCALGO].  Reason： Blocked! 
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCSHIB
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: ETHUNI
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTATOM].  Reason： Blocked! 
-2025/08/04 16:56:40 [WS][TICK] ✅ BTCUSDC = 114751.72000000
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCBNB
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCAZERO
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCCAW
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCDOGE
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTXRP
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTDOGE
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTBNB
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDTAPE
-2025/08/04 16:56:40 [WS][ACK] ⚠️ Заблокирована пара: USDCUNI].  Reason： Blocked! 
-2025/08/04 16:56:40 [WS][TICK] ✅ ALGOUSDC = 0.24540000
-2025/08/04 16:56:40 [WS][TICK] ✅ LTCUSDT = 118.25000000
-2025/08/04 16:56:40 [WS][TICK] ✅ LTCUSDT = 118.26000000
-2025/08/04 16:56:40 [WS][TICK] ✅ LTCUSDT = 118.25000000
-2025/08/04 16:56:40 [WS][TICK] ✅ LTCUSDT = 118.25000000
-2025/08/04 16:56:40 [WS][TICK] ✅ LTCUSDT = 118.25000000
-2025/08/04 16:56:40 [WS][TICK] ✅ LTCUSDT = 118.25000000
-2025/08/04 16:56:40 [WS][TICK] ✅ ADAUSDT = 0.74700000
-2025/08/04 16:56:40 [WS][TICK] ✅ ADAUSDT = 0.74700000
-2025/08/04 16:56:40 [WS][TICK] ✅ ADAUSDT = 0.74690000
-2025/08/04 16:56:40 [WS][TICK] ✅ ADAUSDT = 0.74700000
-2025/08/04 16:56:40 [WS][TICK] ✅ ADAUSDT = 0.74700000
-2025/08/04 16:56:40 [WS][TICK] ✅ ADAUSDT = 0.74700000
-2025/08/04 16:56:40 [WS][TICK] ✅ BNBUSDT = 761.19000000
-2025/08/04 16:56:40 [WS][TICK] ✅ BNBUSDT = 761.19000000
-2025/08/04 16:56:40 [WS][TICK] ✅ BNBUSDT = 761.19000000
-2025/08/04 16:56:40 [WS][TICK] ✅ ADAUSDC = 0.74586400
-2025/08/04 16:56:40 [WS][TICK] ✅ LTCBTC = 0.00103050
-2025/08/04 16:56:40 [WS][TICK] ✅ LTCBTC = 0.00102950
-2025/08/04 16:56:40 [WS][TICK] ✅ LTCBTC = 0.00103100
-2025/08/04 16:56:40 [WS][TICK] ✅ LTCBTC = 0.00102960
-2025/08/04 16:56:40 [WS][TICK] ✅ SOLUSDC = 165.11350000
-2025/08/04 16:56:40 [WS][TICK] ✅ LTCUSDC = 118.24900000
-2025/08/04 16:56:40 [WS][TICK] ✅ LTCUSDC = 118.25700000
-2025/08/04 16:56:40 [WS][TICK] ✅ LTCUSDC = 118.24400000
-2025/08/04 16:56:40 [WS][TICK] ✅ LTCUSDC = 118.24600000
-2025/08/04 16:56:40 [WS][TICK] ✅ ETHUSDC = 3611.07000000
-2025/08/04 16:56:40 [WS][TICK] ✅ BCHUSDT = 556.20000000
-2025/08/04 16:56:40 [WS][TICK] ✅ BNBUSDC = 760.12510000
-2025/08/04 16:56:40 [WS][TICK] ✅ BCHUSDT = 556.20000000
-2025/08/04 16:56:40 [WS][TICK] ✅ USDCUSDT = 0.99990000
-2025/08/04 16:56:40 [WS][TICK] ✅ BCHUSDT = 556.20000000
-2025/08/04 16:56:40 [WS][TICK] ✅ USDCUSDT = 0.99980000
-2025/08/04 16:56:40 [WS][TICK] ✅ USDCUSDT = 0.99980000
-2025/08/04 16:56:40 [WS][TICK] ✅ ADABTC = 0.00000651
-2025/08/04 16:56:40 [WS][TICK] ✅ ADABTC = 0.00000651
-2025/08/04 16:56:40 [WS][TICK] ✅ BNBUSDC = 760.12520000
-2025/08/04 16:56:40 [WS][TICK] ✅ BNBUSDC = 760.12560000
-2025/08/04 16:56:40 [WS][TICK] ✅ BNBUSDC = 760.12500000
-2025/08/04 16:56:40 [WS][TICK] ✅ UNIETH = 0.00271900
-2025/08/04 16:56:40 [WS][TICK] ✅ UNIETH = 0.00271900
-2025/08/04 16:56:40 [WS][TICK] ✅ UNIETH = 0.00271900
-2025/08/04 16:56:40 [WS][TICK] ✅ UNIETH = 0.00272100
-2025/08/04 16:56:40 [WS][TICK] ✅ UNIETH = 0.00272100
-2025/08/04 16:56:40 [WS][TICK] ✅ BNBUSDT = 761.19000000
-2025/08/04 16:56:40 [WS][TICK] ✅ BNBUSDT = 761.19000000
-2025/08/04 16:56:40 [WS][TICK] ✅ BNBUSDT = 761.19000000
-2025/08/04 16:56:40 [WS][TICK] ✅ AVAXUSDT = 22.15000000
-2025/08/04 16:56:40 [WS][TICK] ✅ AVAXUSDT = 22.15000000
-2025/08/04 16:56:40 [WS][TICK] ✅ AVAXUSDT = 22.15000000
-2025/08/04 16:56:40 [WS][TICK] ✅ BCHUSDC = 555.13000000
-2025/08/04 16:56:40 [WS][TICK] ✅ BCHUSDC = 554.95000000
-2025/08/04 16:56:40 [WS][TICK] ✅ BCHUSDC = 555.00000000
 
