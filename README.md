@@ -484,82 +484,157 @@ Showing top 10 nodes out of 47
 
 
 
-var (
-    // префиксы, по которым будем искать в []byte
-    idKey     = []byte(`"id":`)
-    code0Key  = []byte(`"code":0`)
-    sKey      = []byte(`"s":"`)
-    pKey      = []byte(`"p":"`)
-    prefixFail = "Not Subscribed successfully! ["
+package app
+
+import (
+	"bytes"
+	"log"
+	"strconv"
+	"sync"
 )
 
+// PrecomputedLeg хранит заранее вычисленные данные по каждому leg.
+type PrecomputedLeg struct {
+	Symbol string
+	Invert bool
+}
+
+// OptimizedTriangle хранит заранее вычисленные legs.
+type OptimizedTriangle struct {
+	AB PrecomputedLeg
+	BC PrecomputedLeg
+	CA PrecomputedLeg
+	A, B, C string
+}
+
+// Arbitrager оптимизированный.
+type Arbitrager struct {
+	Triangles       []OptimizedTriangle
+	latest          map[string]float64
+	trianglesByPair map[string][]int
+	realSymbols     map[string]bool
+	mu              sync.Mutex
+	StartAmount     float64
+}
+
+// PrecomputeTriangles оптимизирует и заранее вычисляет символы и инверсии.
+func PrecomputeTriangles(tris []triangle.Triangle, avail map[string]bool) []OptimizedTriangle {
+	out := make([]OptimizedTriangle, 0, len(tris))
+
+	for _, tri := range tris {
+		ab, okAB, invAB := normalizeSymbolDirStatic(tri.A, tri.B, avail)
+		bc, okBC, invBC := normalizeSymbolDirStatic(tri.B, tri.C, avail)
+		ca, okCA, invCA := normalizeSymbolDirStatic(tri.C, tri.A, avail)
+
+		if !okAB || !okBC || !okCA {
+			continue
+		}
+
+		out = append(out, OptimizedTriangle{
+			AB: PrecomputedLeg{Symbol: ab, Invert: invAB},
+			BC: PrecomputedLeg{Symbol: bc, Invert: invBC},
+			CA: PrecomputedLeg{Symbol: ca, Invert: invCA},
+			A:  tri.A, B: tri.B, C: tri.C,
+		})
+	}
+
+	return out
+}
+
+func normalizeSymbolDirStatic(base, quote string, avail map[string]bool) (symbol string, ok bool, invert bool) {
+	if avail[base+quote] {
+		return base + quote, true, false
+	}
+	if avail[quote+base] {
+		return quote + base, true, true
+	}
+	return "", false, false
+}
+
 func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
-    // 1) ACK-подписка: есть `"id":` и `"code":0`, но нет поля `"s":`
-    if bytes.Contains(raw, idKey) &&
-       bytes.Contains(raw, code0Key) &&
-       !bytes.Contains(raw, sKey) {
+	// парсим symbol
+	sym := parseSymbol(raw)
+	if sym == "" {
+		return
+	}
 
-        // разбираем текст ошибки подписки — только руками, без JSON
-        start := bytes.Index(raw, []byte(prefixFail))
-        if start >= 0 {
-            start += len(prefixFail)
-            // найдём конец списка заблокированных через `].  Reason`
-            end := bytes.Index(raw[start:], []byte("].  Reason"))
-            if end > 0 {
-                blockedList := raw[start : start+end]
-                for _, ch := range strings.Split(string(blockedList), ",") {
-                    if idx := strings.LastIndex(ch, "@"); idx != -1 {
-                        sym := ch[idx+1:]
-                        a.mu.Lock()
-                        a.realSymbols[sym] = false
-                        a.mu.Unlock()
-                    }
-                }
-            }
-        }
-        return
-    }
+	a.mu.Lock()
+	price, ok := parsePrice(raw)
+	if !ok {
+		a.mu.Unlock()
+		return
+	}
 
-    // 2) Находим symbol: "s":"XXX"
-    i := bytes.Index(raw, sKey)
-    if i < 0 {
-        return
-    }
-    i += len(sKey)
-    j := bytes.IndexByte(raw[i:], '"')
-    if j < 0 {
-        return
-    }
-    sym := string(raw[i : i+j])
+	a.latest[sym] = price
+	a.mu.Unlock()
 
-    // 3) Фильтры: подписка и треугольники
-    if ok, ex := a.realSymbols[sym]; !ex || !ok {
-        return
-    }
-    if _, ex := a.trianglesByPair[sym]; !ex {
-        return
-    }
+	a.Check(sym)
+}
 
-    // 4) Находим цену: "p":"YYY"
-    i = bytes.Index(raw, pKey)
-    if i < 0 {
-        return
-    }
-    i += len(pKey)
-    j = bytes.IndexByte(raw[i:], '"')
-    if j < 0 {
-        return
-    }
-    priceBytes := raw[i : i+j]
-    price, err := strconv.ParseFloat(string(priceBytes), 64)
-    if err != nil {
-        return
-    }
+func parseSymbol(raw []byte) string {
+	key := []byte(`"s":"`)
+	i := bytes.Index(raw, key)
+	if i < 0 {
+		return ""
+	}
+	i += len(key)
+	j := bytes.IndexByte(raw[i:], '"')
+	if j < 0 {
+		return ""
+	}
+	return string(raw[i : i+j])
+}
 
-    // 5) Обновляем и проверяем
-    a.mu.Lock()
-    a.latest[sym] = price
-    a.mu.Unlock()
-    a.Check(sym)
+func parsePrice(raw []byte) (float64, bool) {
+	key := []byte(`"p":"`)
+	i := bytes.Index(raw, key)
+	if i < 0 {
+		return 0, false
+	}
+	i += len(key)
+	j := bytes.IndexByte(raw[i:], '"')
+	if j < 0 {
+		return 0, false
+	}
+	price, err := strconv.ParseFloat(string(raw[i:i+j]), 64)
+	if err != nil {
+		return 0, false
+	}
+	return price, true
+}
+
+func (a *Arbitrager) Check(symbol string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	indices := a.trianglesByPair[symbol]
+	nf := 0.9965 * 0.9965 * 0.9965
+
+	for _, idx := range indices {
+		tri := a.Triangles[idx]
+
+		p1, ex1 := a.latest[tri.AB.Symbol]
+		p2, ex2 := a.latest[tri.BC.Symbol]
+		p3, ex3 := a.latest[tri.CA.Symbol]
+
+		if !ex1 || !ex2 || !ex3 || p1 == 0 || p2 == 0 || p3 == 0 {
+			continue
+		}
+
+		if tri.AB.Invert {
+			p1 = 1 / p1
+		}
+		if tri.BC.Invert {
+			p2 = 1 / p2
+		}
+		if tri.CA.Invert {
+			p3 = 1 / p3
+		}
+
+		profit := (p1*p2*p3*nf - 1) * 100
+		if profit > 0 && tri.A == "USDT" {
+			log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
+		}
+	}
 }
 
