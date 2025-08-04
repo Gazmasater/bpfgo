@@ -414,85 +414,56 @@ Showing top 10 nodes out of 62
 (pprof) 
 
 
-func (a *Arbitrager) HandleRaw(_ string, raw []byte) {
-	// 1. Обработка ACK сообщений
-	var ack struct {
-		ID   int64  `json:"id"`
-		Code int    `json:"code"`
-		Msg  string `json:"msg"`
-	}
-	if err := json.Unmarshal(raw, &ack); err == nil && ack.Code == 0 {
-		const prefixFail = "Not Subscribed successfully! ["
-		if strings.HasPrefix(ack.Msg, prefixFail) {
-			blocked := strings.Split(
-				strings.TrimSuffix(strings.TrimPrefix(ack.Msg, prefixFail), "].  Reason： Blocked! \""),
-				",",
-			)
-			for _, ch := range blocked {
-				if idx := strings.LastIndex(ch, "@"); idx != -1 {
-					sym := ch[idx+1:]
-					a.mu.Lock()
-					a.realSymbols[sym] = false
-					a.mu.Unlock()
-					log.Printf("[WS][ACK] ⚠️ Заблокирована пара: %s", sym)
-				}
-			}
-			return
-		}
-	}
+func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
+    // Парсим JSON один раз
+    var p fastjson.Parser
+    v, err := p.ParseBytes(raw)
+    if err != nil {
+        log.Printf("invalid JSON: %v", err)
+        return
+    }
 
-	// 2. Получаем symbol (s)
-	symbolRaw, _, _, err := jsonparser.Get(raw, "s")
-	if err != nil {
-		log.Printf("[WS][ERR] ❌ Не удалось получить symbol: %v\nRAW: %s", err, string(raw))
-		return
-	}
-	symbol := string(symbolRaw)
-	if symbol == "" {
-		log.Printf("[WS][ERR] ❌ symbol пустой\nRAW: %s", string(raw))
-		return
-	}
+    // Обрабатываем ACK подписки (если есть)
+    if codeVal := v.GetInt("code"); codeVal == 0 {
+        if msgVal := v.GetStringBytes("msg"); len(msgVal) > 0 {
+            const prefixFail = "Not Subscribed successfully! ["
+            msg := string(msgVal)
+            if parts := strings.Split(msg, prefixFail); len(parts) == 2 {
+                blocked := strings.Split(strings.TrimSuffix(parts[1], "].  Reason： Blocked! \""), ",")
+                for _, ch := range blocked {
+                    if idx := strings.LastIndex(ch, "@"); idx != -1 {
+                        sym := ch[idx+1:]
+                        a.realSymbolsMu.Lock()
+                        a.realSymbols[sym] = false
+                        a.realSymbolsMu.Unlock()
+                    }
+                }
+                return
+            }
+        }
+    }
 
-	// 3. Ищем первую цену в deals
-	found := false
-	var price float64
+    // Достаём символ и цену (если это «дата»)
+    symBytes := v.GetStringBytes("s")
+    deals := v.GetArray("d", "deals")
+    if len(symBytes) == 0 || len(deals) == 0 {
+        return
+    }
+    sym := string(symBytes)
 
-	_, err = jsonparser.ArrayEach(raw, func(value []byte, _ jsonparser.ValueType, _ int, _ error) {
-		if found {
-			return
-		}
-		priceRaw, _, _, err := jsonparser.Get(value, "p")
-		if err != nil {
-			log.Printf("[WS][ERR] ❌ Не удалось получить поле 'p': %v | deal: %s", err, string(value))
-			return
-		}
-		priceStr := string(priceRaw)
-		price, err = strconv.ParseFloat(priceStr, 64)
-		if err != nil {
-			log.Printf("[WS][ERR] ❌ Ошибка преобразования цены: %v, str=%s", err, priceStr)
-			return
-		}
-		found = true
-	}, "d", "deals")
+    priceStr := deals[0].GetStringBytes("p")
+    price, err := strconv.ParseFloat(string(priceStr), 64)
+    if err != nil {
+        log.Printf("parse price error: %v, raw=%s", err, raw)
+        return
+    }
 
-	if err != nil {
-		log.Printf("[WS][ERR] ❌ Ошибка в ArrayEach: %v\nRAW: %s", err, string(raw))
-		return
-	}
-	if !found {
-		log.Printf("[WS][SKIP] ❗ В сообщении нет сделок\nRAW: %s", string(raw))
-		return
-	}
+    // Сохраняем цену в sync.Map
+    a.latest.Store(sym, price)
 
-	log.Printf("[WS][TICK] ✅ %s = %.8f", symbol, price)
-
-	// 4. Обновляем latest
-	a.mu.Lock()
-	a.latest[symbol] = price
-	a.mu.Unlock()
-
-	// 5. Проверяем треугольники
-	a.Check(symbol)
+    // Асинхронно проверяем арбитраж
+    go a.Check(sym)
 }
+
 
 
