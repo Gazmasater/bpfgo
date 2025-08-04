@@ -458,6 +458,8 @@ Showing top 10 nodes out of 67
 
 
 
+package arbitrage
+
 import (
     "strconv"
     "strings"
@@ -468,13 +470,28 @@ import (
 
 var json = jsoniter.ConfigFastest
 
+type Arbitrager struct {
+    Triangles       []triangle.Triangle
+    latest          map[string]float64
+    trianglesByPair map[string][]int
+    realSymbols     map[string]bool
+    stepSizes       map[string]float64
+    minQtys         map[string]float64
+    mu              sync.Mutex
+    StartAmount     float64
+    exchange        exchange.Exchange
+}
+
 func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
     // Парсим корневой JSON без рефлексии
     any := json.Get(raw)
 
-    // 1) Обработка ACK подписки
-    // Проверяем, что поле "id" присутствует (не Nil) и код == 0
-    if any.Get("id").ValueType() != jsoniter.NilValue && any.Get("code").ToInt() == 0 {
+    // 1) Обработка ACK подписки — только если есть id, code и msg, и code == 0
+    if any.Get("id").ValueType() != jsoniter.NilValue &&
+        any.Get("code").ValueType() != jsoniter.NilValue &&
+        any.Get("msg").ValueType() != jsoniter.NilValue &&
+        any.Get("code").ToInt() == 0 {
+
         const prefixFail = "Not Subscribed successfully! ["
         msg := any.Get("msg").ToString()
         if parts := strings.Split(msg, prefixFail); len(parts) == 2 {
