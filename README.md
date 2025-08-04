@@ -461,6 +461,7 @@ Showing top 10 nodes out of 67
 package arbitrage
 
 import (
+    "log"
     "strconv"
     "strings"
     "sync"
@@ -483,29 +484,32 @@ type Arbitrager struct {
 }
 
 func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
-    // Парсим корневой JSON без рефлексии
     any := json.Get(raw)
 
-    // 1) Обработка ACK подписки — только если есть id, code и msg, и code == 0
+    // 1) Попытка распознать ACK
     if any.Get("id").ValueType() != jsoniter.NilValue &&
         any.Get("code").ValueType() != jsoniter.NilValue &&
-        any.Get("msg").ValueType() != jsoniter.NilValue &&
-        any.Get("code").ToInt() == 0 {
+        any.Get("msg").ValueType() != jsoniter.NilValue {
 
-        const prefixFail = "Not Subscribed successfully! ["
-        msg := any.Get("msg").ToString()
-        if parts := strings.Split(msg, prefixFail); len(parts) == 2 {
-            blocked := strings.Split(
-                strings.TrimSuffix(parts[1], "].  Reason： Blocked! \""), ",",
-            )
-            a.mu.Lock()
-            for _, ch := range blocked {
-                if idx := strings.LastIndex(ch, "@"); idx != -1 {
-                    sym := ch[idx+1:]
-                    a.realSymbols[sym] = false
+        code := any.Get("code").ToInt()
+        log.Printf("[HandleRaw] ACK detected, code=%d", code)
+        if code == 0 {
+            const prefixFail = "Not Subscribed successfully! ["
+            msg := any.Get("msg").ToString()
+            if parts := strings.Split(msg, prefixFail); len(parts) == 2 {
+                blocked := strings.Split(
+                    strings.TrimSuffix(parts[1], "].  Reason： Blocked! \""), ",",
+                )
+                a.mu.Lock()
+                for _, ch := range blocked {
+                    if idx := strings.LastIndex(ch, "@"); idx != -1 {
+                        sym := ch[idx+1:]
+                        a.realSymbols[sym] = false
+                        log.Printf("[HandleRaw] Mark unsubscribed: %s", sym)
+                    }
                 }
+                a.mu.Unlock()
             }
-            a.mu.Unlock()
         }
         return
     }
@@ -513,35 +517,55 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
     // 2) Получаем символ
     sym := any.Get("s").ToString()
     if sym == "" {
+        log.Printf("[HandleRaw] no \"s\" field, skipping")
+        return
+    }
+    log.Printf("[HandleRaw] got symbol: %s", sym)
+
+    // 3) Проверяем, подписаны ли мы на этот символ
+    if ok := a.realSymbols[sym]; !ok {
+        log.Printf("[HandleRaw] symbol %s not in realSymbols, skip", sym)
         return
     }
 
-    // 3) Фильтруем по нужным парам
+    // 4) Фильтруем только те пары, по которым есть треугольники
     if _, ok := a.trianglesByPair[sym]; !ok {
+        log.Printf("[HandleRaw] no triangles for %s, skip", sym)
         return
     }
 
-    // 4) Достаём цену первой сделки
-    priceStr := any.
-        Get("d").
-        Get("deals").
-        Get(0).
-        Get("p").
-        ToString()
+    // 5) Достаём массив deals
+    dealsAny := any.Get("d").Get("deals")
+    if dealsAny.ValueType() != jsoniter.ArrayValue {
+        log.Printf("[HandleRaw] no deals array for %s", sym)
+        return
+    }
+    if dealsAny.Size() == 0 {
+        log.Printf("[HandleRaw] empty deals for %s", sym)
+        return
+    }
+
+    // 6) Первую цену
+    priceStr := dealsAny.Get(0).Get("p").ToString()
     if priceStr == "" {
+        log.Printf("[HandleRaw] empty price string for %s", sym)
         return
     }
+    log.Printf("[HandleRaw] price string: %s", priceStr)
 
-    // 5) Конвертируем в float
+    // 7) Парсим в float
     price, err := strconv.ParseFloat(priceStr, 64)
     if err != nil {
+        log.Printf("[HandleRaw] parse price error: %v", err)
         return
     }
+    log.Printf("[HandleRaw] parsed price: %.8f", price)
 
-    // 6) Сохраняем и запускаем проверку
+    // 8) Запись и проверка
     a.mu.Lock()
     a.latest[sym] = price
     a.mu.Unlock()
+    log.Printf("[HandleRaw] calling Check(%s)", sym)
     a.Check(sym)
 }
 
