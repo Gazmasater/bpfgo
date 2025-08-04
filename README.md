@@ -414,6 +414,31 @@ Showing top 10 nodes out of 62
 (pprof) 
 
 
+
+Build ID: 18dfa87cfc416462058286251d48f916dc0060b6
+Type: cpu
+Time: 2025-08-04 18:11:58 MSK
+Duration: 30s, Total samples = 220ms ( 0.73%)
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 170ms, 77.27% of 220ms total
+Showing top 10 nodes out of 91
+      flat  flat%   sum%        cum   cum%
+      50ms 22.73% 22.73%       50ms 22.73%  internal/runtime/syscall.Syscall6
+      30ms 13.64% 36.36%       30ms 13.64%  runtime.nextFreeFast (inline)
+      20ms  9.09% 45.45%       20ms  9.09%  runtime.mapaccess1_faststr
+      10ms  4.55% 50.00%       20ms  9.09%  encoding/json.(*decodeState).array
+      10ms  4.55% 54.55%       30ms 13.64%  encoding/json.(*scanner).pushParseState
+      10ms  4.55% 59.09%       60ms 27.27%  encoding/json.checkValid
+      10ms  4.55% 63.64%       10ms  4.55%  encoding/json.state1
+      10ms  4.55% 68.18%       10ms  4.55%  encoding/json.stateInString
+      10ms  4.55% 72.73%       10ms  4.55%  internal/poll.(*fdMutex).rwunlock
+      10ms  4.55% 77.27%       20ms  9.09%  runtime.(*mcache).prepareForSweep
+(pprof) 
+
+
+
+
 import (
     "encoding/json"
     "log"
