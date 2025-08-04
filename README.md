@@ -446,159 +446,94 @@ type Arbitrager struct {
 }
 
 
+
+
 func New(ex exchange.Exchange) (*Arbitrager, error) {
-	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
-	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
+    // Получаем список символов и параметры лотов
+    rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
+    avail := filesystem.ExpandAvailableSymbols(rawSymbols)
+    log.Printf("📊 Доступные пары (с инверсиями): %d", len(avail))
 
-	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
-	if err != nil {
-		return nil, err
-	}
+    // Строим все возможные треугольники
+    ts, err := filesystem.LoadTrianglesFromSymbols(avail)
+    if err != nil {
+        return nil, fmt.Errorf("LoadTriangles: %w", err)
+    }
+    log.Printf("[INIT] Треугольников найдено: %d", len(ts))
 
-	trianglesByPair := make(map[string][]int)
-	pairsInfo := make(map[string]PairInfo) // здесь заранее сохраняем конкатенации
+    // Для отладки сохраняем дамп
+    if data, err := json.MarshalIndent(ts, "", "  "); err == nil {
+        _ = os.WriteFile("triangles_dump.json", data, 0644)
+    }
 
-	for i, tri := range ts {
-		pairs := [][2]string{{tri.A, tri.B}, {tri.B, tri.C}, {tri.C, tri.A}}
+    // Индексация треугольников по паре
+    trianglesByPair := make(map[string][]int, len(ts)*3)
+    // У каждого треугольника ровно 3 пары, резервируем buffer сразу
+    subRaw := make([]string, 0, len(ts)*3)
 
-		for _, p := range pairs {
-			base, quote := p[0], p[1]
-			symbol := base + quote
-			reverse := quote + base
+    for i, tri := range ts {
+        ab := tri.A + tri.B
+        bc := tri.B + tri.C
+        ca := tri.C + tri.A
 
-			if _, exists := pairsInfo[symbol]; !exists {
-				pairsInfo[symbol] = PairInfo{
-					Base:      base,
-					Quote:     quote,
-					Symbol:    symbol,
-					Reverse:   reverse,
-					WSChannel: "spot@public.deals.v3.api@" + symbol,
-				}
-			}
+        trianglesByPair[ab] = append(trianglesByPair[ab], i)
+        trianglesByPair[bc] = append(trianglesByPair[bc], i)
+        trianglesByPair[ca] = append(trianglesByPair[ca], i)
 
-			trianglesByPair[symbol] = append(trianglesByPair[symbol], i)
-		}
-	}
+        subRaw = append(subRaw, ab, bc, ca)
+    }
+    log.Printf("[INIT] Составили индекс по парам: %d ключей", len(trianglesByPair))
 
-	arb := &Arbitrager{
-		Triangles:       ts,
-		latest:          make(map[string]float64),
-		trianglesByPair: trianglesByPair,
-		realSymbols:     avail,
-		stepSizes:       stepSizes,
-		minQtys:         minQtys,
-		StartAmount:     0.5,
-		exchange:        ex,
-		pairsInfo:       pairsInfo,
-	}
+    // Формируем список уникальных реальных пар для подписки
+    uniq := make(map[string]struct{}, len(subRaw))
+    for _, p := range subRaw {
+        if avail[p] {
+            uniq[p] = struct{}{}
+        }
+    }
+    subPairs := make([]string, 0, len(uniq))
+    for p := range uniq {
+        subPairs = append(subPairs, p)
+    }
+    log.Printf("[INIT] Подписка на пар: %d шт.", len(subPairs))
 
-	// WS подписки чанками по 20
-	const maxPerConn = 20
-	subPairs := make([]string, 0, len(pairsInfo))
-	for sym := range pairsInfo {
-		subPairs = append(subPairs, sym)
-	}
+    // Инициализируем арбитражёра
+    arb := &Arbitrager{
+        Triangles:       ts,
+        latest:          make(map[string]float64, len(subPairs)),
+        trianglesByPair: trianglesByPair,
+        realSymbols:     avail,
+        stepSizes:       stepSizes,
+        minQtys:         minQtys,
+        StartAmount:     0.5,
+        exchange:        ex,
+    }
 
-	for i := 0; i < len(subPairs); i += maxPerConn {
-		end := i + maxPerConn
-		if end > len(subPairs) {
-			end = len(subPairs)
-		}
-		chunk := subPairs[i:end]
+    // WS подписки чанками по 20
+    const maxPerConn = 20
+    for i := 0; i < len(subPairs); i += maxPerConn {
+        end := i + maxPerConn
+        if end > len(subPairs) {
+            end = len(subPairs)
+        }
+        chunk := subPairs[i:end]
+        go func(pairs []string) {
+            for {
+                err := ex.SubscribeDeals(pairs, arb.HandleRaw)
+                if err != nil {
+                    log.Printf("[WS][%s] subscribe error: %v, retrying...", ex.Name(), err)
+                    time.Sleep(time.Second)
+                    continue
+                }
+                log.Printf("[WS][%s] subscribed to channels: %v", ex.Name(), pairs)
+                return
+            }
+        }(chunk)
+    }
 
-		var channels []string
-		for _, sym := range chunk {
-			channels = append(channels, arb.pairsInfo[sym].WSChannel)
-		}
-
-		go func(pairs []string) {
-			for {
-				err := ex.SubscribeDeals(pairs, arb.HandleRaw)
-				if err != nil {
-					log.Printf("[WS][%s] subscribe error: %v, retrying...", ex.Name(), err)
-					time.Sleep(time.Second)
-					continue
-				}
-				log.Printf("[WS][%s] subscribed to channels: %v", ex.Name(), pairs)
-				return
-			}
-		}(channels)
-	}
-
-	return arb, nil
+    return arb, nil
 }
 
-
-
-func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, ok bool, invert bool) {
-	symbol = base + quote
-	if a.realSymbols[symbol] {
-		return symbol, true, false
-	}
-	reverse := quote + base
-	if a.realSymbols[reverse] {
-		return reverse, true, true
-	}
-	return "", false, false
-}
-
-
-func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
-	// извлечение символа из raw (как было)
-	i := bytes.Index(raw, sKey)
-	if i < 0 {
-		return
-	}
-	i += len(sKey)
-	j := bytes.IndexByte(raw[i:], '"')
-	if j < 0 {
-		return
-	}
-	sym := string(raw[i : i+j])
-
-	// теперь проверяем через pairsInfo
-	info, exists := a.pairsInfo[sym]
-	if !exists || !a.realSymbols[info.Symbol] {
-		return
-	}
-
-	// извлечение цены (как было)
-	i = bytes.Index(raw, pKey)
-	if i < 0 {
-		return
-	}
-	i += len(pKey)
-	j = bytes.IndexByte(raw[i:], '"')
-	if j < 0 {
-		return
-	}
-	priceBytes := raw[i : i+j]
-	price, err := strconv.ParseFloat(string(priceBytes), 64)
-	if err != nil {
-		return
-	}
-
-	// обновление цены
-	a.mu.Lock()
-	a.latest[info.Symbol] = price
-	a.mu.Unlock()
-
-	a.Check(info.Symbol)
-}
-
-
-[{
-	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
-	"owner": "go-staticcheck",
-	"severity": 4,
-	"message": "m[string(key)] would be more efficient than k := string(key); m[k] (SA6001)",
-	"source": "go-staticcheck",
-	"startLineNumber": 155,
-	"startColumn": 9,
-	"endLineNumber": 155,
-	"endColumn": 29,
-	"origin": "extHost1"
-}]
 
 
 
