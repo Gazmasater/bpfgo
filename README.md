@@ -458,40 +458,19 @@ Showing top 10 nodes out of 67
 
 
 
-package arbitrage
-
-import (
-    "strconv"
-    "strings"
-    "sync"
-
-    jsoniter "github.com/json-iterator/go"
-)
-
-var json = jsoniter.ConfigFastest
-
-type Arbitrager struct {
-    Triangles       []triangle.Triangle
-    latest          map[string]float64
-    trianglesByPair map[string][]int
-    realSymbols     map[string]bool
-    stepSizes       map[string]float64
-    minQtys         map[string]float64
-    mu              sync.Mutex
-    StartAmount     float64
-    exchange        exchange.Exchange
-}
-
 func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
     any := json.Get(raw)
 
-    // 1) Обработка ACK подписки:
-    //    считаем ACK только если есть id, code, msg и при этом нет поля символа "s"
-    if any.Get("id").ValueType() != jsoniter.NilValue &&
-        any.Get("code").ValueType() != jsoniter.NilValue &&
-        any.Get("msg").ValueType() != jsoniter.NilValue &&
-        any.Get("s").ValueType() == jsoniter.NilValue {
+    // DEBUG: смотрим каждый сырой фрейм
+    log.Printf("[HandleRaw] raw: %s", raw)
 
+    // 1) Обработка ACK: есть id, code, msg И нет поля "c"
+    if any.Get("id").ValueType() != jsoniter.NilValue &&
+       any.Get("code").ValueType() != jsoniter.NilValue &&
+       any.Get("msg").ValueType() != jsoniter.NilValue &&
+       any.Get("c").ValueType() == jsoniter.NilValue {
+
+        log.Printf("[HandleRaw] ACK frame")
         if any.Get("code").ToInt() == 0 {
             const prefixFail = "Not Subscribed successfully! ["
             msg := any.Get("msg").ToString()
@@ -504,6 +483,7 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
                     if idx := strings.LastIndex(ch, "@"); idx != -1 {
                         sym := ch[idx+1:]
                         a.realSymbols[sym] = false
+                        log.Printf("[HandleRaw] unsubscribed: %s", sym)
                     }
                 }
                 a.mu.Unlock()
@@ -512,46 +492,66 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
         return
     }
 
-    // 2) Получаем symbol — если его нет, это не рыночное сообщение
+    // 2) Это не ACK, пробуем взять symbol
     symAny := any.Get("s")
     if symAny.ValueType() == jsoniter.NilValue {
+        log.Printf("[HandleRaw] no \"s\" field, skipping")
         return
     }
     sym := symAny.ToString()
-    if sym == "" {
+    log.Printf("[HandleRaw] symbol: %s", sym)
+
+    // 3) Проверяем realSymbols: именно существование ключа и что он true
+    subscribed, exists := a.realSymbols[sym]
+    if !exists {
+        log.Printf("[HandleRaw] %s not in realSymbols map", sym)
+        return
+    }
+    if !subscribed {
+        log.Printf("[HandleRaw] %s is unsubscribed", sym)
         return
     }
 
-    // 3) Фильтр по подписке и доступности
-    if ok := a.realSymbols[sym]; !ok {
-        return
-    }
+    // 4) Есть ли у нас по этой паре треугольники?
     if _, ok := a.trianglesByPair[sym]; !ok {
+        log.Printf("[HandleRaw] no triangles for %s", sym)
         return
     }
 
-    // 4) Достаём первую цену из deals
+    // 5) Читаем массив deals
     deals := any.Get("d").Get("deals")
-    if deals.ValueType() != jsoniter.ArrayValue || deals.Size() == 0 {
+    if deals.ValueType() != jsoniter.ArrayValue {
+        log.Printf("[HandleRaw] no deals array for %s", sym)
         return
     }
+    if deals.Size() == 0 {
+        log.Printf("[HandleRaw] empty deals for %s", sym)
+        return
+    }
+
+    // 6) Первая цена
     priceStr := deals.Get(0).Get("p").ToString()
     if priceStr == "" {
+        log.Printf("[HandleRaw] empty price for %s", sym)
         return
     }
+    log.Printf("[HandleRaw] priceStr=%s", priceStr)
 
-    // 5) Конвертируем в float и сохраняем
+    // 7) В float
     price, err := strconv.ParseFloat(priceStr, 64)
     if err != nil {
+        log.Printf("[HandleRaw] parse error %v", err)
         return
     }
+    log.Printf("[HandleRaw] parsed price=%.8f", price)
+
+    // 8) Сохраняем и проверяем
     a.mu.Lock()
     a.latest[sym] = price
     a.mu.Unlock()
 
-    // 6) Проверяем арбитражные треугольники
+    log.Printf("[HandleRaw] Calling Check(%s)", sym)
     a.Check(sym)
 }
-
 
 
