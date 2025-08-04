@@ -414,26 +414,64 @@ Showing top 10 nodes out of 62
 (pprof) 
 
 
-func (a *Arbitrager) HandleRaw(exchangeName string, raw []byte) {
+func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
+	// Обработка ACK как раньше
+	var ack struct {
+		ID   int64  `json:"id"`
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+	}
+	if err := json.Unmarshal(raw, &ack); err == nil && ack.Code == 0 {
+		const prefixFail = "Not Subscribed successfully! ["
+		if strings.HasPrefix(ack.Msg, prefixFail) {
+			blocked := strings.Split(strings.TrimSuffix(strings.TrimPrefix(ack.Msg, prefixFail), "].  Reason： Blocked! \""), ",")
+			for _, ch := range blocked {
+				if idx := strings.LastIndex(ch, "@"); idx != -1 {
+					sym := ch[idx+1:]
+					a.mu.Lock()
+					a.realSymbols[sym] = false
+					a.mu.Unlock()
+				}
+			}
+			return
+		}
+	}
+
+	var (
+		symbol, priceStr string
+	)
+
 	symbol, err := jsonparser.GetString(raw, "s")
-	if err != nil || symbol == "" {
+	if err != nil {
+		log.Printf("❌ symbol parse error: %v", err)
 		return
 	}
 
-	priceStr, err := jsonparser.GetString(raw, "d", "deals", "[0]", "p")
-	if err != nil || priceStr == "" {
+	found := false
+	_, err = jsonparser.ArrayEach(raw, func(value []byte, _ jsonparser.ValueType, _ int, _ error) {
+		if found {
+			return
+		}
+		found = true
+		priceStr, err = jsonparser.GetString(value, "p")
+	}, "d", "deals")
+	if err != nil || !found {
+		log.Printf("❌ deal parse error: %v", err)
 		return
 	}
 
 	price, err := strconv.ParseFloat(priceStr, 64)
 	if err != nil {
+		log.Printf("❌ parseFloat error: %v, input: %s", err, priceStr)
 		return
 	}
 
+	// Обновляем latest
 	a.mu.Lock()
 	a.latest[symbol] = price
 	a.mu.Unlock()
 
 	a.Check(symbol)
 }
+
 
