@@ -414,22 +414,141 @@ Showing top 10 nodes out of 62
 (pprof) 
 
 
-func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
-    // Парсим JSON один раз
+package app
+
+import (
+    "log"
+    "math"
+    "strconv"
+    "strings"
+    "sync"
+    "time"
+
+    "github.com/valyala/fastjson"
+
+    "cryptarb/internal/domain/exchange"
+    "cryptarb/internal/domain/triangle"
+    "cryptarb/internal/repository/filesystem"
+)
+
+// Arbitrager handles real-time price updates
+// and checks for triangular arbitrage opportunities.
+type Arbitrager struct {
+    Triangles       []triangle.Triangle
+    latest          sync.Map            // map[string]float64
+    trianglesByPair map[string][]int
+    realSymbols     map[string]bool
+    realSymbolsMu   sync.Mutex
+    stepSizes       map[string]float64
+    minQtys         map[string]float64
+    StartAmount     float64
+    exchange        exchange.Exchange
+    checkJobs       chan string
+    workerWG        sync.WaitGroup
+}
+
+// New creates and initializes an Arbitrager, subscribes to price feeds.
+func New(ex exchange.Exchange) (*Arbitrager, error) {
+    rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
+    avail := filesystem.ExpandAvailableSymbols(rawSymbols)
+    log.Printf("📊 Всего доступных пар (с инверсиями): %d", len(avail))
+
+    ts, err := filesystem.LoadTrianglesFromSymbols(avail)
+    if err != nil {
+        return nil, err
+    }
+    log.Printf("[INIT] Загружено треугольников: %d", len(ts))
+
+    // Build reverse index and subscription list
+    trianglesByPair := make(map[string][]int)
+    subPairsRaw := make([]string, 0, len(ts)*3)
+    for i, tri := range ts {
+        ab := tri.A + tri.B
+        bc := tri.B + tri.C
+        ca := tri.C + tri.A
+        trianglesByPair[ab] = append(trianglesByPair[ab], i)
+        trianglesByPair[bc] = append(trianglesByPair[bc], i)
+        trianglesByPair[ca] = append(trianglesByPair[ca], i)
+        subPairsRaw = append(subPairsRaw, ab, bc, ca)
+    }
+    uniq := make(map[string]struct{})
+    for _, p := range subPairsRaw {
+        if avail[p] {
+            uniq[p] = struct{}{}
+        }
+    }
+    subPairs := make([]string, 0, len(uniq))
+    for p := range uniq {
+        subPairs = append(subPairs, p)
+    }
+    log.Printf("[INIT] Итог: подписываемся на %d уникальных пар", len(subPairs))
+
+    arb := &Arbitrager{
+        Triangles:       ts,
+        trianglesByPair: trianglesByPair,
+        realSymbols:     avail,
+        stepSizes:       stepSizes,
+        minQtys:         minQtys,
+        StartAmount:     0.5,
+        exchange:        ex,
+        checkJobs:       make(chan string, 1000),
+    }
+
+    // Start worker pool
+    const workers = 4
+    for i := 0; i < workers; i++ {
+        arb.workerWG.Add(1)
+        go arb.worker()
+    }
+
+    // Subscribe in chunks
+    const maxPerConn = 20
+    for i := 0; i < len(subPairs); i += maxPerConn {
+        end := i + maxPerConn
+        if end > len(subPairs) {
+            end = len(subPairs)
+        }
+        chunk := subPairs[i:end]
+        go func(pairs []string) {
+            for {
+                if err := ex.SubscribeDeals(pairs, arb.HandleRaw); err != nil {
+                    log.Printf("[WS][%s] subscribe error: %v; retrying", ex.Name(), err)
+                    time.Sleep(time.Second)
+                    continue
+                }
+                return
+            }
+        }(chunk)
+    }
+
+    return arb, nil
+}
+
+// worker processes symbols for arbitrage checks.
+func (a *Arbitrager) worker() {
+    defer a.workerWG.Done()
+    for sym := range a.checkJobs {
+        a.Check(sym)
+    }
+}
+
+// HandleRaw is called on each raw WebSocket message.
+func (a *Arbitrager) HandleRaw(exchangeName string, raw []byte) {
     var p fastjson.Parser
     v, err := p.ParseBytes(raw)
     if err != nil {
-        log.Printf("invalid JSON: %v", err)
+        log.Printf("[WS][%s] JSON parse error: %v", exchangeName, err)
         return
     }
 
-    // Обрабатываем ACK подписки (если есть)
-    if codeVal := v.GetInt("code"); codeVal == 0 {
-        if msgVal := v.GetStringBytes("msg"); len(msgVal) > 0 {
-            const prefixFail = "Not Subscribed successfully! ["
-            msg := string(msgVal)
-            if parts := strings.Split(msg, prefixFail); len(parts) == 2 {
-                blocked := strings.Split(strings.TrimSuffix(parts[1], "].  Reason： Blocked! \""), ",")
+    // Process subscription ACK failures
+    if code := v.GetInt("code"); code == 0 {
+        msg := string(v.GetStringBytes("msg"))
+        if strings.Contains(msg, "Not Subscribed successfully!") {
+            parts := strings.Split(msg, "Not Subscribed successfully! [")
+            if len(parts) == 2 {
+                blocked := strings.Split(
+                    strings.TrimSuffix(parts[1], "].  Reason： Blocked! \""), ",")
                 for _, ch := range blocked {
                     if idx := strings.LastIndex(ch, "@"); idx != -1 {
                         sym := ch[idx+1:]
@@ -443,72 +562,111 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
         }
     }
 
-    // Достаём символ и цену (если это «дата»)
+    // Extract symbol and price
     symBytes := v.GetStringBytes("s")
     deals := v.GetArray("d", "deals")
     if len(symBytes) == 0 || len(deals) == 0 {
         return
     }
     sym := string(symBytes)
-
     priceStr := deals[0].GetStringBytes("p")
     price, err := strconv.ParseFloat(string(priceStr), 64)
     if err != nil {
-        log.Printf("parse price error: %v, raw=%s", err, raw)
+        log.Printf("[WS][%s] parse price error: %v", exchangeName, err)
         return
     }
 
-    // Сохраняем цену в sync.Map
+    // Store and enqueue for check
     a.latest.Store(sym, price)
-
-    // Асинхронно проверяем арбитраж
-    go a.Check(sym)
+    select {
+    case a.checkJobs <- sym:
+    default:
+    }
 }
 
-[{
-	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingFieldOrMethod",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingFieldOrMethod"
-		}
-	},
-	"severity": 8,
-	"message": "a.realSymbolsMu undefined (type *Arbitrager has no field or method realSymbolsMu)",
-	"source": "compiler",
-	"startLineNumber": 141,
-	"startColumn": 9,
-	"endLineNumber": 141,
-	"endColumn": 22,
-	"origin": "extHost1"
-}]
-[{
-	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "MissingFieldOrMethod",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingFieldOrMethod"
-		}
-	},
-	"severity": 8,
-	"message": "a.latest.Store undefined (type map[string]float64 has no field or method Store)",
-	"source": "compiler",
-	"startLineNumber": 217,
-	"startColumn": 11,
-	"endLineNumber": 217,
-	"endColumn": 16,
-	"origin": "extHost1"
-}]
+// Check calculates arbitrage for a given symbol.
+func (a *Arbitrager) Check(symbol string) {
+    const feeFactor = 0.9965 * 0.9965 * 0.9965
+    indices, ok := a.trianglesByPair[symbol]
+    if !ok {
+        return
+    }
+    for _, i := range indices {
+        tri := a.Triangles[i]
+
+        // Keys for each leg
+        keyAB := tri.A + tri.B
+        keyBC := tri.B + tri.C
+        keyCA := tri.C + tri.A
+
+        // Retrieve prices
+        p1v, ok1 := a.latest.Load(keyAB)
+        p2v, ok2 := a.latest.Load(keyBC)
+        p3v, ok3 := a.latest.Load(keyCA)
+        if !ok1 || !ok2 || !ok3 {
+            continue
+        }
+        p1 := p1v.(float64)
+        p2 := p2v.(float64)
+        p3 := p3v.(float64)
+        if p1 == 0 || p2 == 0 || p3 == 0 {
+            continue
+        }
+
+        // Start with base amount
+        amount := a.StartAmount
+
+        // Adjust amount by step size and min quantity for A->B
+        if min, has := a.minQtys[keyAB]; has && amount < min {
+            continue
+        }
+        if step, has := a.stepSizes[keyAB]; has {
+            amount = math.Floor(amount/step) * step
+        }
+        if amount == 0 {
+            continue
+        }
+
+        // Leg 1: A -> B
+        amountB := amount / p1 * feeFactor
+
+        // Adjust B->C
+        if min, has := a.minQtys[keyBC]; has && amountB < min {
+            continue
+        }
+        if step, has := a.stepSizes[keyBC]; has {
+            amountB = math.Floor(amountB/step) * step
+        }
+        if amountB == 0 {
+            continue
+        }
+
+        // Leg 2: B -> C
+        amountC := amountB / p2 * feeFactor
+
+        // Adjust C->A
+        if min, has := a.minQtys[keyCA]; has && amountC < min {
+            continue
+        }
+        if step, has := a.stepSizes[keyCA]; has {
+            amountC = math.Floor(amountC/step) * step
+        }
+        if amountC == 0 {
+            continue
+        }
+
+        // Leg 3: C -> A
+        finalAmount := amountC * p3 * feeFactor
+        profit := finalAmount - amount
+        profitPerc := profit / amount * 100
+
+        if profit > 0 {
+            log.Printf("🔺 ARB %s/%s/%s | start=%.6f end=%.6f profit=%.6f %.4f%%",
+                tri.A, tri.B, tri.C,
+                amount, finalAmount, profit, profitPerc)
+        }
+    }
+}
 
 
 
