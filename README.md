@@ -570,5 +570,136 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 }
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
+2025/08/04 19:54:52 📈 Profiler доступен на http://localhost:6060/debug/pprof/
+2025/08/04 19:54:52 ✅ Подходящих пар: 557
+2025/08/04 19:54:52 📊 Доступные пары (с инверсиями): 1114
+2025/08/04 19:54:52 [TRIANGLE] Found 234 triangles
+2025/08/04 19:54:52 [INIT] Треугольников найдено: 234
+2025/08/04 19:54:52 [INIT] Подписка на пар: 144 шт.
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCAPE
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTAAVE
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCBCH
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: BTCLTC
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCUNI
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCSHIB].  Reason： Blocked! 
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCAZERO
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCAVAX
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCMX
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCLUNC
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCSOL
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTLTC
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTWAVES
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTATOM].  Reason： Blocked! 
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTUNI
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCAAVE
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: BTCSOL
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: BTCATOM
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCDOGE
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTBCH
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTMINA
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTTRX
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCBTC
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCWAVES].  Reason： Blocked! 
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTAZERO
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCCAW
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCRAY
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTCAW
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTAVAX
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTBNB
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: BTCTRX
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTRAY
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCALGO].  Reason： Blocked! 
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCWBTC
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTXEN
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTNEAR
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCFIL
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCJASMY
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTXRP
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCADA
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCMINA
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: BTCETH
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTFIL
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTENS
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCOP].  Reason： Blocked! 
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTOP
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTFTT
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTJASMY
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTLUNC
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCBNB
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCATOM
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTWBTC
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTSOL
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCETH
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCLTC
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTDOGE
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTMX
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCXEN
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTALGO].  Reason： Blocked! 
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCFTT
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTADA
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCXRP
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCNEAR
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCENS
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: BTCBCH
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDCTRX
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: BTCXRP
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTAPE
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTUSDC
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: USDTSHIB].  Reason： Blocked! 
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: ETHUNI
+2025/08/04 19:54:53 [HandleRaw] Mark unsubscribed: BTCADA].  Reason： Blocked! 
+2025/08/04 19:54:53 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+2025/08/04 19:54:54 [HandleRaw] ACK detected, code=0
+
+
 
 
