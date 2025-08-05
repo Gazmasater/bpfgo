@@ -456,10 +456,8 @@ package app
 
 import (
     "bytes"
-    "encoding/json"
     "fmt"
     "log"
-    "os"
     "strconv"
     "strings"
     "sync"
@@ -471,33 +469,32 @@ import (
 )
 
 // flip возвращает инвертированный символ (например, "BTCUSDT" → "USDTBTC").
-// В реальном коде может потребоваться более точное разделение на актив- и ценовую части.
 func flip(sym string) string {
     n := len(sym)
     mid := n / 2
     return sym[mid:] + sym[:mid]
 }
 
-// Arbitrager отвечает за получение данных из WS, обработку и поиск возможностей арбитража.
+// Arbitrager ищет треугольные арбитражные возможности на бирже.
 type Arbitrager struct {
-    Triangles       []triangle.Triangle    // Список всех треугольников
-    latest          map[string]float64     // Последние цены по символам
-    trianglesByPair map[string][]int       // Индексы треугольников по паре
-    realSymbols     map[string]bool        // Карта реально доступных символов
-    stepSizes       map[string]float64     // Шаги лотов
-    minQtys         map[string]float64     // Мин. объёмы
+    Triangles       []triangle.Triangle // Список всех треугольников
+    latest          map[string]float64  // Последние цены по символам
+    trianglesByPair map[string][]int    // Индексы треугольников по паре
+    realSymbols     map[string]bool     // Карта реально доступных символов
+    stepSizes       map[string]float64  // Шаги лотов
+    minQtys         map[string]float64  // Мин. объёмы
 
-    msgCh   chan []byte                    // Канал для сырых WS-сообщений
-    wg      sync.WaitGroup                 // Для ожидания завершения воркеров
+    msgCh chan []byte    // Канал для сырых WS-сообщений
+    wg    sync.WaitGroup // Для ожидания завершения воркеров
 
-    mu       sync.Mutex
-    exchange exchange.Exchange
+    mu          sync.Mutex
+    exchange    exchange.Exchange
     StartAmount float64
 }
 
-// New создаёт и настраивает арбитражёра: загружает данные, строит индексы, запускает воркеры и WS-подписку.
+// New создаёт и инициализирует арбитражёра.
 func New(ex exchange.Exchange) (*Arbitrager, error) {
-    // 1) Получаем доступные символы и параметры
+    // 1) Получаем все доступные символы и параметры лотов
     rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
     log.Printf("📊 Сырьёвых символов: %d", len(rawSymbols))
 
@@ -513,26 +510,18 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
     var subPairs []string
     seen := make(map[string]struct{})
     for i, tri := range ts {
-        // для каждого ребра нормализуем символ
         for _, edge := range [][2]string{{tri.A, tri.B}, {tri.B, tri.C}, {tri.C, tri.A}} {
-            a, b := edge[0], edge[1]
-            // сначала прямой символ
-            sym := a + b
-            invert := false
+            aSym, bSym := edge[0], edge[1]
+            sym := aSym + bSym
             if !rawSymbols[sym] {
-                // пробуем обратный
-                rev := b + a
+                rev := bSym + aSym
                 if rawSymbols[rev] {
                     sym = rev
-                    invert = true
                 } else {
-                    // нет торговой пары, пропускаем ребро
                     continue
                 }
             }
-            // сохраняем в индекс
             trianglesByPair[sym] = append(trianglesByPair[sym], i)
-            // собираем список подписки разово
             if _, ok := seen[sym]; !ok {
                 seen[sym] = struct{}{}
                 subPairs = append(subPairs, sym)
@@ -557,7 +546,7 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
         arb.realSymbols[sym] = true
     }
 
-    // 5) Запускаем воркеры
+    // 5) Запускаем пул воркеров
     const workerCount = 4
     arb.wg.Add(workerCount)
     for i := 0; i < workerCount; i++ {
@@ -569,7 +558,7 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
         }()
     }
 
-    // 6) Одна WS-горутина
+    // 6) Единая WS-подписка
     go func() {
         for {
             err := ex.SubscribeDeals(subPairs, func(_ string, raw []byte) {
@@ -588,7 +577,7 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
     return arb, nil
 }
 
-// Stop корректно завершает работу: останавливает WS-подписку и ждёт воркеров.
+// Stop корректно завершает работу: закрывает канал и ждёт воркеров.
 func (a *Arbitrager) Stop() {
     close(a.msgCh)
     a.wg.Wait()
@@ -621,22 +610,31 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
         }
         return
     }
-    // 2) Парсим символ
+    // 2) Парсим символ и цену
     i := bytes.Index(raw, []byte(sKey))
-    if i < 0 { return }
+    if i < 0 {
+        return
+    }
     i += len(sKey)
     j := bytes.IndexByte(raw[i:], '"')
-    if j < 0 { return }
+    if j < 0 {
+        return
+    }
     sym := string(raw[i : i+j])
-    // 3) Парсим цену
     i = bytes.Index(raw, []byte(pKey))
-    if i < 0 { return }
+    if i < 0 {
+        return
+    }
     i += len(pKey)
     j = bytes.IndexByte(raw[i:], '"')
-    if j < 0 { return }
+    if j < 0 {
+        return
+    }
     price, err := strconv.ParseFloat(string(raw[i:i+j]), 64)
-    if err != nil { return }
-    // 4) Проверка и обновление под мьютексом
+    if err != nil {
+        return
+    }
+    // 3) Проверка и обновление под мьютексом
     a.mu.Lock()
     alive, ok := a.realSymbols[sym]
     _, hasTri := a.trianglesByPair[sym]
@@ -646,8 +644,53 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
     }
     a.latest[sym] = price
     a.mu.Unlock()
-    // 5) Поиск арбитража
+    // 4) Поиск арбитража
     a.Check(sym)
 }
+
+// Check проверяет все треугольники для данного символа.
+func (a *Arbitrager) Check(symbol string) {
+    a.mu.Lock()
+    defer a.mu.Unlock()
+
+    indices := a.trianglesByPair[symbol]
+    if len(indices) == 0 {
+        return
+    }
+
+    nf := 0.9965 * 0.9965 * 0.9965
+
+    for _, idx := range indices {
+        tri := a.Triangles[idx]
+
+        ab, ok1, rev1 := a.normalizeSymbolDir(tri.A, tri.B)
+        bc, ok2, rev2 := a.normalizeSymbolDir(tri.B, tri.C)
+        ca, ok3, rev3 := a.normalizeSymbolDir(tri.C, tri.A)
+        if !ok1 || !ok2 || !ok3 {
+            continue
+        }
+
+        p1, ex1 := a.latest[ab]
+        p2, ex2 := a.latest[bc]
+        p3, ex3 := a.latest[ca]
+        if !ex1 || !ex2 || !ex3 || p1 == 0 || p2 == 0 || p3 == 0 {
+            continue
+        }
+
+        if rev1 {
+            p1 = 1 / p1
+        }
+        if rev2 {
+            p2 = 1 / p2
+        }
+        if rev3 {
+            p3 = 1 / p3
+        }
+
+        profit := (p1*p2*p3*nf - 1) * 100
+        log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
+    }
+}
+
 
 
