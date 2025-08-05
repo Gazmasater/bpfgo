@@ -649,3 +649,76 @@ func (m *MexcExchange) GetBestBid(symbol string) (float64, error) {
 	}
 	return strconv.ParseFloat(data.Bids[0][0], 64)
 }
+
+
+
+package main
+
+import (
+	"log"
+	"net/http"
+	_ "net/http/pprof"
+	"os"
+
+	"cryptarb/internal/app"
+	"cryptarb/internal/repository/mexc"
+
+	"github.com/joho/godotenv"
+)
+
+func main() {
+	// 🧪 Включаем pprof
+	go func() {
+		log.Println("📈 Profiler доступен на http://localhost:6060/debug/pprof/")
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+
+	// 1. Загружаем .env
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("❌ Не удалось загрузить .env:", err)
+	}
+
+	apiKey := os.Getenv("MEXC_API_KEY")
+	secret := os.Getenv("MEXC_SECRET_KEY")
+
+	if apiKey == "" || secret == "" {
+		log.Fatal("❌ API ключи не найдены в .env")
+	}
+
+	// 2. Создаём клиента биржи
+	ex := mexc.NewMexcExchange(apiKey, secret)
+
+	// 3. Запускаем арбитраж без triangles.json
+	_, err = app.New(ex)
+	if err != nil {
+		log.Fatal("❌ Ошибка запуска арбитража:", err)
+	}
+
+	// 4. Блокируем main
+	select {}
+}
+
+
+[{
+	"resource": "/home/gaz358/myprog/crypt/cmd/cryptarb/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "InvalidIfaceAssign",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "InvalidIfaceAssign"
+		}
+	},
+	"severity": 8,
+	"message": "cannot use ex (variable of type *mexc.MexcExchange) as exchange.Exchange value in argument to app.New: *mexc.MexcExchange does not implement exchange.Exchange (wrong type for method SubscribeDeals)\n\t\thave SubscribeDeals(context.Context, []string, func(string, []byte)) error\n\t\twant SubscribeDeals([]string, func(string, []byte)) error",
+	"source": "compiler",
+	"startLineNumber": 39,
+	"startColumn": 19,
+	"endLineNumber": 39,
+	"endColumn": 21,
+	"origin": "extHost1"
+}]
