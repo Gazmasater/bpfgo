@@ -406,118 +406,19 @@ list LoadTrianglesFromSymbols
 
 
 
-// В начале файла замените mu на RWMutex, если хотите параллельные чтения:
-type Arbitrager struct {
-    // ...
-    mu              sync.RWMutex
-    // ...
-}
-
-// Новый приватный метод, зеркалит тело Check без Lock/Unlock
-func (a *Arbitrager) checkLocked(symbol string) {
-    indices := a.trianglesByPair[symbol]
-    if len(indices) == 0 {
-        return
-    }
-
-    nf := 0.9965 * 0.9965 * 0.9965
-    for _, idx := range indices {
-        tri := a.Triangles[idx]
-
-        ab, ok1, rev1 := a.normalizeSymbolDir(tri.A, tri.B)
-        bc, ok2, rev2 := a.normalizeSymbolDir(tri.B, tri.C)
-        ca, ok3, rev3 := a.normalizeSymbolDir(tri.C, tri.A)
-        if !ok1 || !ok2 || !ok3 {
-            continue
-        }
-
-        p1, ex1 := a.latest[ab]
-        p2, ex2 := a.latest[bc]
-        p3, ex3 := a.latest[ca]
-        if !ex1 || !ex2 || !ex3 || p1 == 0 || p2 == 0 || p3 == 0 {
-            continue
-        }
-        if rev1 { p1 = 1 / p1 }
-        if rev2 { p2 = 1 / p2 }
-        if rev3 { p3 = 1 / p3 }
-
-        profit := (p1 * p2 * p3 * nf - 1) * 100
-        if profit > 0 && tri.A == "USDT" {
-            log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
-        }
-    }
-}
-
-// Обновлённый HandleRaw — весь доступ к картам и latest под одним Lock
-func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
-    // 1) ACK-подписка: есть `"id":` и `"code":0`, но нет поля `"s":`
-    if bytes.Contains(raw, idKey) &&
-       bytes.Contains(raw, code0Key) &&
-       !bytes.Contains(raw, sKey) {
-
-        // разбираем текст ошибки подписки — только руками, без JSON
-        start := bytes.Index(raw, []byte(prefixFail))
-        if start >= 0 {
-            start += len(prefixFail)
-            // найдём конец списка заблокированных через `].  Reason`
-            end := bytes.Index(raw[start:], []byte("].  Reason"))
-            if end > 0 {
-                blockedList := raw[start : start+end]
-                for _, ch := range strings.Split(string(blockedList), ",") {
-                    if idx := strings.LastIndex(ch, "@"); idx != -1 {
-                        sym := ch[idx+1:]
-                        a.mu.Lock()
-                        a.realSymbols[sym] = false
-                        a.mu.Unlock()
-                    }
-                }
-            }
-        }
-        return
-    }
-
-    // 2) Извлекаем symbol: "s":"XXX"
-    i := bytes.Index(raw, sKey)
-    if i < 0 {
-        return
-    }
-    i += len(sKey)
-    j := bytes.IndexByte(raw[i:], '"')
-    if j < 0 {
-        return
-    }
-    sym := string(raw[i : i+j])
-
-    // 3) Весь доступ к realSymbols, trianglesByPair и latest — под Lock
-    a.mu.Lock()
-    defer a.mu.Unlock()
-
-    // фильтруем несуществующие или отключённые пары
-    if ok, exists := a.realSymbols[sym]; !exists || !ok {
-        return
-    }
-    if _, exists := a.trianglesByPair[sym]; !exists {
-        return
-    }
-
-    // 4) Извлекаем цену: "p":"YYY"
-    i = bytes.Index(raw, pKey)
-    if i < 0 {
-        return
-    }
-    i += len(pKey)
-    j = bytes.IndexByte(raw[i:], '"')
-    if j < 0 {
-        return
-    }
-    priceBytes := raw[i : i+j]
-    price, err := strconv.ParseFloat(string(priceBytes), 64)
-    if err != nil {
-        return
-    }
-
-    // 5) Обновляем latest и сразу проверяем треугольники
-    a.latest[sym] = price
-    a.checkLocked(sym)
-}
+(pprof) top
+Showing nodes accounting for 2051.50kB, 100% of 2051.50kB total
+Showing top 10 nodes out of 26
+      flat  flat%   sum%        cum   cum%
+    1539kB 75.02% 75.02%     1539kB 75.02%  runtime.allocm
+  512.50kB 24.98%   100%   512.50kB 24.98%  encoding/pem.Decode
+         0     0%   100%   512.50kB 24.98%  crypto/tls.(*Conn).HandshakeContext
+         0     0%   100%   512.50kB 24.98%  crypto/tls.(*Conn).clientHandshake
+         0     0%   100%   512.50kB 24.98%  crypto/tls.(*Conn).handshakeContext
+         0     0%   100%   512.50kB 24.98%  crypto/tls.(*Conn).verifyServerCertificate
+         0     0%   100%   512.50kB 24.98%  crypto/tls.(*clientHandshakeStateTLS13).handshake
+         0     0%   100%   512.50kB 24.98%  crypto/tls.(*clientHandshakeStateTLS13).readServerCertificate
+         0     0%   100%   512.50kB 24.98%  crypto/x509.(*CertPool).AppendCertsFromPEM
+         0     0%   100%   512.50kB 24.98%  crypto/x509.(*Certificate).Verify
+(pprof) 
 
