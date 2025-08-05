@@ -422,30 +422,65 @@ go func() {
 
 
 
-File: cryptarb
-Build ID: 894bd52a7e48d57e4cf69de674ff8f90f82b7cf5
-Type: cpu
-Time: 2025-08-05 21:12:22 MSK
-Duration: 30s, Total samples = 100ms ( 0.33%)
-Entering interactive mode (type "help" for commands, "o" for options)
-(pprof) top
-Showing nodes accounting for 100ms, 100% of 100ms total
-Showing top 10 nodes out of 49
-      flat  flat%   sum%        cum   cum%
-      20ms 20.00% 20.00%       20ms 20.00%  internal/runtime/syscall.Syscall6
-      10ms 10.00% 30.00%       40ms 40.00%  cryptarb/internal/app.(*Arbitrager).Check
-      10ms 10.00% 40.00%       70ms 70.00%  cryptarb/internal/repository/mexc.(*MexcExchange).SubscribeDeals
-      10ms 10.00% 50.00%       10ms 10.00%  internal/runtime/maps.ctrlGroup.matchH2 (inline)
-      10ms 10.00% 60.00%       10ms 10.00%  internal/sync.(*Mutex).Unlock (inline)
-      10ms 10.00% 70.00%       10ms 10.00%  io.ReadAll
-      10ms 10.00% 80.00%       10ms 10.00%  runtime.futex
-      10ms 10.00% 90.00%       10ms 10.00%  runtime.pidleget
-      10ms 10.00%   100%       10ms 10.00%  runtime.procyield
-         0     0%   100%       10ms 10.00%  bufio.(*Reader).Peek
-(pprof) 
+func (m *MexcExchange) PlaceMarketOrder(symbol, side string, quantity float64) (string, error) {
+    endpoint := "https://api.mexc.com/api/v3/order"
+    timestamp := strconv.FormatInt(time.Now().UnixMilli(), 10)
 
+    // Собираем параметры
+    params := url.Values{}
+    params.Set("symbol", symbol)
+    params.Set("side", strings.ToUpper(side)) // "BUY" или "SELL"
+    params.Set("type", "MARKET")
+    if side == "BUY" {
+        params.Set("quoteOrderQty", fmt.Sprintf("%.4f", quantity))
+    } else {
+        params.Set("quantity", fmt.Sprintf("%.6f", quantity))
+    }
+    params.Set("timestamp", timestamp)
 
-io.ReadAll
+    // Подпись
+    sig := createSignature(m.apiSecret, params.Encode())
+    params.Set("signature", sig)
+
+    // Запрос
+    req, err := http.NewRequest("POST", endpoint+"?"+params.Encode(), nil)
+    if err != nil {
+        return "", fmt.Errorf("request error: %v", err)
+    }
+    req.Header.Set("X-MEXC-APIKEY", m.apiKey)
+
+    client := &http.Client{Timeout: 10 * time.Second}
+    resp, err := client.Do(req)
+    if err != nil {
+        return "", fmt.Errorf("HTTP error: %v", err)
+    }
+    defer resp.Body.Close()
+
+    // В случае ошибки — тоже используем Decoder
+    if resp.StatusCode != http.StatusOK {
+        var errResp struct {
+            Code    int    `json:"code"`
+            Message string `json:"message"`
+        }
+        decErr := json.NewDecoder(resp.Body)
+        if err := decErr.Decode(&errResp); err != nil {
+            return "", fmt.Errorf("order failed: status %d", resp.StatusCode)
+        }
+        return "", fmt.Errorf("order failed [%d]: %s", errResp.Code, errResp.Message)
+    }
+
+    // Успешный ответ
+    var result struct {
+        OrderID string `json:"orderId"`
+    }
+    dec := json.NewDecoder(resp.Body)
+    if err := dec.Decode(&result); err != nil {
+        return "", fmt.Errorf("decode error: %v", err)
+    }
+
+    return result.OrderID, nil
+}
+
 
 
 
