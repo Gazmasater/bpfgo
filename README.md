@@ -463,30 +463,14 @@ go tool pprof \
 
 
 
-File: cryptarb
-Build ID: 7af130719f312e9f1eafb7d1c085f23719e8020a
-Type: delay
-Time: 2025-08-05 22:09:14 MSK
-Duration: 10s, Total samples = 22.84s (228.30%)
-Entering interactive mode (type "help" for commands, "o" for options)
-(pprof)  ignore=net/http\..*
-(pprof)  ignore=runtime\..*
-(pprof) focus=cryptarb
-(pprof) top -cum
-Active filters:
-   focus=cryptarb
-   ignore=runtime\..*
-Showing nodes accounting for 0.71ms, 0.0031% of 22840.84ms total
-      flat  flat%   sum%        cum   cum%
-         0     0%     0%     0.71ms 0.0031%  cryptarb/internal/app.(*Arbitrager).HandleRaw
-         0     0%     0%     0.71ms 0.0031%  cryptarb/internal/app.(*Arbitrager).HandleRaw-fm
-         0     0%     0%     0.71ms 0.0031%  cryptarb/internal/app.New.func1
-         0     0%     0%     0.71ms 0.0031%  cryptarb/internal/app.New.gowrap1
-         0     0%     0%     0.71ms 0.0031%  cryptarb/internal/repository/mexc.(*MexcExchange).SubscribeDeals
-    0.71ms 0.0031% 0.0031%     0.71ms 0.0031%  sync.(*Mutex).Lock (inline)
-         0     0% 0.0031%     0.30ms 0.0013%  cryptarb/internal/app.(*Arbitrager).Check
-         0     0% 0.0031%     0.30ms 0.0013%  cryptarb/internal/app.(*Arbitrager).normalizeSymbolDir
-(pprof) 
+curl 'http://localhost:6060/debug/pprof/profile?seconds=15' > cpu.prof
+
+go tool pprof --http=:8080 \
+    --focus="cryptarb" \
+    --ignore="runtime\..*" \
+    cpu.prof
+
+go tool pprof --text --focus="cryptarb" --ignore="runtime\..*" cpu.prof
 
 
 
