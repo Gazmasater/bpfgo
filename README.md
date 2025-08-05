@@ -439,6 +439,25 @@ curl 'http://localhost:6060/debug/pprof/block?seconds=10' > block.prof
 go tool pprof --http=:8080 block.prof
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ curl 'http://localhost:6060/debug/pprof/block?seconds=10' > block.prof
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100  1270  100  1270    0     0    126      0  0:00:10  0:00:10 --:--:--   264
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go tool pprof --http=:8080 block.prof
+Serving web UI on http://localhost:8080
+Gtk-Message: 22:09:34.198: Not loading module "atk-bridge": The functionality is provided by GTK natively. Please try to not load it.
+Gtk-Message: 22:09:34.349: Failed to load module "canberra-gtk-module"
+Gtk-Message: 22:09:34.354: Failed to load module "canberra-gtk-module"
+Failed to execute dot. Is Graphviz installed?
+exec: "dot": executable file not found in $PATH
+Failed to execute dot. Is Graphviz installed?
+exec: "dot": executable file not found in $PATH
+[8151:8282:0805/220937.742203:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+[8320:8320:0805/220939.950317:ERROR:ui/gl/gl_surface_presentation_helper.cc:260] GetVSyncParametersIfAvailable() failed for 1 times!
+[8320:8320:0805/220941.468084:ERROR:ui/gl/gl_surface_presentation_helper.cc:260] GetVSyncParametersIfAvailable() failed for 2 times!
+[8151:8282:0805/220959.041201:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+
+
 
 
 
