@@ -404,6 +404,28 @@ go tool pprof http://localhost:6060/debug/pprof/heap
 list LoadTrianglesFromSymbols
 
 
+File: cryptarb
+Build ID: 89faeb18e3964e33a0ca535fd97aefb0dae94650
+Type: inuse_space
+Time: 2025-08-05 15:49:05 MSK
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 1538.28kB, 100% of 1538.28kB total
+Showing top 10 nodes out of 26
+      flat  flat%   sum%        cum   cum%
+    1026kB 66.70% 66.70%     1026kB 66.70%  runtime.allocm
+  512.28kB 33.30%   100%   512.28kB 33.30%  encoding/pem.Decode
+         0     0%   100%   512.28kB 33.30%  crypto/tls.(*Conn).HandshakeContext
+         0     0%   100%   512.28kB 33.30%  crypto/tls.(*Conn).clientHandshake
+         0     0%   100%   512.28kB 33.30%  crypto/tls.(*Conn).handshakeContext
+         0     0%   100%   512.28kB 33.30%  crypto/tls.(*Conn).verifyServerCertificate
+         0     0%   100%   512.28kB 33.30%  crypto/tls.(*clientHandshakeStateTLS13).handshake
+         0     0%   100%   512.28kB 33.30%  crypto/tls.(*clientHandshakeStateTLS13).readServerCertificate
+         0     0%   100%   512.28kB 33.30%  crypto/x509.(*CertPool).AppendCertsFromPEM
+         0     0%   100%   512.28kB 33.30%  crypto/x509.(*Certificate).Verify
+(pprof) 
+
+
 
 
 SubscribeDeals(ctx context.Context, pairs []string, handler func(exchange string, raw []byte)) error
