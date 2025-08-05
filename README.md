@@ -448,14 +448,19 @@ go tool pprof --http=:8080 block.prof
 
 go tool pprof block.prof
 
-(pprof) ignore net/http\..*
-(pprof) ignore runtime\..*
+(pprof) ignore=net/http\..*
+(pprof) ignore=runtime\..*
+(pprof) focus=cryptarb
 (pprof) top -cum
 
-(pprof) list cryptarb/internal/app.(*Arbitrager).Check
-(pprof) list cryptarb/internal/repository/mexc.SubscribeDeals
 
-(pprof) list sync\.Mutex\.Lock
+go tool pprof \
+    --http=:8080 \
+    --focus="cryptarb" \
+    --ignore="net/http\..*" \
+    --ignore="runtime\..*" \
+    block.prof
+
 
 
 File: cryptarb
