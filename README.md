@@ -422,152 +422,26 @@ go func() {
 
 
 
-func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
-	// 1) ACK-подписка: есть `"id":` и `"code":0`, но нет поля `"s":`
-	if bytes.Contains(raw, idKey) &&
-		bytes.Contains(raw, code0Key) &&
-		!bytes.Contains(raw, sKey) {
-
-		start := bytes.Index(raw, []byte(prefixFail))
-		if start >= 0 {
-			start += len(prefixFail)
-			end := bytes.Index(raw[start:], []byte("].  Reason"))
-			if end > 0 {
-				blockedList := raw[start : start+end]
-				for _, ch := range strings.Split(string(blockedList), ",") {
-					if idx := strings.LastIndex(ch, "@"); idx != -1 {
-						sym := ch[idx+1:]
-						a.mu.Lock()
-						a.realSymbols[sym] = false
-						a.mu.Unlock()
-					}
-				}
-			}
-		}
-		return
-	}
-
-	// 2) Извлекаем symbol: "s":"XXX"
-	i := bytes.Index(raw, sKey)
-	if i < 0 {
-		return
-	}
-	i += len(sKey)
-	j := bytes.IndexByte(raw[i:], '"')
-	if j < 0 {
-		return
-	}
-	sym := string(raw[i : i+j])
-
-	// 3) Проверяем, разрешён ли символ и связан ли он с треугольниками
-	a.mu.Lock()
-	allowed, exists := a.realSymbols[sym]
-	_, hasTriangles := a.trianglesByPair[sym]
-	a.mu.Unlock()
-	if !exists || !allowed || !hasTriangles {
-		return
-	}
-
-	// 4) Извлекаем цену: "p":"YYY"
-	i = bytes.Index(raw, pKey)
-	if i < 0 {
-		return
-	}
-	i += len(pKey)
-	j = bytes.IndexByte(raw[i:], '"')
-	if j < 0 {
-		return
-	}
-	priceBytes := raw[i : i+j]
-	price, err := strconv.ParseFloat(string(priceBytes), 64)
-	if err != nil || price == 0 {
-		return
-	}
-
-	// 5) Обновляем цену и запускаем проверку
-	a.mu.Lock()
-	a.latest[sym] = price
-	a.mu.Unlock()
-	a.Check(sym)
-}
-
-
-
-
-// Check проверяет все треугольники, связанные с символом.
-// Использует мьютекс только для чтения данных, расчёт и логика вне блокировки.
-func (a *Arbitrager) Check(symbol string) {
-	// 1. Получаем индексы треугольников и снапшоты цен под мьютексом
-	a.mu.Lock()
-	indices := a.trianglesByPair[symbol]
-	if len(indices) == 0 {
-		a.mu.Unlock()
-		return
-	}
-
-	// копируем снапшоты цен (read-only)
-	prices := make(map[string]float64, len(a.latest))
-	for k, v := range a.latest {
-		prices[k] = v
-	}
-	a.mu.Unlock()
-
-	// 2. Рассчитываем
-	const fee = 0.9965 * 0.9965 * 0.9965 // учёт комиссии
-
-	for _, idx := range indices {
-		tri := a.Triangles[idx]
-
-		ab, ok1, rev1 := a.normalizeSymbolDir(tri.A, tri.B)
-		bc, ok2, rev2 := a.normalizeSymbolDir(tri.B, tri.C)
-		ca, ok3, rev3 := a.normalizeSymbolDir(tri.C, tri.A)
-		if !ok1 || !ok2 || !ok3 {
-			continue
-		}
-
-		p1, ex1 := prices[ab]
-		p2, ex2 := prices[bc]
-		p3, ex3 := prices[ca]
-		if !ex1 || !ex2 || !ex3 || p1 == 0 || p2 == 0 || p3 == 0 {
-			continue
-		}
-
-		if rev1 {
-			p1 = 1 / p1
-		}
-		if rev2 {
-			p2 = 1 / p2
-		}
-		if rev3 {
-			p3 = 1 / p3
-		}
-
-		profit := (p1*p2*p3*fee - 1) * 100
-		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
-	}
-}
-
-
-
-// normalizeSymbolDir определяет корректное направление символа и нужно ли инвертировать цену.
-// Безопасно работает с realSymbols под мьютексом.
-func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, ok bool, invert bool) {
-	s1 := base + quote
-	s2 := quote + base
-
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if a.realSymbols[s1] {
-		return s1, true, false
-	}
-	if a.realSymbols[s2] {
-		return s2, true, true
-	}
-	return "", false, false
-}
-
-
+File: cryptarb
+Build ID: 0bab227150d3b10f7d1b1f590f6006dca142d5a4
+Type: inuse_space
+Time: 2025-08-05 20:51:46 MSK
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 3075.63kB, 100% of 3075.63kB total
+Showing top 10 nodes out of 49
+      flat  flat%   sum%        cum   cum%
+    1539kB 50.04% 50.04%     1539kB 50.04%  runtime.allocm
+  512.56kB 16.67% 66.70%   512.56kB 16.67%  encoding/pem.Decode
+  512.05kB 16.65% 83.35%   512.05kB 16.65%  runtime.acquireSudog
+  512.02kB 16.65%   100%   512.02kB 16.65%  syscall.anyToSockaddr
+         0     0%   100%   512.02kB 16.65%  cryptarb/internal/app.New.func1
+         0     0%   100%   512.02kB 16.65%  cryptarb/internal/repository/mexc.(*MexcExchange).SubscribeDeals
+         0     0%   100%   512.56kB 16.67%  crypto/tls.(*Conn).HandshakeContext
+         0     0%   100%   512.56kB 16.67%  crypto/tls.(*Conn).clientHandshake
+         0     0%   100%   512.56kB 16.67%  crypto/tls.(*Conn).handshakeContext
+         0     0%   100%   512.56kB 16.67%  crypto/tls.(*Conn).verifyServerCertificate
+(pprof) 
 
 
 
