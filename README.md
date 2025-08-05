@@ -450,8 +450,11 @@ Showing top 10 nodes out of 38
 (pprof) 
 
 
-(pprof) list crypt/internal/repository/filesystem/ExpandAvailableSymbols
-no matches found for regexp: crypt/internal/repository/filesystem/ExpandAvailableSymbols
-(pprof) list ExpandAvailableSymbols                                     
-no matches found for regexp: ExpandAvailableSymbols
-(pprof) 
+list cryptarb/internal/repository/filesystem.ExpandAvailableSymbols
+
+list .*ExpandAvailableSymbols
+
+disasm ExpandAvailableSymbols
+
+go build -gcflags='-l' -o cryptarb ./cmd/yourapp
+
