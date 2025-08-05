@@ -420,8 +420,6 @@ import (
     "fmt"
     "log"
     "os"
-    "strconv"
-    "strings"
     "sync"
     "time"
 
@@ -430,55 +428,60 @@ import (
     "cryptarb/internal/repository/filesystem"
 )
 
-const (
-    // ...
-    prefixFail = "Not Subscribed successfully! ["
-)
-
 type Arbitrager struct {
     Triangles       []triangle.Triangle
-    latest          map[string]float64
-    trianglesByPair map[string][]triangle.Triangle
-    realSymbols     map[string]bool
-    stepSizes       map[string]float64
-    minQtys         map[string]float64
+    latest          map[string]float64      // Последние цены по парам
+    trianglesByPair map[string][]int        // Индексы треугольников по паре
+    realSymbols     map[string]bool         // Доступные пары (с инверсиями)
+    stepSizes       map[string]float64      // Шаг лота
+    minQtys         map[string]float64      // Мин. объём
+    mu              sync.Mutex
     StartAmount     float64
     exchange        exchange.Exchange
-
-    mu sync.Mutex
 }
 
-// New создаёт арбитражёра, грузит все треугольники и запускает WS-подписки
+// New создаёт и инициализирует арбитражёра,
+// строит все треугольники, индексирует их по парам и запускает WS-подписки.
 func New(ex exchange.Exchange) (*Arbitrager, error) {
-    // 1) Получаем символы и параметры лотов
+    // 1) Получаем все доступные пары и параметры лотов
     rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
     avail := filesystem.ExpandAvailableSymbols(rawSymbols)
     log.Printf("📊 Доступные пары (с инверсиями): %d", len(avail))
 
-    // 2) Строим все возможные треугольники
+    // 2) Строим треугольники
     ts, err := filesystem.LoadTrianglesFromSymbols(avail)
     if err != nil {
         return nil, fmt.Errorf("LoadTriangles: %w", err)
     }
     log.Printf("[INIT] Треугольников найдено: %d", len(ts))
 
-    // Для отладки — дампим
+    // Сохраняем дамп для отладки
     if data, err := json.MarshalIndent(ts, "", "  "); err == nil {
         _ = os.WriteFile("triangles_dump.json", data, 0644)
     }
 
-    // 3) Готовим мапы для быстрого поиска
-    trianglesByPair := make(map[string][]triangle.Triangle, len(ts)*3)
-    for _, t := range ts {
-        trianglesByPair[t.A.Symbol] = append(trianglesByPair[t.A.Symbol], t)
-        trianglesByPair[t.B.Symbol] = append(trianglesByPair[t.B.Symbol], t)
-        trianglesByPair[t.C.Symbol] = append(trianglesByPair[t.C.Symbol], t)
-    }
+    // 3) Индексируем треугольники по каждой из 3-х пар (AB, BC, CA)
+    trianglesByPair := make(map[string][]int, len(ts)*3)
+    subRaw := make([]string, 0, len(ts)*3)
+    for i, tri := range ts {
+        ab := tri.A + tri.B
+        bc := tri.B + tri.C
+        ca := tri.C + tri.A
 
-    // 4) Собираем список пар для подписки
-    uniq := make(map[string]struct{}, len(avail))
-    for _, p := range avail {
-        uniq[p] = struct{}{}
+        trianglesByPair[ab] = append(trianglesByPair[ab], i)
+        trianglesByPair[bc] = append(trianglesByPair[bc], i)
+        trianglesByPair[ca] = append(trianglesByPair[ca], i)
+
+        subRaw = append(subRaw, ab, bc, ca)
+    }
+    log.Printf("[INIT] Составили индекс по парам: %d ключей", len(trianglesByPair))
+
+    // 4) Фильтруем только реально доступные пары и убираем дубликаты
+    uniq := make(map[string]struct{}, len(subRaw))
+    for _, p := range subRaw {
+        if avail[p] {
+            uniq[p] = struct{}{}
+        }
     }
     subPairs := make([]string, 0, len(uniq))
     for p := range uniq {
@@ -486,7 +489,7 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
     }
     log.Printf("[INIT] Подписка на пар: %d шт.", len(subPairs))
 
-    // 5) Инициализируем арбитражёра
+    // 5) Инициализируем структуру Arbitrager
     arb := &Arbitrager{
         Triangles:       ts,
         latest:          make(map[string]float64, len(subPairs)),
@@ -498,7 +501,7 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
         exchange:        ex,
     }
 
-    // 6) WS-подписки чанками по 25 пар
+    // 6) Запускаем WS-подписки чанками по 25 пар
     const maxPerConn = 25
     for i := 0; i < len(subPairs); i += maxPerConn {
         end := i + maxPerConn
@@ -512,8 +515,8 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
     return arb, nil
 }
 
-// subscriptionLoop — выносит retry-логику подписки в метод,
-// чтобы анонимные замыкания не захватывали большой state
+// subscriptionLoop старается подписаться на канал WS и при ошибке
+// перезапускает попытку через секунду, без захвата большого state.
 func (a *Arbitrager) subscriptionLoop(pairs []string) {
     for {
         err := a.exchange.SubscribeDeals(pairs, a.HandleRaw)
@@ -522,8 +525,7 @@ func (a *Arbitrager) subscriptionLoop(pairs []string) {
             time.Sleep(time.Second)
             continue
         }
-        // Если SubscribeDeals никогда не возвращает nil,
-        // этот код не будет достигнут. Иначе — можно выйти:
+        log.Printf("[WS][%s] subscribed to %d channels", a.exchange.Name(), len(pairs))
         return
     }
 }
