@@ -458,6 +458,40 @@ go tool pprof block.prof
 (pprof) list sync\.Mutex\.Lock
 
 
+File: cryptarb
+Build ID: 7af130719f312e9f1eafb7d1c085f23719e8020a
+Type: delay
+Time: 2025-08-05 22:09:14 MSK
+Duration: 10s, Total samples = 22.84s (228.30%)
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof)  ignore net/http\..*
+did you mean: ignore=net/http\..*
+(pprof) ignore runtime\..*
+did you mean: ignore=runtime\..*
+(pprof) top -cum
+Showing nodes accounting for 12.84s, 56.21% of 22.84s total
+Dropped 8 nodes (cum <= 0.11s)
+Showing top 10 nodes out of 11
+      flat  flat%   sum%        cum   cum%
+    12.84s 56.21% 56.21%     12.84s 56.21%  runtime.chanrecv1
+         0     0% 56.21%     12.84s 56.21%  runtime.unique_runtime_registerUniqueMapCleanup.func2
+         0     0% 56.21%        10s 43.79%  net/http.(*ServeMux).ServeHTTP
+         0     0% 56.21%        10s 43.79%  net/http.(*Server).Serve.gowrap3
+         0     0% 56.21%        10s 43.79%  net/http.(*conn).serve
+         0     0% 56.21%        10s 43.79%  net/http.HandlerFunc.ServeHTTP
+         0     0% 56.21%        10s 43.79%  net/http.serverHandler.ServeHTTP
+         0     0% 56.21%        10s 43.79%  net/http/pprof.Index
+         0     0% 56.21%        10s 43.79%  net/http/pprof.handler.ServeHTTP
+         0     0% 56.21%        10s 43.79%  net/http/pprof.handler.serveDeltaProfile
+(pprof) list sync\.Mutex\.Lock
+no matches found for regexp: sync\.Mutex\.Lock
+(pprof) list cryptarb/internal/app.(*Arbitrager).Check
+parsing argument regexp cryptarb/internal/app.(*Arbitrager).Check: error parsing regexp: missing argument to repetition operator: `*`
+(pprof) list cryptarb/internal/repository/mexc.SubscribeDeals
+no matches found for regexp: cryptarb/internal/repository/mexc.SubscribeDeals
+(pprof) 
+
+
 
 
 
