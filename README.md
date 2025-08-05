@@ -556,3 +556,25 @@ func createSignature(secret, query string) string {
 }
 
 
+package exchange
+
+// Exchange определяет интерфейс криптобиржи для подключения к арбитражному движку
+// и абстрагирует WebSocket/REST взаимодействие.
+type Exchange interface {
+	// Name возвращает уникальное имя биржи (например: "MEXC")
+	Name() string
+
+	// FetchAvailableSymbols возвращает список доступных торговых пар ("BTCUSDT" и т.д.)
+	FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64)
+	// SubscribeDeals подписывается на обновления по указанным парам
+	// и вызывает handler при каждом событии сделки
+	SubscribeDeals(pairs []string, handler func(exchange string, raw []byte)) error
+
+	PlaceMarketOrder(symbol, side string, quantity float64) (orderID string, err error)
+
+	GetBestAsk(symbol string) (float64, error)
+	GetBestBid(symbol string) (float64, error)
+}
+
+
+
