@@ -411,11 +411,18 @@ go tool pprof http://localhost:6060/debug/pprof/heap?debug=1
 go tool pprof http://localhost:6060/debug/pprof/goroutine
 (pprof) top
 
+go func() {
+        log.Println("🚀 pprof доступен на http://localhost:6060/debug/pprof/")
+        log.Println(http.ListenAndServe("localhost:6060", nil))
+    }()
+
 
 
 gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go tool pprof http://localhost:6060/debug/pprof/heap?debug=1
 Fetching profile over HTTP from http://localhost:6060/debug/pprof/heap?debug=1
 http post http://localhost:6060/debug/pprof/symbol: server response: 405 Method Not Allowed
+
+
 gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go tool pprof http://localhost:6060/debug/pprof/goroutine
 Fetching profile over HTTP from http://localhost:6060/debug/pprof/goroutine
 Saved profile in /home/gaz358/pprof/pprof.cryptarb.goroutine.001.pb.gz
