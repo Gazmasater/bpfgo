@@ -422,64 +422,17 @@ go func() {
 
 
 
-func (m *MexcExchange) PlaceMarketOrder(symbol, side string, quantity float64) (string, error) {
-    endpoint := "https://api.mexc.com/api/v3/order"
-    timestamp := strconv.FormatInt(time.Now().UnixMilli(), 10)
-
-    // Собираем параметры
-    params := url.Values{}
-    params.Set("symbol", symbol)
-    params.Set("side", strings.ToUpper(side)) // "BUY" или "SELL"
-    params.Set("type", "MARKET")
-    if side == "BUY" {
-        params.Set("quoteOrderQty", fmt.Sprintf("%.4f", quantity))
-    } else {
-        params.Set("quantity", fmt.Sprintf("%.6f", quantity))
-    }
-    params.Set("timestamp", timestamp)
-
-    // Подпись
-    sig := createSignature(m.apiSecret, params.Encode())
-    params.Set("signature", sig)
-
-    // Запрос
-    req, err := http.NewRequest("POST", endpoint+"?"+params.Encode(), nil)
-    if err != nil {
-        return "", fmt.Errorf("request error: %v", err)
-    }
-    req.Header.Set("X-MEXC-APIKEY", m.apiKey)
-
-    client := &http.Client{Timeout: 10 * time.Second}
-    resp, err := client.Do(req)
-    if err != nil {
-        return "", fmt.Errorf("HTTP error: %v", err)
-    }
-    defer resp.Body.Close()
-
-    // В случае ошибки — тоже используем Decoder
-    if resp.StatusCode != http.StatusOK {
-        var errResp struct {
-            Code    int    `json:"code"`
-            Message string `json:"message"`
-        }
-        decErr := json.NewDecoder(resp.Body)
-        if err := decErr.Decode(&errResp); err != nil {
-            return "", fmt.Errorf("order failed: status %d", resp.StatusCode)
-        }
-        return "", fmt.Errorf("order failed [%d]: %s", errResp.Code, errResp.Message)
-    }
-
-    // Успешный ответ
-    var result struct {
-        OrderID string `json:"orderId"`
-    }
-    dec := json.NewDecoder(resp.Body)
-    if err := dec.Decode(&result); err != nil {
-        return "", fmt.Errorf("decode error: %v", err)
-    }
-
-    return result.OrderID, nil
+func init() {
+    // Собирать каждый блокирующий вызов
+    runtime.SetBlockProfileRate(1)
 }
+
+# Сохраняем block profile в файл block.prof
+curl 'http://localhost:6060/debug/pprof/block?seconds=10' > block.prof
+
+
+go tool pprof --http=:8080 block.prof
+
 
 
 
