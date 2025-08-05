@@ -420,13 +420,6 @@ import (
 	"cryptarb/internal/repository/filesystem"
 )
 
-// flip возвращает инвертированный символ (например, "BTCUSDT" → "USDTBTC").
-//func flip(sym string) string {
-//	n := len(sym)
-//	mid := n / 2
-//	return sym[mid:] + sym[:mid]
-//}
-
 // Arbitrager ищет треугольные арбитражные возможности на бирже.
 type Arbitrager struct {
 	Triangles       []triangle.Triangle // Список всех треугольников
@@ -535,17 +528,17 @@ func (a *Arbitrager) Stop() {
 	a.wg.Wait()
 }
 
-// HandleRaw обрабатывает одно сообщение из WS.
+// HandleRaw обрабатывает одно сообщение из WS без JSON Unmarshal.
 func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 	const (
 		idKey      = `"id":`
 		code0Key   = `"code":0`
-		sKey       = `"s":"`
-		pKey       = `"p":"`
+		symKey     = `"symbol":"`
+		priceKey   = `"price":"`
 		prefixFail = "Not Subscribed successfully! ["
 	)
 	// 1) Обработка ACK-ошибки подписки
-	if bytes.Contains(raw, []byte(idKey)) && bytes.Contains(raw, []byte(code0Key)) && !bytes.Contains(raw, []byte(sKey)) {
+	if bytes.Contains(raw, []byte(idKey)) && bytes.Contains(raw, []byte(code0Key)) && !bytes.Contains(raw, []byte(symKey)) {
 		if start := bytes.Index(raw, []byte(prefixFail)); start >= 0 {
 			start += len(prefixFail)
 			if end := bytes.Index(raw[start:], []byte("].  Reason")); end > 0 {
@@ -562,22 +555,26 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 		}
 		return
 	}
-	// 2) Парсим символ и цену
-	i := bytes.Index(raw, []byte(sKey))
+
+	// 2) Парсим symbol из поля "symbol":"BTC_USDT"
+	i := bytes.Index(raw, []byte(symKey))
 	if i < 0 {
 		return
 	}
-	i += len(sKey)
+	i += len(symKey)
 	j := bytes.IndexByte(raw[i:], '"')
 	if j < 0 {
 		return
 	}
-	sym := string(raw[i : i+j])
-	i = bytes.Index(raw, []byte(pKey))
+	rawSym := string(raw[i : i+j])         // "BTC_USDT"
+	sym := strings.ReplaceAll(rawSym, "_", "") // "BTCUSDT"
+
+	// 3) Парсим price из поля "price":"1234.56"
+	i = bytes.Index(raw, []byte(priceKey))
 	if i < 0 {
 		return
 	}
-	i += len(pKey)
+	i += len(priceKey)
 	j = bytes.IndexByte(raw[i:], '"')
 	if j < 0 {
 		return
@@ -586,7 +583,8 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 	if err != nil {
 		return
 	}
-	// 3) Проверка и обновление под мьютексом
+
+	// 4) Проверка и обновление под мьютексом
 	a.mu.Lock()
 	alive, ok := a.realSymbols[sym]
 	_, hasTri := a.trianglesByPair[sym]
@@ -596,10 +594,12 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 	}
 	a.latest[sym] = price
 	a.mu.Unlock()
-	// 4) Поиск арбитража
+
+	// 5) Поиск арбитража
 	a.Check(sym)
 }
 
+// normalizeSymbolDir собирает символ и указывает, нужно ли инвертировать цену.
 func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, ok bool, invert bool) {
 	if a.realSymbols[base+quote] {
 		return base + quote, true, false
