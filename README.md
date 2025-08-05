@@ -411,6 +411,10 @@ go tool pprof http://localhost:6060/debug/pprof/heap?debug=1
 go tool pprof http://localhost:6060/debug/pprof/goroutine
 (pprof) top
 
+
+import _ "net/http/pprof"
+
+
 go func() {
         log.Println("🚀 pprof доступен на http://localhost:6060/debug/pprof/")
         log.Println(http.ListenAndServe("localhost:6060", nil))
