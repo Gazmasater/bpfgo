@@ -409,26 +409,124 @@ list LoadTrianglesFromSymbols
 SubscribeDeals(ctx context.Context, pairs []string, handler func(exchange string, raw []byte)) error
 
 
-File: cryptarb
-Build ID: 5793da9edb460d8f2a31d3e4534db953cbb9487f
-Type: inuse_space
-Time: 2025-08-05 15:23:42 MSK
-Entering interactive mode (type "help" for commands, "o" for options)
-(pprof) top
-Showing nodes accounting for 4107.39kB, 100% of 4107.39kB total
-Showing top 10 nodes out of 59
-      flat  flat%   sum%        cum   cum%
-    1026kB 24.98% 24.98%     1026kB 24.98%  runtime.allocm
-  520.04kB 12.66% 37.64%   520.04kB 12.66%  cryptarb/internal/repository/filesystem.LoadTrianglesFromSymbols
-  512.75kB 12.48% 50.12%   512.75kB 12.48%  crypto/x509.parseCertificate
-  512.56kB 12.48% 62.60%   512.56kB 12.48%  encoding/pem.Decode
-  512.02kB 12.47% 75.07%   512.02kB 12.47%  crypto/internal/fips140/tls13.(*MasterSecret).ExporterMasterSecret (inline)
-  512.02kB 12.47% 87.53%   512.02kB 12.47%  syscall.anyToSockaddr
-  512.01kB 12.47%   100%  1536.04kB 37.40%  cryptarb/internal/app.New.func1
-         0     0%   100%   520.04kB 12.66%  cryptarb/internal/app.New
-         0     0%   100%  1024.03kB 24.93%  cryptarb/internal/repository/mexc.(*MexcExchange).SubscribeDeals
-         0     0%   100%  1537.33kB 37.43%  crypto/tls.(*Conn).HandshakeContext (inline)
-(pprof) 
+
+
+// файл: cryptarb/internal/app/arbitrager.go
+package app
+
+import (
+    "bytes"
+    "encoding/json"
+    "fmt"
+    "log"
+    "os"
+    "strconv"
+    "strings"
+    "sync"
+    "time"
+
+    "cryptarb/internal/domain/exchange"
+    "cryptarb/internal/domain/triangle"
+    "cryptarb/internal/repository/filesystem"
+)
+
+const (
+    // ...
+    prefixFail = "Not Subscribed successfully! ["
+)
+
+type Arbitrager struct {
+    Triangles       []triangle.Triangle
+    latest          map[string]float64
+    trianglesByPair map[string][]triangle.Triangle
+    realSymbols     map[string]bool
+    stepSizes       map[string]float64
+    minQtys         map[string]float64
+    StartAmount     float64
+    exchange        exchange.Exchange
+
+    mu sync.Mutex
+}
+
+// New создаёт арбитражёра, грузит все треугольники и запускает WS-подписки
+func New(ex exchange.Exchange) (*Arbitrager, error) {
+    // 1) Получаем символы и параметры лотов
+    rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
+    avail := filesystem.ExpandAvailableSymbols(rawSymbols)
+    log.Printf("📊 Доступные пары (с инверсиями): %d", len(avail))
+
+    // 2) Строим все возможные треугольники
+    ts, err := filesystem.LoadTrianglesFromSymbols(avail)
+    if err != nil {
+        return nil, fmt.Errorf("LoadTriangles: %w", err)
+    }
+    log.Printf("[INIT] Треугольников найдено: %d", len(ts))
+
+    // Для отладки — дампим
+    if data, err := json.MarshalIndent(ts, "", "  "); err == nil {
+        _ = os.WriteFile("triangles_dump.json", data, 0644)
+    }
+
+    // 3) Готовим мапы для быстрого поиска
+    trianglesByPair := make(map[string][]triangle.Triangle, len(ts)*3)
+    for _, t := range ts {
+        trianglesByPair[t.A.Symbol] = append(trianglesByPair[t.A.Symbol], t)
+        trianglesByPair[t.B.Symbol] = append(trianglesByPair[t.B.Symbol], t)
+        trianglesByPair[t.C.Symbol] = append(trianglesByPair[t.C.Symbol], t)
+    }
+
+    // 4) Собираем список пар для подписки
+    uniq := make(map[string]struct{}, len(avail))
+    for _, p := range avail {
+        uniq[p] = struct{}{}
+    }
+    subPairs := make([]string, 0, len(uniq))
+    for p := range uniq {
+        subPairs = append(subPairs, p)
+    }
+    log.Printf("[INIT] Подписка на пар: %d шт.", len(subPairs))
+
+    // 5) Инициализируем арбитражёра
+    arb := &Arbitrager{
+        Triangles:       ts,
+        latest:          make(map[string]float64, len(subPairs)),
+        trianglesByPair: trianglesByPair,
+        realSymbols:     avail,
+        stepSizes:       stepSizes,
+        minQtys:         minQtys,
+        StartAmount:     0.5,
+        exchange:        ex,
+    }
+
+    // 6) WS-подписки чанками по 25 пар
+    const maxPerConn = 25
+    for i := 0; i < len(subPairs); i += maxPerConn {
+        end := i + maxPerConn
+        if end > len(subPairs) {
+            end = len(subPairs)
+        }
+        chunk := subPairs[i:end]
+        go arb.subscriptionLoop(chunk)
+    }
+
+    return arb, nil
+}
+
+// subscriptionLoop — выносит retry-логику подписки в метод,
+// чтобы анонимные замыкания не захватывали большой state
+func (a *Arbitrager) subscriptionLoop(pairs []string) {
+    for {
+        err := a.exchange.SubscribeDeals(pairs, a.HandleRaw)
+        if err != nil {
+            log.Printf("[WS][%s] subscribe error: %v, retrying...", a.exchange.Name(), err)
+            time.Sleep(time.Second)
+            continue
+        }
+        // Если SubscribeDeals никогда не возвращает nil,
+        // этот код не будет достигнут. Иначе — можно выйти:
+        return
+    }
+}
 
 
 
