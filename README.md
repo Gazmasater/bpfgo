@@ -409,21 +409,10 @@ list LoadTrianglesFromSymbols
 SubscribeDeals(ctx context.Context, pairs []string, handler func(exchange string, raw []byte)) error
 
 
---- a/internal/app/arbitrage.go
-+++ b/internal/app/arbitrage.go
-@@ func (a *ArbitrageApp) Run() error {
--   // подписываемся на сделки
--   if err := ex.SubscribeDeals(pairs, a.handleRaw); err != nil {
--       return err
--   }
-+   // создаём контекст подписки (можно передавать сюда внешний ctx приложения)
-+   ctx, cancel := context.WithCancel(context.Background())
-+   defer cancel()
-+
-+   // подписываемся на сделки (по отмене ctx – пинги и соединение закроются)
-+   if err := ex.SubscribeDeals(ctx, pairs, a.handleRaw); err != nil {
-+       return err
-+   }
-
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ git commit -a -m "utechka"
+[detached HEAD 2ec61d6] utechka
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ git push origin cleanarhinterf_0
+Everything up-to-date
 
 
