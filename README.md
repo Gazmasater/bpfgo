@@ -422,67 +422,24 @@ go func() {
 
 
 
-func (m *MexcExchange) SubscribeDeals(pairs []string, handler func(exchange string, raw []byte)) error {
-	const wsURL = "wss://wbs.mexc.com/ws"
-
-	for {
-		log.Printf("🌐 [MEXC] Подключаемся к %s", wsURL)
-		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-		if err != nil {
-			log.Printf("❌ [MEXC] Ошибка соединения: %v", err)
-			time.Sleep(5 * time.Second)
-			continue
-		}
-		log.Printf("✅ [MEXC] Соединение установлено")
-
-		// Отправляем подписку
-		sub := map[string]interface{}{
-			"method": "SUBSCRIPTION",
-			"params": buildChannels(pairs),
-			"id":     time.Now().Unix(),
-		}
-		if err := conn.WriteJSON(sub); err != nil {
-			log.Printf("❌ [MEXC] Ошибка при подписке: %v", err)
-			conn.Close()
-			time.Sleep(5 * time.Second)
-			continue
-		}
-		log.Printf("📩 [MEXC] Подписка отправлена: %v", pairs)
-
-		// Ping-поддержка
-		conn.SetPongHandler(func(appData string) error {
-			log.Printf("📶 [MEXC] Получен PONG (%s)", appData)
-			return nil
-		})
-
-		go func(c *websocket.Conn) {
-			t := time.NewTicker(45 * time.Second)
-			defer t.Stop()
-			for range t.C {
-				err := c.WriteMessage(websocket.PingMessage, []byte("hb"))
-				if err != nil {
-					log.Printf("❌ [MEXC] PING ошибка: %v", err)
-					_ = c.Close()
-					return
-				}
-				log.Printf("🔄 [MEXC] PING отправлен")
-			}
-		}(conn)
-
-		// Основной цикл чтения
-		for {
-			_, raw, err := conn.ReadMessage()
-			if err != nil {
-				log.Printf("⚠️ [MEXC] ReadMessage ошибка: %v", err)
-				_ = conn.Close()
-				time.Sleep(5 * time.Second)
-				break // прерываем внутренний цикл — reconnect в верхнем for
-			}
-			handler("MEXC", raw)
-		}
-	}
-}
-
+Type: inuse_space
+Time: 2025-08-05 21:05:06 MSK
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 3076.49kB, 100% of 3076.49kB total
+Showing top 10 nodes out of 32
+      flat  flat%   sum%        cum   cum%
+    2052kB 66.70% 66.70%     2052kB 66.70%  runtime.allocm
+  512.44kB 16.66% 83.36%   512.44kB 16.66%  encoding/pem.Decode
+  512.05kB 16.64%   100%   512.05kB 16.64%  crypto/tls.(*Conn).handshakeContext.func1
+         0     0%   100%   512.05kB 16.64%  cryptarb/internal/app.New.func1
+         0     0%   100%   512.05kB 16.64%  cryptarb/internal/repository/mexc.(*MexcExchange).SubscribeDeals
+         0     0%   100%  1024.48kB 33.30%  crypto/tls.(*Conn).HandshakeContext (inline)
+         0     0%   100%   512.44kB 16.66%  crypto/tls.(*Conn).clientHandshake
+         0     0%   100%  1024.48kB 33.30%  crypto/tls.(*Conn).handshakeContext
+         0     0%   100%   512.44kB 16.66%  crypto/tls.(*Conn).verifyServerCertificate
+         0     0%   100%   512.44kB 16.66%  crypto/tls.(*clientHandshakeStateTLS13).handshake
+(pprof) 
 
 
 
