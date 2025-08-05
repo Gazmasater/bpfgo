@@ -409,10 +409,71 @@ list LoadTrianglesFromSymbols
 SubscribeDeals(ctx context.Context, pairs []string, handler func(exchange string, raw []byte)) error
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ git commit -a -m "utechka"
-[detached HEAD 2ec61d6] utechka
- 1 file changed, 6 insertions(+), 6 deletions(-)
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ git push origin cleanarhinterf_0
-Everything up-to-date
+func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
+    // 1) ACK-подписка: есть `"id":` и `"code":0`, но нет поля `"s":`
+    if bytes.Contains(raw, idKey) &&
+        bytes.Contains(raw, code0Key) &&
+        !bytes.Contains(raw, sKey) {
+
+        // разбираем текст ошибки подписки — только руками, без JSON
+        if start := bytes.Index(raw, []byte(prefixFail)); start >= 0 {
+            start += len(prefixFail)
+            if end := bytes.Index(raw[start:], []byte("].  Reason")); end > 0 {
+                blockedList := raw[start : start+end]
+                for _, ch := range strings.Split(string(blockedList), ",") {
+                    if idx := strings.LastIndex(ch, "@"); idx != -1 {
+                        sym := ch[idx+1:]
+                        a.mu.Lock()
+                        a.realSymbols[sym] = false
+                        a.mu.Unlock()
+                    }
+                }
+            }
+        }
+        return
+    }
+
+    // 2) Парсим symbol "s":"XXX"
+    var sym string
+    if i := bytes.Index(raw, sKey); i >= 0 {
+        i += len(sKey)
+        if j := bytes.IndexByte(raw[i:], '"'); j >= 0 {
+            sym = string(raw[i : i+j])
+        }
+    }
+    if sym == "" {
+        return
+    }
+
+    // 3) Парсим цену "p":"YYY"
+    var price float64
+    if i := bytes.Index(raw, pKey); i >= 0 {
+        i += len(pKey)
+        if j := bytes.IndexByte(raw[i:], '"'); j >= 0 {
+            if p, err := strconv.ParseFloat(string(raw[i:i+j]), 64); err == nil {
+                price = p
+            } else {
+                return
+            }
+        }
+    } else {
+        return
+    }
+
+    // 4) Проверяем подписку и наличие треугольников, и обновляем цену — всё под мьютексом
+    a.mu.Lock()
+    alive, subExists := a.realSymbols[sym]
+    _, triExists := a.trianglesByPair[sym]
+    if !subExists || !alive || !triExists {
+        a.mu.Unlock()
+        return
+    }
+    a.latest[sym] = price
+    a.mu.Unlock()
+
+    // 5) Запускаем проверку арбитража
+    a.Check(sym)
+}
+
 
 
