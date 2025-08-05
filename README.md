@@ -413,6 +413,35 @@ go tool pprof http://localhost:6060/debug/pprof/goroutine
 
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go tool pprof http://localhost:6060/debug/pprof/heap?debug=1
+Fetching profile over HTTP from http://localhost:6060/debug/pprof/heap?debug=1
+http post http://localhost:6060/debug/pprof/symbol: server response: 405 Method Not Allowed
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go tool pprof http://localhost:6060/debug/pprof/goroutine
+Fetching profile over HTTP from http://localhost:6060/debug/pprof/goroutine
+Saved profile in /home/gaz358/pprof/pprof.cryptarb.goroutine.001.pb.gz
+File: cryptarb
+Build ID: 50cef59476329fd2a760e3c932af6568d9817872
+Type: goroutine
+Time: 2025-08-05 20:16:29 MSK
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 10, 100% of 10 total
+Showing top 10 nodes out of 49
+      flat  flat%   sum%        cum   cum%
+         8 80.00% 80.00%          8 80.00%  runtime.gopark
+         1 10.00% 90.00%          1 10.00%  runtime.goroutineProfileWithLabels
+         1 10.00%   100%          1 10.00%  syscall.Syscall
+         0     0%   100%          6 60.00%  bufio.(*Reader).Peek
+         0     0%   100%          6 60.00%  bufio.(*Reader).fill
+         0     0%   100%          6 60.00%  bytes.(*Buffer).ReadFrom
+         0     0%   100%          6 60.00%  cryptarb/internal/app.New.func1
+         0     0%   100%          6 60.00%  cryptarb/internal/repository/mexc.(*MexcExchange).SubscribeDeals
+         0     0%   100%          6 60.00%  crypto/tls.(*Conn).Read
+         0     0%   100%          6 60.00%  crypto/tls.(*Conn).readFromUntil
+(pprof) 
+
+
+
 
 
 
