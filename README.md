@@ -1,3 +1,4 @@
+
 mx0vglWtzbBOGF34or  апи кей
 77658a3144bd469fa8050b9c91b9cd4e секр кей
 
@@ -530,15 +531,14 @@ func (a *Arbitrager) Stop() {
 
 // HandleRaw обрабатывает одно сообщение из WS без JSON Unmarshal.
 func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
-	const (
-		idKey      = `"id":`
-		code0Key   = `"code":0`
-		symKey     = `"symbol":"`
-		priceKey   = `"price":"`
-		prefixFail = "Not Subscribed successfully! ["
-	)
-	// 1) Обработка ACK-ошибки подписки
-	if bytes.Contains(raw, []byte(idKey)) && bytes.Contains(raw, []byte(code0Key)) && !bytes.Contains(raw, []byte(symKey)) {
+	idKey := []byte(`"id":`)
+	code0Key := []byte(`"code":0`)
+	sKey := []byte(`"s":"`)
+	pKey := []byte(`"p":"`)
+	prefixFail := "Not Subscribed successfully! ["
+
+	// 1) ACK-подписка: есть id и code0, но нет поля s
+	if bytes.Contains(raw, idKey) && bytes.Contains(raw, code0Key) && !bytes.Contains(raw, sKey) {
 		if start := bytes.Index(raw, []byte(prefixFail)); start >= 0 {
 			start += len(prefixFail)
 			if end := bytes.Index(raw[start:], []byte("].  Reason")); end > 0 {
@@ -556,6 +556,53 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 		return
 	}
 
+	// 2) Парсим символ из поля "s":"XXX"
+	i := bytes.Index(raw, sKey)
+	if i < 0 {
+		return
+	}
+	i += len(sKey)
+	j := bytes.IndexByte(raw[i:], '"')
+	if j < 0 {
+		return
+	}
+	sym := string(raw[i : i+j])
+
+	// 3) Парсим цену из поля "p":"YYY"
+	i = bytes.Index(raw, pKey)
+	if i < 0 {
+		return
+	}
+	i += len(pKey)
+	j = bytes.IndexByte(raw[i:], '"')
+	if j < 0 {
+		return
+	}
+	price, err := strconv.ParseFloat(string(raw[i:i+j]), 64)
+	if err != nil {
+		return
+	}
+
+	// 4) Проверка и обновление под мьютексом
+	a.mu.Lock()
+	alive, ok := a.realSymbols[sym]
+	_, hasTri := a.trianglesByPair[sym]
+	if !ok || !alive || !hasTri {
+		a.mu.Unlock()
+		return
+	}
+	a.latest[sym] = price
+	a.mu.Unlock()
+
+	// 5) Поиск арбитража
+	a.Check(sym)
+}
+				}
+			}
+		}
+		return
+	}
+
 	// 2) Парсим symbol из поля "symbol":"BTC_USDT"
 	i := bytes.Index(raw, []byte(symKey))
 	if i < 0 {
@@ -566,20 +613,26 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
 	if j < 0 {
 		return
 	}
-	rawSym := string(raw[i : i+j])         // "BTC_USDT"
+	rawSym := string(raw[i : i+j])        // e.g. "BTC_USDT"
 	sym := strings.ReplaceAll(rawSym, "_", "") // "BTCUSDT"
 
-	// 3) Парсим price из поля "price":"1234.56"
+	// 3) Парсим price из поля "price":1234.56
 	i = bytes.Index(raw, []byte(priceKey))
 	if i < 0 {
 		return
 	}
 	i += len(priceKey)
-	j = bytes.IndexByte(raw[i:], '"')
-	if j < 0 {
-		return
+	// пропускаем возможные пробелы
+	for i < len(raw) && raw[i] == ' ' {
+		i++
 	}
-	price, err := strconv.ParseFloat(string(raw[i:i+j]), 64)
+	// собираем цифры и точку
+	j = i
+	for j < len(raw) && ((raw[j] >= '0' && raw[j] <= '9') || raw[j] == '.') {
+		j++
+	}
+	priceBytes := raw[i:j]
+	price, err := strconv.ParseFloat(string(priceBytes), 64)
 	if err != nil {
 		return
 	}
