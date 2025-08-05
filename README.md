@@ -450,18 +450,33 @@ func (a *Arbitrager) checkLocked(symbol string) {
 
 // Обновлённый HandleRaw — весь доступ к картам и latest под одним Lock
 func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
-    // 1) ACK-подписка — без изменений
+    // 1) ACK-подписка: есть `"id":` и `"code":0`, но нет поля `"s":`
     if bytes.Contains(raw, idKey) &&
        bytes.Contains(raw, code0Key) &&
        !bytes.Contains(raw, sKey) {
-        // ... парсим и блокируем недоступные символы под Lock ...
-        a.mu.Lock()
-        // ... обновляем a.realSymbols ...
-        a.mu.Unlock()
+
+        // разбираем текст ошибки подписки — только руками, без JSON
+        start := bytes.Index(raw, []byte(prefixFail))
+        if start >= 0 {
+            start += len(prefixFail)
+            // найдём конец списка заблокированных через `].  Reason`
+            end := bytes.Index(raw[start:], []byte("].  Reason"))
+            if end > 0 {
+                blockedList := raw[start : start+end]
+                for _, ch := range strings.Split(string(blockedList), ",") {
+                    if idx := strings.LastIndex(ch, "@"); idx != -1 {
+                        sym := ch[idx+1:]
+                        a.mu.Lock()
+                        a.realSymbols[sym] = false
+                        a.mu.Unlock()
+                    }
+                }
+            }
+        }
         return
     }
 
-    // 2) Извлекаем symbol
+    // 2) Извлекаем symbol: "s":"XXX"
     i := bytes.Index(raw, sKey)
     if i < 0 {
         return
@@ -473,11 +488,11 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
     }
     sym := string(raw[i : i+j])
 
-    // 3) Под одним Lock проверяем и обновляем цену
+    // 3) Весь доступ к realSymbols, trianglesByPair и latest — под Lock
     a.mu.Lock()
     defer a.mu.Unlock()
 
-    // фильтруем по подписке и треугольникам
+    // фильтруем несуществующие или отключённые пары
     if ok, exists := a.realSymbols[sym]; !exists || !ok {
         return
     }
@@ -485,7 +500,7 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
         return
     }
 
-    // 4) Извлекаем цену
+    // 4) Извлекаем цену: "p":"YYY"
     i = bytes.Index(raw, pKey)
     if i < 0 {
         return
@@ -501,7 +516,8 @@ func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
         return
     }
 
-    // 5) Сохраняем и сразу проверяем
+    // 5) Обновляем latest и сразу проверяем треугольники
     a.latest[sym] = price
     a.checkLocked(sym)
 }
+
