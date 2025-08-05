@@ -435,6 +435,28 @@ go tool pprof --http=:8080 block.prof
 
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ curl 'http://localhost:6060/debug/pprof/block?seconds=10' > block.prof
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100  1227  100  1227    0     0    122      0  0:00:10  0:00:10 --:--:--   255
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go tool pprof --http=:8080 block.prof
+Serving web UI on http://localhost:8080
+Gtk-Message: 21:58:27.089: Not loading module "atk-bridge": The functionality is provided by GTK natively. Please try to not load it.
+Gtk-Message: 21:58:27.235: Failed to load module "canberra-gtk-module"
+Gtk-Message: 21:58:27.243: Failed to load module "canberra-gtk-module"
+Failed to execute dot. Is Graphviz installed?
+exec: "dot": executable file not found in $PATH
+Failed to execute dot. Is Graphviz installed?
+exec: "dot": executable file not found in $PATH
+[7347:7548:0805/215830.819327:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+[7347:7548:0805/215830.966446:ERROR:google_apis/gcm/engine/mcs_client.cc:700]   Error code: 401  Error message: Authentication Failed: wrong_secret
+[7347:7548:0805/215830.966512:ERROR:google_apis/gcm/engine/mcs_client.cc:702] Failed to log in to GCM, resetting connection.
+[7597:7597:0805/215832.933473:ERROR:ui/gl/gl_surface_presentation_helper.cc:260] GetVSyncParametersIfAvailable() failed for 1 times!
+[7347:7548:0805/215900.168162:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+[7597:7597:0805/215943.345115:ERROR:ui/gl/gl_surface_presentation_helper.cc:260] GetVSyncParametersIfAvailable() failed for 2 times!
+[7597:7597:0805/215943.356004:ERROR:ui/gl/gl_surface_presentation_helper.cc:260] GetVSyncParametersIfAvailable() failed for 3 times!
+[7347:7548:0805/215954.398251:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+
 
 
 
