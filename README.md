@@ -448,3 +448,10 @@ Showing top 10 nodes out of 38
          0     0%   100%   512.02kB 16.51%  github.com/gorilla/websocket.(*Dialer).DialContext
          0     0%   100%   512.02kB 16.51%  github.com/gorilla/websocket.(*Dialer).DialContext.func4
 (pprof) 
+
+
+(pprof) list crypt/internal/repository/filesystem/ExpandAvailableSymbols
+no matches found for regexp: crypt/internal/repository/filesystem/ExpandAvailableSymbols
+(pprof) list ExpandAvailableSymbols                                     
+no matches found for regexp: ExpandAvailableSymbols
+(pprof) 
