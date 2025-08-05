@@ -422,26 +422,67 @@ go func() {
 
 
 
-File: cryptarb
-Build ID: 0bab227150d3b10f7d1b1f590f6006dca142d5a4
-Type: inuse_space
-Time: 2025-08-05 20:51:46 MSK
-Entering interactive mode (type "help" for commands, "o" for options)
-(pprof) top
-Showing nodes accounting for 3075.63kB, 100% of 3075.63kB total
-Showing top 10 nodes out of 49
-      flat  flat%   sum%        cum   cum%
-    1539kB 50.04% 50.04%     1539kB 50.04%  runtime.allocm
-  512.56kB 16.67% 66.70%   512.56kB 16.67%  encoding/pem.Decode
-  512.05kB 16.65% 83.35%   512.05kB 16.65%  runtime.acquireSudog
-  512.02kB 16.65%   100%   512.02kB 16.65%  syscall.anyToSockaddr
-         0     0%   100%   512.02kB 16.65%  cryptarb/internal/app.New.func1
-         0     0%   100%   512.02kB 16.65%  cryptarb/internal/repository/mexc.(*MexcExchange).SubscribeDeals
-         0     0%   100%   512.56kB 16.67%  crypto/tls.(*Conn).HandshakeContext
-         0     0%   100%   512.56kB 16.67%  crypto/tls.(*Conn).clientHandshake
-         0     0%   100%   512.56kB 16.67%  crypto/tls.(*Conn).handshakeContext
-         0     0%   100%   512.56kB 16.67%  crypto/tls.(*Conn).verifyServerCertificate
-(pprof) 
+func (m *MexcExchange) SubscribeDeals(pairs []string, handler func(exchange string, raw []byte)) error {
+	const wsURL = "wss://wbs.mexc.com/ws"
+
+	for {
+		log.Printf("🌐 [MEXC] Подключаемся к %s", wsURL)
+		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+		if err != nil {
+			log.Printf("❌ [MEXC] Ошибка соединения: %v", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		log.Printf("✅ [MEXC] Соединение установлено")
+
+		// Отправляем подписку
+		sub := map[string]interface{}{
+			"method": "SUBSCRIPTION",
+			"params": buildChannels(pairs),
+			"id":     time.Now().Unix(),
+		}
+		if err := conn.WriteJSON(sub); err != nil {
+			log.Printf("❌ [MEXC] Ошибка при подписке: %v", err)
+			conn.Close()
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		log.Printf("📩 [MEXC] Подписка отправлена: %v", pairs)
+
+		// Ping-поддержка
+		conn.SetPongHandler(func(appData string) error {
+			log.Printf("📶 [MEXC] Получен PONG (%s)", appData)
+			return nil
+		})
+
+		go func(c *websocket.Conn) {
+			t := time.NewTicker(45 * time.Second)
+			defer t.Stop()
+			for range t.C {
+				err := c.WriteMessage(websocket.PingMessage, []byte("hb"))
+				if err != nil {
+					log.Printf("❌ [MEXC] PING ошибка: %v", err)
+					_ = c.Close()
+					return
+				}
+				log.Printf("🔄 [MEXC] PING отправлен")
+			}
+		}(conn)
+
+		// Основной цикл чтения
+		for {
+			_, raw, err := conn.ReadMessage()
+			if err != nil {
+				log.Printf("⚠️ [MEXC] ReadMessage ошибка: %v", err)
+				_ = conn.Close()
+				time.Sleep(5 * time.Second)
+				break // прерываем внутренний цикл — reconnect в верхнем for
+			}
+			handler("MEXC", raw)
+		}
+	}
+}
+
 
 
 
