@@ -406,19 +406,17 @@ list LoadTrianglesFromSymbols
 
 
 
-(pprof) top
-Showing nodes accounting for 2051.50kB, 100% of 2051.50kB total
-Showing top 10 nodes out of 26
+pprof) top
+Showing nodes accounting for 3079.03kB, 100% of 3079.03kB total
+Showing top 10 nodes out of 34
       flat  flat%   sum%        cum   cum%
-    1539kB 75.02% 75.02%     1539kB 75.02%  runtime.allocm
-  512.50kB 24.98%   100%   512.50kB 24.98%  encoding/pem.Decode
-         0     0%   100%   512.50kB 24.98%  crypto/tls.(*Conn).HandshakeContext
-         0     0%   100%   512.50kB 24.98%  crypto/tls.(*Conn).clientHandshake
-         0     0%   100%   512.50kB 24.98%  crypto/tls.(*Conn).handshakeContext
-         0     0%   100%   512.50kB 24.98%  crypto/tls.(*Conn).verifyServerCertificate
-         0     0%   100%   512.50kB 24.98%  crypto/tls.(*clientHandshakeStateTLS13).handshake
-         0     0%   100%   512.50kB 24.98%  crypto/tls.(*clientHandshakeStateTLS13).readServerCertificate
-         0     0%   100%   512.50kB 24.98%  crypto/x509.(*CertPool).AppendCertsFromPEM
-         0     0%   100%   512.50kB 24.98%  crypto/x509.(*Certificate).Verify
-(pprof) 
-
+    1539kB 49.98% 49.98%     1539kB 49.98%  runtime.allocm
+  516.01kB 16.76% 66.74%   516.01kB 16.76%  crypto/internal/fips140/mlkem.NewDecapsulationKey768 (inline)
+  512.01kB 16.63% 83.37%   512.01kB 16.63%  internal/sync.(*HashTrieMap[go.shape.struct { net/netip.isV6 bool; net/netip.zoneV6 string },go.shape.struct { weak._ [0]*go.shape.struct { net/netip.isV6 bool; net/netip.zoneV6 string }; weak.u unsafe.Pointer }]).All
+  512.01kB 16.63%   100%   512.01kB 16.63%  os.(*File).readdir
+         0     0%   100%  1028.02kB 33.39%  crypto/tls.(*Conn).HandshakeContext
+         0     0%   100%  1028.02kB 33.39%  crypto/tls.(*Conn).clientHandshake
+         0     0%   100%  1028.02kB 33.39%  crypto/tls.(*Conn).handshakeContext
+         0     0%   100%   516.01kB 16.76%  crypto/tls.(*Conn).makeClientHello
+         0     0%   100%   512.01kB 16.63%  crypto/tls.(*Conn).verifyServerCertificate
+         0     0%   100%   512.01kB 16.63%  crypto/tls.(*clientHandshakeStateTLS13).handshake
