@@ -409,71 +409,26 @@ list LoadTrianglesFromSymbols
 SubscribeDeals(ctx context.Context, pairs []string, handler func(exchange string, raw []byte)) error
 
 
-func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
-    // 1) ACK-подписка: есть `"id":` и `"code":0`, но нет поля `"s":`
-    if bytes.Contains(raw, idKey) &&
-        bytes.Contains(raw, code0Key) &&
-        !bytes.Contains(raw, sKey) {
-
-        // разбираем текст ошибки подписки — только руками, без JSON
-        if start := bytes.Index(raw, []byte(prefixFail)); start >= 0 {
-            start += len(prefixFail)
-            if end := bytes.Index(raw[start:], []byte("].  Reason")); end > 0 {
-                blockedList := raw[start : start+end]
-                for _, ch := range strings.Split(string(blockedList), ",") {
-                    if idx := strings.LastIndex(ch, "@"); idx != -1 {
-                        sym := ch[idx+1:]
-                        a.mu.Lock()
-                        a.realSymbols[sym] = false
-                        a.mu.Unlock()
-                    }
-                }
-            }
-        }
-        return
-    }
-
-    // 2) Парсим symbol "s":"XXX"
-    var sym string
-    if i := bytes.Index(raw, sKey); i >= 0 {
-        i += len(sKey)
-        if j := bytes.IndexByte(raw[i:], '"'); j >= 0 {
-            sym = string(raw[i : i+j])
-        }
-    }
-    if sym == "" {
-        return
-    }
-
-    // 3) Парсим цену "p":"YYY"
-    var price float64
-    if i := bytes.Index(raw, pKey); i >= 0 {
-        i += len(pKey)
-        if j := bytes.IndexByte(raw[i:], '"'); j >= 0 {
-            if p, err := strconv.ParseFloat(string(raw[i:i+j]), 64); err == nil {
-                price = p
-            } else {
-                return
-            }
-        }
-    } else {
-        return
-    }
-
-    // 4) Проверяем подписку и наличие треугольников, и обновляем цену — всё под мьютексом
-    a.mu.Lock()
-    alive, subExists := a.realSymbols[sym]
-    _, triExists := a.trianglesByPair[sym]
-    if !subExists || !alive || !triExists {
-        a.mu.Unlock()
-        return
-    }
-    a.latest[sym] = price
-    a.mu.Unlock()
-
-    // 5) Запускаем проверку арбитража
-    a.Check(sym)
-}
+File: cryptarb
+Build ID: 5793da9edb460d8f2a31d3e4534db953cbb9487f
+Type: inuse_space
+Time: 2025-08-05 15:23:42 MSK
+Entering interactive mode (type "help" for commands, "o" for options)
+(pprof) top
+Showing nodes accounting for 4107.39kB, 100% of 4107.39kB total
+Showing top 10 nodes out of 59
+      flat  flat%   sum%        cum   cum%
+    1026kB 24.98% 24.98%     1026kB 24.98%  runtime.allocm
+  520.04kB 12.66% 37.64%   520.04kB 12.66%  cryptarb/internal/repository/filesystem.LoadTrianglesFromSymbols
+  512.75kB 12.48% 50.12%   512.75kB 12.48%  crypto/x509.parseCertificate
+  512.56kB 12.48% 62.60%   512.56kB 12.48%  encoding/pem.Decode
+  512.02kB 12.47% 75.07%   512.02kB 12.47%  crypto/internal/fips140/tls13.(*MasterSecret).ExporterMasterSecret (inline)
+  512.02kB 12.47% 87.53%   512.02kB 12.47%  syscall.anyToSockaddr
+  512.01kB 12.47%   100%  1536.04kB 37.40%  cryptarb/internal/app.New.func1
+         0     0%   100%   520.04kB 12.66%  cryptarb/internal/app.New
+         0     0%   100%  1024.03kB 24.93%  cryptarb/internal/repository/mexc.(*MexcExchange).SubscribeDeals
+         0     0%   100%  1537.33kB 37.43%  crypto/tls.(*Conn).HandshakeContext (inline)
+(pprof) 
 
 
 
