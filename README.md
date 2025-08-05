@@ -402,27 +402,16 @@ go tool pprof http://localhost:6060/debug/pprof/heap
 
 
 (pprof) list FetchAvailableSymbols
-list LoadTrianglesFromSymbols
+
+go tool pprof http://localhost:6060/debug/pprof/heap?debug=1
+(pprof) top --alloc_space
+(pprof) top --inuse_objects
 
 
-Type: inuse_space
-Time: 2025-08-05 20:08:17 MSK
-Entering interactive mode (type "help" for commands, "o" for options)
+go tool pprof http://localhost:6060/debug/pprof/goroutine
 (pprof) top
-Showing nodes accounting for 1538.05kB, 100% of 1538.05kB total
-Showing top 10 nodes out of 13
-      flat  flat%   sum%        cum   cum%
-    1026kB 66.71% 66.71%     1026kB 66.71%  runtime.allocm
-  512.05kB 33.29%   100%   512.05kB 33.29%  runtime.acquireSudog
-         0     0%   100%   512.05kB 33.29%  runtime.chanrecv
-         0     0%   100%   512.05kB 33.29%  runtime.chanrecv1
-         0     0%   100%     1026kB 66.71%  runtime.mstart
-         0     0%   100%     1026kB 66.71%  runtime.mstart0
-         0     0%   100%     1026kB 66.71%  runtime.mstart1
-         0     0%   100%     1026kB 66.71%  runtime.newm
-         0     0%   100%     1026kB 66.71%  runtime.resetspinning
-         0     0%   100%     1026kB 66.71%  runtime.schedule
-(pprof) 
+
+
 
 
 
