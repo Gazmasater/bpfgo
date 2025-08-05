@@ -406,17 +406,246 @@ list LoadTrianglesFromSymbols
 
 
 
-Showing nodes accounting for 1025.50kB, 100% of 1025.50kB total
-Showing top 10 nodes out of 14
-      flat  flat%   sum%        cum   cum%
-     513kB 50.02% 50.02%      513kB 50.02%  runtime.allocm
-  512.50kB 49.98%   100%   512.50kB 49.98%  hash/crc32.simpleMakeTable (inline)
-         0     0%   100%   512.50kB 49.98%  hash/crc32.init
-         0     0%   100%   512.50kB 49.98%  runtime.doInit (inline)
-         0     0%   100%   512.50kB 49.98%  runtime.doInit1
-         0     0%   100%   512.50kB 49.98%  runtime.main
-         0     0%   100%      513kB 50.02%  runtime.mstart
-         0     0%   100%      513kB 50.02%  runtime.mstart0
-         0     0%   100%      513kB 50.02%  runtime.mstart1
-         0     0%   100%      513kB 50.02%  runtime.newm
-(pprof) 
+package mexc
+
+import (
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/gorilla/websocket"
+)
+
+type Mexc struct{}
+
+type MexcExchange struct {
+	apiKey    string
+	apiSecret string
+}
+
+func NewMexcExchange(apiKey, apiSecret string) *MexcExchange {
+	return &MexcExchange{
+		apiKey:    apiKey,
+		apiSecret: apiSecret,
+	}
+}
+
+func (m *MexcExchange) Name() string {
+	return "MEXC"
+}
+
+func (m *MexcExchange) PlaceMarketOrder(symbol, side string, quantity float64) (string, error) {
+	endpoint := "https://api.mexc.com/api/v3/order"
+	timestamp := strconv.FormatInt(time.Now().UnixMilli(), 10)
+
+	params := url.Values{}
+	params.Set("symbol", symbol)
+	params.Set("side", strings.ToUpper(side))
+	params.Set("type", "MARKET")
+	if strings.ToUpper(side) == "BUY" {
+		params.Set("quoteOrderQty", fmt.Sprintf("%.4f", quantity))
+	} else {
+		params.Set("quantity", fmt.Sprintf("%.6f", quantity))
+	}
+	params.Set("timestamp", timestamp)
+
+	signature := createSignature(m.apiSecret, params.Encode())
+	params.Set("signature", signature)
+
+	req, err := http.NewRequest("POST", endpoint+"?"+params.Encode(), nil)
+	if err != nil {
+		return "", fmt.Errorf("create request: %v", err)
+	}
+	req.Header.Set("X-MEXC-APIKEY", m.apiKey)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("HTTP error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("order failed: %s", body)
+	}
+
+	var result struct {
+		OrderID string `json:"orderId"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("decode error: %v", err)
+	}
+
+	return result.OrderID, nil
+}
+
+func createSignature(secret, query string) string {
+	h := hmac.New(sha256.New, []byte(secret))
+	h.Write([]byte(query))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// SubscribeDeals открывает подписку на WebSocket-каналы и шлёт пинги каждые 45 секунд
+// ctx позволяет корректно завершить подписку извне (отменить пинги и закрыть соединение).
+func (m *MexcExchange) SubscribeDeals(ctx context.Context, pairs []string, handler func(exchange string, raw []byte)) error {
+	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	// Старт подписки
+	sub := map[string]interface{}{
+		"method": "SUBSCRIPTION",
+		"params": buildChannels(pairs),
+		"id":     time.Now().Unix(),
+	}
+	if err := conn.WriteJSON(sub); err != nil {
+		return err
+	}
+
+	// Пинг по таймеру (останавливается при отмене ctx)
+	ticker := time.NewTicker(45 * time.Second)
+	defer ticker.Stop()
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				_ = conn.WriteMessage(websocket.PingMessage, []byte("hb"))
+			}
+		}
+	}()
+
+	// Читаем сообщения до возникновения ошибки или отмены контекста
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+			_, raw, err := conn.ReadMessage()
+			if err != nil {
+				return err
+			}
+			handler("MEXC", raw)
+		}
+	}
+}
+
+func buildChannels(pairs []string) []string {
+	out := make([]string, 0, len(pairs))
+	for _, p := range pairs {
+		out = append(out, "spot@public.deals.v3.api@"+p)
+	}
+	return out
+}
+
+func (m *MexcExchange) isValidSymbol(s map[string]interface{}) bool {
+	if s["status"] != "1" {
+		return false
+	}
+	if allowed, _ := s["isSpotTradingAllowed"].(bool); !allowed {
+		return false
+	}
+
+	step := 0.0
+	if str, ok := s["baseSizePrecision"].(string); ok {
+		if v, err := strconv.ParseFloat(str, 64); err == nil {
+			step = v
+		}
+	}
+	return step > 0
+}
+
+func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64) {
+	available := make(map[string]bool)
+	steps := make(map[string]float64)
+	minQty := make(map[string]float64)
+
+	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+	if err != nil {
+		log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
+		return available, steps, minQty
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("❌ Ошибка чтения тела ответа: %v", err)
+		return available, steps, minQty
+	}
+	_ = os.WriteFile("all_symbols_full.json", body, 0644)
+
+	var data struct {
+		Symbols []map[string]interface{} `json:"symbols"`
+	}
+	if err := json.Unmarshal(body, &data); err != nil {
+		log.Printf("❌ Ошибка разбора JSON: %v", err)
+		return available, steps, minQty
+	}
+
+	var logLines []string
+	for _, s := range data.Symbols {
+		sym, _ := s["symbol"].(string)
+		if sym == "" || !m.isValidSymbol(s) {
+			continue
+		}
+
+		step, _ := strconv.ParseFloat(s["baseSizePrecision"].(string), 64)
+		available[sym] = true
+		steps[sym] = step
+		minQty[sym] = step
+		logLines = append(logLines, fmt.Sprintf("%s\tstep=%g", sym, step))
+	}
+
+	_ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(logLines, "\n")), 0644)
+	log.Printf("✅ Подходящих пар: %d", len(available))
+	return available, steps, minQty
+}
+
+func (m *MexcExchange) GetBestAsk(symbol string) (float64, error) {
+	resp, err := http.Get("https://api.mexc.com/api/v3/depth?symbol=" + symbol + "&limit=1")
+	if err != nil {
+		return 0, fmt.Errorf("get depth failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var data struct{ Asks [][]string `json:"asks"` }
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return 0, fmt.Errorf("decode depth failed: %v", err)
+	}
+	if len(data.Asks) == 0 {
+		return 0, fmt.Errorf("no ask in depth for %s", symbol)
+	}
+	return strconv.ParseFloat(data.Asks[0][0], 64)
+}
+
+func (m *MexcExchange) GetBestBid(symbol string) (float64, error) {
+	resp, err := http.Get("https://api.mexc.com/api/v3/depth?symbol=" + symbol + "&limit=1")
+	if err != nil {
+		return 0, fmt.Errorf("get depth failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var data struct{ Bids [][]string `json:"bids"` }
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return 0, fmt.Errorf("decode depth failed: %v", err)
+	}
+	if len(data.Bids) == 0 {
+		return 0, fmt.Errorf("no bid in depth for %s", symbol)
+	}
+	return strconv.ParseFloat(data.Bids[0][0], 64)
+}
