@@ -422,23 +422,26 @@ go func() {
 
 
 
-Type: inuse_space
-Time: 2025-08-05 21:05:06 MSK
+File: cryptarb
+Build ID: 894bd52a7e48d57e4cf69de674ff8f90f82b7cf5
+Type: cpu
+Time: 2025-08-05 21:12:22 MSK
+Duration: 30s, Total samples = 100ms ( 0.33%)
 Entering interactive mode (type "help" for commands, "o" for options)
 (pprof) top
-Showing nodes accounting for 3076.49kB, 100% of 3076.49kB total
-Showing top 10 nodes out of 32
+Showing nodes accounting for 100ms, 100% of 100ms total
+Showing top 10 nodes out of 49
       flat  flat%   sum%        cum   cum%
-    2052kB 66.70% 66.70%     2052kB 66.70%  runtime.allocm
-  512.44kB 16.66% 83.36%   512.44kB 16.66%  encoding/pem.Decode
-  512.05kB 16.64%   100%   512.05kB 16.64%  crypto/tls.(*Conn).handshakeContext.func1
-         0     0%   100%   512.05kB 16.64%  cryptarb/internal/app.New.func1
-         0     0%   100%   512.05kB 16.64%  cryptarb/internal/repository/mexc.(*MexcExchange).SubscribeDeals
-         0     0%   100%  1024.48kB 33.30%  crypto/tls.(*Conn).HandshakeContext (inline)
-         0     0%   100%   512.44kB 16.66%  crypto/tls.(*Conn).clientHandshake
-         0     0%   100%  1024.48kB 33.30%  crypto/tls.(*Conn).handshakeContext
-         0     0%   100%   512.44kB 16.66%  crypto/tls.(*Conn).verifyServerCertificate
-         0     0%   100%   512.44kB 16.66%  crypto/tls.(*clientHandshakeStateTLS13).handshake
+      20ms 20.00% 20.00%       20ms 20.00%  internal/runtime/syscall.Syscall6
+      10ms 10.00% 30.00%       40ms 40.00%  cryptarb/internal/app.(*Arbitrager).Check
+      10ms 10.00% 40.00%       70ms 70.00%  cryptarb/internal/repository/mexc.(*MexcExchange).SubscribeDeals
+      10ms 10.00% 50.00%       10ms 10.00%  internal/runtime/maps.ctrlGroup.matchH2 (inline)
+      10ms 10.00% 60.00%       10ms 10.00%  internal/sync.(*Mutex).Unlock (inline)
+      10ms 10.00% 70.00%       10ms 10.00%  io.ReadAll
+      10ms 10.00% 80.00%       10ms 10.00%  runtime.futex
+      10ms 10.00% 90.00%       10ms 10.00%  runtime.pidleget
+      10ms 10.00%   100%       10ms 10.00%  runtime.procyield
+         0     0%   100%       10ms 10.00%  bufio.(*Reader).Peek
 (pprof) 
 
 
