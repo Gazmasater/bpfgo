@@ -409,28 +409,21 @@ list LoadTrianglesFromSymbols
 SubscribeDeals(ctx context.Context, pairs []string, handler func(exchange string, raw []byte)) error
 
 
-[{
-	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "WrongArgCount",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "WrongArgCount"
-		}
-	},
-	"severity": 8,
-	"message": "not enough arguments in call to ex.SubscribeDeals\n\thave ([]string, func(_exchange string, raw []byte))\n\twant (context.Context, []string, func(exchange string, raw []byte))",
-	"source": "compiler",
-	"startLineNumber": 104,
-	"startColumn": 50,
-	"endLineNumber": 104,
-	"endColumn": 50,
-	"origin": "extHost1"
-}]
+--- a/internal/app/arbitrage.go
++++ b/internal/app/arbitrage.go
+@@ func (a *ArbitrageApp) Run() error {
+-   // подписываемся на сделки
+-   if err := ex.SubscribeDeals(pairs, a.handleRaw); err != nil {
+-       return err
+-   }
++   // создаём контекст подписки (можно передавать сюда внешний ctx приложения)
++   ctx, cancel := context.WithCancel(context.Background())
++   defer cancel()
++
++   // подписываемся на сделки (по отмене ctx – пинги и соединение закроются)
++   if err := ex.SubscribeDeals(ctx, pairs, a.handleRaw); err != nil {
++       return err
++   }
 
 
 
