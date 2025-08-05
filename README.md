@@ -433,7 +433,7 @@ SubscribeDeals(ctx context.Context, pairs []string, handler func(exchange string
 
 
 
-// файл: cryptarb/internal/app/arbitrager.go
+
 package app
 
 import (
@@ -442,6 +442,8 @@ import (
     "fmt"
     "log"
     "os"
+    "strconv"
+    "strings"
     "sync"
     "time"
 
@@ -450,27 +452,31 @@ import (
     "cryptarb/internal/repository/filesystem"
 )
 
+// Arbitrager отвечает за получение данных из WS, обработку и поиск возможностей арбитража.
 type Arbitrager struct {
-    Triangles       []triangle.Triangle
-    latest          map[string]float64      // Последние цены по парам
-    trianglesByPair map[string][]int        // Индексы треугольников по паре
-    realSymbols     map[string]bool         // Доступные пары (с инверсиями)
-    stepSizes       map[string]float64      // Шаг лота
-    minQtys         map[string]float64      // Мин. объём
-    mu              sync.Mutex
-    StartAmount     float64
-    exchange        exchange.Exchange
+    Triangles       []triangle.Triangle    // Список всех треугольников
+    latest          map[string]float64     // Последние цены по символам
+    trianglesByPair map[string][]int       // Индексы треугольников по паре
+    realSymbols     map[string]bool        // Карта доступных символов
+    stepSizes       map[string]float64     // Шаги лотов
+    minQtys         map[string]float64     // Мин. объёмы
+
+    msgCh chan []byte                     // Канал для сырых WS-сообщений
+    wg    sync.WaitGroup                  // Для ожидания завершения воркеров
+
+    mu       sync.Mutex
+    exchange exchange.Exchange
+    StartAmount float64
 }
 
-// New создаёт и инициализирует арбитражёра,
-// строит все треугольники, индексирует их по парам и запускает WS-подписки.
+// New создаёт и настраивает арбитражёра: загружает данные, строит индексы, запускает воркеры и WS-подписку.
 func New(ex exchange.Exchange) (*Arbitrager, error) {
-    // 1) Получаем все доступные пары и параметры лотов
+    // 1) Получаем все доступные символы и параметры
     rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
     avail := filesystem.ExpandAvailableSymbols(rawSymbols)
     log.Printf("📊 Доступные пары (с инверсиями): %d", len(avail))
 
-    // 2) Строим треугольники
+    // 2) Загружаем треугольники
     ts, err := filesystem.LoadTrianglesFromSymbols(avail)
     if err != nil {
         return nil, fmt.Errorf("LoadTriangles: %w", err)
@@ -482,23 +488,21 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
         _ = os.WriteFile("triangles_dump.json", data, 0644)
     }
 
-    // 3) Индексируем треугольники по каждой из 3-х пар (AB, BC, CA)
+    // 3) Индексируем треугольники по каждой паре (AB, BC, CA)
     trianglesByPair := make(map[string][]int, len(ts)*3)
     subRaw := make([]string, 0, len(ts)*3)
     for i, tri := range ts {
         ab := tri.A + tri.B
         bc := tri.B + tri.C
         ca := tri.C + tri.A
-
         trianglesByPair[ab] = append(trianglesByPair[ab], i)
         trianglesByPair[bc] = append(trianglesByPair[bc], i)
         trianglesByPair[ca] = append(trianglesByPair[ca], i)
-
         subRaw = append(subRaw, ab, bc, ca)
     }
     log.Printf("[INIT] Составили индекс по парам: %d ключей", len(trianglesByPair))
 
-    // 4) Фильтруем только реально доступные пары и убираем дубликаты
+    // 4) Убираем дубликаты и фильтруем по реально доступным
     uniq := make(map[string]struct{}, len(subRaw))
     for _, p := range subRaw {
         if avail[p] {
@@ -511,7 +515,7 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
     }
     log.Printf("[INIT] Подписка на пар: %d шт.", len(subPairs))
 
-    // 5) Инициализируем структуру Arbitrager
+    // 5) Инициализируем Arbitrager
     arb := &Arbitrager{
         Triangles:       ts,
         latest:          make(map[string]float64, len(subPairs)),
@@ -519,38 +523,112 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
         realSymbols:     avail,
         stepSizes:       stepSizes,
         minQtys:         minQtys,
-        StartAmount:     0.5,
+        msgCh:           make(chan []byte, 1000),
         exchange:        ex,
+        StartAmount:     0.5,
     }
 
-    // 6) Запускаем WS-подписки чанками по 25 пар
-    const maxPerConn = 25
-    for i := 0; i < len(subPairs); i += maxPerConn {
-        end := i + maxPerConn
-        if end > len(subPairs) {
-            end = len(subPairs)
-        }
-        chunk := subPairs[i:end]
-        go arb.subscriptionLoop(chunk)
+    // 6) Запускаем пул воркеров
+    const workerCount = 4
+    arb.wg.Add(workerCount)
+    for i := 0; i < workerCount; i++ {
+        go func() {
+            defer arb.wg.Done()
+            for raw := range arb.msgCh {
+                arb.HandleRaw(ex.Name(), raw)
+            }
+        }()
     }
+
+    // 7) Единая WS-подписка
+    go func() {
+        for {
+            err := ex.SubscribeDeals(subPairs, func(_ string, raw []byte) {
+                arb.msgCh <- raw
+            })
+            if err != nil {
+                log.Printf("[WS][%s] subscribe error: %v, retrying...", ex.Name(), err)
+                time.Sleep(time.Second)
+                continue
+            }
+            log.Printf("[WS][%s] subscribed to %d channels", ex.Name(), len(subPairs))
+            return
+        }
+    }()
 
     return arb, nil
 }
 
-// subscriptionLoop старается подписаться на канал WS и при ошибке
-// перезапускает попытку через секунду, без захвата большого state.
-func (a *Arbitrager) subscriptionLoop(pairs []string) {
-    for {
-        err := a.exchange.SubscribeDeals(pairs, a.HandleRaw)
-        if err != nil {
-            log.Printf("[WS][%s] subscribe error: %v, retrying...", a.exchange.Name(), err)
-            time.Sleep(time.Second)
-            continue
-        }
-        log.Printf("[WS][%s] subscribed to %d channels", a.exchange.Name(), len(pairs))
-        return
-    }
+// Stop корректно завершает работу: останавливает WS-подписку и ждёт воркеров.
+func (a *Arbitrager) Stop() {
+    close(a.msgCh)
+    a.wg.Wait()
 }
 
+// HandleRaw обрабатывает одно сообщение из WS.
+func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
+    // Пример из прошлого:
+    const (
+        idKey      = `"id":`
+        code0Key   = `"code":0`
+        sKey       = `"s":"`
+        pKey       = `"p":"`
+        prefixFail = "Not Subscribed successfully! ["
+    )
 
+    // ACK-подписка: есть id+code0, но нет sKey
+    if bytes.Contains(raw, []byte(idKey)) && bytes.Contains(raw, []byte(code0Key)) && !bytes.Contains(raw, []byte(sKey)) {
+        if start := bytes.Index(raw, []byte(prefixFail)); start >= 0 {
+            start += len(prefixFail)
+            if end := bytes.Index(raw[start:], []byte("].  Reason")); end > 0 {
+                list := raw[start : start+end]
+                for _, ch := range strings.Split(string(list), ",") {
+                    if idx := strings.LastIndex(ch, "@"); idx != -1 {
+                        sym := ch[idx+1:]
+                        a.mu.Lock()
+                        a.realSymbols[sym] = false
+                        a.mu.Unlock()
+                    }
+                }
+            }
+        }
+        return
+    }
+
+    // Парсим symbol
+    i := bytes.Index(raw, []byte(sKey))
+    if i < 0 { return }
+    i += len(sKey)
+    j := bytes.IndexByte(raw[i:], '"')
+    if j < 0 { return }
+    sym := string(raw[i : i+j])
+
+    // Парсим price
+    i = bytes.Index(raw, []byte(pKey))
+    if i < 0 { return }
+    i += len(pKey)
+    j = bytes.IndexByte(raw[i:], '"')
+    if j < 0 { return }
+    price, err := strconv.ParseFloat(string(raw[i:i+j]), 64)
+    if err != nil { return }
+
+    // Проверка и обновление под мьютексом
+    a.mu.Lock()
+    alive, ok := a.realSymbols[sym]
+    _, hasTri := a.trianglesByPair[sym]
+    if !ok || !alive || !hasTri {
+        a.mu.Unlock()
+        return
+    }
+    a.latest[sym] = price
+    a.mu.Unlock()
+
+    // Проверка арбитража
+    a.Check(sym)
+}
+
+// Check запускает алгоритм поиска арбитражных возможностей.
+func (a *Arbitrager) Check(sym string) {
+    // Реализация поиска треугольников...
+}
 
