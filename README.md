@@ -491,6 +491,26 @@ protoc --go_out=. --go_opt=paths=source_relative AggreDealPush.proto
 ь
 crypt_proto/pb/AggreDealPush.pb.go
 
+PublicAggreDealsV3Api.proto
+
+syntax = "proto3";
+option go_package = "crypt_proto/pb";
+
+message PublicAggreDealsV3Api {
+  repeated PublicAggreDealsV3ApiItem deals = 1;
+  string eventType = 2;
+}
+
+message PublicAggreDealsV3ApiItem {
+  string price = 1;
+  string quantity = 2;
+  int32 tradeType = 3; // 1 = buy, 2 = sell
+  int64 time = 4;      // timestamp in ms
+}
+
+
+protoc --go_out=. --go_opt=paths=source_relative PublicAggreDealsV3Api.proto
+
 
 package main
 
@@ -510,10 +530,9 @@ var pairsToTest = []string{
 	"DOTUSDT", "NEARUSDT", "SUIUSDT", "RNDRUSDT", "GALAUSDT", "LINAUSDT",
 }
 
-var outputFile = "protobuf_available.txt"
+var outputFile = "protobuf_aggre_available.txt"
 
 func main() {
-	// создаём файл для записи
 	f, err := os.Create(outputFile)
 	if err != nil {
 		log.Fatalf("❌ Не удалось создать файл: %v", err)
@@ -521,17 +540,17 @@ func main() {
 	defer f.Close()
 
 	for _, pair := range pairsToTest {
-		ok := testProtobufSubscription(pair)
+		ok := testAggreDealsSubscription(pair)
 		if ok {
 			f.WriteString(pair + "\n")
 		}
-		time.Sleep(300 * time.Millisecond) // пауза между запросами
+		time.Sleep(300 * time.Millisecond)
 	}
 
 	log.Printf("✅ Проверка завершена. Результат сохранён в %s", outputFile)
 }
 
-func testProtobufSubscription(symbol string) bool {
+func testAggreDealsSubscription(symbol string) bool {
 	header := http.Header{}
 	header.Set("Sec-WebSocket-Protocol", "protobuf")
 
@@ -544,7 +563,7 @@ func testProtobufSubscription(symbol string) bool {
 
 	sub := map[string]interface{}{
 		"method": "SUBSCRIPTION",
-		"params": []string{"spot@public.deals.v3.api@" + symbol},
+		"params": []string{"spot@public.aggre.deals.v3.api@" + symbol},
 		"id":     time.Now().Unix(),
 	}
 	if err := conn.WriteJSON(sub); err != nil {
@@ -552,7 +571,7 @@ func testProtobufSubscription(symbol string) bool {
 		return false
 	}
 
-	// читаем ответы (макс 2 попытки)
+	// читаем ответ
 	for i := 0; i < 2; i++ {
 		mt, msg, err := conn.ReadMessage()
 		if err != nil {
@@ -569,16 +588,15 @@ func testProtobufSubscription(symbol string) bool {
 		}
 
 		if msgText, ok := resp["msg"].(string); ok {
-			switch {
-			case msgText == "success":
-				log.Printf("✅ [%s] Подписка прошла успешно", symbol)
+			if msgText == "success" {
+				log.Printf("✅ [%s] Подписка прошла успешно (aggre)", symbol)
 				return true
-			case contains(msgText, "Blocked"):
+			}
+			if containsBlocked(msgText) {
 				log.Printf("⛔ [%s] Заблокировано: %s", symbol, msgText)
 				return false
-			default:
-				log.Printf("⚠️ [%s] Ответ: %s", symbol, msgText)
 			}
+			log.Printf("⚠️ [%s] Ответ: %s", symbol, msgText)
 		}
 	}
 
@@ -586,50 +604,18 @@ func testProtobufSubscription(symbol string) bool {
 	return false
 }
 
+func containsBlocked(msg string) bool {
+	return contains(msg, "Blocked") || contains(msg, "block") || contains(msg, "not allow")
+}
+
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[0:len(substr)] == substr || s[len(s)-len(substr):] == substr))
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
+		(s[0:len(substr)] == substr || s[len(s)-len(substr):] == substr))
 }
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/06 21:45:39 ⚠️ [AGIXUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@AGIXUSDT].  Reason： Blocked! 
-2025/08/06 21:46:09 ❌ [AGIXUSDT] Read error: websocket: close 1005 (no status)
-2025/08/06 21:46:10 ⚠️ [FETUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@FETUSDT].  Reason： Blocked! 
-2025/08/06 21:46:44 ❌ [FETUSDT] Read error: websocket: close 1005 (no status)
-2025/08/06 21:46:45 ⚠️ [DODOUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@DODOUSDT].  Reason： Blocked! 
-2025/08/06 21:47:19 ❌ [DODOUSDT] Read error: websocket: close 1005 (no status)
-2025/08/06 21:47:20 ⚠️ [MXUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@MXUSDT].  Reason： Blocked! 
-2025/08/06 21:47:52 ❌ [MXUSDT] Read error: websocket: close 1005 (no status)
-2025/08/06 21:47:53 ⚠️ [TRXUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@TRXUSDT].  Reason： Blocked! 
-2025/08/06 21:48:23 ❌ [TRXUSDT] Read error: websocket: close 1005 (no status)
-2025/08/06 21:48:24 ⚠️ [CAWUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@CAWUSDT].  Reason： Blocked! 
-2025/08/06 21:48:58 ❌ [CAWUSDT] Read error: websocket: close 1005 (no status)
-2025/08/06 21:48:59 ⚠️ [VIDTUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@VIDTUSDT].  Reason： Blocked! 
-2025/08/06 21:49:30 ❌ [VIDTUSDT] Read error: websocket: close 1005 (no status)
-2025/08/06 21:49:32 ⚠️ [COVERUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@COVERUSDT].  Reason： Blocked! 
-2025/08/06 21:50:04 ❌ [COVERUSDT] Read error: websocket: close 1005 (no status)
-2025/08/06 21:50:05 ⚠️ [BTCUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@BTCUSDT].  Reason： Blocked! 
-2025/08/06 21:50:38 ❌ [BTCUSDT] Read error: websocket: close 1005 (no status)
-2025/08/06 21:50:39 ⚠️ [ETHUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@ETHUSDT].  Reason： Blocked! 
-2025/08/06 21:51:14 ❌ [ETHUSDT] Read error: websocket: close 1005 (no status)
-2025/08/06 21:51:15 ⚠️ [SOLUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@SOLUSDT].  Reason： Blocked! 
-2025/08/06 21:51:50 ❌ [SOLUSDT] Read error: websocket: close 1005 (no status)
-2025/08/06 21:51:51 ⚠️ [DOGEUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@DOGEUSDT].  Reason： Blocked! 
-2025/08/06 21:52:26 ❌ [DOGEUSDT] Read error: websocket: close 1005 (no status)
-2025/08/06 21:52:27 ⚠️ [DOTUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@DOTUSDT].  Reason： Blocked! 
-2025/08/06 21:53:00 ❌ [DOTUSDT] Read error: websocket: close 1005 (no status)
-2025/08/06 21:53:02 ⚠️ [NEARUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@NEARUSDT].  Reason： Blocked! 
-2025/08/06 21:53:35 ❌ [NEARUSDT] Read error: websocket: close 1005 (no status)
-2025/08/06 21:53:36 ⚠️ [SUIUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@SUIUSDT].  Reason： Blocked! 
-2025/08/06 21:54:07 ❌ [SUIUSDT] Read error: websocket: close 1005 (no status)
-2025/08/06 21:54:08 ⚠️ [RNDRUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@RNDRUSDT].  Reason： Blocked! 
-2025/08/06 21:54:40 ❌ [RNDRUSDT] Read error: websocket: close 1005 (no status)
-2025/08/06 21:54:41 ⚠️ [GALAUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@GALAUSDT].  Reason： Blocked! 
-2025/08/06 21:55:15 ❌ [GALAUSDT] Read error: websocket: close 1005 (no status)
-2025/08/06 21:55:17 ⚠️ [LINAUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@LINAUSDT].  Reason： Blocked! 
-2025/08/06 21:55:49 ❌ [LINAUSDT] Read error: websocket: close 1005 (no status)
-2025/08/06 21:55:49 ✅ Проверка завершена. Результат сохранён в protobuf_available.txt
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
+
+
 
 
 
