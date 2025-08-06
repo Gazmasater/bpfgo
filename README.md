@@ -449,18 +449,13 @@ option go_package = "crypt_proto/pb";
 
 
 
-
-log.Printf("📥 Trade: %s %s amount=%s | maker=%v | fee=%s %s | time=%d",
-	msg.Price,
-	msg.Quantity,
-	msg.Amount,
-	msg.IsMaker,
-	msg.FeeAmount,
-	msg.FeeCurrency,
-	msg.Time,
-)
-
-
+az358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
+2025/08/06 19:04:36 ✅ AUTH sent
+2025/08/06 19:04:36 ✅ SUBSCRIBE sent
+2025/08/06 19:04:36 ⚠️  Non-binary message: {"id":0,"code":0,"msg":"msg format invalid"}
+2025/08/06 19:04:36 ⚠️  Non-binary message: {"id":2,"code":0,"msg":"Not Subscribed successfully! [spot@private.order.v3.api].  Reason： Blocked! "}
+2025/08/06 19:05:09 ❌ read: websocket: close 1005 (no status)
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_pr
 
 
 
