@@ -453,6 +453,14 @@ curl -s https://api.mexc.com/api/v3/time
 date +%s%3N
 
 
+crypt_proto/
+├── main.go
+├── pb/
+│   ├── AggreDealPush.proto
+│   └── AggreDealPush.pb.go  ← (после генерации)
+
+
+
 package main
 
 import (
