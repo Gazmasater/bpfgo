@@ -447,22 +447,27 @@ protoc --go_out=. --go_opt=paths=source_relative PrivateDealsV3Api.proto
 syntax = "proto3";
 option go_package = "crypt_proto/pb";
 
+sudo apt install ntpdate
+sudo ntpdate time.cloudflare.com
+curl -s https://api.mexc.com/api/v3/time
+date +%s%3N
 
+check_key.sh
+bash check_key.sh
 
-export API_KEY="mx0vglWtzbBOGF34or"
-export SECRET="77658a3144bd469fa8050b9c91b9cd4e"
+#!/bin/bash
 
+API_KEY="mx0vglWtzbBOGF34or"
+SECRET="77658a3144bd469fa8050b9c91b9cd4e"
+recvWindow=5000
 timestamp=$(($(date +%s%3N)))
-query="timestamp=$timestamp"
+query="recvWindow=$recvWindow&timestamp=$timestamp"
 signature=$(echo -n "$query" | openssl dgst -sha256 -hmac "$SECRET" | sed 's/^.* //')
 
-curl -X GET "https://api.mexc.com/api/v3/account?$query&signature=$signature" \
+curl -s -X GET "https://api.mexc.com/api/v3/account?$query&signature=$signature" \
   -H "X-MEXC-APIKEY: $API_KEY"
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ curl -X GET "https://api.mexc.com/api/v3/account?$query&signature=$signature" \
-  -H "X-MEXC-APIKEY: $API_KEY"
-{"code":700003,"msg":"Timestamp for this request is outside of the recvWindow."}ga
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
+
 
 
 
