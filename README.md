@@ -514,7 +514,11 @@ func main() {
 	}
 }
 
-
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
+2025/08/06 20:09:24 ✅ Subscribed to CAWUSDT aggre.deals (protobuf)
+2025/08/06 20:09:24 ⚠️ Non-binary message: {"id":1754500164,"code":0,"msg":"Not Subscribed successfully! [spot@public.aggre.deals.v3.api@CAWUSDT].  Reason： Blocked! "}
+2025/08/06 20:09:55 ❌ Read error: websocket: close 1005 (no status)
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ ^C
 
 
 
