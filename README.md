@@ -467,6 +467,9 @@ signature=$(echo -n "$query" | openssl dgst -sha256 -hmac "$SECRET" | sed 's/^.*
 curl -s -X GET "https://api.mexc.com/api/v3/account?$query&signature=$signature" \
   -H "X-MEXC-APIKEY: $API_KEY"
 
+  D-WXX9:~/myprog/crypt_proto$ bash check_key.sh
+{"makerCommission":null,"takerCommission":null,"buyerCommission":null,"sellerCommission":null,"canTrade":true,"canWithdraw":true,"canDeposit":true,"updateTime":null,"accountType":"SPOT","balances":[{"asset":"USDT","free":"0.8098017424101945","locked":"0","available":"0.8098017424101945"},{"asset":"USDC","free":"0.006924","locked":"0","available":"0.006924"},{"asset":"CAW","free":"65667981","locked":"0","available":"65667981"}],"permissions":["SPOT"]}gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
+
 
 
 
