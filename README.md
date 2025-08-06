@@ -430,51 +430,13 @@ func init() {
 go tool pprof --text --focus="cryptarb" --ignore="runtime\..*" cpu.prof
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ go tool pprof --text --focus="cryptarb" --ignore="runtime\..*" cpu.prof
-File: cryptarb
-Build ID: 7af130719f312e9f1eafb7d1c085f23719e8020a
-Type: cpu
-Time: 2025-08-05 23:01:15 MSK
-Duration: 15s, Total samples = 120ms (  0.8%)
-Active filters:
-   focus=cryptarb
-   ignore=runtime\..*
-Showing nodes accounting for 20ms, 16.67% of 120ms total
-      flat  flat%   sum%        cum   cum%
-      10ms  8.33%  8.33%       20ms 16.67%  bytes.(*Buffer).ReadFrom
-      10ms  8.33% 16.67%       10ms  8.33%  internal/runtime/syscall.Syscall6
-         0     0% 16.67%       20ms 16.67%  bufio.(*Reader).Peek
-         0     0% 16.67%       20ms 16.67%  bufio.(*Reader).fill
-         0     0% 16.67%       20ms 16.67%  cryptarb/internal/app.New.func1
-         0     0% 16.67%       20ms 16.67%  cryptarb/internal/repository/mexc.(*MexcExchange).SubscribeDeals
-         0     0% 16.67%       20ms 16.67%  crypto/tls.(*Conn).Read
-         0     0% 16.67%       20ms 16.67%  crypto/tls.(*Conn).readFromUntil
-         0     0% 16.67%       20ms 16.67%  crypto/tls.(*Conn).readRecord (inline)
-         0     0% 16.67%       20ms 16.67%  crypto/tls.(*Conn).readRecordOrCCS
-         0     0% 16.67%       10ms  8.33%  crypto/tls.(*atLeastReader).Read
-         0     0% 16.67%       20ms 16.67%  github.com/gorilla/websocket.(*Conn).NextReader
-         0     0% 16.67%       20ms 16.67%  github.com/gorilla/websocket.(*Conn).ReadMessage
-         0     0% 16.67%       20ms 16.67%  github.com/gorilla/websocket.(*Conn).advanceFrame
-         0     0% 16.67%       20ms 16.67%  github.com/gorilla/websocket.(*Conn).read
-         0     0% 16.67%       10ms  8.33%  internal/poll.(*FD).Read
-         0     0% 16.67%       10ms  8.33%  internal/poll.ignoringEINTRIO (inline)
-         0     0% 16.67%       10ms  8.33%  net.(*conn).Read
-         0     0% 16.67%       10ms  8.33%  net.(*netFD).Read
-         0     0% 16.67%       10ms  8.33%  syscall.RawSyscall6
-         0     0% 16.67%       10ms  8.33%  syscall.Read (inline)
-         0     0% 16.67%       10ms  8.33%  syscall.Syscall
-         0     0% 16.67%       10ms  8.33%  syscall.read
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ 
 
 
 
 __________________________________________________________________________________
 
 
-// 🔐 Ограничиваем размер сообщения (например, 4 КБ)
-		conn.SetReadLimit(4096)
-
-
+https://github.com/mexcdevelop/websocket-proto
 
 
 
