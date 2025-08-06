@@ -445,12 +445,17 @@ go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 protoc --go_out=. --go_opt=paths=source_relative PublicAggreDepthsV3Api.proto
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-go: downloading google.golang.org/protobuf v1.36.6
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ protoc --go_out=. --go_opt=paths=source_relative public_aggre_depths.proto
-Could not make proto path relative: public_aggre_depths.proto: No such file or directory
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ protoc --go_out=. --go_opt=paths=source_relative PublicAggreDepthsV3Api.proto
+protoc-gen-go: unable to determine Go import path for "PublicAggreDepthsV3Api.proto"
 
+Please specify either:
+        • a "go_package" option in the .proto source file, or
+        • a "M" argument on the command line.
+
+See https://protobuf.dev/reference/go/go-generated#package for more information.
+
+--go_out: protoc-gen-go: Plugin failed with status code 1.
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
 
 
 package main
