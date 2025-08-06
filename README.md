@@ -442,7 +442,7 @@ https://github.com/mexcdevelop/websocket-proto
 sudo apt install -y protobuf-compiler
 go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 
-protoc --go_out=. --go_opt=paths=source_relative public_aggre_depths.proto
+protoc --go_out=. --go_opt=paths=source_relative PublicAggreDepthsV3Api.proto
 
 
 gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
