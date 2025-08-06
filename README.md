@@ -463,7 +463,7 @@ import (
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
 
-	pb "crypt_proto/pb" // Путь к сгенерированному PublicAggreDealsV3Api.pb.go
+	pb "crypt_proto/pb" // Путь к AggreDealPush.pb.go
 )
 
 func main() {
@@ -476,16 +476,16 @@ func main() {
 	}
 	defer conn.Close()
 
-	// Подписка на сделки по CAWUSDT в protobuf
+	// Подписка на одиночные сделки в protobuf
 	sub := map[string]interface{}{
 		"method": "SUBSCRIPTION",
-		"params": []string{"spot@public.aggre.deals.v3.api@CAWUSDT"},
+		"params": []string{"spot@public.deals.v3.api@MXUSDT"},
 		"id":     time.Now().Unix(),
 	}
 	if err := conn.WriteJSON(sub); err != nil {
 		log.Fatal("❌ Subscription error:", err)
 	}
-	log.Println("✅ Subscribed to CAWUSDT aggre.deals (protobuf)")
+	log.Println("✅ Subscribed to MXUSDT public deals (protobuf, single messages)")
 
 	for {
 		mt, data, err := conn.ReadMessage()
@@ -498,30 +498,15 @@ func main() {
 			continue
 		}
 
-		var msg pb.PublicAggreDealsV3Api
-		if err := proto.Unmarshal(data, &msg); err != nil {
+		var deal pb.AggreDealPush
+		if err := proto.Unmarshal(data, &deal); err != nil {
 			log.Println("❌ Protobuf decode error:", err)
 			continue
 		}
 
-		for _, deal := range msg.GetDeals() {
-			side := "SELL"
-			if deal.TradeType == 1 {
-				side = "BUY"
-			}
-			log.Printf("📥 %s %s @ %s | time=%d", side, deal.Quantity, deal.Price, deal.Time)
-		}
+		log.Printf("📥 %s @ %s for %s | time=%d", deal.S, deal.P, deal.V, deal.T)
 	}
 }
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/06 20:09:24 ✅ Subscribed to CAWUSDT aggre.deals (protobuf)
-2025/08/06 20:09:24 ⚠️ Non-binary message: {"id":1754500164,"code":0,"msg":"Not Subscribed successfully! [spot@public.aggre.deals.v3.api@CAWUSDT].  Reason： Blocked! "}
-2025/08/06 20:09:55 ❌ Read error: websocket: close 1005 (no status)
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ ^C
-
-
-
 
 
 
