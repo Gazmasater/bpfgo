@@ -494,7 +494,11 @@ crypt_proto/pb/AggreDealPush.pb.go
 
 "params": []string{"spot@public.deals.v3.api@TRXUSDT"},
 
-
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
+2025/08/06 21:26:32 ✅ Subscribed to MXUSDT public deals (protobuf, single messages)
+2025/08/06 21:26:33 ⚠️ Non-binary message: {"id":1754504792,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@TRXUSDT].  Reason： Blocked! "}
+2025/08/06 21:27:04 ❌ Read error: websocket: close 1005 (no status)
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
 
 
 
