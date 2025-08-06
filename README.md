@@ -466,7 +466,6 @@ message AggreDealPush {
 }
 
 
-
 package main
 
 import (
@@ -512,15 +511,21 @@ func main() {
 			continue
 		}
 
-		var deal pb.AggreDealPush
+		var deal pb.PublicAggreDealsV3Api
 		if err := proto.Unmarshal(data, &deal); err != nil {
 			log.Println("❌ Protobuf decode error:", err)
 			continue
 		}
 
-		log.Printf("📥 %s @ %s for %s | time=%d", deal.S, deal.P, deal.V, deal.T)
+		log.Printf("📥 %s ", deal.EventType)
 	}
 }
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
+2025/08/06 20:25:50 ✅ Subscribed to MXUSDT public deals (protobuf, single messages)
+2025/08/06 20:25:50 ⚠️ Non-binary message: {"id":1754501150,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@MXUSDT].  Reason： Blocked! "}
+2025/08/06 20:26:23 ❌ Read error: websocket: close 1005 (no status)
 
 
 
