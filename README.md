@@ -592,11 +592,44 @@ func contains(s, substr string) bool {
 
 
 gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/06 21:36:35 ✅ Subscribed to MXUSDT public deals (protobuf, single messages)
-2025/08/06 21:36:36 ⚠️ Non-binary message: {"id":1754505395,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@TRXUSDT].  Reason： Blocked! "}
-2025/08/06 21:37:10 ❌ Read error: websocket: close 1005 (no status)
+2025/08/06 21:45:39 ⚠️ [AGIXUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@AGIXUSDT].  Reason： Blocked! 
+2025/08/06 21:46:09 ❌ [AGIXUSDT] Read error: websocket: close 1005 (no status)
+2025/08/06 21:46:10 ⚠️ [FETUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@FETUSDT].  Reason： Blocked! 
+2025/08/06 21:46:44 ❌ [FETUSDT] Read error: websocket: close 1005 (no status)
+2025/08/06 21:46:45 ⚠️ [DODOUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@DODOUSDT].  Reason： Blocked! 
+2025/08/06 21:47:19 ❌ [DODOUSDT] Read error: websocket: close 1005 (no status)
+2025/08/06 21:47:20 ⚠️ [MXUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@MXUSDT].  Reason： Blocked! 
+2025/08/06 21:47:52 ❌ [MXUSDT] Read error: websocket: close 1005 (no status)
+2025/08/06 21:47:53 ⚠️ [TRXUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@TRXUSDT].  Reason： Blocked! 
+2025/08/06 21:48:23 ❌ [TRXUSDT] Read error: websocket: close 1005 (no status)
+2025/08/06 21:48:24 ⚠️ [CAWUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@CAWUSDT].  Reason： Blocked! 
+2025/08/06 21:48:58 ❌ [CAWUSDT] Read error: websocket: close 1005 (no status)
+2025/08/06 21:48:59 ⚠️ [VIDTUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@VIDTUSDT].  Reason： Blocked! 
+2025/08/06 21:49:30 ❌ [VIDTUSDT] Read error: websocket: close 1005 (no status)
+2025/08/06 21:49:32 ⚠️ [COVERUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@COVERUSDT].  Reason： Blocked! 
+2025/08/06 21:50:04 ❌ [COVERUSDT] Read error: websocket: close 1005 (no status)
+2025/08/06 21:50:05 ⚠️ [BTCUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@BTCUSDT].  Reason： Blocked! 
+2025/08/06 21:50:38 ❌ [BTCUSDT] Read error: websocket: close 1005 (no status)
+2025/08/06 21:50:39 ⚠️ [ETHUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@ETHUSDT].  Reason： Blocked! 
+2025/08/06 21:51:14 ❌ [ETHUSDT] Read error: websocket: close 1005 (no status)
+2025/08/06 21:51:15 ⚠️ [SOLUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@SOLUSDT].  Reason： Blocked! 
+2025/08/06 21:51:50 ❌ [SOLUSDT] Read error: websocket: close 1005 (no status)
+2025/08/06 21:51:51 ⚠️ [DOGEUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@DOGEUSDT].  Reason： Blocked! 
+2025/08/06 21:52:26 ❌ [DOGEUSDT] Read error: websocket: close 1005 (no status)
+2025/08/06 21:52:27 ⚠️ [DOTUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@DOTUSDT].  Reason： Blocked! 
+2025/08/06 21:53:00 ❌ [DOTUSDT] Read error: websocket: close 1005 (no status)
+2025/08/06 21:53:02 ⚠️ [NEARUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@NEARUSDT].  Reason： Blocked! 
+2025/08/06 21:53:35 ❌ [NEARUSDT] Read error: websocket: close 1005 (no status)
+2025/08/06 21:53:36 ⚠️ [SUIUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@SUIUSDT].  Reason： Blocked! 
+2025/08/06 21:54:07 ❌ [SUIUSDT] Read error: websocket: close 1005 (no status)
+2025/08/06 21:54:08 ⚠️ [RNDRUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@RNDRUSDT].  Reason： Blocked! 
+2025/08/06 21:54:40 ❌ [RNDRUSDT] Read error: websocket: close 1005 (no status)
+2025/08/06 21:54:41 ⚠️ [GALAUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@GALAUSDT].  Reason： Blocked! 
+2025/08/06 21:55:15 ❌ [GALAUSDT] Read error: websocket: close 1005 (no status)
+2025/08/06 21:55:17 ⚠️ [LINAUSDT] Ответ: Not Subscribed successfully! [spot@public.deals.v3.api@LINAUSDT].  Reason： Blocked! 
+2025/08/06 21:55:49 ❌ [LINAUSDT] Read error: websocket: close 1005 (no status)
+2025/08/06 21:55:49 ✅ Проверка завершена. Результат сохранён в protobuf_available.txt
 gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
-
 
 
 
