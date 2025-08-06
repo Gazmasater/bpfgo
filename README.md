@@ -512,7 +512,10 @@ func main() {
 	}
 }
 
-
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
+2025/08/06 15:01:05 🟢 Subscribed to depth. Waiting for protobuf messages...
+2025/08/06 15:01:06 ⚠️  Skip non-binary message: {"id":1754481665,"code":0,"msg":"Not Subscribed successfully! [spot@public.depth.v3.api@BTCUSDT].  Reason： Blocked! "}
+2025/08/06 15:01:37 ❌ read: websocket: close 1005 (no status)
 
 
 
