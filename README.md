@@ -459,7 +459,10 @@ signature=$(echo -n "$query" | openssl dgst -sha256 -hmac "$SECRET" | sed 's/^.*
 curl -X GET "https://api.mexc.com/api/v3/account?$query&signature=$signature" \
   -H "X-MEXC-APIKEY: $API_KEY"
 
-
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ curl -X GET "https://api.mexc.com/api/v3/account?$query&signature=$signature" \
+  -H "X-MEXC-APIKEY: $API_KEY"
+{"code":700003,"msg":"Timestamp for this request is outside of the recvWindow."}ga
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
 
 
 
