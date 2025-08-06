@@ -439,15 +439,8 @@ ________________________________________________________________________________
 https://github.com/mexcdevelop/websocket-proto
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ git add  websocket-proto
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ git add  main.go
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ git commit  -m "first commit"
-[main 233ed2a] first commit
- 3 files changed, 5 insertions(+)
- create mode 100644 go.mod
- create mode 100644 main.go
- create mode 160000 websocket-proto
-
+git rm --cached websocket-proto
+rm -rf .git/modules/websocket-proto
 
 
 
