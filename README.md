@@ -439,8 +439,84 @@ ________________________________________________________________________________
 https://github.com/mexcdevelop/websocket-proto
 
 
-git rm --cached websocket-proto
-rm -rf .git/modules/websocket-proto
+sudo apt install -y protobuf-compiler
+go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+
+protoc --go_out=. --go_opt=paths=source_relative public_aggre_depths.proto
+
+
+
+package main
+
+import (
+	"context"
+	"crypto/tls"
+	"log"
+	"net/url"
+	"time"
+
+	"github.com/golang/protobuf/proto"
+	"github.com/gorilla/websocket"
+
+	pb "crypt_proto" // Импортируй правильно в зависимости от структуры проекта
+)
+
+func main() {
+	u := url.URL{Scheme: "wss", Host: "wbs.mexc.com", Path: "/raw/ws"}
+	log.Printf("Connecting to %s", u.String())
+
+	dialer := websocket.Dialer{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+
+	c, _, err := dialer.DialContext(context.Background(), u.String(), nil)
+	if err != nil {
+		log.Fatal("Dial error:", err)
+	}
+	defer c.Close()
+
+	subMsg := map[string]interface{}{
+		"symbol": "BTC_USDT",
+		"op":     "sub.depth.snapshot", // либо "sub@spot@public.aggre.depth.v3.api.pb"
+	}
+	err = c.WriteJSON(subMsg)
+	if err != nil {
+		log.Fatal("Write error:", err)
+	}
+
+	log.Println("Subscribed. Waiting for messages...")
+
+	for {
+		msgType, message, err := c.ReadMessage()
+		if err != nil {
+			log.Println("Read error:", err)
+			break
+		}
+
+		// Тип 2 = бинарное сообщение (protobuf)
+		if msgType == websocket.BinaryMessage {
+			var depth pb.PublicAggreDepthsV3Api
+			err := proto.Unmarshal(message, &depth)
+			if err != nil {
+				log.Println("Protobuf decode error:", err)
+				continue
+			}
+
+			log.Printf("Event: %s | Version: %s -> %s", depth.EventType, depth.FromVersion, depth.ToVersion)
+			log.Println("Top Bids:")
+			for _, bid := range depth.Bids {
+				log.Printf("  %s @ %s", bid.Quantity, bid.Price)
+			}
+			log.Println("Top Asks:")
+			for _, ask := range depth.Asks {
+				log.Printf("  %s @ %s", ask.Quantity, ask.Price)
+			}
+		} else {
+			log.Printf("Received non-binary message: %s", string(message))
+		}
+	}
+}
+
 
 
 
