@@ -542,6 +542,20 @@ func main() {
 
 
 
+az358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ protoc --go_out=. --go_opt=paths=source_relative PrivateDealsV3Api.proto
+protoc-gen-go: unable to determine Go import path for "PrivateDealsV3Api.proto"
+
+Please specify either:
+        • a "go_package" option in the .proto source file, or
+        • a "M" argument on the command line.
+
+See https://protobuf.dev/reference/go/go-generated#package for more information.
+
+--go_out: protoc-gen-go: Plugin failed with status code 1.
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
+
+
+
 
 
 
