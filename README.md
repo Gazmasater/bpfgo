@@ -447,54 +447,8 @@ protoc --go_out=. --go_opt=paths=source_relative PublicAggreDepthsV3Api.proto
 syntax = "proto3";
 option go_package = "./;pb";
 
-[{
-	"resource": "/home/gaz358/myprog/crypt_proto/main.go",
-	"owner": "_generated_diagnostic_collection_name_#1",
-	"severity": 8,
-	"message": "found packages pb (PublicAggreDepthsV3Api.pb.go) and main (main.go) in /home/gaz358/myprog/crypt_proto",
-	"source": "go list",
-	"startLineNumber": 1,
-	"startColumn": 1,
-	"endLineNumber": 1,
-	"endColumn": 1,
-	"origin": "extHost1"
-}]
 
-[{
-	"resource": "/home/gaz358/myprog/crypt_proto/main.go",
-	"owner": "_generated_diagnostic_collection_name_#1",
-	"code": {
-		"value": "MismatchedPkgName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MismatchedPkgName"
-		}
-	},
-	"severity": 8,
-	"message": "package main; expected package pb",
-	"source": "compiler",
-	"startLineNumber": 1,
-	"startColumn": 1,
-	"endLineNumber": 1,
-	"endColumn": 8,
-	"origin": "extHost1"
-}]
-
-[{
-	"resource": "/home/gaz358/myprog/crypt_proto/PublicAggreDepthsV3Api.pb.go",
-	"owner": "_generated_diagnostic_collection_name_#1",
-	"severity": 8,
-	"message": "found packages pb (PublicAggreDepthsV3Api.pb.go) and main (main.go) in /home/gaz358/myprog/crypt_proto",
-	"source": "go list",
-	"startLineNumber": 1,
-	"startColumn": 1,
-	"endLineNumber": 1,
-	"endColumn": 1,
-	"origin": "extHost1"
-}]
+import pb "crypt_proto/pb"
 
 
 
