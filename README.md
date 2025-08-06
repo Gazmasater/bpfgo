@@ -444,98 +444,57 @@ go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 
 protoc --go_out=. --go_opt=paths=source_relative PublicAggreDepthsV3Api.proto
 
-
-
-
-package main
-
-import (
-	"context"
-	"crypto/tls"
-	"log"
-	"net/url"
-	"time"
-
-	"github.com/golang/protobuf/proto"
-	"github.com/gorilla/websocket"
-
-	pb "crypt_proto" // Импортируй правильно в зависимости от структуры проекта
-)
-
-func main() {
-	u := url.URL{Scheme: "wss", Host: "wbs.mexc.com", Path: "/raw/ws"}
-	log.Printf("Connecting to %s", u.String())
-
-	dialer := websocket.Dialer{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-
-	c, _, err := dialer.DialContext(context.Background(), u.String(), nil)
-	if err != nil {
-		log.Fatal("Dial error:", err)
-	}
-	defer c.Close()
-
-	subMsg := map[string]interface{}{
-		"symbol": "BTC_USDT",
-		"op":     "sub.depth.snapshot", // либо "sub@spot@public.aggre.depth.v3.api.pb"
-	}
-	err = c.WriteJSON(subMsg)
-	if err != nil {
-		log.Fatal("Write error:", err)
-	}
-
-	log.Println("Subscribed. Waiting for messages...")
-
-	for {
-		msgType, message, err := c.ReadMessage()
-		if err != nil {
-			log.Println("Read error:", err)
-			break
-		}
-
-		// Тип 2 = бинарное сообщение (protobuf)
-		if msgType == websocket.BinaryMessage {
-			var depth pb.PublicAggreDepthsV3Api
-			err := proto.Unmarshal(message, &depth)
-			if err != nil {
-				log.Println("Protobuf decode error:", err)
-				continue
-			}
-
-			log.Printf("Event: %s | Version: %s -> %s", depth.EventType, depth.FromVersion, depth.ToVersion)
-			log.Println("Top Bids:")
-			for _, bid := range depth.Bids {
-				log.Printf("  %s @ %s", bid.Quantity, bid.Price)
-			}
-			log.Println("Top Asks:")
-			for _, ask := range depth.Asks {
-				log.Printf("  %s @ %s", ask.Quantity, ask.Price)
-			}
-		} else {
-			log.Printf("Received non-binary message: %s", string(message))
-		}
-	}
-}
-
-
-
-
-Шаг 1: Добавь go_package в .proto
-Открой PublicAggreDepthsV3Api.proto:
-
-bash
-Копировать
-Редактировать
-nano PublicAggreDepthsV3Api.proto
-Вставь ниже syntax = "proto3"; такую строку:
-
-proto
-Копировать
-Редактировать
+syntax = "proto3";
 option go_package = "./;pb";
-Полный пример файла:
 
+[{
+	"resource": "/home/gaz358/myprog/crypt_proto/main.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"severity": 8,
+	"message": "found packages pb (PublicAggreDepthsV3Api.pb.go) and main (main.go) in /home/gaz358/myprog/crypt_proto",
+	"source": "go list",
+	"startLineNumber": 1,
+	"startColumn": 1,
+	"endLineNumber": 1,
+	"endColumn": 1,
+	"origin": "extHost1"
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/crypt_proto/main.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"code": {
+		"value": "MismatchedPkgName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MismatchedPkgName"
+		}
+	},
+	"severity": 8,
+	"message": "package main; expected package pb",
+	"source": "compiler",
+	"startLineNumber": 1,
+	"startColumn": 1,
+	"endLineNumber": 1,
+	"endColumn": 8,
+	"origin": "extHost1"
+}]
+
+[{
+	"resource": "/home/gaz358/myprog/crypt_proto/PublicAggreDepthsV3Api.pb.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"severity": 8,
+	"message": "found packages pb (PublicAggreDepthsV3Api.pb.go) and main (main.go) in /home/gaz358/myprog/crypt_proto",
+	"source": "go list",
+	"startLineNumber": 1,
+	"startColumn": 1,
+	"endLineNumber": 1,
+	"endColumn": 1,
+	"origin": "extHost1"
+}]
 
 
 
