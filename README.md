@@ -453,6 +453,20 @@ curl -s https://api.mexc.com/api/v3/time
 date +%s%3N
 
 
+
+
+syntax = "proto3";
+option go_package = "crypt_proto/pb";
+
+message AggreDealPush {
+  string s = 1; // symbol
+  string p = 2; // price
+  string v = 3; // volume
+  int64 T = 4;  // timestamp (ms)
+}
+
+
+
 package main
 
 import (
