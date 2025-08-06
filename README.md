@@ -591,5 +591,13 @@ func contains(s, substr string) bool {
 }
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
+2025/08/06 21:36:35 ✅ Subscribed to MXUSDT public deals (protobuf, single messages)
+2025/08/06 21:36:36 ⚠️ Non-binary message: {"id":1754505395,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@TRXUSDT].  Reason： Blocked! "}
+2025/08/06 21:37:10 ❌ Read error: websocket: close 1005 (no status)
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
+
+
+
 
 
