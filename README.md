@@ -452,23 +452,62 @@ sudo ntpdate time.cloudflare.com
 curl -s https://api.mexc.com/api/v3/time
 date +%s%3N
 
-check_key.sh
-bash check_key.sh
 
-#!/bin/bash
+package main
 
-API_KEY="mx0vglWtzbBOGF34or"
-SECRET="77658a3144bd469fa8050b9c91b9cd4e"
-recvWindow=5000
-timestamp=$(($(date +%s%3N)))
-query="recvWindow=$recvWindow&timestamp=$timestamp"
-signature=$(echo -n "$query" | openssl dgst -sha256 -hmac "$SECRET" | sed 's/^.* //')
+import (
+	"log"
+	"net/http"
+	"time"
 
-curl -s -X GET "https://api.mexc.com/api/v3/account?$query&signature=$signature" \
-  -H "X-MEXC-APIKEY: $API_KEY"
+	"github.com/gorilla/websocket"
+	"google.golang.org/protobuf/proto"
 
-  D-WXX9:~/myprog/crypt_proto$ bash check_key.sh
-{"makerCommission":null,"takerCommission":null,"buyerCommission":null,"sellerCommission":null,"canTrade":true,"canWithdraw":true,"canDeposit":true,"updateTime":null,"accountType":"SPOT","balances":[{"asset":"USDT","free":"0.8098017424101945","locked":"0","available":"0.8098017424101945"},{"asset":"USDC","free":"0.006924","locked":"0","available":"0.006924"},{"asset":"CAW","free":"65667981","locked":"0","available":"65667981"}],"permissions":["SPOT"]}gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
+	pb "crypt_proto/pb" // путь к сгенерированному AggreDealPush
+)
+
+func main() {
+	header := http.Header{}
+	header.Set("Sec-WebSocket-Protocol", "protobuf")
+
+	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", header)
+	if err != nil {
+		log.Fatal("❌ Dial failed:", err)
+	}
+	defer conn.Close()
+
+	sub := map[string]interface{}{
+		"method": "SUBSCRIPTION",
+		"params": []string{"spot@public.deals.v3.api@CAWUSDT"},
+		"id":     time.Now().Unix(),
+	}
+	if err := conn.WriteJSON(sub); err != nil {
+		log.Fatal("❌ Subscribe failed:", err)
+	}
+
+	log.Println("✅ Subscribed to CAWUSDT public deals via protobuf")
+
+	for {
+		mt, msg, err := conn.ReadMessage()
+		if err != nil {
+			log.Println("❌ Read error:", err)
+			break
+		}
+
+		if mt != websocket.BinaryMessage {
+			log.Printf("⚠️ Non-binary message: %s", msg)
+			continue
+		}
+
+		var deal pb.AggreDealPush
+		if err := proto.Unmarshal(msg, &deal); err != nil {
+			log.Println("❌ Protobuf decode error:", err)
+			continue
+		}
+
+		log.Printf("📥 %s | Price: %s | Volume: %s | Time: %d", deal.S, deal.P, deal.V, deal.T)
+	}
+}
 
 
 
