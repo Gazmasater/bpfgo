@@ -448,11 +448,58 @@ syntax = "proto3";
 option go_package = "./;pb";
 
 
-az358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/06 14:29:28 Connecting to wss://wbs.mexc.com/ws
-2025/08/06 14:29:29 Subscribed. Waiting for messages...
-2025/08/06 14:29:29 Received non-binary message: {"id":0,"code":0,"msg":"method is empty."}
-2025/08/06 14:30:01 Read error: websocket: close 1005 (no status)
+import (
+	"log"
+	"net/http"
+	"time"
+
+	"github.com/gorilla/websocket"
+	pb "yourmodule/PublicAggreDealsV3Api" // путь к protobuf
+	"google.golang.org/protobuf/proto"
+)
+
+func main() {
+	header := http.Header{}
+	header.Set("Sec-WebSocket-Protocol", "protobuf")
+
+	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", header)
+	if err != nil {
+		log.Fatal("dial:", err)
+	}
+	defer conn.Close()
+
+	// Подписка на сделки по паре BTCUSDT
+	sub := map[string]interface{}{
+		"method": "SUBSCRIPTION",
+		"params": []string{"spot@public.deals.v3.api@BTCUSDT"},
+		"id":     time.Now().Unix(),
+	}
+	if err := conn.WriteJSON(sub); err != nil {
+		log.Fatal("send:", err)
+	}
+
+	log.Println("🟢 Subscribed. Waiting for protobuf messages...")
+
+	for {
+		mt, message, err := conn.ReadMessage()
+		if err != nil {
+			log.Println("read:", err)
+			break
+		}
+		if mt != websocket.BinaryMessage {
+			log.Printf("⚠️ Skipping non-binary message: %s", message)
+			continue
+		}
+
+		var deal pb.AggreDealPush
+		if err := proto.Unmarshal(message, &deal); err != nil {
+			log.Println("❌ proto.Unmarshal:", err)
+			continue
+		}
+
+		log.Printf("📥 %s @ %s, volume: %s, time: %d", deal.S, deal.P, deal.V, deal.T)
+	}
+}
 
 
 
