@@ -466,66 +466,43 @@ message AggreDealPush {
 }
 
 
-package main
 
-import (
-	"log"
-	"net/http"
-	"time"
+Создай файл:
 
-	"github.com/gorilla/websocket"
-	"google.golang.org/protobuf/proto"
+bash
+Копировать
+Редактировать
+nano AggreDealPush.proto
+И вставь содержимое:
 
-	pb "crypt_proto/pb" // Путь к AggreDealPush.pb.go
-)
+proto
+Копировать
+Редактировать
+syntax = "proto3";
+option go_package = "crypt_proto/pb";
 
-func main() {
-	header := http.Header{}
-	header.Set("Sec-WebSocket-Protocol", "protobuf")
-
-	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", header)
-	if err != nil {
-		log.Fatal("❌ Dial error:", err)
-	}
-	defer conn.Close()
-
-	// Подписка на одиночные сделки в protobuf
-	sub := map[string]interface{}{
-		"method": "SUBSCRIPTION",
-		"params": []string{"spot@public.deals.v3.api@MXUSDT"},
-		"id":     time.Now().Unix(),
-	}
-	if err := conn.WriteJSON(sub); err != nil {
-		log.Fatal("❌ Subscription error:", err)
-	}
-	log.Println("✅ Subscribed to MXUSDT public deals (protobuf, single messages)")
-
-	for {
-		mt, data, err := conn.ReadMessage()
-		if err != nil {
-			log.Println("❌ Read error:", err)
-			break
-		}
-		if mt != websocket.BinaryMessage {
-			log.Printf("⚠️ Non-binary message: %s", data)
-			continue
-		}
-
-		var deal pb.PublicAggreDealsV3Api
-		if err := proto.Unmarshal(data, &deal); err != nil {
-			log.Println("❌ Protobuf decode error:", err)
-			continue
-		}
-
-		log.Printf("📥 %s ", deal.EventType)
-	}
+message AggreDealPush {
+  string s = 1; // symbol
+  string p = 2; // price
+  string v = 3; // volume
+  int64 T = 4;  // timestamp (milliseconds)
 }
+Сохрани Ctrl + O, затем Enter, и выйди Ctrl + X.
 
+✅ Шаг 2: Сгенерируй Go-файл из .proto
+Выполни команду:
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/06 20:25:50 ✅ Subscribed to MXUSDT public deals (protobuf, single messages)
-2025/08/06 20:25:50 ⚠️ Non-binary message: {"id":1754501150,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@MXUSDT].  Reason： Blocked! "}
-2025/08/06 20:26:23 ❌ Read error: websocket: close 1005 (no status)
+bash
+Копировать
+Редактировать
+protoc --go_out=. --go_opt=paths=source_relative AggreDealPush.proto
+📦 Это создаст:
+
+text
+Копировать
+Редактировать
+crypt_proto/pb/AggreDealPush.pb.go
+
 
 
 
