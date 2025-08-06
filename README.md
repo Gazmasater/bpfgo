@@ -439,17 +439,14 @@ ________________________________________________________________________________
 https://github.com/mexcdevelop/websocket-proto
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ git add  websocket-proto
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ git add  main.go
 gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ git commit  -m "first commit"
-On branch main
-Your branch is up to date with 'origin/main'.
-
-Untracked files:
-  (use "git add <file>..." to include in what will be committed)
-        go.mod
-        main.go
-        websocket-proto/
-
-nothing added to commit but untracked files present (use "git add" to track)
+[main 233ed2a] first commit
+ 3 files changed, 5 insertions(+)
+ create mode 100644 go.mod
+ create mode 100644 main.go
+ create mode 160000 websocket-proto
 
 
 
