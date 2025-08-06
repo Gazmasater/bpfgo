@@ -448,19 +448,38 @@ syntax = "proto3";
 option go_package = "./;pb";
 
 
+
+MEXC_API_KEY=mx0vglWtzbBOGF34or
+MEXC_SECRET_KEY=77658a3144bd469fa8050b9c91b9cd4e
+
 package main
 
 import (
-	"crypt_proto/pb"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
+
+	pb "crypt_proto/pb" // путь к PrivateOrderPush
 )
 
+func makeSignature(secret, apiKey string, ts int64) string {
+	msg := []byte(fmt.Sprintf("%d%s", ts, apiKey))
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(msg)
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
 func main() {
+	apiKey := os.Getenv("MEXC_API_KEY")
+	secret := os.Getenv("MEXC_SECRET_KEY")
+
 	header := http.Header{}
 	header.Set("Sec-WebSocket-Protocol", "protobuf")
 
@@ -470,52 +489,58 @@ func main() {
 	}
 	defer conn.Close()
 
-	// подписка на стакан BTCUSDT
+	// 1. Авторизация
+	ts := time.Now().UnixMilli()
+	sig := makeSignature(secret, apiKey, ts)
+	auth := map[string]interface{}{
+		"method": "AUTH",
+		"params": map[string]interface{}{
+			"apiKey":    apiKey,
+			"timestamp": ts,
+			"signature": sig,
+		},
+		"id": 1,
+	}
+	if err := conn.WriteJSON(auth); err != nil {
+		log.Fatal("❌ auth send:", err)
+	}
+	log.Println("✅ AUTH sent")
+
+	// 2. Подписка на приватные ордера
 	sub := map[string]interface{}{
 		"method": "SUBSCRIPTION",
-		"params": []string{"spot@public.depth.v3.api@BTCUSDT"},
-		"id":     time.Now().Unix(),
+		"params": []string{"spot@private.order.v3.api"},
+		"id":     2,
 	}
 	if err := conn.WriteJSON(sub); err != nil {
-		log.Fatal("❌ send:", err)
+		log.Fatal("❌ sub send:", err)
 	}
+	log.Println("✅ SUBSCRIBE sent")
 
-	log.Println("🟢 Subscribed to depth. Waiting for protobuf messages...")
-
+	// 3. Обработка бинарных сообщений
 	for {
-		mt, message, err := conn.ReadMessage()
+		mt, data, err := conn.ReadMessage()
 		if err != nil {
 			log.Println("❌ read:", err)
 			break
 		}
 		if mt != websocket.BinaryMessage {
-			log.Printf("⚠️  Skip non-binary message: %s", message)
+			log.Printf("⚠️  Non-binary message: %s", data)
 			continue
 		}
 
-		var depth pb.PublicAggreDepthsV3Api
-		if err := proto.Unmarshal(message, &depth); err != nil {
+		var msg pb.PrivateOrderPush
+		if err := proto.Unmarshal(data, &msg); err != nil {
 			log.Println("❌ proto.Unmarshal:", err)
 			continue
 		}
 
-		log.Printf("📊 Depth update: %d asks / %d bids | type: %s | version: %s → %s",
-			len(depth.Asks), len(depth.Bids), depth.EventType, depth.FromVersion, depth.ToVersion)
-
-		// Вывод первых 3 ask/bid
-		for i := 0; i < 3 && i < len(depth.Asks); i++ {
-			log.Printf("🟢 ASK %s @ %s", depth.Asks[i].Quantity, depth.Asks[i].Price)
-		}
-		for i := 0; i < 3 && i < len(depth.Bids); i++ {
-			log.Printf("🔴 BID %s @ %s", depth.Bids[i].Quantity, depth.Bids[i].Price)
-		}
+		log.Printf("📥 Order: %s %s %s %s %s (%s)",
+			msg.Symbol, msg.OrderType, msg.Price, msg.Quantity, msg.OrderStatus, msg.CreateTime)
 	}
 }
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/06 15:01:05 🟢 Subscribed to depth. Waiting for protobuf messages...
-2025/08/06 15:01:06 ⚠️  Skip non-binary message: {"id":1754481665,"code":0,"msg":"Not Subscribed successfully! [spot@public.depth.v3.api@BTCUSDT].  Reason： Blocked! "}
-2025/08/06 15:01:37 ❌ read: websocket: close 1005 (no status)
+
 
 
 
