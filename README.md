@@ -448,10 +448,8 @@ syntax = "proto3";
 option go_package = "./;pb";
 
 
-az358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/06 14:22:22 Connecting to wss://wbs.mexc.com/raw/ws
-2025/08/06 14:22:22 Dial error:websocket: bad handshake
-exit status 1
+npx wscat -c wss://wbs.mexc.com/ws
+"wss://wbs.mexc.com/ws"
 
 
 
