@@ -492,13 +492,103 @@ protoc --go_out=. --go_opt=paths=source_relative AggreDealPush.proto
 crypt_proto/pb/AggreDealPush.pb.go
 
 
-"params": []string{"spot@public.deals.v3.api@TRXUSDT"},
+package main
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/06 21:26:32 ✅ Subscribed to MXUSDT public deals (protobuf, single messages)
-2025/08/06 21:26:33 ⚠️ Non-binary message: {"id":1754504792,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@TRXUSDT].  Reason： Blocked! "}
-2025/08/06 21:27:04 ❌ Read error: websocket: close 1005 (no status)
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
+import (
+	"encoding/json"
+	"log"
+	"net/http"
+	"os"
+	"time"
+
+	"github.com/gorilla/websocket"
+)
+
+var pairsToTest = []string{
+	"AGIXUSDT", "FETUSDT", "DODOUSDT", "MXUSDT", "TRXUSDT", "CAWUSDT",
+	"VIDTUSDT", "COVERUSDT", "BTCUSDT", "ETHUSDT", "SOLUSDT", "DOGEUSDT",
+	"DOTUSDT", "NEARUSDT", "SUIUSDT", "RNDRUSDT", "GALAUSDT", "LINAUSDT",
+}
+
+var outputFile = "protobuf_available.txt"
+
+func main() {
+	// создаём файл для записи
+	f, err := os.Create(outputFile)
+	if err != nil {
+		log.Fatalf("❌ Не удалось создать файл: %v", err)
+	}
+	defer f.Close()
+
+	for _, pair := range pairsToTest {
+		ok := testProtobufSubscription(pair)
+		if ok {
+			f.WriteString(pair + "\n")
+		}
+		time.Sleep(300 * time.Millisecond) // пауза между запросами
+	}
+
+	log.Printf("✅ Проверка завершена. Результат сохранён в %s", outputFile)
+}
+
+func testProtobufSubscription(symbol string) bool {
+	header := http.Header{}
+	header.Set("Sec-WebSocket-Protocol", "protobuf")
+
+	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", header)
+	if err != nil {
+		log.Printf("❌ [%s] Dial error: %v", symbol, err)
+		return false
+	}
+	defer conn.Close()
+
+	sub := map[string]interface{}{
+		"method": "SUBSCRIPTION",
+		"params": []string{"spot@public.deals.v3.api@" + symbol},
+		"id":     time.Now().Unix(),
+	}
+	if err := conn.WriteJSON(sub); err != nil {
+		log.Printf("❌ [%s] WriteJSON error: %v", symbol, err)
+		return false
+	}
+
+	// читаем ответы (макс 2 попытки)
+	for i := 0; i < 2; i++ {
+		mt, msg, err := conn.ReadMessage()
+		if err != nil {
+			log.Printf("❌ [%s] Read error: %v", symbol, err)
+			return false
+		}
+		if mt != websocket.TextMessage {
+			continue
+		}
+
+		var resp map[string]interface{}
+		if err := json.Unmarshal(msg, &resp); err != nil {
+			continue
+		}
+
+		if msgText, ok := resp["msg"].(string); ok {
+			switch {
+			case msgText == "success":
+				log.Printf("✅ [%s] Подписка прошла успешно", symbol)
+				return true
+			case contains(msgText, "Blocked"):
+				log.Printf("⛔ [%s] Заблокировано: %s", symbol, msgText)
+				return false
+			default:
+				log.Printf("⚠️ [%s] Ответ: %s", symbol, msgText)
+			}
+		}
+	}
+
+	log.Printf("⚠️ [%s] Нет ответа на подписку", symbol)
+	return false
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[0:len(substr)] == substr || s[len(s)-len(substr):] == substr))
+}
 
 
 
