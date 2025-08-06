@@ -448,8 +448,11 @@ syntax = "proto3";
 option go_package = "./;pb";
 
 
-npx wscat -c wss://wbs.mexc.com/ws
-"wss://wbs.mexc.com/ws"
+az358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
+2025/08/06 14:29:28 Connecting to wss://wbs.mexc.com/ws
+2025/08/06 14:29:29 Subscribed. Waiting for messages...
+2025/08/06 14:29:29 Received non-binary message: {"id":0,"code":0,"msg":"method is empty."}
+2025/08/06 14:30:01 Read error: websocket: close 1005 (no status)
 
 
 
