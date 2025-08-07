@@ -464,21 +464,47 @@ sort blocked_pairs.log | uniq > blocked.txt
 comm -23 all.txt blocked.txt > allowed_ws_symbols.log
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ cd cmd/cryptarb
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/08/07 14:43:22 📈 Profiler доступен на http://localhost:6060/debug/pprof/
-2025/08/07 14:43:22 📵 Загружено 144 заблокированных символов из blocked_pairs.log
-2025/08/07 14:43:22 ⚠️ Файл available_pairs.txt не найден. Пробуем allowed_ws_symbols.log...
-2025/08/07 14:43:22 ✅ Загрузка символов из allowed_ws_symbols.log
-2025/08/07 14:43:22 ✅ Подходящих пар: 486
-2025/08/07 14:43:22 📊 Доступные пары (с инверсиями): 972
-2025/08/07 14:43:22 🚫 Заблокированных пар для исключения при построении: 144
-2025/08/07 14:43:22 [TRIANGLE] Found 0 triangles after filtering
-2025/08/07 14:43:22 [INIT] Треугольников найдено: 0
-2025/08/07 14:43:22 [INIT] Составили индекс по парам: 0 ключей
-2025/08/07 14:43:22 [INIT] Пары для подписки: 0
-2025/08/07 14:43:22 📄 Сохранено 0 пар в final_ws_symbols.log
+func New(ex exchange.Exchange) (*Arbitrager, error) {
+	// Получаем список доступных символов и параметры лотов
+	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
+	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
+	log.Printf("📊 Доступные пары (с инверсиями): %d", len(avail))
 
+	// Загружаем список заблокированных символов
+	blocked := make(map[string]struct{})
+	if data, err := os.ReadFile("blocked_pairs.log"); err == nil {
+		lines := strings.Split(string(data), "\n")
+		for _, l := range lines {
+			s := strings.TrimSpace(l)
+			if s != "" {
+				blocked[s] = struct{}{}
+			}
+		}
+		log.Printf("📵 Загружено %d заблокированных символов из blocked_pairs.log", len(blocked))
+	} else {
+		log.Printf("⚠️ blocked_pairs.log не найден, продолжаем без фильтрации")
+	}
+
+	// Выводим все разрешённые пары в файл до треугольников
+	allowed := make([]string, 0)
+	for p := range avail {
+		if _, isBlocked := blocked[p]; !isBlocked {
+			allowed = append(allowed, p)
+		}
+	}
+	if len(allowed) > 0 {
+		slices.Sort(allowed)
+		_ = os.WriteFile("allowed_pairs_filtered.log", []byte(strings.Join(allowed, "\n")), 0644)
+		log.Printf("📄 Сохранено %d разрешённых пар в allowed_pairs_filtered.log", len(allowed))
+	} else {
+		log.Printf("📄 Нет разрешённых пар для записи")
+	}
+
+	log.Printf("⏳ Ожидание 5 минут перед завершением...")
+	time.Sleep(5 * time.Minute)
+
+	return nil, nil
+}
 
 
 
