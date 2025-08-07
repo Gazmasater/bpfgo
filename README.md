@@ -467,127 +467,59 @@ comm -23 all.txt blocked.txt > allowed_ws_symbols.log
 package main
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
+	"encoding/json"
 	"log"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
-const (
-	apiKey    = "mx0vglWtzbBOGF34or"
-	secretKey = "77658a3144bd469fa8050b9c91b9cd4e"
-	wsURL     = "wss://contract.mexc.com/ws"
-)
+const wsURL = "wss://wspap.okx.com:8443/ws/v5/public"
 
 func main() {
-	// Заголовки подключения
-	header := map[string][]string{
-		"Origin": {"https://mexc.com"},
-	}
-
-	dialer := websocket.Dialer{
-		Subprotocols: []string{"access"},
-	}
-
-	// Подключение
-	c, _, err := dialer.Dial(wsURL, header)
+	// Подключение к WebSocket OKX (spot public)
+	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		log.Fatal("❌ Dial error:", err)
 	}
 	defer c.Close()
-	log.Println("🔌 Connected to private WS")
+	log.Println("🔌 Connected to OKX WebSocket")
 
-	// Авто-PING
+	// Периодический ping
 	go func() {
 		for {
-			time.Sleep(15 * time.Second)
-			_ = c.WriteMessage(websocket.PingMessage, nil)
+			time.Sleep(25 * time.Second)
+			c.WriteMessage(websocket.PingMessage, nil)
 		}
 	}()
 
-	// Генерация подписи
-	timestamp := time.Now().UnixMilli()
-	msg := fmt.Sprintf("%d%s", timestamp, apiKey)
-	sign := hmacSHA256(msg, secretKey)
-
-	// Авторизация
-	auth := map[string]interface{}{
-		"method": "access",
-		"params": map[string]interface{}{
-			"apiKey":  apiKey,
-			"reqTime": timestamp,
-			"sign":    sign,
-		},
-		"id": 1,
-	}
-
-	if err := c.WriteJSON(auth); err != nil {
-		log.Fatal("❌ Auth send error:", err)
-	}
-	log.Println("🔐 Auth message sent")
-
-	// Ответ на авторизацию
-	_, authResp, err := c.ReadMessage()
-	if err != nil {
-		log.Fatal("❌ Auth read error:", err)
-	}
-	log.Printf("📨 Auth response: %s\n", authResp)
-
-	// Подписка на каналы
-	subs := []map[string]interface{}{
-		{
-			"method": "sub.personal.order",
-			"params": map[string]interface{}{
-				"symbol": "BTC_USDT",
+	// Подписка на тикеры по BTC-USDT (spot)
+	sub := map[string]interface{}{
+		"op": "subscribe",
+		"args": []map[string]string{
+			{
+				"channel": "tickers",
+				"instId":  "BTC-USDT",
 			},
-			"id": 2,
-		},
-		{
-			"method": "sub.personal.position",
-			"params": map[string]interface{}{
-				"symbol": "BTC_USDT",
-			},
-			"id": 3,
-		},
-		{
-			"method": "sub.personal.asset",
-			"params": map[string]interface{}{},
-			"id":     4,
 		},
 	}
 
-	for _, sub := range subs {
-		if err := c.WriteJSON(sub); err != nil {
-			log.Fatalf("❌ Subscription error (%v): %v", sub["method"], err)
-		}
-		log.Printf("📩 Subscribed to %v", sub["method"])
+	if err := c.WriteJSON(sub); err != nil {
+		log.Fatal("❌ Subscribe error:", err)
 	}
+	log.Println("📩 Подписка отправлена на tickers: BTC-USDT")
 
-	// Чтение всех сообщений
+	// Чтение входящих сообщений
 	for {
 		_, msg, err := c.ReadMessage()
 		if err != nil {
 			log.Fatal("❌ Read error:", err)
 		}
+		var out map[string]interface{}
+		_ = json.Unmarshal(msg, &out)
 		log.Printf("📨 %s\n", msg)
 	}
 }
-
-// hmacSHA256 возвращает подпись
-func hmacSHA256(message, secret string) string {
-	h := hmac.New(sha256.New, []byte(secret))
-	h.Write([]byte(message))
-	return hex.EncodeToString(h.Sum(nil))
-}
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/07 21:26:21 ❌ Dial error:websocket: bad handshake
-exit status 1
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
 
 
 
