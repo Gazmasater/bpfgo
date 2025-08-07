@@ -533,6 +533,11 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 		log.Printf("⚠️ Исключено %d пар (см. excluded_pairs.log)", len(invalid))
 	}
 
+	// 💾 Сохраняем финальные пары
+	if err := os.WriteFile("final_ws_symbols.log", []byte(strings.Join(subPairs, "\n")), 0644); err == nil {
+		log.Printf("📄 Сохранено %d пар в final_ws_symbols.log", len(subPairs))
+	}
+
 	// Создаём арбитражёр
 	arb := &Arbitrager{
 		Triangles:       ts,
@@ -570,4 +575,5 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 
 	return arb, nil
 }
+
 
