@@ -464,61 +464,11 @@ sort blocked_pairs.log | uniq > blocked.txt
 comm -23 all.txt blocked.txt > allowed_ws_symbols.log
 
 
-package main
-
-import (
-	"log"
-	"time"
-
-	"github.com/gorilla/websocket"
-)
-
-func main() {
-	wsURL := "wss://wbs.mexc.com/ws"
-
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	if err != nil {
-		log.Fatalf("❌ Ошибка подключения: %v", err)
-	}
-	defer conn.Close()
-	log.Println("✅ Подключение установлено")
-
-	// Отправляем подписку
-	symbol := "BTCUSDT"
-	sub := map[string]interface{}{
-		"method": "SUBSCRIPTION",
-		"params": []string{"spot@public.deals.v3.api@" + symbol},
-		"id":     time.Now().Unix(),
-	}
-	if err := conn.WriteJSON(sub); err != nil {
-		log.Fatalf("❌ Ошибка отправки подписки: %v", err)
-	}
-	log.Printf("📩 Подписка отправлена на: %s", symbol)
-
-	// Пинг каждые 45 секунд
-	go func() {
-		t := time.NewTicker(45 * time.Second)
-		defer t.Stop()
-		for range t.C {
-			err := conn.WriteMessage(websocket.PingMessage, []byte("hb"))
-			if err != nil {
-				log.Printf("❌ Ping ошибка: %v", err)
-				return
-			}
-			log.Println("🔄 Ping отправлен")
-		}
-	}()
-
-	// Читаем ответы
-	for {
-		_, msg, err := conn.ReadMessage()
-		if err != nil {
-			log.Fatalf("❌ ReadMessage ошибка: %v", err)
-		}
-		log.Printf("📨 Сообщение: %s", string(msg))
-	}
-}
-
+az358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
+2025/08/07 19:58:27 ✅ Подключение установлено
+2025/08/07 19:58:27 📩 Подписка отправлена на: BTCUSDT
+2025/08/07 19:58:27 📨 Сообщение: {"id":1754585907,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@BTCUSDT].  Reason： Blocked! "}
+^Csignal: interrupt
 
 
 
