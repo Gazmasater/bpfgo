@@ -459,103 +459,17 @@ syntax = "proto3";
 option go_package = "crypt_proto/pb";
 
 
-func New(ex exchange.Exchange) (*Arbitrager, error) {
-	// Получаем список символов и параметры лотов
-	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
-	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
-	log.Printf("📊 Доступные пары (с инверсиями): %d", len(avail))
-
-	// Строим все возможные треугольники
-	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
-	if err != nil {
-		return nil, fmt.Errorf("LoadTriangles: %w", err)
-	}
-	log.Printf("[INIT] Треугольников найдено: %d", len(ts))
-
-	// Сохраняем дамп для отладки
-	if data, err := json.MarshalIndent(ts, "", "  "); err == nil {
-		_ = os.WriteFile("triangles_dump.json", data, 0644)
-	}
-
-	// Индексация треугольников по парам + сборка всех пар
-	trianglesByPair := make(map[string][]int, len(ts)*3)
-	subRaw := make([]string, 0, len(ts)*3)
-
-	for i, tri := range ts {
-		ab := tri.A + tri.B
-		bc := tri.B + tri.C
-		ca := tri.C + tri.A
-
-		trianglesByPair[ab] = append(trianglesByPair[ab], i)
-		trianglesByPair[bc] = append(trianglesByPair[bc], i)
-		trianglesByPair[ca] = append(trianglesByPair[ca], i)
-
-		subRaw = append(subRaw, ab, bc, ca)
-	}
-	log.Printf("[INIT] Составили индекс по парам: %d ключей", len(trianglesByPair))
-
-	// Фильтрация реальных пар и лог отклонённых
-	uniq := make(map[string]struct{}, len(subRaw))
-	invalid := make([]string, 0)
-
-	for _, p := range subRaw {
-		if avail[p] {
-			uniq[p] = struct{}{}
-		} else {
-			invalid = append(invalid, p)
-		}
-	}
-
-	subPairs := make([]string, 0, len(uniq))
-	for p := range uniq {
-		subPairs = append(subPairs, p)
-	}
-	log.Printf("[INIT] Пары для подписки: %d шт.", len(subPairs))
-
-	if len(invalid) > 0 {
-		_ = os.WriteFile("excluded_pairs.log", []byte(strings.Join(invalid, "\n")), 0644)
-		log.Printf("⚠️ Исключено %d неподходящих пар (см. excluded_pairs.log)", len(invalid))
-	}
-
-	// Инициализируем арбитражёра
-	arb := &Arbitrager{
-		Triangles:       ts,
-		latest:          make(map[string]float64, len(subPairs)),
-		trianglesByPair: trianglesByPair,
-		realSymbols:     avail,
-		stepSizes:       stepSizes,
-		minQtys:         minQtys,
-		StartAmount:     0.5,
-		exchange:        ex,
-	}
-
-	// WS-подписки чанками
-	const maxPerConn = 20
-	for i := 0; i < len(subPairs); i += maxPerConn {
-		end := i + maxPerConn
-		if end > len(subPairs) {
-			end = len(subPairs)
-		}
-		chunk := subPairs[i:end]
-		go func(idx int, pairs []string) {
-			for {
-				err := ex.SubscribeDeals(pairs, arb.HandleRaw)
-				if err != nil {
-					log.Printf("[WS][%s] ❌ Подписка #%d: %v, повтор через 1с...", ex.Name(), idx, err)
-					time.Sleep(time.Second)
-					continue
-				}
-				log.Printf("[WS][%s] ✅ Подписка #%d активна: %v", ex.Name(), idx, pairs)
-				return
-			}
-		}(i/maxPerConn+1, chunk)
-	}
-
-	return arb, nil
-}
-
-
-
+2025/08/07 09:32:59 📩 [MEXC] Подписка отправлена: [BTCBCH USDCUNI OPUSDT MINAUSDC USDTENS USDTJASMY USDTSOL LUNCUSDT BNBUSDT USDTXEN BTCUSDC USDCAZERO USDTLTC LTCBTC USDCRAY BTCATOM USDCFTT WAVESUSDT USDCWBTC USDCLUNC]
+2025/08/07 09:32:59 📩 [MEXC] Подписка отправлена: [RAYUSDC USDCXEN SOLBTC USDTMX USDCATOM USDTAAVE USDCLTC TRXBTC SHIBUSDC XRPUSDT USDCTRX FILUSDC ETHUNI BCHUSDT USDTLUNC USDCADA BTCADA AZEROUSDT DOGEUSDC ADAUSDC]
+2025/08/07 09:32:59 📩 [MEXC] Подписка отправлена: [LTCUSDT USDTWBTC USDCOP AVAXUSDT JASMYUSDT USDCAPE CAWUSDT USDCJASMY USDTFTT ALGOUSDT USDTOP APEUSDT AZEROUSDC USDCBCH BTCSOL NEARUSDT BCHUSDC FTTUSDT UNIUSDT BTCTRX]
+2025/08/07 09:32:59 📩 [MEXC] Подписка отправлена: [USDTAVAX JASMYUSDC USDTXRP SOLUSDT ETHUSDC USDCNEAR AAVEUSDC ENSUSDT USDTCAW USDTUSDC USDCENS WBTCUSDT USDCMINA BTCLTC RAYUSDT USDCETH SOLUSDC USDTMINA WAVESUSDC USDTALGO]
+2025/08/07 09:32:59 📩 [MEXC] Подписка отправлена: [BCHBTC LUNCUSDC USDTBCH ATOMBTC ATOMUSDT XRPBTC USDCUSDT XENUSDC USDCXRP ALGOUSDC USDTUNI USDCAVAX MXUSDT AVAXUSDC USDTWAVES USDCBTC USDCSHIB USDCDOGE BTCXRP UNIUSDC]
+2025/08/07 09:33:00 ✅ [MEXC] Соединение установлено
+2025/08/07 09:33:00 📩 [MEXC] Подписка отправлена: [USDCCAW USDTRAY TRXUSDT ATOMUSDC]
+2025/08/07 09:33:00 ✅ [MEXC] Соединение установлено
+2025/08/07 09:33:00 📩 [MEXC] Подписка отправлена: [FTTUSDC ENSUSDC USDTAZERO USDCAAVE USDTBNB MXUSDC UNIETH TRXUSDC APEUSDC USDCFIL LTCUSDC CAWUSDC USDTNEAR USDCMX USDTAPE SHIBUSDT USDTADA ADAUSDT USDTFIL WBTCUSDC]
+2025/08/07 09:33:00 ✅ [MEXC] Соединение установлено
+2025/08/07 09:33:00 📩 [MEXC] Подписка отправлена: [USDTSHIB BTCETH XRPUSDC USDTDOGE XENUSDT ADABTC FILUSDT BNBUSDC USDTTRX AAVEUSDT USDCWAVES OPUSDC NEARUSDC ETHBTC USDCSOL USDCALGO USDCBNB MINAUSDT USDTATOM DOGEUSDT]
 
 ь
 
