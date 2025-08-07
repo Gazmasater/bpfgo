@@ -469,10 +469,9 @@ package main
 import (
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
-	"net/url"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -481,39 +480,38 @@ import (
 const (
 	apiKey    = "mx0vglWtzbBOGF34or"
 	secretKey = "77658a3144bd469fa8050b9c91b9cd4e"
+	wsURL     = "wss://contract.mexc.com/ws"
 )
 
 func main() {
-	u := url.URL{Scheme: "wss", Host: "wbs.mexc.com", Path: "/ws"}
-	log.Printf("🔌 Connecting to %s", u.String())
-
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		log.Fatal("❌ Dial error:", err)
 	}
 	defer c.Close()
 
+	log.Println("🔌 Connected to private WS")
+
 	go func() {
 		for {
-			time.Sleep(15 * time.Second)
-			_ = c.WriteMessage(websocket.PingMessage, nil)
+			time.Sleep(10 * time.Second)
+			c.WriteMessage(websocket.PingMessage, nil)
 		}
 	}()
 
-	// ⏱ Генерация подписи
+	// 🕒 Генерация сигнатуры
 	timestamp := time.Now().UnixMilli()
-	msg := fmt.Sprintf("%d%s", timestamp, apiKey)
-	sign := hmacSHA256(msg, secretKey)
+	signStr := fmt.Sprintf("%d%s", timestamp, apiKey)
+	sign := hmacSHA256(signStr, secretKey)
 
-	// ✅ Отправка AUTH (массив параметров!)
 	auth := map[string]interface{}{
-		"method": "AUTH",
-		"params": []interface{}{
-			apiKey,
-			timestamp,
-			sign,
+		"method": "access",
+		"params": map[string]interface{}{
+			"apiKey":    apiKey,
+			"reqTime":   timestamp,
+			"sign":      sign,
 		},
-		"id": 0,
+		"id": 1,
 	}
 
 	if err := c.WriteJSON(auth); err != nil {
@@ -521,51 +519,42 @@ func main() {
 	}
 	log.Println("🔐 Auth message sent")
 
-	// 📥 Ответ на AUTH
-	_, msgRaw, err := c.ReadMessage()
+	// ⏳ Ждём подтверждение
+	_, msg, err := c.ReadMessage()
 	if err != nil {
-		log.Fatal("❌ Auth read error:", err)
+		log.Fatal("❌ Read error:", err)
 	}
-	log.Printf("📝 Auth response: %s\n", msgRaw)
+	log.Printf("📨 Auth response: %s\n", msg)
 
-	// 📩 Подписка
+	// 📩 Подписка на приватный канал: ордера
 	sub := map[string]interface{}{
-		"id":     2,
-		"method": "SUBSCRIPTION",
-		"params": []string{
-			"spot@public.kline.v3.api@BTCUSDT@Min1",
-			"spot@public.deals.v3.api@BTCUSDT",
-			"spot@public.ticker.v3.api@BTCUSDT",
+		"method": "sub.personal.order", // или "sub.personal.asset", "sub.personal.position"
+		"params": map[string]interface{}{
+			"symbol": "BTC_USDT", // ⚠️ Формат через нижнее подчёркивание
 		},
+		"id": 2,
 	}
-	if err := c.WriteJSON(sub); err != nil {
-		log.Fatal("❌ Subscribe error:", err)
-	}
-	log.Println("📩 Подписка отправлена")
 
+	if err := c.WriteJSON(sub); err != nil {
+		log.Fatal("❌ Subscription error:", err)
+	}
+	log.Println("📩 Subscribed to private channel")
+
+	// 📥 Чтение входящих сообщений
 	for {
 		_, msg, err := c.ReadMessage()
 		if err != nil {
 			log.Fatal("❌ Read error:", err)
 		}
-		log.Printf("📨 Сообщение: %s\n", msg)
+		log.Printf("📨 %s\n", msg)
 	}
 }
 
 func hmacSHA256(message, secret string) string {
 	h := hmac.New(sha256.New, []byte(secret))
 	h.Write([]byte(message))
-	return hex.EncodeToString(h.Sum(nil))
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/07 20:55:38 🔌 Connecting to wss://wbs.mexc.com/ws
-2025/08/07 20:55:39 🔐 Auth message sent
-2025/08/07 20:55:39 📝 Auth response: {"id":0,"code":0,"msg":"AUTH is not supported."}
-2025/08/07 20:55:39 📩 Подписка отправлена
-2025/08/07 20:55:39 📨 Сообщение: {"id":2,"code":0,"msg":"Not Subscribed successfully! [spot@public.kline.v3.api@BTCUSDT@Min1,spot@public.ticker.v3.api@BTCUSDT,spot@public.deals.v3.api@BTCUSDT].  Reason： Blocked! "}
-
 
 
 
