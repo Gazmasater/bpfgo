@@ -459,77 +459,101 @@ syntax = "proto3";
 option go_package = "crypt_proto/pb";
 
 
-func (m *MexcExchange) SubscribeDeals(pairs []string, handler func(exchange string, raw []byte)) error {
-	const wsURL = "wss://wbs.mexc.com/ws"
+func New(ex exchange.Exchange) (*Arbitrager, error) {
+	// Получаем список символов и параметры лотов
+	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
+	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
+	log.Printf("📊 Доступные пары (с инверсиями): %d", len(avail))
 
-	for {
-		log.Printf("🌐 [MEXC] Подключаемся к %s", wsURL)
-		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-		if err != nil {
-			log.Printf("❌ [MEXC] Ошибка соединения: %v", err)
-			time.Sleep(5 * time.Second)
-			continue
-		}
-		log.Printf("✅ [MEXC] Соединение установлено")
+	// Строим все возможные треугольники
+	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
+	if err != nil {
+		return nil, fmt.Errorf("LoadTriangles: %w", err)
+	}
+	log.Printf("[INIT] Треугольников найдено: %d", len(ts))
 
-		// Отправляем подписку
-		sub := map[string]interface{}{
-			"method": "SUBSCRIPTION",
-			"params": buildChannels(pairs),
-			"id":     time.Now().Unix(),
-		}
-		if err := conn.WriteJSON(sub); err != nil {
-			log.Printf("❌ [MEXC] Ошибка при подписке: %v", err)
-			conn.Close()
-			time.Sleep(5 * time.Second)
-			continue
-		}
-		log.Printf("📩 [MEXC] Подписка отправлена: %v", pairs)
+	// Сохраняем дамп для отладки
+	if data, err := json.MarshalIndent(ts, "", "  "); err == nil {
+		_ = os.WriteFile("triangles_dump.json", data, 0644)
+	}
 
-		// Ping-поддержка
-		conn.SetPongHandler(func(appData string) error {
-			log.Printf("📶 [MEXC] Получен PONG (%s)", appData)
-			return nil
-		})
+	// Индексация треугольников по парам + сборка всех пар
+	trianglesByPair := make(map[string][]int, len(ts)*3)
+	subRaw := make([]string, 0, len(ts)*3)
 
-		go func(c *websocket.Conn) {
-			t := time.NewTicker(45 * time.Second)
-			defer t.Stop()
-			for range t.C {
-				err := c.WriteMessage(websocket.PingMessage, []byte("hb"))
-				if err != nil {
-					log.Printf("❌ [MEXC] PING ошибка: %v", err)
-					_ = c.Close()
-					return
-				}
-				log.Printf("🔄 [MEXC] PING отправлен")
-			}
-		}(conn)
+	for i, tri := range ts {
+		ab := tri.A + tri.B
+		bc := tri.B + tri.C
+		ca := tri.C + tri.A
 
-		// Основной цикл чтения
-		for {
-			_, raw, err := conn.ReadMessage()
-			if err != nil {
-				log.Printf("⚠️ [MEXC] ReadMessage ошибка: %v", err)
-				_ = conn.Close()
-				time.Sleep(5 * time.Second)
-				break // прерываем внутренний цикл — reconnect в верхнем for
-			}
-			handler("MEXC", raw)
+		trianglesByPair[ab] = append(trianglesByPair[ab], i)
+		trianglesByPair[bc] = append(trianglesByPair[bc], i)
+		trianglesByPair[ca] = append(trianglesByPair[ca], i)
+
+		subRaw = append(subRaw, ab, bc, ca)
+	}
+	log.Printf("[INIT] Составили индекс по парам: %d ключей", len(trianglesByPair))
+
+	// Фильтрация реальных пар и лог отклонённых
+	uniq := make(map[string]struct{}, len(subRaw))
+	invalid := make([]string, 0)
+
+	for _, p := range subRaw {
+		if avail[p] {
+			uniq[p] = struct{}{}
+		} else {
+			invalid = append(invalid, p)
 		}
 	}
+
+	subPairs := make([]string, 0, len(uniq))
+	for p := range uniq {
+		subPairs = append(subPairs, p)
+	}
+	log.Printf("[INIT] Пары для подписки: %d шт.", len(subPairs))
+
+	if len(invalid) > 0 {
+		_ = os.WriteFile("excluded_pairs.log", []byte(strings.Join(invalid, "\n")), 0644)
+		log.Printf("⚠️ Исключено %d неподходящих пар (см. excluded_pairs.log)", len(invalid))
+	}
+
+	// Инициализируем арбитражёра
+	arb := &Arbitrager{
+		Triangles:       ts,
+		latest:          make(map[string]float64, len(subPairs)),
+		trianglesByPair: trianglesByPair,
+		realSymbols:     avail,
+		stepSizes:       stepSizes,
+		minQtys:         minQtys,
+		StartAmount:     0.5,
+		exchange:        ex,
+	}
+
+	// WS-подписки чанками
+	const maxPerConn = 20
+	for i := 0; i < len(subPairs); i += maxPerConn {
+		end := i + maxPerConn
+		if end > len(subPairs) {
+			end = len(subPairs)
+		}
+		chunk := subPairs[i:end]
+		go func(idx int, pairs []string) {
+			for {
+				err := ex.SubscribeDeals(pairs, arb.HandleRaw)
+				if err != nil {
+					log.Printf("[WS][%s] ❌ Подписка #%d: %v, повтор через 1с...", ex.Name(), idx, err)
+					time.Sleep(time.Second)
+					continue
+				}
+				log.Printf("[WS][%s] ✅ Подписка #%d активна: %v", ex.Name(), idx, pairs)
+				return
+			}
+		}(i/maxPerConn+1, chunk)
+	}
+
+	return arb, nil
 }
 
-func buildChannels(pairs []string) []string {
-	out := make([]string, 0, len(pairs))
-	for _, p := range pairs {
-	DTAZERO USDCXEN RAYUSDT BTCSOL ADAUSDT USDCAPE USDTWAVES DOGEUSDT JASMYUSDC XENUSDC SHIBUSDC UNIETH WBTCUSDC USDTOP FILUSDT TRXUSDT XRPUSDC LTCBTC LTCUSDT DOGEUSDC ATOMBTC]
-2025/08/07 09:24:59 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 09:25:01 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 09:25:01 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 09:25:01 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 09:25:03 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 09:25:03 ❌ [MEXC] PING ошибка: websocket: close sent
 
 
 
