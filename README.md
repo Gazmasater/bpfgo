@@ -464,91 +464,61 @@ sort blocked_pairs.log | uniq > blocked.txt
 comm -23 all.txt blocked.txt > allowed_ws_symbols.log
 
 
-func New(ex exchange.Exchange) (*Arbitrager, error) {
-	// Получаем список доступных символов
-	rawSymbols, _, _ := ex.FetchAvailableSymbols()
-	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
-	log.Printf("📊 Доступные пары (с инверсиями): %d", len(avail))
+package main
 
-	// Отфильтрованные пары (без заблокированных — блокируем только по ошибке подписки)
-	checkable := make([]string, 0, len(avail))
-	for p := range avail {
-		checkable = append(checkable, p)
+import (
+	"log"
+	"time"
+
+	"github.com/gorilla/websocket"
+)
+
+func main() {
+	wsURL := "wss://wbs.mexc.com/ws"
+
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		log.Fatalf("❌ Ошибка подключения: %v", err)
 	}
-	slices.Sort(checkable)
-	log.Printf("📄 Проверяем подписку по %d парам...", len(checkable))
+	defer conn.Close()
+	log.Println("✅ Подключение установлено")
 
-	okPairs := make([]string, 0, len(checkable))
-	for _, symbol := range checkable {
-		ok := testWsSubscription(ex, symbol)
-		if ok {
-			okPairs = append(okPairs, symbol)
-			log.Printf("✅ WS OK: %s", symbol)
-		} else {
-			log.Printf("🚫 WS FAIL: %s", symbol)
-		}
+	// Отправляем подписку
+	symbol := "BTCUSDT"
+	sub := map[string]interface{}{
+		"method": "SUBSCRIPTION",
+		"params": []string{"spot@public.deals.v3.api@" + symbol},
+		"id":     time.Now().Unix(),
 	}
+	if err := conn.WriteJSON(sub); err != nil {
+		log.Fatalf("❌ Ошибка отправки подписки: %v", err)
+	}
+	log.Printf("📩 Подписка отправлена на: %s", symbol)
 
-	_ = os.WriteFile("ws_available_pairs.log", []byte(strings.Join(okPairs, "\n")), 0644)
-	log.Printf("📁 Итог: %d подходящих для WS пар сохранено в ws_available_pairs.log", len(okPairs))
-
-	log.Printf("⏳ Ожидание 5 минут перед завершением...")
-	time.Sleep(5 * time.Minute)
-
-	return nil, nil
-}
-
-func testWsSubscription(symbol string) bool {
-	done := make(chan bool, 1)
-	timeout := time.After(5 * time.Second)
-
+	// Пинг каждые 45 секунд
 	go func() {
-		wsURL := "wss://wbs.mexc.com/ws"
-		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-		if err != nil {
-			log.Printf("❌ [MEXC] Ошибка соединения: %v", err)
-			done <- false
-			return
+		t := time.NewTicker(45 * time.Second)
+		defer t.Stop()
+		for range t.C {
+			err := conn.WriteMessage(websocket.PingMessage, []byte("hb"))
+			if err != nil {
+				log.Printf("❌ Ping ошибка: %v", err)
+				return
+			}
+			log.Println("🔄 Ping отправлен")
 		}
-		defer conn.Close()
-
-		sub := map[string]interface{}{
-			"method": "SUBSCRIPTION",
-			"params": []string{"spot@public.deals.v3.api@" + symbol},
-			"id":     time.Now().Unix(),
-		}
-
-		if err := conn.WriteJSON(sub); err != nil {
-			log.Printf("❌ [MEXC] Ошибка при подписке: %v", err)
-			done <- false
-			return
-		}
-
-		conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-		_, msg, err := conn.ReadMessage()
-		if err != nil {
-			log.Printf("⚠️ [MEXC] ReadMessage ошибка: %v", err)
-			done <- false
-			return
-		}
-
-		text := string(msg)
-		if strings.Contains(text, "Blocked") {
-			done <- false
-			return
-		}
-
-		done <- true
 	}()
 
-	select {
-	case res := <-done:
-		return res
-	case <-timeout:
-		log.Printf("⏰ [MEXC] Таймаут подписки на %s", symbol)
-		return false
+	// Читаем ответы
+	for {
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			log.Fatalf("❌ ReadMessage ошибка: %v", err)
+		}
+		log.Printf("📨 Сообщение: %s", string(msg))
 	}
 }
+
 
 
 
