@@ -459,17 +459,149 @@ syntax = "proto3";
 option go_package = "crypt_proto/pb";
 
 
-2025/08/07 09:32:59 📩 [MEXC] Подписка отправлена: [BTCBCH USDCUNI OPUSDT MINAUSDC USDTENS USDTJASMY USDTSOL LUNCUSDT BNBUSDT USDTXEN BTCUSDC USDCAZERO USDTLTC LTCBTC USDCRAY BTCATOM USDCFTT WAVESUSDT USDCWBTC USDCLUNC]
-2025/08/07 09:32:59 📩 [MEXC] Подписка отправлена: [RAYUSDC USDCXEN SOLBTC USDTMX USDCATOM USDTAAVE USDCLTC TRXBTC SHIBUSDC XRPUSDT USDCTRX FILUSDC ETHUNI BCHUSDT USDTLUNC USDCADA BTCADA AZEROUSDT DOGEUSDC ADAUSDC]
-2025/08/07 09:32:59 📩 [MEXC] Подписка отправлена: [LTCUSDT USDTWBTC USDCOP AVAXUSDT JASMYUSDT USDCAPE CAWUSDT USDCJASMY USDTFTT ALGOUSDT USDTOP APEUSDT AZEROUSDC USDCBCH BTCSOL NEARUSDT BCHUSDC FTTUSDT UNIUSDT BTCTRX]
-2025/08/07 09:32:59 📩 [MEXC] Подписка отправлена: [USDTAVAX JASMYUSDC USDTXRP SOLUSDT ETHUSDC USDCNEAR AAVEUSDC ENSUSDT USDTCAW USDTUSDC USDCENS WBTCUSDT USDCMINA BTCLTC RAYUSDT USDCETH SOLUSDC USDTMINA WAVESUSDC USDTALGO]
-2025/08/07 09:32:59 📩 [MEXC] Подписка отправлена: [BCHBTC LUNCUSDC USDTBCH ATOMBTC ATOMUSDT XRPBTC USDCUSDT XENUSDC USDCXRP ALGOUSDC USDTUNI USDCAVAX MXUSDT AVAXUSDC USDTWAVES USDCBTC USDCSHIB USDCDOGE BTCXRP UNIUSDC]
-2025/08/07 09:33:00 ✅ [MEXC] Соединение установлено
-2025/08/07 09:33:00 📩 [MEXC] Подписка отправлена: [USDCCAW USDTRAY TRXUSDT ATOMUSDC]
-2025/08/07 09:33:00 ✅ [MEXC] Соединение установлено
-2025/08/07 09:33:00 📩 [MEXC] Подписка отправлена: [FTTUSDC ENSUSDC USDTAZERO USDCAAVE USDTBNB MXUSDC UNIETH TRXUSDC APEUSDC USDCFIL LTCUSDC CAWUSDC USDTNEAR USDCMX USDTAPE SHIBUSDT USDTADA ADAUSDT USDTFIL WBTCUSDC]
-2025/08/07 09:33:00 ✅ [MEXC] Соединение установлено
-2025/08/07 09:33:00 📩 [MEXC] Подписка отправлена: [USDTSHIB BTCETH XRPUSDC USDTDOGE XENUSDT ADABTC FILUSDT BNBUSDC USDTTRX AAVEUSDT USDCWAVES OPUSDC NEARUSDC ETHBTC USDCSOL USDCALGO USDCBNB MINAUSDT USDTATOM DOGEUSDT]
+func (m *MexcExchange) SubscribeDeals(pairs []string, handler func(exchange string, raw []byte)) error {
+	const wsURL = "wss://wbs.mexc.com/ws"
+
+	for {
+		log.Printf("🌐 [MEXC] Подключаемся к %s", wsURL)
+		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+		if err != nil {
+			log.Printf("❌ [MEXC] Ошибка соединения: %v", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		log.Printf("✅ [MEXC] Соединение установлено")
+
+		sub := map[string]interface{}{
+			"method": "SUBSCRIPTION",
+			"params": buildChannels(pairs),
+			"id":     time.Now().Unix(),
+		}
+		if err := conn.WriteJSON(sub); err != nil {
+			log.Printf("❌ [MEXC] Ошибка при подписке: %v", err)
+			conn.Close()
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		log.Printf("📩 [MEXC] Подписка отправлена: %v", pairs)
+
+		// Обработчик PONG
+		conn.SetPongHandler(func(appData string) error {
+			log.Printf("📶 [MEXC] Получен PONG (%s)", appData)
+			return nil
+		})
+
+		// Пинг-поток
+		go func(c *websocket.Conn) {
+			t := time.NewTicker(45 * time.Second)
+			defer t.Stop()
+			for range t.C {
+				err := c.WriteMessage(websocket.PingMessage, []byte("hb"))
+				if err != nil {
+					log.Printf("❌ [MEXC] PING ошибка: %v", err)
+					_ = c.Close()
+					return
+				}
+				log.Printf("🔄 [MEXC] PING отправлен")
+			}
+		}(conn)
+
+		// Основной цикл чтения
+		for {
+			_, raw, err := conn.ReadMessage()
+			if err != nil {
+				log.Printf("⚠️ [MEXC] ReadMessage ошибка: %v", err)
+				_ = conn.Close()
+				time.Sleep(5 * time.Second)
+				break
+			}
+
+			// 🔍 Новый лог — всегда сохраняем raw
+			log.Printf("📨 [MEXC] Ответ: %s", raw)
+
+			handler("MEXC", raw)
+		}
+	}
+}
+
+
+func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
+	// 1) Проверка на ack-подписку без symbol
+	if bytes.Contains(raw, idKey) &&
+		bytes.Contains(raw, code0Key) &&
+		!bytes.Contains(raw, sKey) {
+
+		start := bytes.Index(raw, []byte(prefixFail))
+		if start >= 0 {
+			start += len(prefixFail)
+			end := bytes.Index(raw[start:], []byte("].  Reason"))
+			if end > 0 {
+				blockedList := raw[start : start+end]
+				for _, ch := range strings.Split(string(blockedList), ",") {
+					if idx := strings.LastIndex(ch, "@"); idx != -1 {
+						sym := ch[idx+1:]
+						a.mu.Lock()
+						a.realSymbols[sym] = false
+						a.mu.Unlock()
+						log.Printf("🚫 [MEXC] Символ отключён сервером: %s", sym)
+					}
+				}
+			}
+		} else {
+			log.Printf("⚠️ [RAW] Подписка отклонена, но причина не найдена: %s", raw)
+		}
+		return
+	}
+
+	// 2) Нет символа
+	i := bytes.Index(raw, sKey)
+	if i < 0 {
+		log.Printf("⚠️ [RAW] Нет поля 's': %s", raw)
+		return
+	}
+	i += len(sKey)
+	j := bytes.IndexByte(raw[i:], '"')
+	if j < 0 {
+		log.Printf("⚠️ [RAW] Ошибка разбора символа: %s", raw)
+		return
+	}
+	sym := string(raw[i : i+j])
+
+	// 3) Фильтры: подписка и треугольники
+	if ok, ex := a.realSymbols[sym]; !ex || !ok {
+		log.Printf("⛔ [RAW] Неизвестный или отключённый символ: %s", sym)
+		return
+	}
+	if _, ex := a.trianglesByPair[sym]; !ex {
+		log.Printf("🔕 [RAW] Символ не используется в треугольниках: %s", sym)
+		return
+	}
+
+	// 4) Цена
+	i = bytes.Index(raw, pKey)
+	if i < 0 {
+		log.Printf("⚠️ [RAW] Нет поля 'p': %s", raw)
+		return
+	}
+	i += len(pKey)
+	j = bytes.IndexByte(raw[i:], '"')
+	if j < 0 {
+		log.Printf("⚠️ [RAW] Ошибка разбора цены: %s", raw)
+		return
+	}
+	priceBytes := raw[i : i+j]
+	price, err := strconv.ParseFloat(string(priceBytes), 64)
+	if err != nil {
+		log.Printf("⚠️ [RAW] Не удалось распарсить цену: %s", raw)
+		return
+	}
+
+	// 5) Обновление
+	a.mu.Lock()
+	a.latest[sym] = price
+	a.mu.Unlock()
+	a.Check(sym)
+}
 
 ь
 
