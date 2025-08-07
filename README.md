@@ -469,7 +469,7 @@ package main
 import (
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/json"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"time"
@@ -484,32 +484,36 @@ const (
 )
 
 func main() {
-	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	// 👇 Добавляем нужный subprotocol: "access"
+	dialer := websocket.Dialer{
+		Subprotocols: []string{"access"},
+	}
+	c, _, err := dialer.Dial(wsURL, nil)
 	if err != nil {
 		log.Fatal("❌ Dial error:", err)
 	}
 	defer c.Close()
-
 	log.Println("🔌 Connected to private WS")
 
 	go func() {
 		for {
-			time.Sleep(10 * time.Second)
-			c.WriteMessage(websocket.PingMessage, nil)
+			time.Sleep(15 * time.Second)
+			_ = c.WriteMessage(websocket.PingMessage, nil)
 		}
 	}()
 
-	// 🕒 Генерация сигнатуры
+	// 🕒 Генерация подписи
 	timestamp := time.Now().UnixMilli()
 	signStr := fmt.Sprintf("%d%s", timestamp, apiKey)
 	sign := hmacSHA256(signStr, secretKey)
 
+	// 🔐 Авторизация
 	auth := map[string]interface{}{
 		"method": "access",
 		"params": map[string]interface{}{
-			"apiKey":    apiKey,
-			"reqTime":   timestamp,
-			"sign":      sign,
+			"apiKey":  apiKey,
+			"reqTime": timestamp,
+			"sign":    sign,
 		},
 		"id": 1,
 	}
@@ -519,28 +523,44 @@ func main() {
 	}
 	log.Println("🔐 Auth message sent")
 
-	// ⏳ Ждём подтверждение
+	// 📥 Ответ на авторизацию
 	_, msg, err := c.ReadMessage()
 	if err != nil {
-		log.Fatal("❌ Read error:", err)
+		log.Fatal("❌ Auth read error:", err)
 	}
 	log.Printf("📨 Auth response: %s\n", msg)
 
-	// 📩 Подписка на приватный канал: ордера
-	sub := map[string]interface{}{
-		"method": "sub.personal.order", // или "sub.personal.asset", "sub.personal.position"
-		"params": map[string]interface{}{
-			"symbol": "BTC_USDT", // ⚠️ Формат через нижнее подчёркивание
+	// 📩 Подписки на 3 канала
+	subs := []map[string]interface{}{
+		{
+			"method": "sub.personal.order",
+			"params": map[string]interface{}{
+				"symbol": "BTC_USDT",
+			},
+			"id": 2,
 		},
-		"id": 2,
+		{
+			"method": "sub.personal.position",
+			"params": map[string]interface{}{
+				"symbol": "BTC_USDT",
+			},
+			"id": 3,
+		},
+		{
+			"method": "sub.personal.asset",
+			"params": map[string]interface{}{},
+			"id":     4,
+		},
 	}
 
-	if err := c.WriteJSON(sub); err != nil {
-		log.Fatal("❌ Subscription error:", err)
+	for _, sub := range subs {
+		if err := c.WriteJSON(sub); err != nil {
+			log.Fatalf("❌ Subscription error (%v): %v", sub["method"], err)
+		}
+		log.Printf("📩 Subscribed to %v\n", sub["method"])
 	}
-	log.Println("📩 Subscribed to private channel")
 
-	// 📥 Чтение входящих сообщений
+	// 🔁 Чтение сообщений
 	for {
 		_, msg, err := c.ReadMessage()
 		if err != nil {
@@ -553,13 +573,8 @@ func main() {
 func hmacSHA256(message, secret string) string {
 	h := hmac.New(sha256.New, []byte(secret))
 	h.Write([]byte(message))
-	return fmt.Sprintf("%x", h.Sum(nil))
+	return hex.EncodeToString(h.Sum(nil))
 }
-
-az358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/07 21:12:57 ❌ Dial error:websocket: bad handshake
-exit status 1
-gaz358@gaz358-BO
 
 
 
