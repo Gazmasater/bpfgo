@@ -498,63 +498,60 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 	return nil, nil
 }
 
-func testWsSubscription(ex exchange.Exchange, symbol string) bool {
-	ch := make(chan bool, 1)
+func testWsSubscription(symbol string) bool {
+	done := make(chan bool, 1)
+	timeout := time.After(5 * time.Second)
 
 	go func() {
-		timer := time.NewTimer(2 * time.Second)
-		defer timer.Stop()
-
-		hit := false
-		err := ex.SubscribeDeals([]string{symbol}, func(exchange string, raw []byte) {
-			hit = true
-		})
+		wsURL := "wss://wbs.mexc.com/ws"
+		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 		if err != nil {
-			ch <- false
+			log.Printf("❌ [MEXC] Ошибка соединения: %v", err)
+			done <- false
+			return
+		}
+		defer conn.Close()
+
+		sub := map[string]interface{}{
+			"method": "SUBSCRIPTION",
+			"params": []string{"spot@public.deals.v3.api@" + symbol},
+			"id":     time.Now().Unix(),
+		}
+
+		if err := conn.WriteJSON(sub); err != nil {
+			log.Printf("❌ [MEXC] Ошибка при подписке: %v", err)
+			done <- false
 			return
 		}
 
-		time.Sleep(1500 * time.Millisecond)
-		ch <- hit
+		conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			log.Printf("⚠️ [MEXC] ReadMessage ошибка: %v", err)
+			done <- false
+			return
+		}
+
+		text := string(msg)
+		if strings.Contains(text, "Blocked") {
+			done <- false
+			return
+		}
+
+		done <- true
 	}()
 
-	return <-ch
+	select {
+	case res := <-done:
+		return res
+	case <-timeout:
+		log.Printf("⏰ [MEXC] Таймаут подписки на %s", symbol)
+		return false
+	}
 }
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ cd cmd/cryptarb
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/08/07 15:35:16 📈 Profiler доступен на http://localhost:6060/debug/pprof/
-2025/08/07 15:35:16 ✅ Подходящих пар: 558
-2025/08/07 15:35:16 📊 Доступные пары (с инверсиями): 1116
-2025/08/07 15:35:16 📄 Проверяем подписку по 1116 парам...
-2025/08/07 15:35:16 🌐 [MEXC] Подключаемся к wss://wbs.mexc.com/ws
-2025/08/07 15:35:16 ✅ [MEXC] Соединение установлено
-2025/08/07 15:35:16 📩 [MEXC] Подписка отправлена: [1INCHUSDT]
-2025/08/07 15:35:17 📨 [MEXC] Ответ: {"id":1754570116,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@1INCHUSDT].  Reason： Blocked! "}
-2025/08/07 15:35:49 ⚠️ [MEXC] ReadMessage ошибка: websocket: close 1005 (no status)
-2025/08/07 15:35:54 🌐 [MEXC] Подключаемся к wss://wbs.mexc.com/ws
-2025/08/07 15:35:55 ✅ [MEXC] Соединение установлено
-2025/08/07 15:35:55 📩 [MEXC] Подписка отправлена: [1INCHUSDT]
-2025/08/07 15:35:55 📨 [MEXC] Ответ: {"id":1754570155,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@1INCHUSDT].  Reason： Blocked! "}
-2025/08/07 15:36:01 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 15:36:26 ⚠️ [MEXC] ReadMessage ошибка: websocket: close 1005 (no status)
-2025/08/07 15:36:31 🌐 [MEXC] Подключаемся к wss://wbs.mexc.com/ws
-2025/08/07 15:36:32 ✅ [MEXC] Соединение установлено
-2025/08/07 15:36:32 📩 [MEXC] Подписка отправлена: [1INCHUSDT]
-2025/08/07 15:36:33 📨 [MEXC] Ответ: {"id":1754570192,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@1INCHUSDT].  Reason： Blocked! "}
-2025/08/07 15:36:40 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 15:37:08 ⚠️ [MEXC] ReadMessage ошибка: websocket: close 1005 (no status)
-2025/08/07 15:37:13 🌐 [MEXC] Подключаемся к wss://wbs.mexc.com/ws
-2025/08/07 15:37:13 ✅ [MEXC] Соединение установлено
-2025/08/07 15:37:13 📩 [MEXC] Подписка отправлена: [1INCHUSDT]
-2025/08/07 15:37:13 📨 [MEXC] Ответ: {"id":1754570233,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@1INCHUSDT].  Reason： Blocked! "}
-2025/08/07 15:37:17 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 15:37:48 ⚠️ [MEXC] ReadMessage ошибка: websocket: close 1005 (no status)
-2025/08/07 15:37:53 🌐 [MEXC] Подключаемся к wss://wbs.mexc.com/ws
-2025/08/07 15:37:54 ✅ [MEXC] Соединение установлено
-2025/08/07 15:37:54 📩 [MEXC] Подписка отправлена: [1INCHUSDT]
-2025/08/07 15:37:54 📨 [MEXC] Ответ: {"id":1754570274,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@1INCHUSDT].  Reason： Blocked! "}
-2025/08/07 15:37:58 ❌ [MEXC] PING ошибка: websocket: close sent
+
+
 
 
 
