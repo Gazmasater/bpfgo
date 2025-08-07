@@ -608,52 +608,48 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 package filesystem
 
 import (
+	"bufio"
 	"cryptarb/internal/domain/triangle"
+	"errors"
 	"log"
 	"os"
 	"strings"
 )
 
+// LoadAvailableSymbolsFromFile загружает символы из файла или создаёт его на основе allowed_ws_symbols.log, если тот не найден
 func LoadAvailableSymbolsFromFile(path string) (map[string]bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		log.Printf("⚠️ Файл %s не найден. Пробуем allowed_ws_symbols.log...", path)
+		alt := "allowed_ws_symbols.log"
+		fallback, ferr := os.ReadFile(alt)
+		if ferr != nil {
+			return nil, errors.New("не удалось загрузить символы: ни " + path + ", ни " + alt)
+		}
+		log.Printf("✅ Загрузка символов из %s", alt)
+		data = fallback
+		_ = os.WriteFile(path, fallback, 0644) // создаём основной файл
 	}
 
 	symbols := make(map[string]bool)
-	for _, line := range strings.Split(string(data), "\n") {
-		s := strings.TrimSpace(line)
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	for scanner.Scan() {
+		s := strings.TrimSpace(scanner.Text())
 		if s != "" {
 			symbols[s] = true
 		}
 	}
-	log.Printf("📥 Загружено %d символов из %s", len(symbols), path)
+
+	if len(symbols) == 0 {
+		return nil, errors.New("файл символов пустой")
+	}
+	log.Printf("✅ Подходящих пар: %d", len(symbols))
 	return symbols, nil
 }
 
-func ExpandAvailableSymbols(raw map[string]bool) map[string]bool {
-	expanded := make(map[string]bool, len(raw)*2)
-	for sym := range raw {
-		expanded[sym] = true
-		base, quote := unpackPair(sym)
-		if base != "" && quote != "" {
-			expanded[quote+base] = true
-		}
-	}
-	return expanded
-}
-
-func unpackPair(pair string) (string, string) {
-	quotes := []string{"USDT", "USDC", "BTC", "ETH", "EUR", "BRL", "USD1", "USDE"}
-	for _, q := range quotes {
-		if len(pair) > len(q) && pair[len(pair)-len(q):] == q {
-			return pair[:len(pair)-len(q)], q
-		}
-	}
-	return "", ""
-}
-
+// LoadTrianglesFromSymbols строит граф и находит треугольники на основе доступных символов
 func LoadTrianglesFromSymbols(avail map[string]bool) ([]triangle.Triangle, error) {
+	// 🛑 Загружаем заблокированные символы
 	blocked := make(map[string]struct{})
 	if data, err := os.ReadFile("blocked_pairs.log"); err == nil {
 		for _, line := range strings.Split(string(data), "\n") {
@@ -665,21 +661,24 @@ func LoadTrianglesFromSymbols(avail map[string]bool) ([]triangle.Triangle, error
 		log.Printf("🚫 Заблокированных пар для исключения при построении: %d", len(blocked))
 	}
 
+	// Строим граф
 	graph := make(map[string][]string)
 	for sym := range avail {
 		if _, isBlocked := blocked[sym]; isBlocked {
-			continue
+			continue // 🔥 исключаем из графа заблокированные пары
 		}
+
 		base, quote := unpackPair(sym)
 		if base == "" || quote == "" {
 			continue
 		}
-		graph[quote] = append(graph[quote], base)
-		graph[base] = append(graph[base], quote)
+		graph[quote] = append(graph[quote], base) // BUY: quote → base
+		graph[base] = append(graph[base], quote)  // SELL: base → quote
 	}
 
 	var tris []triangle.Triangle
 	seen := make(map[[3]string]struct{})
+
 	for a, bs := range graph {
 		for _, b := range bs {
 			for _, c := range graph[b] {
@@ -695,15 +694,37 @@ func LoadTrianglesFromSymbols(avail map[string]bool) ([]triangle.Triangle, error
 			}
 		}
 	}
+
 	log.Printf("[TRIANGLE] Found %d triangles after filtering", len(tris))
 	return tris, nil
 }
 
+// ExpandAvailableSymbols добавляет инверсии символов и возвращает map: symbol → bool
+func ExpandAvailableSymbols(raw map[string]bool) map[string]bool {
+	expanded := make(map[string]bool, len(raw)*2)
+	for sym := range raw {
+		expanded[sym] = true
+		base, quote := unpackPair(sym)
+		if base != "" && quote != "" {
+			expanded[quote+base] = true
+		}
+	}
+	return expanded
+}
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/08/07 14:28:13 📈 Profiler доступен на http://localhost:6060/debug/pprof/
-2025/08/07 14:28:13 📵 Загружено 144 заблокированных символов из blocked_pairs.log
-2025/08/07 14:28:13 ❌ Ошибка запуска арбитража:ошибка загрузки символов: open available_pairs.txt: no such file or directory
-exit status 1
+// unpackPair разбивает символ на base и quote по известным суффиксам
+func unpackPair(pair string) (string, string) {
+	quotes := []string{"USDT", "USDC", "BTC", "ETH", "EUR", "BRL", "USD1", "USDE"}
+	for _, q := range quotes {
+		if len(pair) > len(q) && pair[len(pair)-len(q):] == q {
+			return pair[:len(pair)-len(q)], q
+		}
+	}
+	return "", ""
+}
+
+
+
+
 
 
