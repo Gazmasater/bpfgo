@@ -458,160 +458,24 @@ date +%s%3N
 syntax = "proto3";
 option go_package = "crypt_proto/pb";
 
-message AggreDealPush {
-  string s = 1; // symbol
-  string p = 2; // price
-  string v = 3; // volume
-  int64 T = 4;  // timestamp (ms)
-}
+
+
+2025/08/07 03:14:51 🌐 [MEXC] Подключаемся к wss://wbs.mexc.com/ws
+2025/08/07 03:14:52 ✅ [MEXC] Соединение установлено
+2025/08/07 03:14:52 📩 [MEXC] Подписка отправлена: [ETHUSDC OPUSDT USDCOP LUNCUSDT USDTBNB BTCBCH FTTUSDT AVAXUSDT FILUSDC USDTBCH ADABTC BTCATOM XENUSDT USDCWAVES LTCUSDC USDTSOL USDTOP MINAUSDC USDTADA USDTSHIB AVAXUSDC BTCXRP USDCALGO BNBUSDT ETHBTC JASMYUSDT USDTWBTC USDCETH USDCTRX AAVEUSDC]
+2025/08/07 03:14:53 🌐 [MEXC] Подключаемся к wss://wbs.mexc.com/ws
+2025/08/07 03:14:53 ✅ [MEXC] Соединение установлено
+2025/08/07 03:14:53 📩 [MEXC] Подписка отправлена: [USDTAAVE SOLUSDT USDCLUNC USDCXRP USDTRAY USDTUSDC ETHUNI FTTUSDC DOGEUSDT USDTXRP XRPUSDC USDCNEAR USDCFTT NEARUSDC BTCTRX USDTFIL USDCCAW CAWUSDC SOLUSDC USDTMX LTCUSDT BTCUSDC JASMYUSDC USDCDOGE BCHUSDC XENUSDC SOLBTC AZEROUSDT UNIETH USDTFTT]
+2025/08/07 03:14:56 ❌ [MEXC] PING ошибка: websocket: close sent
+2025/08/07 03:14:56 ❌ [MEXC] PING ошибка: websocket: close sent
+2025/08/07 03:14:56 ❌ [MEXC] PING ошибка: websocket: close sent
+2025/08/07 03:14:56 ❌ [MEXC] PING ошибка: websocket: close sent
+2025/08/07 03:14:57 ❌ [MEXC] PING ошибка: websocket: close sent
 
 
 
-Создай файл:
-
-bash
-Копировать
-Редактировать
-nano AggreDealPush.proto
-И вставь содержимое:
-
-
-syntax = "proto3";
-option go_package = "crypt_proto/pb";
-
-message AggreDealPush {
-  string s = 1; // symbol
-  string p = 2; // price
-  string v = 3; // volume
-  int64 T = 4;  // timestamp (milliseconds)
-}
-
-protoc --go_out=. --go_opt=paths=source_relative AggreDealPush.proto
 
 ь
-crypt_proto/pb/AggreDealPush.pb.go
-
-PublicAggreDealsV3Api.proto
-
-syntax = "proto3";
-option go_package = "crypt_proto/pb";
-
-message PublicAggreDealsV3Api {
-  repeated PublicAggreDealsV3ApiItem deals = 1;
-  string eventType = 2;
-}
-
-message PublicAggreDealsV3ApiItem {
-  string price = 1;
-  string quantity = 2;
-  int32 tradeType = 3; // 1 = buy, 2 = sell
-  int64 time = 4;      // timestamp in ms
-}
-
-
-protoc --go_out=. --go_opt=paths=source_relative PublicAggreDealsV3Api.proto
-
-
-package main
-
-import (
-	"encoding/json"
-	"log"
-	"net/http"
-	"os"
-	"time"
-
-	"github.com/gorilla/websocket"
-)
-
-var pairsToTest = []string{
-	"AGIXUSDT", "FETUSDT", "DODOUSDT", "MXUSDT", "TRXUSDT", "CAWUSDT",
-	"VIDTUSDT", "COVERUSDT", "BTCUSDT", "ETHUSDT", "SOLUSDT", "DOGEUSDT",
-	"DOTUSDT", "NEARUSDT", "SUIUSDT", "RNDRUSDT", "GALAUSDT", "LINAUSDT",
-}
-
-var outputFile = "protobuf_aggre_available.txt"
-
-func main() {
-	f, err := os.Create(outputFile)
-	if err != nil {
-		log.Fatalf("❌ Не удалось создать файл: %v", err)
-	}
-	defer f.Close()
-
-	for _, pair := range pairsToTest {
-		ok := testAggreDealsSubscription(pair)
-		if ok {
-			f.WriteString(pair + "\n")
-		}
-		time.Sleep(300 * time.Millisecond)
-	}
-
-	log.Printf("✅ Проверка завершена. Результат сохранён в %s", outputFile)
-}
-
-func testAggreDealsSubscription(symbol string) bool {
-	header := http.Header{}
-	header.Set("Sec-WebSocket-Protocol", "protobuf")
-
-	conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", header)
-	if err != nil {
-		log.Printf("❌ [%s] Dial error: %v", symbol, err)
-		return false
-	}
-	defer conn.Close()
-
-	sub := map[string]interface{}{
-		"method": "SUBSCRIPTION",
-		"params": []string{"spot@public.aggre.deals.v3.api@" + symbol},
-		"id":     time.Now().Unix(),
-	}
-	if err := conn.WriteJSON(sub); err != nil {
-		log.Printf("❌ [%s] WriteJSON error: %v", symbol, err)
-		return false
-	}
-
-	// читаем ответ
-	for i := 0; i < 2; i++ {
-		mt, msg, err := conn.ReadMessage()
-		if err != nil {
-			log.Printf("❌ [%s] Read error: %v", symbol, err)
-			return false
-		}
-		if mt != websocket.TextMessage {
-			continue
-		}
-
-		var resp map[string]interface{}
-		if err := json.Unmarshal(msg, &resp); err != nil {
-			continue
-		}
-
-		if msgText, ok := resp["msg"].(string); ok {
-			if msgText == "success" {
-				log.Printf("✅ [%s] Подписка прошла успешно (aggre)", symbol)
-				return true
-			}
-			if containsBlocked(msgText) {
-				log.Printf("⛔ [%s] Заблокировано: %s", symbol, msgText)
-				return false
-			}
-			log.Printf("⚠️ [%s] Ответ: %s", symbol, msgText)
-		}
-	}
-
-	log.Printf("⚠️ [%s] Нет ответа на подписку", symbol)
-	return false
-}
-
-func containsBlocked(msg string) bool {
-	return contains(msg, "Blocked") || contains(msg, "block") || contains(msg, "not allow")
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
-		(s[0:len(substr)] == substr || s[len(s)-len(substr):] == substr))
-}
 
 
 
