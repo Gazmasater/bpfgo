@@ -464,18 +464,92 @@ sort blocked_pairs.log | uniq > blocked.txt
 comm -23 all.txt blocked.txt > allowed_ws_symbols.log
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/07 20:25:20 🔌 Connecting to wss://wbs.mexc.com/ws
-2025/08/07 20:25:22 📨 Auth response: {"id":0,"code":0,"msg":"msg format invalid"}
-2025/08/07 20:25:22 📩 Подписка отправлена на:
- - spot@public.ticker.v3.api@BTCUSDT
-2025/08/07 20:25:22  - spot@public.deals.v3.api@BTCUSDT
-2025/08/07 20:25:22  - spot@public.kline.v3.api@BTCUSDT@Min1
-2025/08/07 20:25:22 📨 Сообщение: {"id":2,"code":0,"msg":"Not Subscribed successfully! [spot@public.ticker.v3.api@BTCUSDT,spot@public.kline.v3.api@BTCUSDT@Min1,spot@public.deals.v3.api@BTCUSDT].  Reason： Blocked! "}
-2025/08/07 20:25:52 ❌ Read error:websocket: close 1005 (no status)
-exit status 1
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
+package main
 
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"log"
+	"net/url"
+	"strconv"
+	"time"
+
+	"github.com/gorilla/websocket"
+)
+
+const (
+	apiKey    = "mx0vglWtzbBOGF34or"
+	secretKey = "77658a3144bd469fa8050b9c91b9cd4e"
+	symbol    = "VICUSDT"
+)
+
+func main() {
+	wsURL := "wss://wbs.mexc.com/ws"
+	u := url.URL{Scheme: "wss", Host: "wbs.mexc.com", Path: "/ws"}
+
+	log.Printf("🔌 Connecting to %s", u.String())
+	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		log.Fatalf("❌ Dial error: %v", err)
+	}
+	defer conn.Close()
+
+	// Подпись
+	ts := time.Now().UnixMilli()
+	sign := signRequest(apiKey, secretKey, ts)
+
+	loginMsg := map[string]interface{}{
+		"id":     1,
+		"method": "LOGIN",
+		"params": []map[string]interface{}{{
+			"apiKey":  apiKey,
+			"reqTime": ts,
+			"sign":    sign,
+		}},
+	}
+
+	if err := conn.WriteJSON(loginMsg); err != nil {
+		log.Fatalf("❌ Login write error: %v", err)
+	}
+
+	_, loginResp, err := conn.ReadMessage()
+	if err != nil {
+		log.Fatalf("❌ Login read error: %v", err)
+	}
+	log.Printf("📨 Auth response: %s", loginResp)
+
+	// Подписка на 3 канала
+	sub := map[string]interface{}{
+		"id":     2,
+		"method": "SUBSCRIPTION",
+		"params": []string{
+			"spot@public.ticker.v3.api@" + symbol,
+			"spot@public.deals.v3.api@" + symbol,
+			"spot@public.kline.v3.api@" + symbol + "@Min1",
+		},
+	}
+	if err := conn.WriteJSON(sub); err != nil {
+		log.Fatalf("❌ Subscribe error: %v", err)
+	}
+	log.Println("📩 Подписка отправлена")
+
+	// Слушаем
+	for {
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			log.Fatalf("❌ Read error: %v", err)
+		}
+		log.Printf("📨 Сообщение: %s", msg)
+	}
+}
+
+func signRequest(apiKey, secret string, ts int64) string {
+	payload := apiKey + strconv.FormatInt(ts, 10)
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(payload))
+	return hex.EncodeToString(mac.Sum(nil))
+}
 
 
 
