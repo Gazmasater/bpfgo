@@ -464,11 +464,96 @@ sort blocked_pairs.log | uniq > blocked.txt
 comm -23 all.txt blocked.txt > allowed_ws_symbols.log
 
 
-az358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/07 19:58:27 ✅ Подключение установлено
-2025/08/07 19:58:27 📩 Подписка отправлена на: BTCUSDT
-2025/08/07 19:58:27 📨 Сообщение: {"id":1754585907,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@BTCUSDT].  Reason： Blocked! "}
-^Csignal: interrupt
+package main
+
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"log"
+	"net/url"
+	"strconv"
+	"time"
+
+	"github.com/gorilla/websocket"
+)
+
+const (
+	apiKey    = "mx0vglWtzbBOGF34or"
+	secretKey = "77658a3144bd469fa8050b9c91b9cd4e"
+	wsURL     = "wss://wbs.mexc.com/ws"
+)
+
+func main() {
+	u := url.URL{Scheme: "wss", Host: "wbs.mexc.com", Path: "/ws"}
+	log.Printf("🔌 Connecting to %s", u.String())
+
+	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		log.Fatal("❌ Dial error:", err)
+	}
+	defer conn.Close()
+
+	// 1. Авторизация
+	timestamp := time.Now().UnixMilli()
+	sign := generateSign(apiKey, secretKey, timestamp)
+
+	auth := map[string]interface{}{
+		"method": "LOGIN",
+		"params": map[string]interface{}{
+			"apiKey":  apiKey,
+			"reqTime": timestamp,
+			"sign":    sign,
+		},
+		"id": 1,
+	}
+	if err := conn.WriteJSON(auth); err != nil {
+		log.Fatal("❌ Auth send error:", err)
+	}
+
+	_, msg, err := conn.ReadMessage()
+	if err != nil {
+		log.Fatal("❌ Auth read error:", err)
+	}
+	log.Printf("📨 Auth response: %s", msg)
+
+	// 2. Подписка на три канала
+	channels := []string{
+		"spot@public.ticker.v3.api@BTCUSDT",
+		"spot@public.deals.v3.api@BTCUSDT",
+		"spot@public.kline.v3.api@BTCUSDT@Min1",
+	}
+
+	sub := map[string]interface{}{
+		"method": "SUBSCRIPTION",
+		"params": channels,
+		"id":     2,
+	}
+	if err := conn.WriteJSON(sub); err != nil {
+		log.Fatal("❌ Subscribe error:", err)
+	}
+	log.Printf("📩 Подписка отправлена на:\n - %s", channels[0])
+	log.Printf(" - %s", channels[1])
+	log.Printf(" - %s", channels[2])
+
+	// 3. Читаем сообщения
+	for {
+		_, message, err := conn.ReadMessage()
+		if err != nil {
+			log.Fatal("❌ Read error:", err)
+		}
+		log.Printf("📨 Сообщение: %s", message)
+	}
+}
+
+func generateSign(apiKey, secretKey string, timestamp int64) string {
+	payload := apiKey + strconv.FormatInt(timestamp, 10)
+	h := hmac.New(sha256.New, []byte(secretKey))
+	h.Write([]byte(payload))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
 
 
 
