@@ -495,16 +495,18 @@ func main() {
 	}
 	defer conn.Close()
 
-	// 1. Авторизация
+	// 1. Авторизация — params это массив!
 	timestamp := time.Now().UnixMilli()
 	sign := generateSign(apiKey, secretKey, timestamp)
 
 	auth := map[string]interface{}{
 		"method": "LOGIN",
-		"params": map[string]interface{}{
-			"apiKey":  apiKey,
-			"reqTime": timestamp,
-			"sign":    sign,
+		"params": []map[string]interface{}{
+			{
+				"apiKey":  apiKey,
+				"reqTime": timestamp,
+				"sign":    sign,
+			},
 		},
 		"id": 1,
 	}
@@ -512,13 +514,14 @@ func main() {
 		log.Fatal("❌ Auth send error:", err)
 	}
 
+	// Ответ на авторизацию
 	_, msg, err := conn.ReadMessage()
 	if err != nil {
 		log.Fatal("❌ Auth read error:", err)
 	}
 	log.Printf("📨 Auth response: %s", msg)
 
-	// 2. Подписка на три канала
+	// 2. Подписка
 	channels := []string{
 		"spot@public.ticker.v3.api@BTCUSDT",
 		"spot@public.deals.v3.api@BTCUSDT",
@@ -554,15 +557,6 @@ func generateSign(apiKey, secretKey string, timestamp int64) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/07 20:20:00 🔌 Connecting to wss://wbs.mexc.com/ws
-2025/08/07 20:20:01 📨 Auth response: {"id":0,"code":0,"msg":"msg format invalid"}
-2025/08/07 20:20:01 📩 Подписка отправлена на:
- - spot@public.ticker.v3.api@BTCUSDT
-2025/08/07 20:20:01  - spot@public.deals.v3.api@BTCUSDT
-2025/08/07 20:20:01  - spot@public.kline.v3.api@BTCUSDT@Min1
-2025/08/07 20:20:02 📨 Сообщение: {"id":2,"code":0,"msg":"Not Subscribed successfully! [spot@public.ticker.v3.api@BTCUSDT,spot@public.kline.v3.api@BTCUSDT@Min1,spot@public.deals.v3.api@BTCUSDT].  Reason： Blocked! "}
 
 
 
