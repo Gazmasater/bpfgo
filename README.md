@@ -464,68 +464,117 @@ sort blocked_pairs.log | uniq > blocked.txt
 comm -23 all.txt blocked.txt > allowed_ws_symbols.log
 
 
-package main
+package okx
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
+
+	"cryptarb/internal/domain/exchange"
 )
 
-const wsURL = "wss://wspap.okx.com:8443/ws/v5/public"
+type OKXExchange struct{}
 
-func main() {
-	// Подключение к WebSocket OKX (spot public)
-	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+func NewOKXExchange() *OKXExchange {
+	return &OKXExchange{}
+}
+
+func (o *OKXExchange) Name() string {
+	return "OKX"
+}
+
+func (o *OKXExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64) {
+	resp, err := http.Get("https://www.okx.com/api/v5/public/instruments?instType=SPOT")
 	if err != nil {
-		log.Fatal("❌ Dial error:", err)
+		log.Printf("❌ Ошибка запроса: %v", err)
+		return nil, nil, nil
 	}
-	defer c.Close()
-	log.Println("🔌 Connected to OKX WebSocket")
+	defer resp.Body.Close()
 
-	// Периодический ping
+	var data struct {
+		Data []struct {
+			InstID string `json:"instId"`
+			LotSz  string `json:"lotSz"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		log.Printf("❌ Ошибка decode: %v", err)
+		return nil, nil, nil
+	}
+
+	avail := make(map[string]bool)
+	step := make(map[string]float64)
+	minQty := make(map[string]float64)
+
+	for _, item := range data.Data {
+		// OKX использует формат BTC-USDT, заменим на BTCUSDT
+		sym := strings.ReplaceAll(item.InstID, "-", "")
+		avail[sym] = true
+		step[sym] = 0.0001
+		minQty[sym] = 0.0001
+	}
+
+	log.Printf("✅ OKX: Подходящих пар: %d", len(avail))
+	return avail, step, minQty
+}
+
+func (o *OKXExchange) SubscribeDeals(pairs []string, handler func(exchange string, raw []byte)) error {
+	conn, _, err := websocket.DefaultDialer.Dial("wss://ws.okx.com:8443/ws/v5/public", nil)
+	if err != nil {
+		return fmt.Errorf("websocket dial error: %w", err)
+	}
+
+	// Подготовка подписки
+	args := []map[string]string{}
+	for _, p := range pairs {
+		instId := p[:len(p)-4] + "-" + p[len(p)-4:] // e.g. BTCUSDT -> BTC-USDT
+		args = append(args, map[string]string{
+			"channel": "tickers",
+			"instId":  instId,
+		})
+	}
+
+	sub := map[string]interface{}{
+		"op":   "subscribe",
+		"args": args,
+	}
+
+	if err := conn.WriteJSON(sub); err != nil {
+		return fmt.Errorf("subscribe send error: %w", err)
+	}
+	log.Printf("📩 OKX подписка отправлена: %v", pairs)
+
 	go func() {
 		for {
-			time.Sleep(25 * time.Second)
-			c.WriteMessage(websocket.PingMessage, nil)
+			_, msg, err := conn.ReadMessage()
+			if err != nil {
+				log.Printf("❌ Read error: %v", err)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			handler("OKX", msg)
 		}
 	}()
 
-	// Подписка на тикеры по BTC-USDT (spot)
-	sub := map[string]interface{}{
-		"op": "subscribe",
-		"args": []map[string]string{
-			{
-				"channel": "tickers",
-				"instId":  "BTC-USDT",
-			},
-		},
-	}
-
-	if err := c.WriteJSON(sub); err != nil {
-		log.Fatal("❌ Subscribe error:", err)
-	}
-	log.Println("📩 Подписка отправлена на tickers: BTC-USDT")
-
-	// Чтение входящих сообщений
-	for {
-		_, msg, err := c.ReadMessage()
-		if err != nil {
-			log.Fatal("❌ Read error:", err)
-		}
-		var out map[string]interface{}
-		_ = json.Unmarshal(msg, &out)
-		log.Printf("📨 %s\n", msg)
-	}
+	return nil
 }
 
-az358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/07 21:38:06 🔌 Connected to OKX WebSocket
-2025/08/07 21:38:06 📩 Подписка отправлена на tickers: BTC-USDT
-2025/08/07 21:38:06 📨 {"event":"subscribe","arg":{"channel":"tickers","instId":"BTC-USDT"},"connId":"55fc4726"}
-2025/08/07 21:38:06 📨 {"arg":{"channel":"tickers","instId":"BTC-USDT"},"data":[{"instType":"SPOT","instId":"BTC-USDT","last":"116332.1","lastSz":"0.51112607","askPx":"116333.1","askSz":"0.55705148","bidPx":"116333","bidSz":"0.40436242","open24h":"115484","high24h":"117120","low24h":"114004","sodUtc0":"114999.8","sodUtc8":"116700","volCcy24h":"737653255.664493036","vol24h":"6371.25160341","ts":"1754591886566"}]}
+func (o *OKXExchange) GetBestAsk(symbol string) (float64, error) {
+	return 0, nil // можно реализовать через REST /api/v5/market/books
+}
 
+func (o *OKXExchange) GetBestBid(symbol string) (float64, error) {
+	return 0, nil
+}
 
+func (o *OKXExchange) PlaceMarketOrder(symbol, side string, quantity float64) (string, error) {
+	return "", fmt.Errorf("place market order not implemented")
+}
 
