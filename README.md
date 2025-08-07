@@ -521,5 +521,11 @@ func main() {
 	}
 }
 
+az358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
+2025/08/07 21:38:06 🔌 Connected to OKX WebSocket
+2025/08/07 21:38:06 📩 Подписка отправлена на tickers: BTC-USDT
+2025/08/07 21:38:06 📨 {"event":"subscribe","arg":{"channel":"tickers","instId":"BTC-USDT"},"connId":"55fc4726"}
+2025/08/07 21:38:06 📨 {"arg":{"channel":"tickers","instId":"BTC-USDT"},"data":[{"instType":"SPOT","instId":"BTC-USDT","last":"116332.1","lastSz":"0.51112607","askPx":"116333.1","askSz":"0.55705148","bidPx":"116333","bidSz":"0.40436242","open24h":"115484","high24h":"117120","low24h":"114004","sodUtc0":"114999.8","sodUtc8":"116700","volCcy24h":"737653255.664493036","vol24h":"6371.25160341","ts":"1754591886566"}]}
+
 
 
