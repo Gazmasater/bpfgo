@@ -559,5 +559,14 @@ func hmacSHA256(message, secret string) string {
 }
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
+2025/08/07 20:55:38 🔌 Connecting to wss://wbs.mexc.com/ws
+2025/08/07 20:55:39 🔐 Auth message sent
+2025/08/07 20:55:39 📝 Auth response: {"id":0,"code":0,"msg":"AUTH is not supported."}
+2025/08/07 20:55:39 📩 Подписка отправлена
+2025/08/07 20:55:39 📨 Сообщение: {"id":2,"code":0,"msg":"Not Subscribed successfully! [spot@public.kline.v3.api@BTCUSDT@Min1,spot@public.ticker.v3.api@BTCUSDT,spot@public.deals.v3.api@BTCUSDT].  Reason： Blocked! "}
+
+
+
 
 
