@@ -480,7 +480,7 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 
 	okPairs := make([]string, 0, len(checkable))
 	for _, symbol := range checkable {
-		ok := ex.TestSingleWsSubscription(symbol)
+		ok := testWsSubscription(ex, symbol)
 		if ok {
 			okPairs = append(okPairs, symbol)
 			log.Printf("✅ WS OK: %s", symbol)
@@ -497,6 +497,30 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 
 	return nil, nil
 }
+
+func testWsSubscription(ex exchange.Exchange, symbol string) bool {
+	ch := make(chan bool, 1)
+
+	go func() {
+		timer := time.NewTimer(2 * time.Second)
+		defer timer.Stop()
+
+		hit := false
+		err := ex.SubscribeDeals([]string{symbol}, func(exchange string, raw []byte) {
+			hit = true
+		})
+		if err != nil {
+			ch <- false
+			return
+		}
+
+		time.Sleep(1500 * time.Millisecond)
+		ch <- hit
+	}()
+
+	return <-ch
+}
+
 
 
 
