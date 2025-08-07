@@ -470,10 +470,9 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"fmt"
 	"log"
 	"net/url"
-	"os"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -501,18 +500,18 @@ func main() {
 		}
 	}()
 
-	// Генерация подписи
+	// ⏱ Генерация подписи
 	timestamp := time.Now().UnixMilli()
 	msg := fmt.Sprintf("%d%s", timestamp, apiKey)
 	sign := hmacSHA256(msg, secretKey)
 
+	// ✅ Отправка AUTH (массив параметров!)
 	auth := map[string]interface{}{
 		"method": "AUTH",
-		"params": map[string]interface{}{
-			"apiKey":    apiKey,
-			"reqTime":   timestamp,
-			"sign":      sign,
-			"signatureMethod": "HmacSHA256",
+		"params": []interface{}{
+			apiKey,
+			timestamp,
+			sign,
 		},
 		"id": 0,
 	}
@@ -522,14 +521,14 @@ func main() {
 	}
 	log.Println("🔐 Auth message sent")
 
-	// Ждём подтверждение
+	// 📥 Ответ на AUTH
 	_, msgRaw, err := c.ReadMessage()
 	if err != nil {
 		log.Fatal("❌ Auth read error:", err)
 	}
 	log.Printf("📝 Auth response: %s\n", msgRaw)
 
-	// Подписка
+	// 📩 Подписка
 	sub := map[string]interface{}{
 		"id":     2,
 		"method": "SUBSCRIPTION",
@@ -559,12 +558,6 @@ func hmacSHA256(message, secret string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-az358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/07 20:48:24 🔌 Connecting to wss://wbs.mexc.com/ws
-2025/08/07 20:48:25 🔐 Auth message sent
-2025/08/07 20:48:25 📝 Auth response: {"id":0,"code":0,"msg":"msg format invalid"}
-2025/08/07 20:48:25 📩 Подписка отправлена
-2025/08/07 20:48:26 📨 Сообщение: {"id":2,"code":0,"msg":"Not Subscribed successfully! [spot@public.kline.v3.api@BTCUSDT@Min1,spot@public.ticker.v3.api@BTCUSDT,spot@public.deals.v3.api@BTCUSDT].  Reason： Blocked! "}
 
 
 
