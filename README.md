@@ -464,3 +464,239 @@ sort blocked_pairs.log | uniq > blocked.txt
 comm -23 all.txt blocked.txt > allowed_ws_symbols.log
 
 
+// ✅ Полный код New() и filesystem с загрузкой символов из файла и построением треугольников
+
+package arbitrager
+
+import (
+	"cryptarb/internal/domain/triangle"
+	"cryptarb/internal/exchange"
+	"cryptarb/internal/filesystem"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"strings"
+	"time"
+)
+
+type Arbitrager struct {
+	Triangles       []triangle.Triangle
+	latest          map[string]float64
+	trianglesByPair map[string][]int
+	realSymbols     map[string]bool
+	stepSizes       map[string]float64
+	minQtys         map[string]float64
+	StartAmount     float64
+	exchange        exchange.Exchange
+}
+
+func New(ex exchange.Exchange) (*Arbitrager, error) {
+	// Загружаем заблокированные символы
+	blocked := make(map[string]struct{})
+	if data, err := os.ReadFile("blocked_pairs.log"); err == nil {
+		lines := strings.Split(string(data), "\n")
+		for _, l := range lines {
+			s := strings.TrimSpace(l)
+			if s != "" {
+				blocked[s] = struct{}{}
+			}
+		}
+		log.Printf("\U0001f4f5 Загружено %d заблокированных символов из blocked_pairs.log", len(blocked))
+	}
+
+	// Загружаем пары из файла
+	rawSymbols, err := filesystem.LoadAvailableSymbolsFromFile("available_pairs.txt")
+	if err != nil {
+		return nil, fmt.Errorf("ошибка загрузки символов: %w", err)
+	}
+	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
+	log.Printf("\U0001f4ca Доступные пары (с инверсиями): %d", len(avail))
+
+	// Строим треугольники
+	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
+	if err != nil {
+		return nil, fmt.Errorf("LoadTriangles: %w", err)
+	}
+	log.Printf("[INIT] Треугольников найдено: %d", len(ts))
+
+	if data, err := json.MarshalIndent(ts, "", "  "); err == nil {
+		_ = os.WriteFile("triangles_dump.json", data, 0644)
+	}
+
+	// Индексация пар
+	trianglesByPair := make(map[string][]int, len(ts)*3)
+	subRaw := make([]string, 0, len(ts)*3)
+	for i, tri := range ts {
+		ab := tri.A + tri.B
+		bc := tri.B + tri.C
+		ca := tri.C + tri.A
+
+		trianglesByPair[ab] = append(trianglesByPair[ab], i)
+		trianglesByPair[bc] = append(trianglesByPair[bc], i)
+		trianglesByPair[ca] = append(trianglesByPair[ca], i)
+
+		subRaw = append(subRaw, ab, bc, ca)
+	}
+	log.Printf("[INIT] Составили индекс по парам: %d ключей", len(trianglesByPair))
+
+	// Убираем заблокированные и отсутствующие
+	uniq := make(map[string]struct{}, len(subRaw))
+	invalid := make([]string, 0)
+	for _, p := range subRaw {
+		if avail[p] {
+			if _, isBlocked := blocked[p]; !isBlocked {
+				uniq[p] = struct{}{}
+			} else {
+				invalid = append(invalid, p+" (blocked)")
+			}
+		} else {
+			invalid = append(invalid, p+" (not found)")
+		}
+	}
+
+	subPairs := make([]string, 0, len(uniq))
+	for p := range uniq {
+		subPairs = append(subPairs, p)
+	}
+	log.Printf("[INIT] Пары для подписки: %d", len(subPairs))
+	_ = os.WriteFile("final_ws_symbols.log", []byte(strings.Join(subPairs, "\n")), 0644)
+	log.Printf("\U0001f4c4 Сохранено %d пар в final_ws_symbols.log", len(subPairs))
+
+	if len(invalid) > 0 {
+		_ = os.WriteFile("excluded_pairs.log", []byte(strings.Join(invalid, "\n")), 0644)
+		log.Printf("\u26a0\ufe0f Исключено %d пар (см. excluded_pairs.log)", len(invalid))
+	}
+
+	arb := &Arbitrager{
+		Triangles:       ts,
+		latest:          make(map[string]float64, len(subPairs)),
+		trianglesByPair: trianglesByPair,
+		realSymbols:     avail,
+		stepSizes:       map[string]float64{}, // пусто, т.к. из файла
+		minQtys:         map[string]float64{}, // пусто, т.к. из файла
+		StartAmount:     0.5,
+		exchange:        ex,
+	}
+
+	const maxPerConn = 20
+	for i := 0; i < len(subPairs); i += maxPerConn {
+		end := i + maxPerConn
+		if end > len(subPairs) {
+			end = len(subPairs)
+		}
+		chunk := subPairs[i:end]
+
+		go func(idx int, pairs []string) {
+			for {
+				err := ex.SubscribeDeals(pairs, arb.HandleRaw)
+				if err != nil {
+					log.Printf("[WS][%s] ❌ Подписка #%d: %v, повтор через 1с...", ex.Name(), idx, err)
+					time.Sleep(time.Second)
+					continue
+				}
+				log.Printf("[WS][%s] ✅ Подписка #%d активна: %v", ex.Name(), idx, pairs)
+				return
+			}
+		}(i/maxPerConn+1, chunk)
+	}
+
+	return arb, nil
+}
+
+// 🔽 filesystem/symbols.go
+package filesystem
+
+import (
+	"cryptarb/internal/domain/triangle"
+	"log"
+	"os"
+	"strings"
+)
+
+func LoadAvailableSymbolsFromFile(path string) (map[string]bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	symbols := make(map[string]bool)
+	for _, line := range strings.Split(string(data), "\n") {
+		s := strings.TrimSpace(line)
+		if s != "" {
+			symbols[s] = true
+		}
+	}
+	log.Printf("📥 Загружено %d символов из %s", len(symbols), path)
+	return symbols, nil
+}
+
+func ExpandAvailableSymbols(raw map[string]bool) map[string]bool {
+	expanded := make(map[string]bool, len(raw)*2)
+	for sym := range raw {
+		expanded[sym] = true
+		base, quote := unpackPair(sym)
+		if base != "" && quote != "" {
+			expanded[quote+base] = true
+		}
+	}
+	return expanded
+}
+
+func unpackPair(pair string) (string, string) {
+	quotes := []string{"USDT", "USDC", "BTC", "ETH", "EUR", "BRL", "USD1", "USDE"}
+	for _, q := range quotes {
+		if len(pair) > len(q) && pair[len(pair)-len(q):] == q {
+			return pair[:len(pair)-len(q)], q
+		}
+	}
+	return "", ""
+}
+
+func LoadTrianglesFromSymbols(avail map[string]bool) ([]triangle.Triangle, error) {
+	blocked := make(map[string]struct{})
+	if data, err := os.ReadFile("blocked_pairs.log"); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			s := strings.TrimSpace(line)
+			if s != "" {
+				blocked[s] = struct{}{}
+			}
+		}
+		log.Printf("🚫 Заблокированных пар для исключения при построении: %d", len(blocked))
+	}
+
+	graph := make(map[string][]string)
+	for sym := range avail {
+		if _, isBlocked := blocked[sym]; isBlocked {
+			continue
+		}
+		base, quote := unpackPair(sym)
+		if base == "" || quote == "" {
+			continue
+		}
+		graph[quote] = append(graph[quote], base)
+		graph[base] = append(graph[base], quote)
+	}
+
+	var tris []triangle.Triangle
+	seen := make(map[[3]string]struct{})
+	for a, bs := range graph {
+		for _, b := range bs {
+			for _, c := range graph[b] {
+				for _, back := range graph[c] {
+					if back == a {
+						key := [3]string{a, b, c}
+						if _, ok := seen[key]; !ok {
+							seen[key] = struct{}{}
+							tris = append(tris, triangle.Triangle{A: a, B: b, C: c})
+						}
+					}
+				}
+			}
+		}
+	}
+	log.Printf("[TRIANGLE] Found %d triangles after filtering", len(tris))
+	return tris, nil
+}
+
+
