@@ -460,7 +460,7 @@ option go_package = "crypt_proto/pb";
 
 
 func New(ex exchange.Exchange) (*Arbitrager, error) {
-	// 📥 Загружаем заблокированные пары
+	// Загружаем список заблокированных символов
 	blocked := make(map[string]struct{})
 	if data, err := os.ReadFile("blocked_pairs.log"); err == nil {
 		lines := strings.Split(string(data), "\n")
@@ -473,7 +473,7 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 		log.Printf("📵 Загружено %d заблокированных символов из blocked_pairs.log", len(blocked))
 	}
 
-	// Получаем список символов с биржи
+	// Получаем список доступных символов и параметры лотов
 	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
 	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
 	log.Printf("📊 Доступные пары (с инверсиями): %d", len(avail))
@@ -489,7 +489,7 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 		_ = os.WriteFile("triangles_dump.json", data, 0644)
 	}
 
-	// Индексация и сбор всех пар из треугольников
+	// Индексация пар
 	trianglesByPair := make(map[string][]int, len(ts)*3)
 	subRaw := make([]string, 0, len(ts)*3)
 
@@ -506,22 +506,22 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 	}
 	log.Printf("[INIT] Составили индекс по парам: %d ключей", len(trianglesByPair))
 
-	// 🔎 Убираем пары, отсутствующие на бирже или заблокированные
+	// Убираем пары, отсутствующие в бирже или заблокированные
 	uniq := make(map[string]struct{}, len(subRaw))
 	invalid := make([]string, 0)
 
 	for _, p := range subRaw {
-		switch {
-		case !avail[p]:
+		if avail[p] {
+			if _, isBlocked := blocked[p]; !isBlocked {
+				uniq[p] = struct{}{}
+			} else {
+				invalid = append(invalid, p+" (blocked)")
+			}
+		} else {
 			invalid = append(invalid, p+" (not found)")
-		case _, isBlocked := blocked[p]; isBlocked:
-			invalid = append(invalid, p+" (blocked)")
-		default:
-			uniq[p] = struct{}{}
 		}
 	}
 
-	// Финальные пары
 	subPairs := make([]string, 0, len(uniq))
 	for p := range uniq {
 		subPairs = append(subPairs, p)
@@ -531,11 +531,6 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 	if len(invalid) > 0 {
 		_ = os.WriteFile("excluded_pairs.log", []byte(strings.Join(invalid, "\n")), 0644)
 		log.Printf("⚠️ Исключено %d пар (см. excluded_pairs.log)", len(invalid))
-	}
-
-	// 🧾 Сохраняем оставшиеся пары
-	if err := os.WriteFile("final_ws_symbols.log", []byte(strings.Join(subPairs, "\n")), 0644); err == nil {
-		log.Printf("📄 Сохранено %d пар в final_ws_symbols.log", len(subPairs))
 	}
 
 	// Создаём арбитражёр
@@ -550,7 +545,7 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 		exchange:        ex,
 	}
 
-	// 🔌 Подписки чанками
+	// Подписки чанками
 	const maxPerConn = 20
 	for i := 0; i < len(subPairs); i += maxPerConn {
 		end := i + maxPerConn
