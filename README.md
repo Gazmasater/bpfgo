@@ -552,6 +552,33 @@ func signRequest(apiKey, secret string, ts int64) string {
 }
 
 
+[{
+	"resource": "/home/gaz358/myprog/crypt_proto/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "UnusedVar",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UnusedVar"
+		}
+	},
+	"severity": 8,
+	"message": "declared and not used: wsURL",
+	"source": "compiler",
+	"startLineNumber": 22,
+	"startColumn": 2,
+	"endLineNumber": 22,
+	"endColumn": 7,
+	"tags": [
+		1
+	],
+	"origin": "extHost1"
+}]
+
+
 
 
 
