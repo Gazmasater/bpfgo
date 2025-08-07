@@ -459,16 +459,22 @@ syntax = "proto3";
 option go_package = "crypt_proto/pb";
 
 
-2025/08/07 03:16:45 📩 [MEXC] Подписка отправлена: [ETHUSDC OPUSDT USDCOP LUNCUSDT USDTBNB BTCBCH FTTUSDT AVAXUSDT FILUSDC USDTBCH ADABTC BTCATOM XENUSDT USDCWAVES LTCUSDC USDTSOL USDTOP MINAUSDC USDTADA USDTSHIB AVAXUSDC BTCXRP USDCALGO BNBUSDT ETHBTC JASMYUSDT USDTWBTC USDCETH USDCTRX AAVEUSDC]
-2025/08/07 03:16:46 ⚠️ [MEXC] ReadMessage ошибка: websocket: close 1005 (no status)
-2025/08/07 03:16:49 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 03:16:51 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 03:16:51 🌐 [MEXC] Подключаемся к wss://wbs.mexc.com/ws
-2025/08/07 03:16:51 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 03:16:51 ✅ [MEXC] Соединение установлено
-2025/08/07 03:16:51 📩 [MEXC] Подписка отправлена: [USDTAAVE SOLUSDT USDCLUNC USDCXRP USDTRAY USDTUSDC ETHUNI FTTUSDC DOGEUSDT USDTXRP XRPUSDC USDCNEAR USDCFTT NEARUSDC BTCTRX USDTFIL USDCCAW CAWUSDC SOLUSDC USDTMX LTCUSDT BTCUSDC JASMYUSDC USDCDOGE BCHUSDC XENUSDC SOLBTC AZEROUSDT UNIETH USDTFTT]
-2025/08/07 03:16:52 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 03:16:59 ❌ [MEXC] PIN
+25/08/07 03:23:17 ✅ [MEXC] Соединение установлено
+2025/08/07 03:23:17 📩 [MEXC] Подписка отправлена: [ETHBTC USDCJASMY USDCRAY LUNCUSDC APEUSDC BTCLTC XRPUSDC LTCBTC USDTJASMY USDCBNB BTCADA RAYUSDC BCHUSDT USDTBNB ATOMBTC]
+2025/08/07 03:23:17 ✅ [MEXC] Соединение установлено
+2025/08/07 03:23:17 📩 [MEXC] Подписка отправлена: [USDTWBTC USDCFIL FILUSDT BTCETH BNBUSDC LTCUSDT MINAUSDC RAYUSDT USDCNEAR UNIETH USDTFIL JASMYUSDT USDTAZERO USDCMX USDCAVAX]
+2025/08/07 03:23:17 ✅ [MEXC] Соединение установлено
+2025/08/07 03:23:17 📩 [MEXC] Подписка отправлена: [XENUSDC BCHUSDC APEUSDT USDCAPE ALGOUSDC MINAUSDT ENSUSDT AVAXUSDC USDTSHIB]
+2025/08/07 03:23:20 ❌ [MEXC] PING ошибка: websocket: close sent
+2025/08/07 03:23:20 ❌ [MEXC] PING ошибка: websocket: close sent
+2025/08/07 03:23:20 ❌ [MEXC] PING ошибка: websocket: close sent
+2025/08/07 03:23:20 ❌ [MEXC] PING ошибка: websocket: close sent
+2025/08/07 03:23:21 ❌ [MEXC] PING ошибка: websocket: close sent
+2025/08/07 03:23:21 ❌ [MEXC] PING ошибка: websocket: close sent
+2025/08/07 03:23:21 ❌ [MEXC] PING ошибка: websocket: close sent
+2025/08/07 03:23:21 ❌ [MEXC] PING ошибка: websocket: close sent
+2025/08/07 03:23:21 ❌ [MEXC] PING ошибка: websocket: close sent
+2025/08/07 03:23:21 ❌ [MEXC] PING ошибка: websocket: close sent
 
 
 ь
