@@ -459,23 +459,55 @@ syntax = "proto3";
 option go_package = "crypt_proto/pb";
 
 
-25/08/07 03:23:17 ✅ [MEXC] Соединение установлено
-2025/08/07 03:23:17 📩 [MEXC] Подписка отправлена: [ETHBTC USDCJASMY USDCRAY LUNCUSDC APEUSDC BTCLTC XRPUSDC LTCBTC USDTJASMY USDCBNB BTCADA RAYUSDC BCHUSDT USDTBNB ATOMBTC]
-2025/08/07 03:23:17 ✅ [MEXC] Соединение установлено
-2025/08/07 03:23:17 📩 [MEXC] Подписка отправлена: [USDTWBTC USDCFIL FILUSDT BTCETH BNBUSDC LTCUSDT MINAUSDC RAYUSDT USDCNEAR UNIETH USDTFIL JASMYUSDT USDTAZERO USDCMX USDCAVAX]
-2025/08/07 03:23:17 ✅ [MEXC] Соединение установлено
-2025/08/07 03:23:17 📩 [MEXC] Подписка отправлена: [XENUSDC BCHUSDC APEUSDT USDCAPE ALGOUSDC MINAUSDT ENSUSDT AVAXUSDC USDTSHIB]
-2025/08/07 03:23:20 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 03:23:20 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 03:23:20 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 03:23:20 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 03:23:21 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 03:23:21 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 03:23:21 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 03:23:21 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 03:23:21 ❌ [MEXC] PING ошибка: websocket: close sent
-2025/08/07 03:23:21 ❌ [MEXC] PING ошибка: websocket: close sent
+2func (m *MexcExchange) SubscribeDeals(pairs []string, handler func(exchange string, raw []byte)) error {
+	for {
+		conn, _, err := websocket.DefaultDialer.Dial("wss://wbs.mexc.com/ws", nil)
+		if err != nil {
+			log.Printf("❌ Dial error: %v", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
 
+		sub := map[string]interface{}{
+			"method": "SUBSCRIPTION",
+			"params": buildChannels(pairs),
+			"id":     time.Now().Unix(),
+		}
+		if err := conn.WriteJSON(sub); err != nil {
+			log.Printf("❌ Subscription error: %v", err)
+			conn.Close()
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		log.Printf("✅ Подключение и подписка на %d пар: %v", len(pairs), pairs)
+
+		go func() {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			for range ticker.C {
+				err := conn.WriteMessage(websocket.PingMessage, []byte("ping"))
+				if err != nil {
+					log.Printf("❌ Ping error: %v", err)
+					conn.Close()
+					return
+				}
+			}
+		}()
+
+		for {
+			_, raw, err := conn.ReadMessage()
+			if err != nil {
+				log.Printf("⚠️ ReadMessage error: %v", err)
+				conn.Close()
+				break // вернётся к Dial и подключится заново
+			}
+			handler("MEXC", raw)
+		}
+
+		time.Sleep(2 * time.Second) // краткая пауза между переподключениями
+	}
+}
 
 ь
 
