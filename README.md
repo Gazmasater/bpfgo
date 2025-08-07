@@ -556,6 +556,10 @@ func hmacSHA256(message, secret string) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
+az358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
+2025/08/07 21:12:57 ❌ Dial error:websocket: bad handshake
+exit status 1
+gaz358@gaz358-BO
 
 
 
