@@ -459,29 +459,268 @@ syntax = "proto3";
 option go_package = "crypt_proto/pb";
 
 
-2025/08/07 09:42:42 📨 [MEXC] Ответ: {"id":1754548961,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@USDTADA,spot@public.deals.v3.api@USDCNEAR,spot@public.deals.v3.api@UNIUSDC,spot@public.deals.v3.api@USDCAZERO,spot@public.deals.v3.api@USDCRAY,spot@public.deals.v3.api@LUNCUSDC,spot@public.deals.v3.api@USDTJASMY,spot@public.deals.v3.api@USDCMX,spot@public.deals.v3.api@MINAUSDC,spot@public.deals.v3.api@USDTUSDC,spot@public.deals.v3.api@AZEROUSDC,spot@public.deals.v3.api@MXUSDC,spot@public.deals.v3.api@USDCAAVE,spot@public.deals.v3.api@USDCTRX,spot@public.deals.v3.api@WAVESUSDT,spot@public.deals.v3.api@USDTFIL,spot@public.deals.v3.api@USDTALGO,spot@public.deals.v3.api@BTCUSDC,spot@public.deals.v3.api@TRXBTC,spot@public.deals.v3.api@USDCWAVES].  Reason： Blocked! "}
-2025/08/07 09:42:42 🚫 [MEXC] Символ отключён сервером: USDTADA
-2025/08/07 09:42:42 🚫 [MEXC] Символ отключён сервером: USDCNEAR
-2025/08/07 09:42:42 🚫 [MEXC] Символ отключён сервером: UNIUSDC
-2025/08/07 09:42:42 🚫 [MEXC] Символ отключён сервером: USDCAZERO
-2025/08/07 09:42:42 🚫 [MEXC] Символ отключён сервером: USDCRAY
-2025/08/07 09:42:42 🚫 [MEXC] Символ отключён сервером: LUNCUSDC
-2025/08/07 09:42:42 🚫 [MEXC] Символ отключён сервером: USDTJASMY
-2025/08/07 09:42:42 🚫 [MEXC] Символ отключён сервером: USDCMX
-2025/08/07 09:42:42 🚫 [MEXC] Символ отключён сервером: MINAUSDC
-2025/08/07 09:42:42 🚫 [MEXC] Символ отключён сервером: USDTUSDC
-2025/08/07 09:42:42 🚫 [MEXC] Символ отключён сервером: AZEROUSDC
-2025/08/07 09:42:42 🚫 [MEXC] Символ отключён сервером: MXUSDC
-2025/08/07 09:42:42 🚫 [MEXC] Символ отключён сервером: USDCAAVE
-2025/08/07 09:42:42 🚫 [MEXC] Символ отключён сервером: USDCTRX
-2025/08/07 09:42:42 🚫 [MEXC] Символ отключён сервером: WAVESUSDT
-2025/08/07 09:42:42 🚫 [MEXC] Символ отключён сервером: USDTFIL
-2025/08/07 09:42:42 🚫 [MEXC] Символ отключён сервером: USDTALGO
-2025/08/07 09:42:42 🚫 [MEXC] Символ отключён сервером: BTCUSDC
-2025/08/07 09:42:42 🚫 [MEXC] Символ отключён сервером: TRXBTC
-2025/08/07 09:42:42 🚫 [MEXC] Символ отключён сервером: USDCWAVES
-2025/08/07 09:42:42 📨 [MEXC] Ответ: {"id":1754548961,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@USDCDOGE,spot@public.deals.v3.api@USDTLTC,spot@public.deals.v3.api@ETHUSDC,spot@public.deals.v3.api@ENSUSDT].  Reason： Blocked! "}
+package app
 
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"cryptarb/internal/domain/exchange"
+	"cryptarb/internal/domain/triangle"
+	"cryptarb/internal/repository/filesystem"
+)
+
+type Arbitrager struct {
+	Triangles       []triangle.Triangle
+	latest          map[string]float64
+	trianglesByPair map[string][]int
+	realSymbols     map[string]bool
+	stepSizes       map[string]float64
+	minQtys         map[string]float64
+	mu              sync.Mutex
+	StartAmount     float64
+	exchange        exchange.Exchange
+}
+
+func New(ex exchange.Exchange) (*Arbitrager, error) {
+	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
+	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
+	log.Printf("📊 Доступные пары (с инверсиями): %d", len(avail))
+
+	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
+	if err != nil {
+		return nil, fmt.Errorf("LoadTriangles: %w", err)
+	}
+	log.Printf("[INIT] Треугольников найдено: %d", len(ts))
+
+	if data, err := json.MarshalIndent(ts, "", "  "); err == nil {
+		_ = os.WriteFile("triangles_dump.json", data, 0644)
+	}
+
+	trianglesByPair := make(map[string][]int, len(ts)*3)
+	subRaw := make([]string, 0, len(ts)*3)
+
+	for i, tri := range ts {
+		ab := tri.A + tri.B
+		bc := tri.B + tri.C
+		ca := tri.C + tri.A
+
+		trianglesByPair[ab] = append(trianglesByPair[ab], i)
+		trianglesByPair[bc] = append(trianglesByPair[bc], i)
+		trianglesByPair[ca] = append(trianglesByPair[ca], i)
+
+		subRaw = append(subRaw, ab, bc, ca)
+	}
+	log.Printf("[INIT] Составили индекс по парам: %d ключей", len(trianglesByPair))
+
+	uniq := make(map[string]struct{}, len(subRaw))
+	invalid := make([]string, 0)
+
+	for _, p := range subRaw {
+		if avail[p] {
+			uniq[p] = struct{}{}
+		} else {
+			invalid = append(invalid, p)
+		}
+	}
+
+	subPairs := make([]string, 0, len(uniq))
+	for p := range uniq {
+		subPairs = append(subPairs, p)
+	}
+	log.Printf("[INIT] Пары для подписки: %d шт.", len(subPairs))
+
+	if len(invalid) > 0 {
+		_ = os.WriteFile("excluded_pairs.log", []byte(strings.Join(invalid, "\n")), 0644)
+		log.Printf("⚠️ Исключено %d неподходящих пар (см. excluded_pairs.log)", len(invalid))
+	}
+
+	arb := &Arbitrager{
+		Triangles:       ts,
+		latest:          make(map[string]float64, len(subPairs)),
+		trianglesByPair: trianglesByPair,
+		realSymbols:     avail,
+		stepSizes:       stepSizes,
+		minQtys:         minQtys,
+		StartAmount:     0.5,
+		exchange:        ex,
+	}
+
+	const maxPerConn = 20
+	for i := 0; i < len(subPairs); i += maxPerConn {
+		end := i + maxPerConn
+		if end > len(subPairs) {
+			end = len(subPairs)
+		}
+		chunk := subPairs[i:end]
+		go func(idx int, pairs []string) {
+			for {
+				err := ex.SubscribeDeals(pairs, arb.HandleRaw)
+				if err != nil {
+					log.Printf("[WS][%s] ❌ Подписка #%d: %v, повтор через 1с...", ex.Name(), idx, err)
+					time.Sleep(time.Second)
+					continue
+				}
+				log.Printf("[WS][%s] ✅ Подписка #%d активна: %v", ex.Name(), idx, pairs)
+				return
+			}
+		}(i/maxPerConn+1, chunk)
+	}
+
+	return arb, nil
+}
+
+func (a *Arbitrager) normalizeSymbolDir(base, quote string) (symbol string, ok bool, invert bool) {
+	if a.realSymbols[base+quote] {
+		return base + quote, true, false
+	}
+	if a.realSymbols[quote+base] {
+		return quote + base, true, true
+	}
+	return "", false, false
+}
+
+var (
+	idKey      = []byte(`"id":`)
+	code0Key   = []byte(`"code":0`)
+	sKey       = []byte(`"s":"`)
+	pKey       = []byte(`"p":"`)
+	prefixFail = "Not Subscribed successfully! ["
+)
+
+func (a *Arbitrager) HandleRaw(_exchange string, raw []byte) {
+	if bytes.Contains(raw, idKey) &&
+		bytes.Contains(raw, code0Key) &&
+		!bytes.Contains(raw, sKey) {
+
+		start := bytes.Index(raw, []byte(prefixFail))
+		if start >= 0 {
+			start += len(prefixFail)
+			end := bytes.Index(raw[start:], []byte("].  Reason"))
+			if end > 0 {
+				blockedList := raw[start : start+end]
+				for _, ch := range strings.Split(string(blockedList), ",") {
+					if idx := strings.LastIndex(ch, "@"); idx != -1 {
+						sym := ch[idx+1:]
+
+						a.mu.Lock()
+						a.realSymbols[sym] = false
+						a.mu.Unlock()
+
+						log.Printf("🚫 [MEXC] Символ отключён сервером: %s", sym)
+
+						f, err := os.OpenFile("blocked_pairs.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+						if err == nil {
+							_, _ = f.WriteString(sym + "\n")
+							_ = f.Close()
+						}
+					}
+				}
+			} else {
+				log.Printf("⚠️ [RAW] Подписка отклонена без Reason: %s", raw)
+			}
+		} else {
+			log.Printf("⚠️ [RAW] Не удалось распарсить ошибку подписки: %s", raw)
+		}
+		return
+	}
+
+	i := bytes.Index(raw, sKey)
+	if i < 0 {
+		log.Printf("⚠️ [RAW] Нет поля 's': %s", raw)
+		return
+	}
+	i += len(sKey)
+	j := bytes.IndexByte(raw[i:], '"')
+	if j < 0 {
+		log.Printf("⚠️ [RAW] Ошибка разбора символа: %s", raw)
+		return
+	}
+	sym := string(raw[i : i+j])
+
+	if ok, ex := a.realSymbols[sym]; !ex || !ok {
+		log.Printf("⛔ [RAW] Неизвестный или отключённый символ: %s", sym)
+		return
+	}
+	if _, ex := a.trianglesByPair[sym]; !ex {
+		log.Printf("🔕 [RAW] Символ не используется в треугольниках: %s", sym)
+		return
+	}
+
+	i = bytes.Index(raw, pKey)
+	if i < 0 {
+		log.Printf("⚠️ [RAW] Нет поля 'p': %s", raw)
+		return
+	}
+	i += len(pKey)
+	j = bytes.IndexByte(raw[i:], '"')
+	if j < 0 {
+		log.Printf("⚠️ [RAW] Ошибка разбора цены: %s", raw)
+		return
+	}
+	priceBytes := raw[i : i+j]
+	price, err := strconv.ParseFloat(string(priceBytes), 64)
+	if err != nil {
+		log.Printf("⚠️ [RAW] Не удалось распарсить цену: %s", raw)
+		return
+	}
+
+	a.mu.Lock()
+	a.latest[sym] = price
+	a.mu.Unlock()
+
+	a.Check(sym)
+}
+
+func (a *Arbitrager) Check(symbol string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	indices := a.trianglesByPair[symbol]
+	if len(indices) == 0 {
+		return
+	}
+
+	nf := 0.9965 * 0.9965 * 0.9965
+
+	for _, idx := range indices {
+		tri := a.Triangles[idx]
+
+		ab, ok1, rev1 := a.normalizeSymbolDir(tri.A, tri.B)
+		bc, ok2, rev2 := a.normalizeSymbolDir(tri.B, tri.C)
+		ca, ok3, rev3 := a.normalizeSymbolDir(tri.C, tri.A)
+		if !ok1 || !ok2 || !ok3 {
+			continue
+		}
+
+		p1, ex1 := a.latest[ab]
+		p2, ex2 := a.latest[bc]
+		p3, ex3 := a.latest[ca]
+		if !ex1 || !ex2 || !ex3 || p1 == 0 || p2 == 0 || p3 == 0 {
+			continue
+		}
+
+		if rev1 {
+			p1 = 1 / p1
+		}
+		if rev2 {
+			p2 = 1 / p2
+		}
+		if rev3 {
+			p3 = 1 / p3
+		}
+
+		profit := (p1*p2*p3*nf - 1) * 100
+		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%%", tri.A, tri.B, tri.C, profit)
+	}
+}
 
 
 
