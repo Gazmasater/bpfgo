@@ -484,17 +484,24 @@ const (
 )
 
 func main() {
-	// 👇 Добавляем нужный subprotocol: "access"
+	// Заголовки подключения
+	header := map[string][]string{
+		"Origin": {"https://mexc.com"},
+	}
+
 	dialer := websocket.Dialer{
 		Subprotocols: []string{"access"},
 	}
-	c, _, err := dialer.Dial(wsURL, nil)
+
+	// Подключение
+	c, _, err := dialer.Dial(wsURL, header)
 	if err != nil {
 		log.Fatal("❌ Dial error:", err)
 	}
 	defer c.Close()
 	log.Println("🔌 Connected to private WS")
 
+	// Авто-PING
 	go func() {
 		for {
 			time.Sleep(15 * time.Second)
@@ -502,12 +509,12 @@ func main() {
 		}
 	}()
 
-	// 🕒 Генерация подписи
+	// Генерация подписи
 	timestamp := time.Now().UnixMilli()
-	signStr := fmt.Sprintf("%d%s", timestamp, apiKey)
-	sign := hmacSHA256(signStr, secretKey)
+	msg := fmt.Sprintf("%d%s", timestamp, apiKey)
+	sign := hmacSHA256(msg, secretKey)
 
-	// 🔐 Авторизация
+	// Авторизация
 	auth := map[string]interface{}{
 		"method": "access",
 		"params": map[string]interface{}{
@@ -523,14 +530,14 @@ func main() {
 	}
 	log.Println("🔐 Auth message sent")
 
-	// 📥 Ответ на авторизацию
-	_, msg, err := c.ReadMessage()
+	// Ответ на авторизацию
+	_, authResp, err := c.ReadMessage()
 	if err != nil {
 		log.Fatal("❌ Auth read error:", err)
 	}
-	log.Printf("📨 Auth response: %s\n", msg)
+	log.Printf("📨 Auth response: %s\n", authResp)
 
-	// 📩 Подписки на 3 канала
+	// Подписка на каналы
 	subs := []map[string]interface{}{
 		{
 			"method": "sub.personal.order",
@@ -557,10 +564,10 @@ func main() {
 		if err := c.WriteJSON(sub); err != nil {
 			log.Fatalf("❌ Subscription error (%v): %v", sub["method"], err)
 		}
-		log.Printf("📩 Subscribed to %v\n", sub["method"])
+		log.Printf("📩 Subscribed to %v", sub["method"])
 	}
 
-	// 🔁 Чтение сообщений
+	// Чтение всех сообщений
 	for {
 		_, msg, err := c.ReadMessage()
 		if err != nil {
@@ -570,15 +577,11 @@ func main() {
 	}
 }
 
+// hmacSHA256 возвращает подпись
 func hmacSHA256(message, secret string) string {
 	h := hmac.New(sha256.New, []byte(secret))
 	h.Write([]byte(message))
 	return hex.EncodeToString(h.Sum(nil))
 }
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/07 21:19:55 ❌ Dial error:websocket: bad handshake
-exit status 1
 
 
