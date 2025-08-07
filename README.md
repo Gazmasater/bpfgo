@@ -465,40 +465,32 @@ comm -23 all.txt blocked.txt > allowed_ws_symbols.log
 
 
 func New(ex exchange.Exchange) (*Arbitrager, error) {
-	// Получаем список доступных символов и параметры лотов
-	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
+	// Получаем список доступных символов
+	rawSymbols, _, _ := ex.FetchAvailableSymbols()
 	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
 	log.Printf("📊 Доступные пары (с инверсиями): %d", len(avail))
 
-	// Загружаем список заблокированных символов
-	blocked := make(map[string]struct{})
-	if data, err := os.ReadFile("blocked_pairs.log"); err == nil {
-		lines := strings.Split(string(data), "\n")
-		for _, l := range lines {
-			s := strings.TrimSpace(l)
-			if s != "" {
-				blocked[s] = struct{}{}
-			}
+	// Отфильтрованные пары (без заблокированных — блокируем только по ошибке подписки)
+	checkable := make([]string, 0, len(avail))
+	for p := range avail {
+		checkable = append(checkable, p)
+	}
+	slices.Sort(checkable)
+	log.Printf("📄 Проверяем подписку по %d парам...", len(checkable))
+
+	okPairs := make([]string, 0, len(checkable))
+	for _, symbol := range checkable {
+		ok := ex.TestSingleWsSubscription(symbol)
+		if ok {
+			okPairs = append(okPairs, symbol)
+			log.Printf("✅ WS OK: %s", symbol)
+		} else {
+			log.Printf("🚫 WS FAIL: %s", symbol)
 		}
-		log.Printf("📵 Загружено %d заблокированных символов из blocked_pairs.log", len(blocked))
-	} else {
-		log.Printf("⚠️ blocked_pairs.log не найден, продолжаем без фильтрации")
 	}
 
-	// Выводим все разрешённые пары в файл до треугольников
-	allowed := make([]string, 0)
-	for p := range avail {
-		if _, isBlocked := blocked[p]; !isBlocked {
-			allowed = append(allowed, p)
-		}
-	}
-	if len(allowed) > 0 {
-		slices.Sort(allowed)
-		_ = os.WriteFile("allowed_pairs_filtered.log", []byte(strings.Join(allowed, "\n")), 0644)
-		log.Printf("📄 Сохранено %d разрешённых пар в allowed_pairs_filtered.log", len(allowed))
-	} else {
-		log.Printf("📄 Нет разрешённых пар для записи")
-	}
+	_ = os.WriteFile("ws_available_pairs.log", []byte(strings.Join(okPairs, "\n")), 0644)
+	log.Printf("📁 Итог: %d подходящих для WS пар сохранено в ws_available_pairs.log", len(okPairs))
 
 	log.Printf("⏳ Ожидание 5 минут перед завершением...")
 	time.Sleep(5 * time.Minute)
