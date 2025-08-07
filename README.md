@@ -700,3 +700,10 @@ func LoadTrianglesFromSymbols(avail map[string]bool) ([]triangle.Triangle, error
 }
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
+2025/08/07 14:28:13 📈 Profiler доступен на http://localhost:6060/debug/pprof/
+2025/08/07 14:28:13 📵 Загружено 144 заблокированных символов из blocked_pairs.log
+2025/08/07 14:28:13 ❌ Ошибка запуска арбитража:ошибка загрузки символов: open available_pairs.txt: no such file or directory
+exit status 1
+
+
