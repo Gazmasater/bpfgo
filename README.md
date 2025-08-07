@@ -723,6 +723,163 @@ func (a *Arbitrager) Check(symbol string) {
 }
 
 
+2025/08/07 09:51:40 📨 [MEXC] Ответ: {"id":1754549499,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@OPUSDT,spot@public.deals.v3.api@BTCETH,spot@public.deals.v3.api@USDCBTC,spot@public.deals.v3.api@SOLUSDT,spot@public.deals.v3.api@ENSUSDC,spot@public.deals.v3.api@USDCXRP,spot@public.deals.v3.api@USDCWBTC,spot@public.deals.v3.api@USDTUNI,spot@public.deals.v3.api@USDCCAW,spot@public.deals.v3.api@USDCTRX,spot@public.deals.v3.api@USDCAVAX,spot@public.deals.v3.api@JASMYUSDT,spot@public.deals.v3.api@USDTMX,spot@public.deals.v3.api@TRXUSDT,spot@public.deals.v3.api@ATOMUSDT,spot@public.deals.v3.api@MINAUSDT,spot@public.deals.v3.api@USDTFIL,spot@public.deals.v3.api@FTTUSDC,spot@public.deals.v3.api@ETHUNI,spot@public.deals.v3.api@DOGEUSDT].  Reason： Blocked! "}
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: OPUSDT
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: BTCETH
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: USDCBTC
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: SOLUSDT
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: ENSUSDC
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: USDCXRP
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: USDCWBTC
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: USDTUNI
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: USDCCAW
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: USDCTRX
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: USDCAVAX
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: JASMYUSDT
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: USDTMX
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: TRXUSDT
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: ATOMUSDT
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: MINAUSDT
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: USDTFIL
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: FTTUSDC
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: ETHUNI
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: DOGEUSDT
+2025/08/07 09:51:40 📨 [MEXC] Ответ: {"id":1754549500,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@APEUSDT,spot@public.deals.v3.api@MXUSDT,spot@public.deals.v3.api@USDTNEAR,spot@public.deals.v3.api@XRPUSDC,spot@public.deals.v3.api@RAYUSDT,spot@public.deals.v3.api@ADAUSDT,spot@public.deals.v3.api@USDCUNI,spot@public.deals.v3.api@USDTLUNC,spot@public.deals.v3.api@MXUSDC,spot@public.deals.v3.api@BTCSOL,spot@public.deals.v3.api@CAWUSDT,spot@public.deals.v3.api@BTCATOM,spot@public.deals.v3.api@BNBUSDT,spot@public.deals.v3.api@USDTXRP,spot@public.deals.v3.api@AVAXUSDT,spot@public.deals.v3.api@USDTAPE,spot@public.deals.v3.api@RAYUSDC,spot@public.deals.v3.api@ADAUSDC,spot@public.deals.v3.api@USDCSHIB,spot@public.deals.v3.api@USDCWAVES].  Reason： Blocked! "}
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: APEUSDT
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: MXUSDT
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: USDTNEAR
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: XRPUSDC
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: RAYUSDT
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: ADAUSDT
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: USDCUNI
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: USDTLUNC
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: MXUSDC
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: BTCSOL
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: CAWUSDT
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: BTCATOM
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: BNBUSDT
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: USDTXRP
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: AVAXUSDT
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: USDTAPE
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: RAYUSDC
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: ADAUSDC
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: USDCSHIB
+2025/08/07 09:51:40 🚫 [MEXC] Символ отключён сервером: USDCWAVES
+2025/08/07 09:51:40 🌐 [MEXC] Подключаемся к wss://wbs.mexc.com/ws
+2025/08/07 09:51:40 ✅ [MEXC] Соединение установлено
+2025/08/07 09:51:40 📩 [MEXC] Подписка отправлена: [USDCATOM USDTCAW BCHUSDC BTCXRP ALGOUSDC SOLUSDC USDCAZERO USDCBCH USDTXEN CAWUSDC LTCBTC USDCMX USDTMINA BTCTRX ATOMBTC USDCMINA LTCUSDC USDTJASMY OPUSDC USDCFTT]
+2025/08/07 09:51:41 🌐 [MEXC] Подключаемся к wss://wbs.mexc.com/ws
+2025/08/07 09:51:41 📨 [MEXC] Ответ: {"id":1754549500,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@CAWUSDC,spot@public.deals.v3.api@USDCFTT,spot@public.deals.v3.api@USDCBCH,spot@public.deals.v3.api@USDTXEN,spot@public.deals.v3.api@USDCAZERO,spot@public.deals.v3.api@USDTCAW,spot@public.deals.v3.api@BCHUSDC,spot@public.deals.v3.api@USDTJASMY,spot@public.deals.v3.api@USDCMX,spot@public.deals.v3.api@BTCTRX,spot@public.deals.v3.api@ALGOUSDC,spot@public.deals.v3.api@ATOMBTC,spot@public.deals.v3.api@USDCATOM,spot@public.deals.v3.api@LTCBTC,spot@public.deals.v3.api@BTCXRP,spot@public.deals.v3.api@LTCUSDC,spot@public.deals.v3.api@USDCMINA,spot@public.deals.v3.api@USDTMINA,spot@public.deals.v3.api@SOLUSDC,spot@public.deals.v3.api@OPUSDC].  Reason： Blocked! "}
+2025/08/07 09:51:41 🚫 [MEXC] Символ отключён сервером: CAWUSDC
+2025/08/07 09:51:41 🚫 [MEXC] Символ отключён сервером: USDCFTT
+2025/08/07 09:51:41 🚫 [MEXC] Символ отключён сервером: USDCBCH
+2025/08/07 09:51:41 🚫 [MEXC] Символ отключён сервером: USDTXEN
+2025/08/07 09:51:41 🚫 [MEXC] Символ отключён сервером: USDCAZERO
+2025/08/07 09:51:41 🚫 [MEXC] Символ отключён сервером: USDTCAW
+2025/08/07 09:51:41 🚫 [MEXC] Символ отключён сервером: BCHUSDC
+2025/08/07 09:51:41 🚫 [MEXC] Символ отключён сервером: USDTJASMY
+2025/08/07 09:51:41 🚫 [MEXC] Символ отключён сервером: USDCMX
+2025/08/07 09:51:41 🚫 [MEXC] Символ отключён сервером: BTCTRX
+2025/08/07 09:51:41 🚫 [MEXC] Символ отключён сервером: ALGOUSDC
+2025/08/07 09:51:41 🚫 [MEXC] Символ отключён сервером: ATOMBTC
+2025/08/07 09:51:41 🚫 [MEXC] Символ отключён сервером: USDCATOM
+2025/08/07 09:51:41 🚫 [MEXC] Символ отключён сервером: LTCBTC
+2025/08/07 09:51:41 🚫 [MEXC] Символ отключён сервером: BTCXRP
+2025/08/07 09:51:41 🚫 [MEXC] Символ отключён сервером: LTCUSDC
+2025/08/07 09:51:41 🚫 [MEXC] Символ отключён сервером: USDCMINA
+2025/08/07 09:51:41 🚫 [MEXC] Символ отключён сервером: USDTMINA
+2025/08/07 09:51:41 🚫 [MEXC] Символ отключён сервером: SOLUSDC
+2025/08/07 09:51:41 🚫 [MEXC] Символ отключён сервером: OPUSDC
+2025/08/07 09:51:41 🌐 [MEXC] Подключаемся к wss://wbs.mexc.com/ws
+2025/08/07 09:51:41 ✅ [MEXC] Соединение установлено
+2025/08/07 09:51:41 📩 [MEXC] Подписка отправлена: [USDCSOL WBTCUSDC ENSUSDT USDTWAVES USDTDOGE SOLBTC USDCAAVE FILUSDC USDTUSDC USDCALGO LTCUSDT USDTATOM NEARUSDC TRXBTC USDTAAVE USDCFIL XENUSDT UNIUSDT USDTAZERO ADABTC]
+2025/08/07 09:51:42 ✅ [MEXC] Соединение установлено
+2025/08/07 09:51:42 📩 [MEXC] Подписка отправлена: [BTCBCH WBTCUSDT LUNCUSDT AZEROUSDC AAVEUSDT USDCETH UNIUSDC BCHUSDT USDTSHIB WAVESUSDC AAVEUSDC AVAXUSDC USDTWBTC ETHBTC USDTBNB DOGEUSDC ATOMUSDC BTCLTC AZEROUSDT WAVESUSDT]
+2025/08/07 09:51:42 📨 [MEXC] Ответ: {"id":1754549501,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@XENUSDT,spot@public.deals.v3.api@USDCFIL,spot@public.deals.v3.api@USDCSOL,spot@public.deals.v3.api@USDTUSDC,spot@public.deals.v3.api@NEARUSDC,spot@public.deals.v3.api@USDTWAVES,spot@public.deals.v3.api@USDTAAVE,spot@public.deals.v3.api@USDTAZERO,spot@public.deals.v3.api@SOLBTC,spot@public.deals.v3.api@USDCAAVE,spot@public.deals.v3.api@UNIUSDT,spot@public.deals.v3.api@WBTCUSDC,spot@public.deals.v3.api@FILUSDC,spot@public.deals.v3.api@LTCUSDT,spot@public.deals.v3.api@USDTDOGE,spot@public.deals.v3.api@ADABTC,spot@public.deals.v3.api@USDCALGO,spot@public.deals.v3.api@USDTATOM,spot@public.deals.v3.api@ENSUSDT,spot@public.deals.v3.api@TRXBTC].  Reason： Blocked! "}
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: XENUSDT
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: USDCFIL
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: USDCSOL
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: USDTUSDC
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: NEARUSDC
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: USDTWAVES
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: USDTAAVE
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: USDTAZERO
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: SOLBTC
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: USDCAAVE
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: UNIUSDT
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: WBTCUSDC
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: FILUSDC
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: LTCUSDT
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: USDTDOGE
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: ADABTC
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: USDCALGO
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: USDTATOM
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: ENSUSDT
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: TRXBTC
+2025/08/07 09:51:42 📨 [MEXC] Ответ: {"id":1754549502,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@UNIUSDC,spot@public.deals.v3.api@BTCBCH,spot@public.deals.v3.api@AVAXUSDC,spot@public.deals.v3.api@ATOMUSDC,spot@public.deals.v3.api@WBTCUSDT,spot@public.deals.v3.api@WAVESUSDC,spot@public.deals.v3.api@BTCLTC,spot@public.deals.v3.api@AAVEUSDC,spot@public.deals.v3.api@AZEROUSDC,spot@public.deals.v3.api@BCHUSDT,spot@public.deals.v3.api@USDTWBTC,spot@public.deals.v3.api@DOGEUSDC,spot@public.deals.v3.api@USDCETH,spot@public.deals.v3.api@WAVESUSDT,spot@public.deals.v3.api@LUNCUSDT,spot@public.deals.v3.api@USDTBNB,spot@public.deals.v3.api@USDTSHIB,spot@public.deals.v3.api@AZEROUSDT,spot@public.deals.v3.api@AAVEUSDT,spot@public.deals.v3.api@ETHBTC].  Reason： Blocked! "}
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: UNIUSDC
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: BTCBCH
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: AVAXUSDC
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: ATOMUSDC
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: WBTCUSDT
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: WAVESUSDC
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: BTCLTC
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: AAVEUSDC
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: AZEROUSDC
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: BCHUSDT
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: USDTWBTC
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: DOGEUSDC
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: USDCETH
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: WAVESUSDT
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: LUNCUSDT
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: USDTBNB
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: USDTSHIB
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: AZEROUSDT
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: AAVEUSDT
+2025/08/07 09:51:42 🚫 [MEXC] Символ отключён сервером: ETHBTC
+2025/08/07 09:51:42 🌐 [MEXC] Подключаемся к wss://wbs.mexc.com/ws
+2025/08/07 09:51:42 🌐 [MEXC] Подключаемся к wss://wbs.mexc.com/ws
+2025/08/07 09:51:42 ✅ [MEXC] Соединение установлено
+2025/08/07 09:51:42 📩 [MEXC] Подписка отправлена: [FTTUSDT ALGOUSDT USDCRAY USDTENS]
+2025/08/07 09:51:42 ✅ [MEXC] Соединение установлено
+2025/08/07 09:51:42 📩 [MEXC] Подписка отправлена: [USDCBNB USDTOP UNIETH FILUSDT SHIBUSDT JASMYUSDC USDTLTC BTCUSDC USDCNEAR USDCENS USDCXEN USDCAPE USDCDOGE USDTRAY USDCLTC USDTALGO USDTAVAX USDTTRX LUNCUSDC MINAUSDC]
+2025/08/07 09:51:43 📨 [MEXC] Ответ: {"id":1754549502,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@USDCRAY,spot@public.deals.v3.api@FTTUSDT,spot@public.deals.v3.api@USDTENS,spot@public.deals.v3.api@ALGOUSDT].  Reason： Blocked! "}
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: USDCRAY
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: FTTUSDT
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: USDTENS
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: ALGOUSDT
+2025/08/07 09:51:43 📨 [MEXC] Ответ: {"id":1754549502,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@USDTOP,spot@public.deals.v3.api@USDCNEAR,spot@public.deals.v3.api@JASMYUSDC,spot@public.deals.v3.api@USDCENS,spot@public.deals.v3.api@FILUSDT,spot@public.deals.v3.api@SHIBUSDT,spot@public.deals.v3.api@LUNCUSDC,spot@public.deals.v3.api@UNIETH,spot@public.deals.v3.api@USDCDOGE,spot@public.deals.v3.api@MINAUSDC,spot@public.deals.v3.api@USDTTRX,spot@public.deals.v3.api@USDTLTC,spot@public.deals.v3.api@USDCBNB,spot@public.deals.v3.api@USDCAPE,spot@public.deals.v3.api@USDCLTC,spot@public.deals.v3.api@USDTAVAX,spot@public.deals.v3.api@USDCXEN,spot@public.deals.v3.api@USDTRAY,spot@public.deals.v3.api@BTCUSDC,spot@public.deals.v3.api@USDTALGO].  Reason： Blocked! "}
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: USDTOP
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: USDCNEAR
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: JASMYUSDC
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: USDCENS
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: FILUSDT
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: SHIBUSDT
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: LUNCUSDC
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: UNIETH
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: USDCDOGE
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: MINAUSDC
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: USDTTRX
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: USDTLTC
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: USDCBNB
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: USDCAPE
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: USDCLTC
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: USDTAVAX
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: USDCXEN
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: USDTRAY
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: BTCUSDC
+2025/08/07 09:51:43 🚫 [MEXC] Символ отключён сервером: USDTALGO
+2025/08/07 09:51:46 ❌ [MEXC] PING ошибка: websocket: close sent
+2025/08/07 09:51:47 ❌ [MEXC] PING ошибка: websocket: close sent
+2025/08/07 09:51:47 ❌ [MEXC] PING ошибка: websocket: close sent
+2025/08/07 09:51:47 ❌ [MEXC] PING ошибка: websocket: close sent
+2025/08/07 09:51:47 ❌ [MEXC] PING ошибка: websocket: close sent
+2025/08/07 09:51:47 ❌ [MEXC] PING ошибка: websocket: close sent
+2025/08/07 09:51:47 ❌ [MEXC] PING ошибка: websocket: close sent
+2025/08/07 09:51:47 ❌ [MEXC] PING ошибка: websocket: close sent
+
+
+
 
 
 
