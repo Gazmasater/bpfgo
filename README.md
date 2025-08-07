@@ -459,121 +459,16 @@ syntax = "proto3";
 option go_package = "crypt_proto/pb";
 
 
-func New(ex exchange.Exchange) (*Arbitrager, error) {
-	// Загружаем список заблокированных символов
-	blocked := make(map[string]struct{})
-	if data, err := os.ReadFile("blocked_pairs.log"); err == nil {
-		lines := strings.Split(string(data), "\n")
-		for _, l := range lines {
-			s := strings.TrimSpace(l)
-			if s != "" {
-				blocked[s] = struct{}{}
-			}
-		}
-		log.Printf("📵 Загружено %d заблокированных символов из blocked_pairs.log", len(blocked))
-	}
-
-	// Получаем список доступных символов и параметры лотов
-	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
-	avail := filesystem.ExpandAvailableSymbols(rawSymbols)
-	log.Printf("📊 Доступные пары (с инверсиями): %d", len(avail))
-
-	// Строим треугольники
-	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
-	if err != nil {
-		return nil, fmt.Errorf("LoadTriangles: %w", err)
-	}
-	log.Printf("[INIT] Треугольников найдено: %d", len(ts))
-
-	if data, err := json.MarshalIndent(ts, "", "  "); err == nil {
-		_ = os.WriteFile("triangles_dump.json", data, 0644)
-	}
-
-	// Индексация пар
-	trianglesByPair := make(map[string][]int, len(ts)*3)
-	subRaw := make([]string, 0, len(ts)*3)
-
-	for i, tri := range ts {
-		ab := tri.A + tri.B
-		bc := tri.B + tri.C
-		ca := tri.C + tri.A
-
-		trianglesByPair[ab] = append(trianglesByPair[ab], i)
-		trianglesByPair[bc] = append(trianglesByPair[bc], i)
-		trianglesByPair[ca] = append(trianglesByPair[ca], i)
-
-		subRaw = append(subRaw, ab, bc, ca)
-	}
-	log.Printf("[INIT] Составили индекс по парам: %d ключей", len(trianglesByPair))
-
-	// Убираем пары, отсутствующие в бирже или заблокированные
-	uniq := make(map[string]struct{}, len(subRaw))
-	invalid := make([]string, 0)
-
-	for _, p := range subRaw {
-		if avail[p] {
-			if _, isBlocked := blocked[p]; !isBlocked {
-				uniq[p] = struct{}{}
-			} else {
-				invalid = append(invalid, p+" (blocked)")
-			}
-		} else {
-			invalid = append(invalid, p+" (not found)")
-		}
-	}
-
-	subPairs := make([]string, 0, len(uniq))
-	for p := range uniq {
-		subPairs = append(subPairs, p)
-	}
-	log.Printf("[INIT] Пары для подписки: %d", len(subPairs))
-
-	if len(invalid) > 0 {
-		_ = os.WriteFile("excluded_pairs.log", []byte(strings.Join(invalid, "\n")), 0644)
-		log.Printf("⚠️ Исключено %d пар (см. excluded_pairs.log)", len(invalid))
-	}
-
-	// 💾 Сохраняем финальные пары
-	if err := os.WriteFile("final_ws_symbols.log", []byte(strings.Join(subPairs, "\n")), 0644); err == nil {
-		log.Printf("📄 Сохранено %d пар в final_ws_symbols.log", len(subPairs))
-	}
-
-	// Создаём арбитражёр
-	arb := &Arbitrager{
-		Triangles:       ts,
-		latest:          make(map[string]float64, len(subPairs)),
-		trianglesByPair: trianglesByPair,
-		realSymbols:     avail,
-		stepSizes:       stepSizes,
-		minQtys:         minQtys,
-		StartAmount:     0.5,
-		exchange:        ex,
-	}
-
-	// Подписки чанками
-	const maxPerConn = 20
-	for i := 0; i < len(subPairs); i += maxPerConn {
-		end := i + maxPerConn
-		if end > len(subPairs) {
-			end = len(subPairs)
-		}
-		chunk := subPairs[i:end]
-
-		go func(idx int, pairs []string) {
-			for {
-				err := ex.SubscribeDeals(pairs, arb.HandleRaw)
-				if err != nil {
-					log.Printf("[WS][%s] ❌ Подписка #%d: %v, повтор через 1с...", ex.Name(), idx, err)
-					time.Sleep(time.Second)
-					continue
-				}
-				log.Printf("[WS][%s] ✅ Подписка #%d активна: %v", ex.Name(), idx, pairs)
-				return
-			}
-		}(i/maxPerConn+1, chunk)
-	}
-
-	return arb, nil
-}
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
+2025/08/07 13:29:46 📈 Profiler доступен на http://localhost:6060/debug/pprof/
+2025/08/07 13:29:46 📵 Загружено 144 заблокированных символов из blocked_pairs.log
+2025/08/07 13:29:47 ✅ Подходящих пар: 558
+2025/08/07 13:29:47 📊 Доступные пары (с инверсиями): 1116
+2025/08/07 13:29:47 [TRIANGLE] Found 234 triangles
+2025/08/07 13:29:47 [INIT] Треугольников найдено: 234
+2025/08/07 13:29:47 [INIT] Составили индекс по парам: 144 ключей
+2025/08/07 13:29:47 [INIT] Пары для подписки: 0
+2025/08/07 13:29:47 ⚠️ Исключено 702 пар (см. excluded_pairs.log)
+2025/08/07 13:29:47 📄 Сохранено 0 пар в final_ws_symbols.log
 
 
