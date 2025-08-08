@@ -448,214 +448,190 @@ syntax = "proto3";
 option go_package = "crypt_proto/pb";
 
 
+
+
 // internal/domain/exchange/exchange.go
 package exchange
 
-import "time"
-
-type Tick struct {
-    Symbol string   // "BTCUSDT" без дефиса
-    Price  float64
-    Ts     time.Time
-    Src    string   // "MEXC" или "OKX" — если захочешь логировать источник
-}
-
 type Exchange interface {
-    Name() string
-    FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64)
-    SubscribeTicks(pairs []string, onTick func(Tick)) error
-    PlaceMarketOrder(symbol, side string, quantity float64) (string, error)
-    GetBestAsk(symbol string) (float64, error)
-    GetBestBid(symbol string) (float64, error)
+	Name() string
+
+	FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64)
+
+	// Нормализованный тикер: символ без дефисов (BTCUSDT) и float64-цена.
+	SubscribeTickers(pairs []string, handler func(symbol string, price float64)) error
+
+	PlaceMarketOrder(symbol, side string, quantity float64) (string, error)
+	GetBestAsk(symbol string) (float64, error)
+	GetBestBid(symbol string) (float64, error)
 }
 
 
 
-2) app больше не обрабатывает raw
-go
-Копировать
-Редактировать
-// internal/app/app.go (фрагменты)
-type Arbitrager struct {
-    Triangles       []triangle.Triangle
-    latest          map[string]float64
-    trianglesByPair map[string][]int
-    realSymbols     map[string]bool
-    mu              sync.Mutex
-    StartAmount     float64
-}
+// internal/app/arbitrager.go
 
 func New(ex exchange.Exchange) (*Arbitrager, error) {
-    rawSymbols, _, _ := ex.FetchAvailableSymbols()
-    avail := filesystem.ExpandAvailableSymbols(rawSymbols)
+	// 1) Реальные пары и лоты с бирж (без инверсий)
+	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
+	if len(rawSymbols) == 0 {
+		return nil, fmt.Errorf("no spot symbols from %s", ex.Name())
+	}
 
-    a := &Arbitrager{
-        latest:          make(map[string]float64, len(avail)),
-        trianglesByPair: make(map[string][]int),
-        realSymbols:     avail, // true для обеих направлений
-        StartAmount:     100,
-    }
+	// 2) Расширяем инверсиями и строим треугольники
+	avail := filesystem.ExpandAvailableSymbols(rawSymbols) // AB и BA = true
+	log.Printf("📊 Доступные пары (реальные+инверсии): %d", len(avail))
 
-    // строим треугольники сразу из avail (с учётом blocked_pairs.log, если нужно)
-    tris, err := filesystem.LoadTrianglesFromSymbols(rawSymbols)
-    if err != nil { return nil, err }
-    a.Triangles = triangle.Filter(tris, avail)
+	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
+	if err != nil {
+		return nil, fmt.Errorf("LoadTrianglesFromSymbols: %w", err)
+	}
+	log.Printf("[INIT] Треугольников найдено: %d", len(ts))
 
-    // Индексация треугольников по парам
-    for i, t := range a.Triangles {
-        for _, p := range [][2]string{{t.A,t.B},{t.B,t.C},{t.C,t.A}} {
-            ab, ok, _ := a.normalizeSymbolDir(p[0], p[1])
-            if ok {
-                a.trianglesByPair[ab] = append(a.trianglesByPair[ab], i)
-            }
-        }
-    }
+	// Для отладки — дамп треугольников
+	if data, err := json.MarshalIndent(ts, "", "  "); err == nil {
+		_ = os.WriteFile("triangles_dump.json", data, 0644)
+	}
 
-    // Подписываемся только на нужные пары
-    pairs := triangle.SymbolPairs(a.Triangles)
-    go func() {
-        _ = ex.SubscribeTicks(pairs, func(t exchange.Tick) { a.handleTick(t) })
-    }()
+	// 3) Индексация: на каждый треугольник вешаем оба направления ребра (AB и BA)
+	trianglesByPair := make(map[string][]int, len(ts)*6)
+	// И список реальных пар для подписки: подписываемся только на то, что реально торгуется (rawSymbols)
+	realToSubscribe := make(map[string]struct{}, len(ts)*6)
 
-    return a, nil
+	for i, tri := range ts {
+		ab, ba := tri.A+tri.B, tri.B+tri.A
+		bc, cb := tri.B+tri.C, tri.C+tri.B
+		ca, ac := tri.C+tri.A, tri.A+tri.C
+
+		trianglesByPair[ab] = append(trianglesByPair[ab], i)
+		trianglesByPair[ba] = append(trianglesByPair[ba], i)
+		trianglesByPair[bc] = append(trianglesByPair[bc], i)
+		trianglesByPair[cb] = append(trianglesByPair[cb], i)
+		trianglesByPair[ca] = append(trianglesByPair[ca], i)
+		trianglesByPair[ac] = append(trianglesByPair[ac], i)
+
+		// Подписываемся только на реально существующие направления
+		if rawSymbols[ab] { realToSubscribe[ab] = struct{}{} }
+		if rawSymbols[ba] { realToSubscribe[ba] = struct{}{} }
+		if rawSymbols[bc] { realToSubscribe[bc] = struct{}{} }
+		if rawSymbols[cb] { realToSubscribe[cb] = struct{}{} }
+		if rawSymbols[ca] { realToSubscribe[ca] = struct{}{} }
+		if rawSymbols[ac] { realToSubscribe[ac] = struct{}{} }
+	}
+
+	subPairs := make([]string, 0, len(realToSubscribe))
+	for p := range realToSubscribe {
+		subPairs = append(subPairs, p)
+	}
+	log.Printf("[INIT] Индекс по парам: %d ключей", len(trianglesByPair))
+	log.Printf("[INIT] Подписка на реальных пар: %d шт.", len(subPairs))
+
+	// 4) Инициализация арбитражёра
+	arb := &Arbitrager{
+		Triangles:       ts,
+		latest:          make(map[string]float64, len(subPairs)),
+		trianglesByPair: trianglesByPair,
+		realSymbols:     avail,     // содержит и AB, и BA -> нужно для normalize/invert
+		stepSizes:       stepSizes, // как пришло от биржи
+		minQtys:         minQtys,   // как пришло от биржи
+		StartAmount:     0.5,
+		exchange:        ex,
+	}
+
+	// 5) WS-подписки чанками; каждый чанк — отдельное соединение у адаптера биржи
+	const maxPerConn = 25
+	for i := 0; i < len(subPairs); i += maxPerConn {
+		end := i + maxPerConn
+		if end > len(subPairs) {
+			end = len(subPairs)
+		}
+		chunk := append([]string(nil), subPairs[i:end]...) // защитим от гонок
+
+		go func(pairs []string) {
+			for {
+				if err := ex.SubscribeTickers(pairs, arb.OnTick); err != nil {
+					log.Printf("[WS][%s] subscribe error: %v, retrying...", ex.Name(), err)
+					time.Sleep(time.Second)
+					continue
+				}
+				log.Printf("[WS][%s] subscribed to %d pairs", ex.Name(), len(pairs))
+				return
+			}
+		}(chunk)
+	}
+
+	return arb, nil
 }
 
-func (a *Arbitrager) handleTick(t exchange.Tick) {
-    a.mu.Lock()
-    a.latest[t.Symbol] = t.Price
-    a.mu.Unlock()
-    a.Check(t.Symbol)
-}
-Обрати внимание: testWsSubscription и HandleRaw больше не нужны — MEXC/OKX сами парсят свои сообщения и отдают Tick.
 
-3) MEXC: парсим и вызываем onTick
-go
-Копировать
-Редактировать
-// internal/repository/mexc/mexc.go (фрагменты)
-func (m *MexcExchange) SubscribeTicks(pairs []string, onTick func(exchange.Tick)) error {
-    const wsURL = "wss://wbs.mexc.com/ws"
-    // ... подключение, пинг как у тебя ...
+// OnTick кладёт последнюю цену и триггерит пересчёт
+func (a *Arbitrager) OnTick(symbol string, price float64) {
+	if price <= 0 {
+		return
+	}
 
-    for {
-        _, raw, err := conn.ReadMessage()
-        if err != nil { /* реконнект */ }
+	a.mu.Lock()
+	_, has := a.trianglesByPair[symbol]
+	if !has {
+		a.mu.Unlock()
+		return
+	}
+	a.latest[symbol] = price
+	a.mu.Unlock()
 
-        // Быстрый дешифр без аллокаций можно оставить,
-        // но проще — минимальный unmarshal:
-        var msg struct {
-            S string `json:"s"` // symbol
-            P string `json:"p"` // price (string)
-        }
-        if json.Unmarshal(raw, &msg) == nil && msg.S != "" && msg.P != "" {
-            if px, err := strconv.ParseFloat(msg.P, 64); err == nil {
-                onTick(exchange.Tick{Symbol: strings.ToUpper(msg.S), Price: px, Ts: time.Now(), Src: m.Name()})
-            }
-            continue
-        }
-
-        // обработка служебных ответов/ошибок — по желанию
-    }
-}
-Твой старый SubscribeDeals почти готов — просто замени handler("MEXC", raw) на распарсить → onTick(...).
-
-4) OKX: подписка и нормализация символов
-В FetchAvailableSymbols уже норм — только разбери lotSz в float64, не ставь константу.
-
-Для WS лучше канал trades или tickers. Для простоты — tickers:
-
-go
-Копировать
-Редактировать
-// internal/repository/okx/okx.go (фрагменты)
-func okxToSym(instId string) string { // "BTC-USDT" -> "BTCUSDT"
-    return strings.ReplaceAll(instId, "-", "")
+	a.Check(symbol)
 }
 
-func symToOKX(symbol string) string { // "BTCUSDT" -> "BTC-USDT" (через известные котировки)
-    base, quote := filesystem.UnpackPair(symbol) // сделай Exported: UnpackPair
-    if base == "" || quote == "" { return symbol }
-    return base + "-" + quote
+// Check пересчитывает профит для всех треугольников, связанных с символом.
+// Берёт снапшот цен, чтобы не держать мьютекс на вычислениях.
+func (a *Arbitrager) Check(symbol string) {
+	// 1) Индексы треугольников и снапшот цен под мьютексом
+	a.mu.Lock()
+	indices := a.trianglesByPair[symbol]
+	if len(indices) == 0 {
+		a.mu.Unlock()
+		return
+	}
+	prices := make(map[string]float64, len(a.latest))
+	for k, v := range a.latest {
+		prices[k] = v
+	}
+	a.mu.Unlock()
+
+	// 2) Хелпер: получить цену ребра A→B.
+	// Если есть тик по AB — берём его; иначе, если есть BA — инвертируем.
+	getLeg := func(base, quote string) (float64, bool) {
+		if p, ok := prices[base+quote]; ok && p > 0 {
+			return p, true
+		}
+		if p, ok := prices[quote+base]; ok && p > 0 {
+			return 1 / p, true
+		}
+		return 0, false
+	}
+
+	const fee = 0.9965 * 0.9965 * 0.9965 // комиссия трёх сделок
+
+	// 3) Считаем профит
+	for _, idx := range indices {
+		tri := a.Triangles[idx]
+
+		p1, ok1 := getLeg(tri.A, tri.B)
+		p2, ok2 := getLeg(tri.B, tri.C)
+		p3, ok3 := getLeg(tri.C, tri.A)
+		if !ok1 || !ok2 || !ok3 {
+			continue
+		}
+
+		gross := p1 * p2 * p3
+		net := gross * fee
+		profitPct := (net - 1) * 100
+
+		// Если нужно — фильтруй только положительные:
+		// if profitPct <= 0 { continue }
+
+		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%% (gross=%.6f net=%.6f)",
+			tri.A, tri.B, tri.C, profitPct, gross, net)
+	}
 }
-
-func (o *OKXExchange) SubscribeTicks(pairs []string, onTick func(exchange.Tick)) error {
-    c, _, err := websocket.DefaultDialer.Dial("wss://ws.okx.com:8443/ws/v5/public", nil)
-    if err != nil { return err }
-
-    args := make([]map[string]string, 0, len(pairs))
-    for _, p := range pairs {
-        args = append(args, map[string]string{
-            "channel": "tickers",
-            "instId":  symToOKX(p),
-        })
-    }
-    sub := map[string]any{"op": "subscribe", "args": args}
-    if err := c.WriteJSON(sub); err != nil { return err }
-
-    go func() {
-        for {
-            _, raw, err := c.ReadMessage()
-            if err != nil { log.Printf("OKX read err: %v", err); time.Sleep(time.Second); continue }
-
-            // Пример ответа: { "arg":{...}, "data":[{"instId":"BTC-USDT","last":"..."}] }
-            var r struct {
-                Arg  struct{ InstID string `json:"instId"` } `json:"arg"`
-                Data []struct {
-                    InstID string `json:"instId"`
-                    Last   string `json:"last"`
-                    Ts     string `json:"ts"`
-                } `json:"data"`
-            }
-            if json.Unmarshal(raw, &r) == nil && len(r.Data) > 0 {
-                d := r.Data[0]
-                if px, err := strconv.ParseFloat(d.Last, 64); err == nil {
-                    onTick(exchange.Tick{
-                        Symbol: okxToSym(d.InstID),
-                        Price:  px,
-                        Ts:     time.Now(),
-                        Src:    o.Name(),
-                    })
-                }
-            }
-        }
-    }()
-    return nil
-}
-И в FetchAvailableSymbols:
-
-go
-Копировать
-Редактировать
-for _, item := range data.Data {
-    sym := okxToSym(item.InstID)
-    if sym == "" { continue }
-    avail[sym] = true
-    if v, err := strconv.ParseFloat(item.LotSz, 64); err == nil && v > 0 {
-        step[sym] = v
-        minQty[sym] = v // минимумом можно считать lot size по умолчанию
-    }
-}
-5) Выбор биржи в main
-go
-Копировать
-Редактировать
-exch := strings.ToUpper(os.Getenv("EXCHANGE")) // "MEXC" или "OKX"
-var ex exchange.Exchange
-switch exch {
-case "MEXC":
-    ex = mexc.NewMexcExchange(apiKey, secret)
-case "OKX":
-    ex = okx.NewOKXExchange()
-default:
-    log.Fatalf("Неизвестная биржа EXCHANGE=%q", exch)
-}
-
-_, err = app.New(ex)
-if err != nil { log.Fatal(err) }
-select {}
-
-
-
-
 
 
