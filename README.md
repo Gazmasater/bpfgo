@@ -895,4 +895,37 @@ func (o *OKXExchange) SubscribeTickers(pairs []string, handler func(symbol strin
 }
 
 
+package main
+
+import (
+	"log"
+	"net/http"
+	_ "net/http/pprof"
+
+	"cryptarb/internal/app"
+	"cryptarb/internal/repository/okx"
+)
+
+func main() {
+	// 🧪 Включаем pprof
+	go func() {
+		log.Println("📈 Profiler доступен на http://localhost:6060/debug/pprof/")
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+
+	// 2. Создаём клиента биржи
+	ex := okx.NewOKXExchange()
+
+	// 3. Запускаем арбитраж без triangles.json
+	_, _ = app.New(ex)
+	//if err != nil {
+	//	log.Fatal("❌ Ошибка запуска арбитража:", err)
+	//}
+
+	// 4. Блокируем main
+	select {}
+}
+
+
+
 
