@@ -907,24 +907,24 @@ import (
 )
 
 func main() {
-	// 🧪 Включаем pprof
+	// pprof
 	go func() {
-		log.Println("📈 Profiler доступен на http://localhost:6060/debug/pprof/")
+		log.Println("📈 Profiler: http://localhost:6060/debug/pprof/")
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 
-	// 2. Создаём клиента биржи
+	// Только OKX
 	ex := okx.NewOKXExchange()
 
-	// 3. Запускаем арбитраж без triangles.json
-	_, _ = app.New(ex)
-	//if err != nil {
-	//	log.Fatal("❌ Ошибка запуска арбитража:", err)
-	//}
+	// Старт арбитража
+	if _, err := app.New(ex); err != nil {
+		log.Fatal("❌ Ошибка запуска арбитража:", err)
+	}
 
-	// 4. Блокируем main
+	// Блокируем main
 	select {}
 }
+
 
 
 
