@@ -635,3 +635,264 @@ func (a *Arbitrager) Check(symbol string) {
 }
 
 
+
+package mexc
+
+import (
+	"bytes"
+	"log"
+	"strconv"
+	"time"
+
+	"github.com/gorilla/websocket"
+)
+
+const mexcMaxPerConn = 25
+
+func chunkStrings(in []string, n int) [][]string {
+	if n <= 0 || len(in) == 0 {
+		return nil
+	}
+	var out [][]string
+	for i := 0; i < len(in); i += n {
+		end := i + n
+		if end > len(in) {
+			end = len(in)
+		}
+		out = append(out, append([]string(nil), in[i:end]...))
+	}
+	return out
+}
+
+func buildMexcChannels(pairs []string) []string {
+	out := make([]string, 0, len(pairs))
+	for _, p := range pairs {
+		out = append(out, "spot@public.deals.v3.api@"+p)
+	}
+	return out
+}
+
+func (m *MexcExchange) SubscribeTickers(pairs []string, handler func(symbol string, price float64)) error {
+	chunks := chunkStrings(pairs, mexcMaxPerConn)
+
+	for _, ch := range chunks {
+		ps := append([]string(nil), ch...) // копия на всякий
+
+		go func(pairs []string) {
+			const wsURL = "wss://wbs.mexc.com/ws"
+
+			for { // reconnect loop
+				log.Printf("🌐 [MEXC] dial %s (pairs=%d)", wsURL, len(pairs))
+				conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+				if err != nil {
+					log.Printf("❌ [MEXC] dial: %v", err)
+					time.Sleep(3 * time.Second)
+					continue
+				}
+				log.Printf("✅ [MEXC] connected")
+
+				sub := map[string]any{
+					"method": "SUBSCRIPTION",
+					"params": buildMexcChannels(pairs),
+					"id":     time.Now().Unix(),
+				}
+				if err := conn.WriteJSON(sub); err != nil {
+					log.Printf("❌ [MEXC] send sub: %v", err)
+					_ = conn.Close()
+					time.Sleep(2 * time.Second)
+					continue
+				}
+				log.Printf("📩 [MEXC] subscribed: %d", len(pairs))
+
+				// ping
+				go func(c *websocket.Conn) {
+					t := time.NewTicker(45 * time.Second)
+					defer t.Stop()
+					for range t.C {
+						if err := c.WriteMessage(websocket.PingMessage, []byte("hb")); err != nil {
+							_ = c.Close()
+							return
+						}
+					}
+				}(conn)
+
+				// read loop
+				for {
+					_, raw, err := conn.ReadMessage()
+					if err != nil {
+						log.Printf("⚠️  [MEXC] read: %v", err)
+						_ = conn.Close()
+						time.Sleep(2 * time.Second)
+						break // reconnect
+					}
+
+					// быстрый парс "s" и "p"
+					i := bytes.Index(raw, []byte(`"s":"`))
+					if i < 0 {
+						continue
+					}
+					i += len(`"s":"`)
+					j := bytes.IndexByte(raw[i:], '"')
+					if j < 0 {
+						continue
+					}
+					sym := string(raw[i : i+j])
+
+					k := bytes.Index(raw, []byte(`"p":"`))
+					if k < 0 {
+						continue
+					}
+					k += len(`"p":"`)
+					l := bytes.IndexByte(raw[k:], '"')
+					if l < 0 {
+						continue
+					}
+					price, err := strconv.ParseFloat(string(raw[k:k+l]), 64)
+					if err != nil || price <= 0 {
+						continue
+					}
+
+					handler(sym, price)
+				}
+			}
+		}(ps)
+	}
+
+	return nil
+}
+
+
+
+package okx
+
+import (
+	"encoding/json"
+	"log"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/gorilla/websocket"
+)
+
+const okxMaxPerConn = 25
+
+func chunkStrings(in []string, n int) [][]string {
+	if n <= 0 || len(in) == 0 {
+		return nil
+	}
+	var out [][]string
+	for i := 0; i < len(in); i += n {
+		end := i + n
+		if end > len(in) {
+			end = len(in)
+		}
+		out = append(out, append([]string(nil), in[i:end]...))
+	}
+	return out
+}
+
+func toOKXInstID(sym string) string {
+	quotes := []string{"USDT", "USDC", "BTC", "ETH", "EUR", "BRL", "USD1", "USDE"}
+	for _, q := range quotes {
+		if strings.HasSuffix(sym, q) && len(sym) > len(q) {
+			return sym[:len(sym)-len(q)] + "-" + q
+		}
+	}
+	if len(sym) > 4 {
+		return sym[:len(sym)-4] + "-" + sym[len(sym)-4:]
+	}
+	return sym
+}
+
+func (o *OKXExchange) SubscribeTickers(pairs []string, handler func(symbol string, price float64)) error {
+	chunks := chunkStrings(pairs, okxMaxPerConn)
+
+	for _, ch := range chunks {
+		ps := append([]string(nil), ch...)
+
+		go func(pairs []string) {
+			const wsURL = "wss://ws.okx.com:8443/ws/v5/public"
+
+			for { // reconnect loop
+				log.Printf("🌐 [OKX] dial %s (pairs=%d)", wsURL, len(pairs))
+				conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+				if err != nil {
+					log.Printf("❌ [OKX] dial: %v", err)
+					time.Sleep(3 * time.Second)
+					continue
+				}
+				log.Printf("✅ [OKX] connected")
+
+				args := make([]map[string]string, 0, len(pairs))
+				for _, p := range pairs {
+					args = append(args, map[string]string{
+						"channel": "tickers",
+						"instId":  toOKXInstID(p),
+					})
+				}
+				sub := map[string]any{"op": "subscribe", "args": args}
+				if err := conn.WriteJSON(sub); err != nil {
+					log.Printf("❌ [OKX] send sub: %v", err)
+					_ = conn.Close()
+					time.Sleep(2 * time.Second)
+					continue
+				}
+				log.Printf("📩 [OKX] subscribed: %d", len(args))
+
+				// read loop
+				for {
+					_, msg, err := conn.ReadMessage()
+					if err != nil {
+						log.Printf("⚠️  [OKX] read: %v", err)
+						_ = conn.Close()
+						time.Sleep(2 * time.Second)
+						break // reconnect
+					}
+
+					var frame struct {
+						Data []struct {
+							InstID string `json:"instId"`
+							Last   string `json:"last"`
+							AskPx  string `json:"askPx"`
+							BidPx  string `json:"bidPx"`
+						} `json:"data"`
+					}
+					if err := json.Unmarshal(msg, &frame); err != nil || len(frame.Data) == 0 {
+						continue
+					}
+
+					for _, d := range frame.Data {
+						if d.InstID == "" {
+							continue
+						}
+						sym := strings.ReplaceAll(d.InstID, "-", "")
+
+						var priceStr string
+						switch {
+						case d.Last != "":
+							priceStr = d.Last
+						case d.AskPx != "":
+							priceStr = d.AskPx
+						case d.BidPx != "":
+							priceStr = d.BidPx
+						default:
+							continue
+						}
+
+						price, err := strconv.ParseFloat(priceStr, 64)
+						if err != nil || price <= 0 {
+							continue
+						}
+						handler(sym, price)
+					}
+				}
+			}
+		}(ps)
+	}
+
+	return nil
+}
+
+
+
