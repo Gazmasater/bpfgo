@@ -450,30 +450,150 @@ option go_package = "crypt_proto/pb";
 
 
 
-// internal/app/arbitrager.go
+package app
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"sync"
+	"time"
+
+	"cryptarb/internal/domain/exchange"
+	"cryptarb/internal/domain/triangle"
+	"cryptarb/internal/repository/filesystem"
+)
+
+// Arbitrager ищет треугольные арбитражные возможности на бирже.
+type Arbitrager struct {
+	Triangles       []triangle.Triangle
+	trianglesByPair map[string][]int   // Индексы треугольников по паре
+	realSymbols     map[string]bool    // Доступные пары (с инверсиями)
+	stepSizes       map[string]float64 // Шаг лота
+	minQtys         map[string]float64 // Мин. объём
+	latest          map[string]Quote   // было map[string]float64
+
+	mu          sync.Mutex
+	StartAmount float64
+	exchange    exchange.Exchange
+}
+
 type Quote struct {
 	Bid float64
 	Ask float64
 	Ts  time.Time
 }
 
+// New создаёт и инициализирует арбитражер.
+func New(ex exchange.Exchange) (*Arbitrager, error) {
+	// 1) Реальные пары и лоты с бирж (без инверсий)
+	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
+	if len(rawSymbols) == 0 {
+		return nil, fmt.Errorf("no spot symbols from %s", ex.Name())
+	}
 
-type Arbitrager struct {
-	// ...
-	latest          map[string]Quote // было map[string]float64
-	// ...
+	// 2) Расширяем инверсиями и строим треугольники
+	avail := filesystem.ExpandAvailableSymbols(rawSymbols) // AB и BA = true
+	log.Printf("📊 Доступные пары (реальные+инверсии): %d", len(avail))
+
+	ts, err := filesystem.LoadTrianglesFromSymbols(avail)
+	if err != nil {
+		return nil, fmt.Errorf("LoadTrianglesFromSymbols: %w", err)
+	}
+	log.Printf("[INIT] Треугольников найдено: %d", len(ts))
+
+	// Для отладки — дамп треугольников
+	if data, err := json.MarshalIndent(ts, "", "  "); err == nil {
+		_ = os.WriteFile("triangles_dump.json", data, 0644)
+	}
+
+	// 3) Индексация: на каждый треугольник вешаем оба направления ребра (AB и BA)
+	trianglesByPair := make(map[string][]int, len(ts)*6)
+	// И список реальных пар для подписки: подписываемся только на то, что реально торгуется (rawSymbols)
+	realToSubscribe := make(map[string]struct{}, len(ts)*6)
+
+	for i, tri := range ts {
+		ab, ba := tri.A+tri.B, tri.B+tri.A
+		bc, cb := tri.B+tri.C, tri.C+tri.B
+		ca, ac := tri.C+tri.A, tri.A+tri.C
+
+		trianglesByPair[ab] = append(trianglesByPair[ab], i)
+		trianglesByPair[ba] = append(trianglesByPair[ba], i)
+		trianglesByPair[bc] = append(trianglesByPair[bc], i)
+		trianglesByPair[cb] = append(trianglesByPair[cb], i)
+		trianglesByPair[ca] = append(trianglesByPair[ca], i)
+		trianglesByPair[ac] = append(trianglesByPair[ac], i)
+
+		// Подписываемся только на реально существующие направления
+		if rawSymbols[ab] {
+			realToSubscribe[ab] = struct{}{}
+		}
+		if rawSymbols[ba] {
+			realToSubscribe[ba] = struct{}{}
+		}
+		if rawSymbols[bc] {
+			realToSubscribe[bc] = struct{}{}
+		}
+		if rawSymbols[cb] {
+			realToSubscribe[cb] = struct{}{}
+		}
+		if rawSymbols[ca] {
+			realToSubscribe[ca] = struct{}{}
+		}
+		if rawSymbols[ac] {
+			realToSubscribe[ac] = struct{}{}
+		}
+	}
+
+	subPairs := make([]string, 0, len(realToSubscribe))
+	for p := range realToSubscribe {
+		subPairs = append(subPairs, p)
+	}
+	log.Printf("[INIT] Индекс по парам: %d ключей", len(trianglesByPair))
+	log.Printf("[INIT] Подписка на реальных пар: %d шт.", len(subPairs))
+
+	// 4) Инициализация арбитражёра
+	arb := &Arbitrager{
+		Triangles: ts,
+		latest:    make(map[string]Quote, len(subPairs)),
+
+		trianglesByPair: trianglesByPair,
+		realSymbols:     avail,     // содержит и AB, и BA -> нужно для normalize/invert
+		stepSizes:       stepSizes, // как пришло от биржи
+		minQtys:         minQtys,   // как пришло от биржи
+		StartAmount:     0.5,
+		exchange:        ex,
+	}
+
+	// 5) WS-подписки чанками; каждый чанк — отдельное соединение у адаптера биржи
+	const maxPerConn = 25
+	for i := 0; i < len(subPairs); i += maxPerConn {
+		end := i + maxPerConn
+		if end > len(subPairs) {
+			end = len(subPairs)
+		}
+		chunk := append([]string(nil), subPairs[i:end]...) // защитим от гонок
+
+		go func(pairs []string) {
+			for {
+				if err := ex.SubscribeTickers(pairs, arb.OnTick); err != nil {
+					log.Printf("[WS][%s] subscribe error: %v, retrying...", ex.Name(), err)
+					time.Sleep(time.Second)
+					continue
+				}
+				log.Printf("[WS][%s] subscribed to %d pairs", ex.Name(), len(pairs))
+				return
+			}
+		}(chunk)
+	}
+
+	return arb, nil
 }
 
-arb := &Arbitrager{
-	// ...
-	latest:          make(map[string]Quote, len(subPairs)),
-	// ...
-}
-
-
-// OnQuote принимает нормализованный символ (например, "BTCUSDT") и котировку bid/ask.
-func (a *Arbitrager) OnQuote(symbol string, bid, ask float64, ts time.Time) {
-	if bid <= 0 || ask <= 0 || ask < bid {
+// OnTick кладёт последнюю цену и триггерит пересчёт
+func (a *Arbitrager) OnTick(symbol string, price float64) {
+	if price <= 0 {
 		return
 	}
 
@@ -483,17 +603,18 @@ func (a *Arbitrager) OnQuote(symbol string, bid, ask float64, ts time.Time) {
 		a.mu.Unlock()
 		return
 	}
-	a.latest[symbol] = Quote{Bid: bid, Ask: ask, Ts: ts}
+	a.latest[symbol] = price
 	a.mu.Unlock()
 
 	a.Check(symbol)
 }
 
-
+// Check пересчитывает профит для всех треугольников, связанных с символом.
+// Берёт снапшот цен, чтобы не держать мьютекс на вычислениях.
 func (a *Arbitrager) Check(symbol string) {
 	const (
-		feeFactor  = 0.9965 * 0.9965 * 0.9965         // комиссия 3 ног
-		staleLimit = 300 * time.Millisecond           // макс. «возраст» котировки
+		feeFactor  = 0.9965 * 0.9965 * 0.9965 // комиссия 3 ног
+		staleLimit = 300 * time.Millisecond   // макс. «возраст» котировки
 	)
 
 	// 1) Забираем индексы и снапшот цен под мьютексом
@@ -547,107 +668,46 @@ func (a *Arbitrager) Check(symbol string) {
 	}
 }
 
-
-// internal/domain/exchange/exchange.go
-type Exchange interface {
-	// ...
-	SubscribeQuotes(pairs []string, handler func(symbol string, bid, ask float64, ts time.Time)) error
-	// ...
-}
-
-
-func (o *OKXExchange) SubscribeQuotes(pairs []string, handler func(symbol string, bid, ask float64, ts time.Time)) error {
-	chunks := chunkStrings(pairs, okxMaxPerConn)
-
-	for _, ch := range chunks {
-		ps := append([]string(nil), ch...)
-
-		go func(pairs []string) {
-			const wsURL = "wss://ws.okx.com:8443/ws/v5/public"
-
-			for {
-				conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-				if err != nil {
-					log.Printf("❌ [OKX] dial: %v", err)
-					time.Sleep(3 * time.Second)
-					continue
-				}
-
-				args := make([]map[string]string, 0, len(pairs))
-				for _, p := range pairs {
-					args = append(args, map[string]string{
-						"channel": "tickers",
-						"instId":  toOKXInstID(p),
-					})
-				}
-				sub := map[string]any{"op": "subscribe", "args": args}
-				if err := conn.WriteJSON(sub); err != nil {
-					log.Printf("❌ [OKX] send sub: %v", err)
-					_ = conn.Close()
-					time.Sleep(2 * time.Second)
-					continue
-				}
-
-				for {
-					_, msg, err := conn.ReadMessage()
-					if err != nil {
-						_ = conn.Close()
-						time.Sleep(2 * time.Second)
-						break
-					}
-
-					var frame struct {
-						Data []struct {
-							InstID string `json:"instId"`
-							AskPx  string `json:"askPx"`
-							BidPx  string `json:"bidPx"`
-							Ts     string `json:"ts"` // мс
-						} `json:"data"`
-					}
-					if json.Unmarshal(msg, &frame) != nil || len(frame.Data) == 0 {
-						continue
-					}
-
-					for _, d := range frame.Data {
-						if d.InstID == "" || d.AskPx == "" || d.BidPx == "" {
-							continue
-						}
-						sym := strings.ReplaceAll(d.InstID, "-", "")
-
-						bid, err1 := strconv.ParseFloat(d.BidPx, 64)
-						ask, err2 := strconv.ParseFloat(d.AskPx, 64)
-						if err1 != nil || err2 != nil || bid <= 0 || ask <= 0 || ask < bid {
-							continue
-						}
-
-						var ts time.Time
-						if d.Ts != "" {
-							if ms, err := strconv.ParseInt(d.Ts, 10, 64); err == nil {
-								ts = time.UnixMilli(ms)
-							}
-						}
-						if ts.IsZero() {
-							ts = time.Now()
-						}
-
-						handler(sym, bid, ask, ts)
-					}
-				}
-			}
-		}(ps)
+func (a *Arbitrager) OnQuote(symbol string, bid, ask float64, ts time.Time) {
+	if bid <= 0 || ask <= 0 || ask < bid {
+		return
 	}
-	return nil
+
+	a.mu.Lock()
+	_, has := a.trianglesByPair[symbol]
+	if !has {
+		a.mu.Unlock()
+		return
+	}
+	a.latest[symbol] = Quote{Bid: bid, Ask: ask, Ts: ts}
+	a.mu.Unlock()
+
+	a.Check(symbol)
 }
 
 
-
-// вместо ex.SubscribeTickers(pairs, arb.OnTick)
-if err := ex.SubscribeQuotes(pairs, func(sym string, bid, ask float64, ts time.Time) {
-	arb.OnQuote(sym, bid, ask, ts)
-}); err != nil {
-	// retry…
-}
-
+[{
+	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "IncompatibleAssign",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "IncompatibleAssign"
+		}
+	},
+	"severity": 8,
+	"message": "cannot use price (variable of type float64) as Quote value in assignment",
+	"source": "compiler",
+	"startLineNumber": 154,
+	"startColumn": 21,
+	"endLineNumber": 154,
+	"endColumn": 26,
+	"origin": "extHost1"
+}]
 
 
 
