@@ -467,6 +467,9 @@ type MexcExchange struct {
 // func (m *MexcExchange) Name() string { return "MEXC" }
 
 
+2025/08/09 03:20:33 🔺 ARB USDT/USDC/LUNA profit=7.9950% (gross=1.091369 net=1.079950)
+
+
 
 
 
