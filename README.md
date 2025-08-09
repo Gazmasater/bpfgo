@@ -584,6 +584,13 @@ func tryProfit(book map[string]qv, fee, threshold float64) bool {
 }
 
 
+az358@gaz358-BOD-WXX9:~/myprog/crypt$ cd cmd/cryptarb/moke
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb/moke$ go run .
+2025/08/09 08:32:09 ✅ MEXC: 1828 spot symbols
+2025/08/09 08:32:09 🔺 TRI: [BTCUSDT ETHUSDT ETHBTC]
+2025/08/09 08:32:09 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (pairs=3)
+2025/08/09 08:32:10 ✅ [MEXC] connected
+2025/08/09 08:32:10 📩 [MEXC] subscribed (deals/last): 3
 
 
 
