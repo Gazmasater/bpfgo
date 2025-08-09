@@ -472,8 +472,8 @@ func NewMEXCExchange() *MEXCExchange { return &MEXCExchange{} }
 func (m *MEXCExchange) Name() string { return "MEXC" }
 
 // ---- Справочник доступных спот-символов ----
-// Берём из /api/v3/exchangeInfo, фильтруем живые пары с разрешённым spot и MARKET,
-// вытаскиваем stepSize/minQty (или baseSizePrecision как запасной вариант).
+// Берём /api/v3/exchangeInfo, фильтруем живые пары с MARKET и spot.
+// Вытаскиваем stepSize/minQty (fallback — baseSizePrecision).
 
 func (m *MEXCExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64) {
 	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
@@ -486,10 +486,10 @@ func (m *MEXCExchange) FetchAvailableSymbols() (map[string]bool, map[string]floa
 	var data struct {
 		Symbols []struct {
 			Symbol               string   `json:"symbol"`
-			Status               string   `json:"status"` // бывает "1", "ENABLED", "TRADING"
+			Status               string   `json:"status"` // "1", "ENABLED", "TRADING"
 			IsSpotTradingAllowed bool     `json:"isSpotTradingAllowed"`
 			OrderTypes           []string `json:"orderTypes"`
-			BaseSizePrecision    string   `json:"baseSizePrecision"` // fallback
+			BaseSizePrecision    string   `json:"baseSizePrecision"` // fallback как шаг
 			Filters              []struct {
 				FilterType string `json:"filterType"`
 				MinQty     string `json:"minQty"`
@@ -502,10 +502,6 @@ func (m *MEXCExchange) FetchAvailableSymbols() (map[string]bool, map[string]floa
 		return nil, nil, nil
 	}
 
-	avail := make(map[string]bool, len(data.Symbols))
-	step := make(map[string]float64, len(data.Symbols))
-	min := make(map[string]float64, len(data.Symbols))
-
 	hasMarket := func(ot []string) bool {
 		for _, t := range ot {
 			if strings.EqualFold(t, "MARKET") {
@@ -515,34 +511,28 @@ func (m *MEXCExchange) FetchAvailableSymbols() (map[string]bool, map[string]floa
 		return false
 	}
 
+	avail := make(map[string]bool, len(data.Symbols))
+	step := make(map[string]float64, len(data.Symbols))
+	min := make(map[string]float64, len(data.Symbols))
+
 	for _, s := range data.Symbols {
-		// статус
 		statusOK := s.Status == "1" || strings.EqualFold(s.Status, "ENABLED") || strings.EqualFold(s.Status, "TRADING")
 		if !statusOK || !s.IsSpotTradingAllowed || !hasMarket(s.OrderTypes) {
 			continue
 		}
 
-		avail[s.Symbol] = true
-
 		var stepSz, minQty float64
-
-		// 1) пробуем filters.LOT_SIZE
 		for _, f := range s.Filters {
 			if strings.EqualFold(f.FilterType, "LOT_SIZE") {
-				if f.StepSize != "" {
-					if v, err := strconv.ParseFloat(f.StepSize, 64); err == nil && v > 0 {
-						stepSz = v
-					}
+				if v, err := strconv.ParseFloat(f.StepSize, 64); err == nil && v > 0 {
+					stepSz = v
 				}
-				if f.MinQty != "" {
-					if v, err := strconv.ParseFloat(f.MinQty, 64); err == nil && v > 0 {
-						minQty = v
-					}
+				if v, err := strconv.ParseFloat(f.MinQty, 64); err == nil && v > 0 {
+					minQty = v
 				}
 			}
 		}
-
-		// 2) fallback: baseSizePrecision (как шаг), min = step
+		// Fallback: baseSizePrecision
 		if stepSz == 0 && s.BaseSizePrecision != "" {
 			if v, err := strconv.ParseFloat(s.BaseSizePrecision, 64); err == nil && v > 0 {
 				stepSz = v
@@ -551,7 +541,6 @@ func (m *MEXCExchange) FetchAvailableSymbols() (map[string]bool, map[string]floa
 		if minQty == 0 && stepSz > 0 {
 			minQty = stepSz
 		}
-
 		if stepSz == 0 {
 			stepSz = 0.0001
 		}
@@ -559,6 +548,7 @@ func (m *MEXCExchange) FetchAvailableSymbols() (map[string]bool, map[string]floa
 			minQty = stepSz
 		}
 
+		avail[s.Symbol] = true
 		step[s.Symbol] = stepSz
 		min[s.Symbol] = minQty
 	}
@@ -567,9 +557,9 @@ func (m *MEXCExchange) FetchAvailableSymbols() (map[string]bool, map[string]floa
 	return avail, step, min
 }
 
-// ---- Подписка на тикеры (через deals), чанки, автопереподключение ----
+// ---- Подписки (как у okx): чанки + автопереподключение ----
 
-const mexcMaxPerConn = 30 // безопасно ≤30 каналов на одно соединение
+const mexcMaxPerConn = 30 // безопасный потолок каналов на одно соединение
 
 func chunkStrings(in []string, n int) [][]string {
 	if n <= 0 || len(in) == 0 {
@@ -587,12 +577,12 @@ func chunkStrings(in []string, n int) [][]string {
 }
 
 func dealsChannel(sym string) string {
-	// JSON-канал: spot@public.deals.v3.api@<SYMBOL>
+	// JSON: spot@public.deals.v3.api@<SYMBOL>
 	return "spot@public.deals.v3.api@" + strings.ToUpper(sym)
 }
 
 func bookTickerChannel(sym string) string {
-	// JSON-канал: spot@public.bookTicker.v3.api@<SYMBOL>
+	// JSON: spot@public.bookTicker.v3.api@<SYMBOL>
 	return "spot@public.bookTicker.v3.api@" + strings.ToUpper(sym)
 }
 
@@ -604,6 +594,8 @@ func symbolFromChannel(c string) string {
 	}
 	return strings.ToUpper(c[i+1:])
 }
+
+// ---- SubscribeTickers: «как у OKX» → last из deals ----
 
 func (m *MEXCExchange) SubscribeTickers(pairs []string, handler func(symbol string, price float64)) error {
 	chunks := chunkStrings(pairs, mexcMaxPerConn)
@@ -624,7 +616,7 @@ func (m *MEXCExchange) SubscribeTickers(pairs []string, handler func(symbol stri
 				}
 				log.Printf("✅ [MEXC] connected")
 
-				// подписка
+				// подписка на deals (last)
 				params := make([]string, 0, len(pairs))
 				for _, p := range pairs {
 					params = append(params, dealsChannel(p))
@@ -636,9 +628,9 @@ func (m *MEXCExchange) SubscribeTickers(pairs []string, handler func(symbol stri
 					time.Sleep(2 * time.Second)
 					continue
 				}
-				log.Printf("📩 [MEXC] subscribed: %d", len(params))
+				log.Printf("📩 [MEXC] subscribed (deals/last): %d", len(params))
 
-				// пингуем каждые ~20с
+				// пинги
 				donePing := make(chan struct{})
 				go func(c *websocket.Conn) {
 					t := time.NewTicker(20 * time.Second)
@@ -664,7 +656,7 @@ func (m *MEXCExchange) SubscribeTickers(pairs []string, handler func(symbol stri
 						break // reconnect
 					}
 
-					// текстовые PONG/ACK — пропускаем
+					// игнорим явные PONG/ack
 					if mt == websocket.TextMessage {
 						s := string(msg)
 						if strings.Contains(s, `"PONG"`) || strings.Contains(s, `"success"`) {
@@ -672,12 +664,10 @@ func (m *MEXCExchange) SubscribeTickers(pairs []string, handler func(symbol stri
 						}
 					}
 
-					// Вариант 1: { "s":"BTCUSDT", "d":[{"p":"123.45"}] }
+					// Вариант 1: {"s":"BTCUSDT","d":[{"p":"123.45"}]}
 					var f1 struct {
 						S string `json:"s"`
-						D []struct {
-							P string `json:"p"`
-						} `json:"d"`
+						D []struct{ P string `json:"p"` } `json:"d"`
 					}
 					if json.Unmarshal(msg, &f1) == nil && f1.S != "" && len(f1.D) > 0 && f1.D[0].P != "" {
 						if price, err := strconv.ParseFloat(f1.D[0].P, 64); err == nil && price > 0 {
@@ -686,12 +676,10 @@ func (m *MEXCExchange) SubscribeTickers(pairs []string, handler func(symbol stri
 						}
 					}
 
-					// Вариант 2: { "c":"spot@public.deals.v3.api@BTCUSDT", "d":[{"p":"123.45"}] }
+					// Вариант 2: {"c":"spot@public.deals.v3.api@BTCUSDT","d":[{"p":"123.45"}]}
 					var f2 struct {
 						C string `json:"c"`
-						D []struct {
-							P string `json:"p"`
-						} `json:"d"`
+						D []struct{ P string `json:"p"` } `json:"d"`
 					}
 					if json.Unmarshal(msg, &f2) == nil && f2.C != "" && len(f2.D) > 0 && f2.D[0].P != "" {
 						sym := symbolFromChannel(f2.C)
@@ -702,8 +690,6 @@ func (m *MEXCExchange) SubscribeTickers(pairs []string, handler func(symbol stri
 							}
 						}
 					}
-
-					// если прилетело что-то ещё — игнорируем молча
 				}
 			}
 		}(ps)
@@ -712,7 +698,7 @@ func (m *MEXCExchange) SubscribeTickers(pairs []string, handler func(symbol stri
 	return nil
 }
 
-// ---- Quotes (best bid/ask) через bookTicker, толерантный парсер ----
+// ---- SubscribeQuotes: реальный источник для арбитража (bid/ask) ----
 
 func (m *MEXCExchange) SubscribeQuotes(pairs []string, handler func(symbol string, bid, ask float64, ts time.Time)) error {
 	chunks := chunkStrings(pairs, mexcMaxPerConn)
@@ -767,7 +753,7 @@ func (m *MEXCExchange) SubscribeQuotes(pairs []string, handler func(symbol strin
 						break
 					}
 
-					// пропускаем явные текстовые PONG/ACK
+					// игнор текстовых PONG/ack
 					if mt == websocket.TextMessage {
 						s := string(msg)
 						if strings.Contains(s, `"PONG"`) || strings.Contains(s, `"success"`) {
@@ -775,13 +761,13 @@ func (m *MEXCExchange) SubscribeQuotes(pairs []string, handler func(symbol strin
 						}
 					}
 
-					// Вариант A: { "s":"BTCUSDT","d":{"bp":"...","ap":"...","t":...}}
+					// A) {"s":"BTCUSDT","d":{"bp":"...","ap":"...","t":...}}
 					var a struct {
 						S string `json:"s"`
 						D struct {
 							Bp string `json:"bp"`
 							Ap string `json:"ap"`
-							T  int64  `json:"t"`
+							T  int64  `json:"t"` // мс
 						} `json:"d"`
 					}
 					if json.Unmarshal(msg, &a) == nil && a.S != "" && a.D.Bp != "" && a.D.Ap != "" {
@@ -797,7 +783,7 @@ func (m *MEXCExchange) SubscribeQuotes(pairs []string, handler func(symbol strin
 						}
 					}
 
-					// Вариант B: { "c":"spot@public.bookTicker.v3.api@BTCUSDT","d":{"bp":"...","ap":"...","t":...}}
+					// B) {"c":"spot@public.bookTicker.v3.api@BTCUSDT","d":{"bp":"...","ap":"...","t":...}}
 					var b struct {
 						C string `json:"c"`
 						D struct {
@@ -820,7 +806,8 @@ func (m *MEXCExchange) SubscribeQuotes(pairs []string, handler func(symbol strin
 						}
 					}
 
-					// Вариант C (batch): { "symbol":"BTCUSDT","publicBookTickerBatch":{"items":[{"bidPrice":"...","askPrice":"..."}]}, "sendTime":"..." }
+					// C) batch-вариант:
+					// {"symbol":"BTCUSDT","publicBookTickerBatch":{"items":[{"bidPrice":"...","askPrice":"..."}]},"sendTime":"..."}
 					var c struct {
 						Symbol string `json:"symbol"`
 						Time   string `json:"sendTime"`
@@ -843,8 +830,6 @@ func (m *MEXCExchange) SubscribeQuotes(pairs []string, handler func(symbol strin
 							continue
 						}
 					}
-
-					// остальное игнорим
 				}
 			}
 		}(ps)
@@ -891,6 +876,5 @@ func (m *MEXCExchange) GetBestBid(symbol string) (float64, error) {
 	}
 	return strconv.ParseFloat(data.Bids[0][0], 64)
 }
-
 
 
