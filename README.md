@@ -452,11 +452,12 @@ option go_package = "crypt_proto/pb";
 package main
 
 import (
-	"cryptarb/internal/repository/mexc"
 	"log"
 	"strings"
 	"sync"
 	"time"
+
+	"cryptarb/internal/repository/mexc"
 )
 
 type qv struct{ bid, ask float64 }
@@ -469,47 +470,63 @@ func main() {
 		log.Fatal("MEXC avail empty")
 	}
 
-	// Подберём треугольник: USDT -> A -> B -> USDT
-	tri := pickTriangle(avail) // вернёт, например: BTCUSDT, ETHUSDT, ETHBTC
+	// Выбираем корректный треугольник: BTCUSDT + ALTUSDT + ALTBTC
+	tri := pickTriangle(avail)
 	log.Printf("🔺 TRI: %v", tri)
 
-	// Локальный кэш котировок
-	var mu sync.RWMutex
-	book := map[string]qv{}
-	fee := 0.0010 // 0.1% такер — поставь свой
+	var (
+		mu   sync.Mutex
+		book = map[string]qv{}
+	)
 
-	// Подписываемся на bid/ask (важно!)
-	go ex.SubscribeQuotes(tri, func(sym string, bid, ask float64, ts time.Time) {
-		sym = strings.ToUpper(sym)
-		mu.Lock()
-		book[sym] = qv{bid: bid, ask: ask}
-		mu.Unlock()
-		log.Printf("[MEXC] QUOTE %-10s bid=%f ask=%f", sym, bid, ask)
-		tryProfit(book, fee)
-	})
+	const (
+		fee       = 0.0010 // 0.10% такер (замени на свою комиссию)
+		threshold = 0.02   // 0.02% порог вывода профита
+	)
 
-	select {}
+	// Подписываемся на bid/ask (важно для арбитража!)
+	go func() {
+		err := ex.SubscribeQuotes(tri, func(sym string, bid, ask float64, ts time.Time) {
+			sym = strings.ToUpper(sym)
+
+			mu.Lock()
+			book[sym] = qv{bid: bid, ask: ask}
+			// Снимем снапшот карты, чтобы не держать мьютекс во время расчёта
+			snap := make(map[string]qv, len(book))
+			for k, v := range book {
+				snap[k] = v
+			}
+			mu.Unlock()
+
+			log.Printf("[MEXC] QUOTE %-10s bid=%f ask=%f", sym, bid, ask)
+			tryProfit(snap, fee, threshold)
+		})
+		if err != nil {
+			log.Fatalf("SubscribeQuotes error: %v", err)
+		}
+	}()
+
+	select {} // держим процесс
 }
 
+// Выбирает валидный триаг: BTCUSDT + ALTUSDT + ALTBTC.
+// Сначала пытается популярные альты, затем перебор всех доступных.
 func pickTriangle(avail map[string]bool) []string {
-	// Требуем мост BTCUSDT
 	if !avail["BTCUSDT"] {
-		// на всякий случай фолбэк на ETH-хаб (редко понадобится)
+		// Фолбэк: ETH-хаб, если вдруг нет BTCUSDT (маловероятно на MEXC)
 		if avail["ETHUSDT"] {
 			for s := range avail {
 				if strings.HasSuffix(s, "USDT") && len(s) > 4 {
-					alt := s[:len(s)-4] // ALT
+					alt := s[:len(s)-4]
 					if avail[alt+"ETH"] {
 						return []string{"ETHUSDT", alt + "USDT", alt + "ETH"}
 					}
 				}
 			}
 		}
-		// совсем уж дефолт
 		return []string{"BTCUSDT", "ETHUSDT", "ETHBTC"}
 	}
 
-	// Список ликвидных ALT, попробуем сначала их (быстрее схлопнется)
 	hot := []string{"ETH", "BNB", "XRP", "SOL", "ADA", "DOGE", "TRX", "TON", "LINK", "LTC"}
 	for _, alt := range hot {
 		if avail[alt+"USDT"] && avail[alt+"BTC"] {
@@ -517,7 +534,6 @@ func pickTriangle(avail map[string]bool) []string {
 		}
 	}
 
-	// Универсальный перебор: ищем любой ALT с двумя нужными рынками
 	for s := range avail {
 		if strings.HasSuffix(s, "USDT") && len(s) > 4 {
 			alt := s[:len(s)-4]
@@ -527,10 +543,10 @@ func pickTriangle(avail map[string]bool) []string {
 		}
 	}
 
-	// Фолбэк по умолчанию
 	return []string{"BTCUSDT", "ETHUSDT", "ETHBTC"}
 }
 
+// Возвращает true, если профит выше threshold (в %), и печатает расчёт.
 func tryProfit(book map[string]qv, fee, threshold float64) bool {
 	a, ok1 := book["BTCUSDT"]
 	b, ok2 := book["ETHUSDT"]
@@ -539,22 +555,26 @@ func tryProfit(book map[string]qv, fee, threshold float64) bool {
 		log.Printf("⛔ нет котировок: BTCUSDT=%v ETHUSDT=%v ETHBTC=%v", ok1, ok2, ok3)
 		return false
 	}
-	if a.ask <= 0 || b.ask <= 0 || c.ask <= 0 || a.bid <= 0 || b.bid <= 0 || c.bid <= 0 || a.ask < a.bid || b.ask < b.bid || c.ask < c.bid {
+	if a.ask <= 0 || b.ask <= 0 || c.ask <= 0 || a.bid <= 0 || b.bid <= 0 || c.bid <= 0 ||
+		a.ask < a.bid || b.ask < b.bid || c.ask < c.bid {
 		log.Printf("⛔ некорректные цены: BTCUSDT %.6f/%.6f ETHUSDT %.6f/%.6f ETHBTC %.6f/%.6f",
 			a.bid, a.ask, b.bid, b.ask, c.bid, c.ask)
 		return false
 	}
 
-	usdt := 1.0
-	btc := usdt / a.ask * (1 - fee)
+	start := 1.0 // 1 USDT
+
+	// Путь 1: USDT→BTC (ask), BTC→ETH (ask), ETH→USDT (bid)
+	btc := start / a.ask * (1 - fee)
 	eth := btc / c.ask * (1 - fee)
 	usdtBack := eth * b.bid * (1 - fee)
-	p1 := (usdtBack - 1) * 100
+	p1 := (usdtBack - start) * 100
 
-	eth2 := usdt / b.ask * (1 - fee)
+	// Путь 2: USDT→ETH (ask), ETH→BTC (bid), BTC→USDT (bid)
+	eth2 := start / b.ask * (1 - fee)
 	btc2 := eth2 * c.bid * (1 - fee)
 	usdtBack2 := btc2 * a.bid * (1 - fee)
-	p2 := (usdtBack2 - 1) * 100
+	p2 := (usdtBack2 - start) * 100
 
 	if p1 > threshold || p2 > threshold {
 		log.Printf("💹 PROFIT p1=%.3f%% p2=%.3f%% | BTCUSDT %.4f/%.4f ETHUSDT %.4f/%.4f ETHBTC %.6f/%.6f",
@@ -563,31 +583,6 @@ func tryProfit(book map[string]qv, fee, threshold float64) bool {
 	}
 	return false
 }
-
-
-[{
-	"resource": "/home/gaz358/myprog/crypt/cmd/cryptarb/moke/moke.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "WrongArgCount",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "WrongArgCount"
-		}
-	},
-	"severity": 8,
-	"message": "not enough arguments in call to tryProfit\n\thave (map[string]qv, float64)\n\twant (map[string]qv, float64, float64)",
-	"source": "compiler",
-	"startLineNumber": 37,
-	"startColumn": 22,
-	"endLineNumber": 37,
-	"endColumn": 22,
-	"origin": "extHost1"
-}]
-
 
 
 
