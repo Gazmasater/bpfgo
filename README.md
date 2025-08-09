@@ -449,10 +449,23 @@ option go_package = "crypt_proto/pb";
 
 
 
-func (m *MEXCExchange) SubscribeQuotes(
-    pairs []string,
-    handler func(symbol string, bid, ask float64, ts time.Time),
-) error
+package exchange
+
+import "time"
+
+type Exchange interface {
+	Name() string
+
+	FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64)
+
+	// Нормализованный тикер: символ без дефисов (BTCUSDT) и float64-цена.
+	SubscribeTickers(pairs []string, handler func(symbol string, price float64)) error
+	SubscribeQuotes(pairs []string, handler func(symbol string, bid, ask float64, ts time.Time)) error
+
+	PlaceMarketOrder(symbol, side string, quantity float64) (string, error)
+	GetBestAsk(symbol string) (float64, error)
+	GetBestBid(symbol string) (float64, error)
+}
 
 
 
