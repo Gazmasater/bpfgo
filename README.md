@@ -470,8 +470,7 @@ func main() {
 		log.Fatal("MEXC avail empty")
 	}
 
-	// Выбираем корректный треугольник: BTCUSDT + ALTUSDT + ALTBTC
-	tri := pickTriangle(avail)
+	tri := pickTriangle(avail) // BTCUSDT + ALTUSDT + ALTBTC
 	log.Printf("🔺 TRI: %v", tri)
 
 	var (
@@ -480,40 +479,42 @@ func main() {
 	)
 
 	const (
-		fee       = 0.0010 // 0.10% такер (замени на свою комиссию)
-		threshold = 0.02   // 0.02% порог вывода профита
+		fee       = 0.0010 // 0.10% такер (подставь свою)
+		threshold = 0.02   // 0.02% порог (для теста можно 0.005)
 	)
 
-	// Подписываемся на bid/ask (важно для арбитража!)
-	go func() {
-		err := ex.SubscribeQuotes(tri, func(sym string, bid, ask float64, ts time.Time) {
-			sym = strings.ToUpper(sym)
+	// Дополнительно подпишемся на deals (last), чтобы видеть сам поток
+	go ex.SubscribeTickers(tri, func(sym string, last float64) {
+		log.Printf("[MEXC] TICK  %-10s last=%f", strings.ToUpper(sym), last)
+	})
 
-			mu.Lock()
-			book[sym] = qv{bid: bid, ask: ask}
-			// Снимем снапшот карты, чтобы не держать мьютекс во время расчёта
-			snap := make(map[string]qv, len(book))
-			for k, v := range book {
-				snap[k] = v
-			}
-			mu.Unlock()
+	// Основная подписка: bid/ask для арбитража
+	if err := ex.SubscribeQuotes(tri, func(sym string, bid, ask float64, ts time.Time) {
+		sym = strings.ToUpper(sym)
 
-			log.Printf("[MEXC] QUOTE %-10s bid=%f ask=%f", sym, bid, ask)
-			tryProfit(snap, fee, threshold)
-		})
-		if err != nil {
-			log.Fatalf("SubscribeQuotes error: %v", err)
+		mu.Lock()
+		book[sym] = qv{bid: bid, ask: ask}
+		// снимем снапшот, чтобы не держать лок в расчёте
+		snap := make(map[string]qv, len(book))
+		for k, v := range book {
+			snap[k] = v
 		}
-	}()
+		mu.Unlock()
 
-	select {} // держим процесс
+		log.Printf("[MEXC] QUOTE %-10s bid=%f ask=%f", sym, bid, ask)
+		tryProfit(snap, fee, threshold)
+	}); err != nil {
+		log.Fatalf("SubscribeQuotes error: %v", err)
+	}
+
+	// держим процесс (SubscribeQuotes внутри запускает горутины)
+	select {}
 }
 
-// Выбирает валидный триаг: BTCUSDT + ALTUSDT + ALTBTC.
-// Сначала пытается популярные альты, затем перебор всех доступных.
+// Возвращает корректный треугольник: BTCUSDT + ALTUSDT + ALTBTC.
 func pickTriangle(avail map[string]bool) []string {
 	if !avail["BTCUSDT"] {
-		// Фолбэк: ETH-хаб, если вдруг нет BTCUSDT (маловероятно на MEXC)
+		// редкий фолбэк на ETH-хаб
 		if avail["ETHUSDT"] {
 			for s := range avail {
 				if strings.HasSuffix(s, "USDT") && len(s) > 4 {
@@ -533,7 +534,6 @@ func pickTriangle(avail map[string]bool) []string {
 			return []string{"BTCUSDT", alt + "USDT", alt + "BTC"}
 		}
 	}
-
 	for s := range avail {
 		if strings.HasSuffix(s, "USDT") && len(s) > 4 {
 			alt := s[:len(s)-4]
@@ -542,11 +542,10 @@ func pickTriangle(avail map[string]bool) []string {
 			}
 		}
 	}
-
 	return []string{"BTCUSDT", "ETHUSDT", "ETHBTC"}
 }
 
-// Возвращает true, если профит выше threshold (в %), и печатает расчёт.
+// Печатает профит, если выше threshold (%). Возвращает true/false.
 func tryProfit(book map[string]qv, fee, threshold float64) bool {
 	a, ok1 := book["BTCUSDT"]
 	b, ok2 := book["ETHUSDT"]
@@ -583,12 +582,6 @@ func tryProfit(book map[string]qv, fee, threshold float64) bool {
 	}
 	return false
 }
-
-
-az358@gaz358-BOD-WXX9:~/myprog/crypt$ cd cmd/cryptarb/moke
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb/moke$ go run .
-2025/08/09 08:04:30 ✅ MEXC: 1828 spot symbols
-2025/08/09 08:04:30 🔺 TRI: [BTCUSDT ETHUSDT ETHBTC]
 
 
 
