@@ -878,3 +878,27 @@ func (m *MEXCExchange) GetBestBid(symbol string) (float64, error) {
 }
 
 
+[{
+	"resource": "/home/gaz358/myprog/crypt/cmd/cryptarb/main.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "InvalidIfaceAssign",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "InvalidIfaceAssign"
+		}
+	},
+	"severity": 8,
+	"message": "cannot use ex (variable of type *mexc.MEXCExchange) as exchange.Exchange value in argument to app.New: *mexc.MEXCExchange does not implement exchange.Exchange (missing method SubscribeTickers)",
+	"source": "compiler",
+	"startLineNumber": 24,
+	"startColumn": 23,
+	"endLineNumber": 24,
+	"endColumn": 25,
+	"origin": "extHost1"
+}]
+
+
