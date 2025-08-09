@@ -585,6 +585,11 @@ func tryProfit(book map[string]qv, fee, threshold float64) bool {
 }
 
 
+az358@gaz358-BOD-WXX9:~/myprog/crypt$ cd cmd/cryptarb/moke
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb/moke$ go run .
+2025/08/09 08:04:30 ✅ MEXC: 1828 spot symbols
+2025/08/09 08:04:30 🔺 TRI: [BTCUSDT ETHUSDT ETHBTC]
+
 
 
 
