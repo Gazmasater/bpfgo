@@ -450,44 +450,32 @@ option go_package = "crypt_proto/pb";
 
 
 
-package app
+// OnTick кладёт последнюю цену и триггерит пересчёт
+func (a *Arbitrager) OnTick(symbol string, price float64) {
+	if price <= 0 {
+		return
+	}
 
-import (
-	"encoding/json"
-	"fmt"
-	"log"
-	"os"
-	"sync"
-	"time"
+	a.mu.Lock()
+	_, has := a.trianglesByPair[symbol]
+	if !has {
+		a.mu.Unlock()
+		return
+	}
+	// Раз у нас только "last", кладём одинаково в Bid и Ask.
+	a.latest[symbol] = Quote{
+		Bid: price,
+		Ask: price,
+		Ts:  time.Now(),
+	}
+	a.mu.Unlock()
 
-	"cryptarb/internal/domain/exchange"
-	"cryptarb/internal/domain/triangle"
-	"cryptarb/internal/repository/filesystem"
-)
-
-// Arbitrager ищет треугольные арбитражные возможности на бирже.
-type Arbitrager struct {
-	Triangles       []triangle.Triangle
-	trianglesByPair map[string][]int   // Индексы треугольников по паре
-	realSymbols     map[string]bool    // Доступные пары (с инверсиями)
-	stepSizes       map[string]float64 // Шаг лота
-	minQtys         map[string]float64 // Мин. объём
-	latest          map[string]Quote   // было map[string]float64
-
-	mu          sync.Mutex
-	StartAmount float64
-	exchange    exchange.Exchange
+	a.Check(symbol)
 }
 
-type Quote struct {
-	Bid float64
-	Ask float64
-	Ts  time.Time
-}
 
-// New создаёт и инициализирует арбитражер.
 func New(ex exchange.Exchange) (*Arbitrager, error) {
-	// 1) Реальные пары и лоты с бирж (без инверсий)
+	// 1) Реальные пары и лоты с биржи (без инверсий)
 	rawSymbols, stepSizes, minQtys := ex.FetchAvailableSymbols()
 	if len(rawSymbols) == 0 {
 		return nil, fmt.Errorf("no spot symbols from %s", ex.Name())
@@ -508,9 +496,8 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 		_ = os.WriteFile("triangles_dump.json", data, 0644)
 	}
 
-	// 3) Индексация: на каждый треугольник вешаем оба направления ребра (AB и BA)
+	// 3) Индексация и список реальных направлений для подписки
 	trianglesByPair := make(map[string][]int, len(ts)*6)
-	// И список реальных пар для подписки: подписываемся только на то, что реально торгуется (rawSymbols)
 	realToSubscribe := make(map[string]struct{}, len(ts)*6)
 
 	for i, tri := range ts {
@@ -525,7 +512,6 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 		trianglesByPair[ca] = append(trianglesByPair[ca], i)
 		trianglesByPair[ac] = append(trianglesByPair[ac], i)
 
-		// Подписываемся только на реально существующие направления
 		if rawSymbols[ab] {
 			realToSubscribe[ab] = struct{}{}
 		}
@@ -555,18 +541,22 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 
 	// 4) Инициализация арбитражёра
 	arb := &Arbitrager{
-		Triangles: ts,
-		latest:    make(map[string]Quote, len(subPairs)),
-
+		Triangles:       ts,
 		trianglesByPair: trianglesByPair,
-		realSymbols:     avail,     // содержит и AB, и BA -> нужно для normalize/invert
-		stepSizes:       stepSizes, // как пришло от биржи
-		minQtys:         minQtys,   // как пришло от биржи
+		realSymbols:     avail,
+		stepSizes:       stepSizes,
+		minQtys:         minQtys,
+		latest:          make(map[string]Quote, len(subPairs)),
 		StartAmount:     0.5,
 		exchange:        ex,
 	}
 
-	// 5) WS-подписки чанками; каждый чанк — отдельное соединение у адаптера биржи
+	// Локальный интерфейс для мягкого фолбэка: если биржа умеет quotes — используем их
+	type quotesSub interface {
+		SubscribeQuotes(pairs []string, handler func(symbol string, bid, ask float64, ts time.Time)) error
+	}
+
+	// 5) WS-подписки чанками; каждый чанк — отдельное соединение
 	const maxPerConn = 25
 	for i := 0; i < len(subPairs); i += maxPerConn {
 		end := i + maxPerConn
@@ -577,12 +567,28 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 
 		go func(pairs []string) {
 			for {
-				if err := ex.SubscribeTickers(pairs, arb.OnTick); err != nil {
-					log.Printf("[WS][%s] subscribe error: %v, retrying...", ex.Name(), err)
+				// Если биржа поддерживает SubscribeQuotes — используем bid/ask
+				if qex, ok := ex.(quotesSub); ok {
+					if err := qex.SubscribeQuotes(pairs, func(sym string, bid, ask float64, ts time.Time) {
+						arb.OnQuote(sym, bid, ask, ts)
+					}); err != nil {
+						log.Printf("[WS][%s] subscribe quotes error: %v, retrying...", ex.Name(), err)
+						time.Sleep(time.Second)
+						continue
+					}
+					log.Printf("[WS][%s] subscribed (quotes) to %d pairs", ex.Name(), len(pairs))
+					return
+				}
+
+				// Фолбэк: старые тикеры (last). Кладём last как bid и ask.
+				if err := ex.SubscribeTickers(pairs, func(sym string, last float64) {
+					arb.OnQuote(sym, last, last, time.Now())
+				}); err != nil {
+					log.Printf("[WS][%s] subscribe tickers error: %v, retrying...", ex.Name(), err)
 					time.Sleep(time.Second)
 					continue
 				}
-				log.Printf("[WS][%s] subscribed to %d pairs", ex.Name(), len(pairs))
+				log.Printf("[WS][%s] subscribed (tickers) to %d pairs", ex.Name(), len(pairs))
 				return
 			}
 		}(chunk)
@@ -590,125 +596,6 @@ func New(ex exchange.Exchange) (*Arbitrager, error) {
 
 	return arb, nil
 }
-
-// OnTick кладёт последнюю цену и триггерит пересчёт
-func (a *Arbitrager) OnTick(symbol string, price float64) {
-	if price <= 0 {
-		return
-	}
-
-	a.mu.Lock()
-	_, has := a.trianglesByPair[symbol]
-	if !has {
-		a.mu.Unlock()
-		return
-	}
-	a.latest[symbol] = price
-	a.mu.Unlock()
-
-	a.Check(symbol)
-}
-
-// Check пересчитывает профит для всех треугольников, связанных с символом.
-// Берёт снапшот цен, чтобы не держать мьютекс на вычислениях.
-func (a *Arbitrager) Check(symbol string) {
-	const (
-		feeFactor  = 0.9965 * 0.9965 * 0.9965 // комиссия 3 ног
-		staleLimit = 300 * time.Millisecond   // макс. «возраст» котировки
-	)
-
-	// 1) Забираем индексы и снапшот цен под мьютексом
-	a.mu.Lock()
-	indices := a.trianglesByPair[symbol]
-	if len(indices) == 0 {
-		a.mu.Unlock()
-		return
-	}
-	now := time.Now()
-	snap := make(map[string]Quote, len(a.latest))
-	for k, v := range a.latest {
-		// можно отфильтровать сразу «протухшие», но оставим на getLeg
-		snap[k] = v
-	}
-	a.mu.Unlock()
-
-	// 2) Направленная цена ребра A→B:
-	//    - если есть котировка по AB: продаём A за B → используем bid_AB
-	//    - иначе, если есть по BA: покупаем A за B через BA → 1 / ask_BA
-	getLeg := func(a, b string) (float64, bool) {
-		if q, ok := snap[a+b]; ok && q.Bid > 0 && now.Sub(q.Ts) <= staleLimit {
-			return q.Bid, true
-		}
-		if q, ok := snap[b+a]; ok && q.Ask > 0 && now.Sub(q.Ts) <= staleLimit {
-			return 1 / q.Ask, true
-		}
-		return 0, false
-	}
-
-	// 3) Считаем треугольники
-	for _, idx := range indices {
-		tri := a.Triangles[idx]
-
-		p1, ok1 := getLeg(tri.A, tri.B)
-		p2, ok2 := getLeg(tri.B, tri.C)
-		p3, ok3 := getLeg(tri.C, tri.A)
-		if !ok1 || !ok2 || !ok3 {
-			continue
-		}
-
-		gross := p1 * p2 * p3
-		net := gross * feeFactor
-		profitPct := (net - 1) * 100
-
-		// Хочешь — активируй порог:
-		// if profitPct < 0.05 { continue } // пример: не ниже 5 б.п.
-
-		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%% (gross=%.6f net=%.6f)",
-			tri.A, tri.B, tri.C, profitPct, gross, net)
-	}
-}
-
-func (a *Arbitrager) OnQuote(symbol string, bid, ask float64, ts time.Time) {
-	if bid <= 0 || ask <= 0 || ask < bid {
-		return
-	}
-
-	a.mu.Lock()
-	_, has := a.trianglesByPair[symbol]
-	if !has {
-		a.mu.Unlock()
-		return
-	}
-	a.latest[symbol] = Quote{Bid: bid, Ask: ask, Ts: ts}
-	a.mu.Unlock()
-
-	a.Check(symbol)
-}
-
-
-[{
-	"resource": "/home/gaz358/myprog/crypt/internal/app/arbitrage.go",
-	"owner": "_generated_diagnostic_collection_name_#0",
-	"code": {
-		"value": "IncompatibleAssign",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "IncompatibleAssign"
-		}
-	},
-	"severity": 8,
-	"message": "cannot use price (variable of type float64) as Quote value in assignment",
-	"source": "compiler",
-	"startLineNumber": 154,
-	"startColumn": 21,
-	"endLineNumber": 154,
-	"endColumn": 26,
-	"origin": "extHost1"
-}]
-
 
 
 
