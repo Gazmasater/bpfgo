@@ -492,72 +492,49 @@ func main() {
 	select {}
 }
 
+
+
 func pickTriangle(avail map[string]bool) []string {
-	candidates := [][]string{
-		{"BTCUSDT", "ETHUSDT", "ETHBTC"},
-		{"BTCUSDT", "BNBUSDT", "BNBBTC"},
-		{"BTCUSDT", "XRPUSDT", "XRPBTC"},
-		{"BTCUSDT", "SOLUSDT", "SOLBTC"},
-	}
-	for _, tri := range candidates {
-		ok := true
-		for _, s := range tri {
-			if !avail[s] {
-				ok = false
-				break
+	// Требуем мост BTCUSDT
+	if !avail["BTCUSDT"] {
+		// на всякий случай фолбэк на ETH-хаб (редко понадобится)
+		if avail["ETHUSDT"] {
+			for s := range avail {
+				if strings.HasSuffix(s, "USDT") && len(s) > 4 {
+					alt := s[:len(s)-4] // ALT
+					if avail[alt+"ETH"] {
+						return []string{"ETHUSDT", alt + "USDT", alt + "ETH"}
+					}
+				}
 			}
 		}
-		if ok {
-			return tri
+		// совсем уж дефолт
+		return []string{"BTCUSDT", "ETHUSDT", "ETHBTC"}
+	}
+
+	// Список ликвидных ALT, попробуем сначала их (быстрее схлопнется)
+	hot := []string{"ETH", "BNB", "XRP", "SOL", "ADA", "DOGE", "TRX", "TON", "LINK", "LTC"}
+	for _, alt := range hot {
+		if avail[alt+"USDT"] && avail[alt+"BTC"] {
+			return []string{"BTCUSDT", alt + "USDT", alt + "BTC"}
 		}
 	}
-	// Фолбэк — возьмём что есть (сработает, если ETHBTC нет на MEXC)
+
+	// Универсальный перебор: ищем любой ALT с двумя нужными рынками
 	for s := range avail {
-		if strings.HasSuffix(s, "USDT") && strings.HasPrefix(s, "E") { // почти всегда ETHUSDT
-			a := "BTCUSDT"
-			b := s
-			c := "ETHBTC"
-			if !avail[c] {
-				c = "BNBBTC" // попытка №2
+		if strings.HasSuffix(s, "USDT") && len(s) > 4 {
+			alt := s[:len(s)-4]
+			if avail[alt+"BTC"] {
+				return []string{"BTCUSDT", alt + "USDT", alt + "BTC"}
 			}
-			return []string{a, b, c}
 		}
 	}
+
+	// Фолбэк по умолчанию
 	return []string{"BTCUSDT", "ETHUSDT", "ETHBTC"}
 }
 
-func tryProfit(book map[string]qv, fee float64) {
-	a, ok1 := book["BTCUSDT"]
-	b, ok2 := book["ETHUSDT"]
-	c, ok3 := book["ETHBTC"]
-	if !(ok1 && ok2 && ok3) {
-		return
-	}
 
-	usdt := 1.0
-	// Путь 1: USDT->BTC (по ask), BTC->ETH (по ask), ETH->USDT (по bid)
-	btc := usdt / a.ask * (1 - fee)
-	eth := btc / c.ask * (1 - fee)
-	usdtBack := eth * b.bid * (1 - fee)
-	p1 := (usdtBack - 1) * 100
-
-	// Путь 2: USDT->ETH (ask), ETH->BTC (bid), BTC->USDT (bid)
-	eth2 := usdt / b.ask * (1 - fee)
-	btc2 := eth2 * c.bid * (1 - fee)
-	usdtBack2 := btc2 * a.bid * (1 - fee)
-	p2 := (usdtBack2 - 1) * 100
-
-	if p1 > 0.01 || p2 > 0.01 {
-		log.Printf("💹 PROFIT p1=%.3f%% p2=%.3f%% | BTCUSDT %.4f/%.4f ETHUSDT %.4f/%.4f ETHBTC %.6f/%.6f",
-			p1, p2, a.bid, a.ask, b.bid, b.ask, c.bid, c.ask)
-	}
-}
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ cd cmd/cryptarb/moke
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb/moke$ go run .
-2025/08/09 07:42:37 ✅ MEXC: 1828 spot symbols
-2025/08/09 07:42:37 🔺 TRI: [BTCUSDT EPICUSDT BNBBTC]
 
 
 
