@@ -940,6 +940,70 @@ func (m *MEXCExchange) GetBestBid(symbol string) (float64, error) {
 
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ cd cmd/cryptarb
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
+2025/08/09 08:53:51 📈 Profiler: http://localhost:6060/debug/pprof/
+2025/08/09 08:53:52 ✅ MEXC: 1828 spot symbols
+2025/08/09 08:53:52 📊 Доступные пары (реальные+инверсии): 3656
+2025/08/09 08:53:52 [TRIANGLE] Found 282 triangles
+2025/08/09 08:53:52 [INIT] Треугольников найдено: 282
+2025/08/09 08:53:52 [INIT] Индекс по парам: 184 ключей
+2025/08/09 08:53:52 [INIT] Подписка на реальных пар: 92 шт.
+2025/08/09 08:53:52 [WS][MEXC] subscribed (quotes) to 17 pairs
+2025/08/09 08:53:52 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=17)
+2025/08/09 08:53:52 [WS][MEXC] subscribed (quotes) to 25 pairs
+2025/08/09 08:53:52 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=5)
+2025/08/09 08:53:52 [WS][MEXC] subscribed (quotes) to 25 pairs
+2025/08/09 08:53:52 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=20)
+2025/08/09 08:53:52 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=5)
+2025/08/09 08:53:52 [WS][MEXC] subscribed (quotes) to 25 pairs
+2025/08/09 08:53:52 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=20)
+2025/08/09 08:53:52 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=5)
+2025/08/09 08:53:52 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=20)
+2025/08/09 08:53:53 📩 [MEXC] subscribed (quotes-json): 5 (chunked)
+2025/08/09 08:53:53 📩 [MEXC] subscribed (quotes-json): 17 (chunked)
+2025/08/09 08:53:53 📩 [MEXC] subscribed (quotes-json): 5 (chunked)
+2025/08/09 08:53:53 📩 [MEXC] subscribed (quotes-json): 20 (chunked)
+2025/08/09 08:53:53 📩 [MEXC] subscribed (quotes-json): 20 (chunked)
+2025/08/09 08:53:53 📩 [MEXC] subscribed (quotes-json): 5 (chunked)
+2025/08/09 08:53:53 📩 [MEXC] subscribed (quotes-json): 20 (chunked)
+2025/08/09 08:53:53 🚫 [MEXC] refused: {"id":1,"code":0,"msg":"Not Subscribed successfully! [spot@public.bookTicker.v3.api@XLMUSDC,spot@public.bookTicker.v3.api@LINGOUSDT,spot@public.bookTicker.v3.api@SUPRAUSDC,spot@public.bookTicker.v3.api@PENGUUSDC,spot@public.bookTicker.v3.api@FETUSDC].  Reason： Blocked! "}
+2025/08/09 08:53:53 🚫 [MEXC] refused: {"id":2,"code":0,"msg":"Not Subscribed successfully! [spot@public.bookTicker.v3.api@USDRUSDT,spot@public.bookTicker.v3.api@AI16ZUSDT,spot@public.bookTicker.v3.api@VIRTUALUSDC,spot@public.bookTicker.v3.api@BABYDOGEUSDC,spot@public.bookTicker.v3.api@USDCUSDT,spot@public.bookTicker.v3.api@SUIUSDT,spot@public.bookTicker.v3.api@PEPEEUR,spot@public.bookTicker.v3.api@BUTTHOLEUSDC,spot@public.bookTicker.v3.api@BABYDOGEUSDT,spot@public.bookTicker.v3.api@KAITOUSDT,spot@public.bookTicker.v3.api@VIRTUALUSDT... (757 bytes)
+2025/08/09 08:53:53 🚫 [MEXC] refused: {"id":3,"code":0,"msg":"Not Subscribed successfully! [spot@public.bookTicker.v3.api@USDRUSDC,spot@public.bookTicker.v3.api@ULTIMAUSDT,spot@public.bookTicker.v3.api@FARTCOINUSDT,spot@public.bookTicker.v3.api@KASEUR,spot@public.bookTicker.v3.api@PEPEUSDT].  Reason： Blocked! "}
+2025/08/09 08:53:53 🚫 [MEXC] refused: {"id":4,"code":0,"msg":"Not Subscribed successfully! [spot@public.bookTicker.v3.api@ICPUSDT,spot@public.bookTicker.v3.api@MELANIAUSDT,spot@public.bookTicker.v3.api@FARTCOINUSDC,spot@public.bookTicker.v3.api@QUBICUSDT,spot@public.bookTicker.v3.api@XMRUSDT,spot@public.bookTicker.v3.api@KASUSDC,spot@public.bookTicker.v3.api@SOSOUSDC,spot@public.bookTicker.v3.api@LINKUSDT,spot@public.bookTicker.v3.api@KEKIUSUSDC,spot@public.bookTicker.v3.api@RAIUSDT,spot@public.bookTicker.v3.api@AIXBTUSDC,spot@publi... (859 bytes)
+2025/08/09 08:53:53 🚫 [MEXC] refused: {"id":6,"code":0,"msg":"Not Subscribed successfully! [spot@public.bookTicker.v3.api@NPCUSDC,spot@public.bookTicker.v3.api@ULTIMAUSDC,spot@public.bookTicker.v3.api@SUPRAUSDT,spot@public.bookTicker.v3.api@SENUSDT,spot@public.bookTicker.v3.api@RIOUSDT,spot@public.bookTicker.v3.api@RBNTUSDC,spot@public.bookTicker.v3.api@INJUSDC,spot@public.bookTicker.v3.api@TAOUSDC,spot@public.bookTicker.v3.api@NAKAUSDC,spot@public.bookTicker.v3.api@ENAUSDC,spot@public.bookTicker.v3.api@HBARUSDC,spot@public.bookTick... (856 bytes)
+2025/08/09 08:53:53 🚫 [MEXC] refused: {"id":5,"code":0,"msg":"Not Subscribed successfully! [spot@public.bookTicker.v3.api@MELANIAUSDC,spot@public.bookTicker.v3.api@USDCEUR,spot@public.bookTicker.v3.api@RIOUSDC,spot@public.bookTicker.v3.api@SENUSDC,spot@public.bookTicker.v3.api@BUTTHOLEUSDT].  Reason： Blocked! "}
+2025/08/09 08:53:53 🚫 [MEXC] refused: {"id":7,"code":0,"msg":"Not Subscribed successfully! [spot@public.bookTicker.v3.api@KAITOUSDC,spot@public.bookTicker.v3.api@PIUSDC,spot@public.bookTicker.v3.api@TURBOUSDT,spot@public.bookTicker.v3.api@INJUSDT,spot@public.bookTicker.v3.api@PEAQUSDT,spot@public.bookTicker.v3.api@DSYNCUSDC,spot@public.bookTicker.v3.api@ONDOUSDC,spot@public.bookTicker.v3.api@PEPEUSDC,spot@public.bookTicker.v3.api@CGPTUSDT,spot@public.bookTicker.v3.api@TONUSDC,spot@public.bookTicker.v3.api@SUSDC,spot@public.bookTicke... (852 bytes)
+2025/08/09 08:54:13 ↔️  [MEXC] control: {"id":0,"code":0,"msg":"PONG"}
+2025/08/09 08:54:13 ↔️  [MEXC] control: {"id":0,"code":0,"msg":"PONG"}
+2025/08/09 08:54:13 ↔️  [MEXC] control: {"id":0,"code":0,"msg":"PONG"}
+2025/08/09 08:54:13 ↔️  [MEXC] control: {"id":0,"code":0,"msg":"PONG"}
+2025/08/09 08:54:13 ↔️  [MEXC] control: {"id":0,"code":0,"msg":"PONG"}
+2025/08/09 08:54:13 ↔️  [MEXC] control: {"id":0,"code":0,"msg":"PONG"}
+2025/08/09 08:54:13 ↔️  [MEXC] control: {"id":0,"code":0,"msg":"PONG"}
+2025/08/09 08:54:26 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=20)
+2025/08/09 08:54:27 📩 [MEXC] subscribed (quotes-json): 20 (chunked)
+2025/08/09 08:54:27 🚫 [MEXC] refused: {"id":8,"code":0,"msg":"Not Subscribed successfully! [spot@public.bookTicker.v3.api@NPCUSDC,spot@public.bookTicker.v3.api@ULTIMAUSDC,spot@public.bookTicker.v3.api@SUPRAUSDT,spot@public.bookTicker.v3.api@SENUSDT,spot@public.bookTicker.v3.api@RIOUSDT,spot@public.bookTicker.v3.api@RBNTUSDC,spot@public.bookTicker.v3.api@INJUSDC,spot@public.bookTicker.v3.api@TAOUSDC,spot@public.bookTicker.v3.api@NAKAUSDC,spot@public.bookTicker.v3.api@ENAUSDC,spot@public.bookTicker.v3.api@HBARUSDC,spot@public.bookTick... (856 bytes)
+2025/08/09 08:54:27 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=5)
+2025/08/09 08:54:27 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=20)
+2025/08/09 08:54:28 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=20)
+2025/08/09 08:54:28 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=5)
+2025/08/09 08:54:28 📩 [MEXC] subscribed (quotes-json): 5 (chunked)
+2025/08/09 08:54:28 📩 [MEXC] subscribed (quotes-json): 20 (chunked)
+2025/08/09 08:54:28 🚫 [MEXC] refused: {"id":9,"code":0,"msg":"Not Subscribed successfully! [spot@public.bookTicker.v3.api@MELANIAUSDC,spot@public.bookTicker.v3.api@USDCEUR,spot@public.bookTicker.v3.api@RIOUSDC,spot@public.bookTicker.v3.api@SENUSDC,spot@public.bookTicker.v3.api@BUTTHOLEUSDT].  Reason： Blocked! "}
+2025/08/09 08:54:28 🚫 [MEXC] refused: {"id":10,"code":0,"msg":"Not Subscribed successfully! [spot@public.bookTicker.v3.api@KAITOUSDC,spot@public.bookTicker.v3.api@PIUSDC,spot@public.bookTicker.v3.api@TURBOUSDT,spot@public.bookTicker.v3.api@INJUSDT,spot@public.bookTicker.v3.api@PEAQUSDT,spot@public.bookTicker.v3.api@DSYNCUSDC,spot@public.bookTicker.v3.api@ONDOUSDC,spot@public.bookTicker.v3.api@PEPEUSDC,spot@public.bookTicker.v3.api@CGPTUSDT,spot@public.bookTicker.v3.api@TONUSDC,spot@public.bookTicker.v3.api@SUSDC,spot@public.bookTick... (853 bytes)
+2025/08/09 08:54:29 📩 [MEXC] subscribed (quotes-json): 5 (chunked)
+2025/08/09 08:54:29 📩 [MEXC] subscribed (quotes-json): 20 (chunked)
+2025/08/09 08:54:29 🚫 [MEXC] refused: {"id":11,"code":0,"msg":"Not Subscribed successfully! [spot@public.bookTicker.v3.api@USDRUSDC,spot@public.bookTicker.v3.api@ULTIMAUSDT,spot@public.bookTicker.v3.api@FARTCOINUSDT,spot@public.bookTicker.v3.api@KASEUR,spot@public.bookTicker.v3.api@PEPEUSDT].  Reason： Blocked! "}
+2025/08/09 08:54:29 🚫 [MEXC] refused: {"id":12,"code":0,"msg":"Not Subscribed successfully! [spot@public.bookTicker.v3.api@ICPUSDT,spot@public.bookTicker.v3.api@MELANIAUSDT,spot@public.bookTicker.v3.api@FARTCOINUSDC,spot@public.bookTicker.v3.api@QUBICUSDT,spot@public.bookTicker.v3.api@XMRUSDT,spot@public.bookTicker.v3.api@KASUSDC,spot@public.bookTicker.v3.api@SOSOUSDC,spot@public.bookTicker.v3.api@LINKUSDT,spot@public.bookTicker.v3.api@KEKIUSUSDC,spot@public.bookTicker.v3.api@RAIUSDT,spot@public.bookTicker.v3.api@AIXBTUSDC,spot@publ... (860 bytes)
+2025/08/09 08:54:29 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=5)
+2025/08/09 08:54:30 📩 [MEXC] subscribed (quotes-json): 5 (chunked)
+2025/08/09 08:54:30 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=17)
+2025/08/09 08:54:30 🚫 [MEXC] refused: {"id":13,"code":0,"msg":"Not Subscribed successfully! [spot@public.bookTicker.v3.api@XLMUSDC,spot@public.bookTicker.v3.api@LINGOUSDT,spot@public.bookTicker.v3.api@SUPRAUSDC,spot@public.bookTicker.v3.api@PENGUUSDC,spot@public.bookTicker.v3.api@FETUSDC].  Reason： Blocked! "}
+2025/08/09 08:54:31 📩 [MEXC] subscribed (quotes-json): 17 (chunked)
+2025/08/09 08:54:32 🚫 [MEXC] refused: {"id":14,"code":0,"msg":"Not Subscribed successfully! [spot@public.bookTicker.v3.api@USDRUSDT,spot@public.bookTicker.v3.api@AI16ZUSDT,spot@public.bookTicker.v3.api@VIRTUALUSDC,spot@public.bookTicker.v3.api@BABYDOGEUSDC,spot@public.bookTicker.v3.api@USDCUSDT,spot@public.bookTicker.v3.api@SUIUSDT,spot@public.bookTicker.v3.api@PEPEEUR,spot@public.bookTicker.v3.api@BUTTHOLEUSDC,spot@public.bookTicker.v3.api@BABYDOGEUSDT,spot@public.bookTicker.v3.api@KAITOUSDT,spot@public.bookTicker.v3.api@VIRTUALUSD... (758 bytes)
+^Csignal: interrupt
+
 
 
 
