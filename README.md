@@ -450,24 +450,203 @@ option go_package = "crypt_proto/pb";
 
 
 
-package mexc
-
-type MexcExchange struct {
-	// опционально: apiKey, apiSecret и т.п.
-	// apiKey    string
-	// apiSecret string
+// internal/app/arbitrager.go
+type Quote struct {
+	Bid float64
+	Ask float64
+	Ts  time.Time
 }
 
-// Если нужен конструктор:
-// func NewMexcExchange(apiKey, apiSecret string) *MexcExchange {
-// 	return &MexcExchange{apiKey: apiKey, apiSecret: apiSecret}
-// }
 
-// Не обязателен для этой ошибки, но полезно иметь:
-// func (m *MexcExchange) Name() string { return "MEXC" }
+type Arbitrager struct {
+	// ...
+	latest          map[string]Quote // было map[string]float64
+	// ...
+}
+
+arb := &Arbitrager{
+	// ...
+	latest:          make(map[string]Quote, len(subPairs)),
+	// ...
+}
 
 
-2025/08/09 03:20:33 🔺 ARB USDT/USDC/LUNA profit=7.9950% (gross=1.091369 net=1.079950)
+// OnQuote принимает нормализованный символ (например, "BTCUSDT") и котировку bid/ask.
+func (a *Arbitrager) OnQuote(symbol string, bid, ask float64, ts time.Time) {
+	if bid <= 0 || ask <= 0 || ask < bid {
+		return
+	}
+
+	a.mu.Lock()
+	_, has := a.trianglesByPair[symbol]
+	if !has {
+		a.mu.Unlock()
+		return
+	}
+	a.latest[symbol] = Quote{Bid: bid, Ask: ask, Ts: ts}
+	a.mu.Unlock()
+
+	a.Check(symbol)
+}
+
+
+func (a *Arbitrager) Check(symbol string) {
+	const (
+		feeFactor  = 0.9965 * 0.9965 * 0.9965         // комиссия 3 ног
+		staleLimit = 300 * time.Millisecond           // макс. «возраст» котировки
+	)
+
+	// 1) Забираем индексы и снапшот цен под мьютексом
+	a.mu.Lock()
+	indices := a.trianglesByPair[symbol]
+	if len(indices) == 0 {
+		a.mu.Unlock()
+		return
+	}
+	now := time.Now()
+	snap := make(map[string]Quote, len(a.latest))
+	for k, v := range a.latest {
+		// можно отфильтровать сразу «протухшие», но оставим на getLeg
+		snap[k] = v
+	}
+	a.mu.Unlock()
+
+	// 2) Направленная цена ребра A→B:
+	//    - если есть котировка по AB: продаём A за B → используем bid_AB
+	//    - иначе, если есть по BA: покупаем A за B через BA → 1 / ask_BA
+	getLeg := func(a, b string) (float64, bool) {
+		if q, ok := snap[a+b]; ok && q.Bid > 0 && now.Sub(q.Ts) <= staleLimit {
+			return q.Bid, true
+		}
+		if q, ok := snap[b+a]; ok && q.Ask > 0 && now.Sub(q.Ts) <= staleLimit {
+			return 1 / q.Ask, true
+		}
+		return 0, false
+	}
+
+	// 3) Считаем треугольники
+	for _, idx := range indices {
+		tri := a.Triangles[idx]
+
+		p1, ok1 := getLeg(tri.A, tri.B)
+		p2, ok2 := getLeg(tri.B, tri.C)
+		p3, ok3 := getLeg(tri.C, tri.A)
+		if !ok1 || !ok2 || !ok3 {
+			continue
+		}
+
+		gross := p1 * p2 * p3
+		net := gross * feeFactor
+		profitPct := (net - 1) * 100
+
+		// Хочешь — активируй порог:
+		// if profitPct < 0.05 { continue } // пример: не ниже 5 б.п.
+
+		log.Printf("🔺 ARB %s/%s/%s profit=%.4f%% (gross=%.6f net=%.6f)",
+			tri.A, tri.B, tri.C, profitPct, gross, net)
+	}
+}
+
+
+// internal/domain/exchange/exchange.go
+type Exchange interface {
+	// ...
+	SubscribeQuotes(pairs []string, handler func(symbol string, bid, ask float64, ts time.Time)) error
+	// ...
+}
+
+
+func (o *OKXExchange) SubscribeQuotes(pairs []string, handler func(symbol string, bid, ask float64, ts time.Time)) error {
+	chunks := chunkStrings(pairs, okxMaxPerConn)
+
+	for _, ch := range chunks {
+		ps := append([]string(nil), ch...)
+
+		go func(pairs []string) {
+			const wsURL = "wss://ws.okx.com:8443/ws/v5/public"
+
+			for {
+				conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+				if err != nil {
+					log.Printf("❌ [OKX] dial: %v", err)
+					time.Sleep(3 * time.Second)
+					continue
+				}
+
+				args := make([]map[string]string, 0, len(pairs))
+				for _, p := range pairs {
+					args = append(args, map[string]string{
+						"channel": "tickers",
+						"instId":  toOKXInstID(p),
+					})
+				}
+				sub := map[string]any{"op": "subscribe", "args": args}
+				if err := conn.WriteJSON(sub); err != nil {
+					log.Printf("❌ [OKX] send sub: %v", err)
+					_ = conn.Close()
+					time.Sleep(2 * time.Second)
+					continue
+				}
+
+				for {
+					_, msg, err := conn.ReadMessage()
+					if err != nil {
+						_ = conn.Close()
+						time.Sleep(2 * time.Second)
+						break
+					}
+
+					var frame struct {
+						Data []struct {
+							InstID string `json:"instId"`
+							AskPx  string `json:"askPx"`
+							BidPx  string `json:"bidPx"`
+							Ts     string `json:"ts"` // мс
+						} `json:"data"`
+					}
+					if json.Unmarshal(msg, &frame) != nil || len(frame.Data) == 0 {
+						continue
+					}
+
+					for _, d := range frame.Data {
+						if d.InstID == "" || d.AskPx == "" || d.BidPx == "" {
+							continue
+						}
+						sym := strings.ReplaceAll(d.InstID, "-", "")
+
+						bid, err1 := strconv.ParseFloat(d.BidPx, 64)
+						ask, err2 := strconv.ParseFloat(d.AskPx, 64)
+						if err1 != nil || err2 != nil || bid <= 0 || ask <= 0 || ask < bid {
+							continue
+						}
+
+						var ts time.Time
+						if d.Ts != "" {
+							if ms, err := strconv.ParseInt(d.Ts, 10, 64); err == nil {
+								ts = time.UnixMilli(ms)
+							}
+						}
+						if ts.IsZero() {
+							ts = time.Now()
+						}
+
+						handler(sym, bid, ask, ts)
+					}
+				}
+			}
+		}(ps)
+	}
+	return nil
+}
+
+
+
+// вместо ex.SubscribeTickers(pairs, arb.OnTick)
+if err := ex.SubscribeQuotes(pairs, func(sym string, bid, ask float64, ts time.Time) {
+	arb.OnQuote(sym, bid, ask, ts)
+}); err != nil {
+	// retry…
+}
 
 
 
