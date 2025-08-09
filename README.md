@@ -450,191 +450,21 @@ option go_package = "crypt_proto/pb";
 
 
 
-package okx
+package mexc
 
-import (
-	"encoding/json"
-	"fmt"
-	"log"
-	"net/http"
-	"strconv"
-	"strings"
-	"time"
-
-	"github.com/gorilla/websocket"
-)
-
-// ---- Тип и конструктор ----
-
-type OKXExchange struct{}
-
-func NewOKXExchange() *OKXExchange { return &OKXExchange{} }
-
-func (o *OKXExchange) Name() string { return "OKX" }
-
-// ---- Справочник доступных спот-символов ----
-
-func (o *OKXExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64) {
-	resp, err := http.Get("https://www.okx.com/api/v5/public/instruments?instType=SPOT")
-	if err != nil {
-		log.Printf("❌ OKX instruments: %v", err)
-		return nil, nil, nil
-	}
-	defer resp.Body.Close()
-
-	var data struct {
-		Data []struct {
-			InstID string `json:"instId"`
-			LotSz  string `json:"lotSz"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		log.Printf("❌ OKX decode: %v", err)
-		return nil, nil, nil
-	}
-
-	avail := make(map[string]bool, len(data.Data))
-	step := make(map[string]float64, len(data.Data))
-	min := make(map[string]float64, len(data.Data))
-	for _, d := range data.Data {
-		sym := strings.ReplaceAll(d.InstID, "-", "") // BTC-USDT -> BTCUSDT
-		avail[sym] = true
-		// Для простоты ставим заглушки; при желании распарсь LotSz.
-		step[sym] = 0.0001
-		min[sym] = 0.0001
-	}
-	log.Printf("✅ OKX: %d spot symbols", len(avail))
-	return avail, step, min
+type MexcExchange struct {
+	// опционально: apiKey, apiSecret и т.п.
+	// apiKey    string
+	// apiSecret string
 }
 
-// ---- Подписка на тикеры (чанки, автопереподключение) ----
+// Если нужен конструктор:
+// func NewMexcExchange(apiKey, apiSecret string) *MexcExchange {
+// 	return &MexcExchange{apiKey: apiKey, apiSecret: apiSecret}
+// }
 
-const okxMaxPerConn = 25
-
-func chunkStrings(in []string, n int) [][]string {
-	if n <= 0 || len(in) == 0 {
-		return nil
-	}
-	var out [][]string
-	for i := 0; i < len(in); i += n {
-		end := i + n
-		if end > len(in) {
-			end = len(in)
-		}
-		out = append(out, append([]string(nil), in[i:end]...))
-	}
-	return out
-}
-
-func toOKXInstID(sym string) string {
-	quotes := []string{"USDT", "USDC", "BTC", "ETH", "EUR", "BRL", "USD1", "USDE"}
-	for _, q := range quotes {
-		if strings.HasSuffix(sym, q) && len(sym) > len(q) {
-			return sym[:len(sym)-len(q)] + "-" + q
-		}
-	}
-	if len(sym) > 4 {
-		return sym[:len(sym)-4] + "-" + sym[len(sym)-4:]
-	}
-	return sym
-}
-
-func (o *OKXExchange) SubscribeTickers(pairs []string, handler func(symbol string, price float64)) error {
-	chunks := chunkStrings(pairs, okxMaxPerConn)
-
-	for _, ch := range chunks {
-		ps := append([]string(nil), ch...) // копия от среза на всякий случай
-
-		go func(pairs []string) {
-			const wsURL = "wss://ws.okx.com:8443/ws/v5/public"
-
-			for { // reconnect loop
-				log.Printf("🌐 [OKX] dial %s (pairs=%d)", wsURL, len(pairs))
-				conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-				if err != nil {
-					log.Printf("❌ [OKX] dial: %v", err)
-					time.Sleep(3 * time.Second)
-					continue
-				}
-				log.Printf("✅ [OKX] connected")
-
-				args := make([]map[string]string, 0, len(pairs))
-				for _, p := range pairs {
-					args = append(args, map[string]string{
-						"channel": "tickers",
-						"instId":  toOKXInstID(p),
-					})
-				}
-				sub := map[string]any{"op": "subscribe", "args": args}
-				if err := conn.WriteJSON(sub); err != nil {
-					log.Printf("❌ [OKX] send sub: %v", err)
-					_ = conn.Close()
-					time.Sleep(2 * time.Second)
-					continue
-				}
-				log.Printf("📩 [OKX] subscribed: %d", len(args))
-
-				// read loop
-				for {
-					_, msg, err := conn.ReadMessage()
-					if err != nil {
-						log.Printf("⚠️  [OKX] read: %v", err)
-						_ = conn.Close()
-						time.Sleep(2 * time.Second)
-						break // reconnect
-					}
-
-					var frame struct {
-						Data []struct {
-							InstID string `json:"instId"`
-							Last   string `json:"last"`
-							AskPx  string `json:"askPx"`
-							BidPx  string `json:"bidPx"`
-						} `json:"data"`
-					}
-					if err := json.Unmarshal(msg, &frame); err != nil || len(frame.Data) == 0 {
-						continue
-					}
-
-					for _, d := range frame.Data {
-						if d.InstID == "" {
-							continue
-						}
-						sym := strings.ReplaceAll(d.InstID, "-", "")
-
-						var priceStr string
-						switch {
-						case d.Last != "":
-							priceStr = d.Last
-						case d.AskPx != "":
-							priceStr = d.AskPx
-						case d.BidPx != "":
-							priceStr = d.BidPx
-						default:
-							continue
-						}
-
-						price, err := strconv.ParseFloat(priceStr, 64)
-						if err != nil || price <= 0 {
-							continue
-						}
-						handler(sym, price)
-					}
-				}
-			}
-		}(ps)
-	}
-
-	return nil
-}
-
-// ---- Заглушки под ордера/книгу (реализуешь позже) ----
-
-func (o *OKXExchange) PlaceMarketOrder(symbol, side string, quantity float64) (string, error) {
-	return "", fmt.Errorf("OKX PlaceMarketOrder not implemented")
-}
-func (o *OKXExchange) GetBestAsk(symbol string) (float64, error) { return 0, fmt.Errorf("OKX GetBestAsk not implemented") }
-func (o *OKXExchange) GetBestBid(symbol string) (float64, error) { return 0, fmt.Errorf("OKX GetBestBid not implemented") }
+// Не обязателен для этой ошибки, но полезно иметь:
+// func (m *MexcExchange) Name() string { return "MEXC" }
 
 
 
