@@ -459,6 +459,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -561,9 +562,22 @@ const (
 
 // Управление логами
 var (
-	debugRawFirstN = 10  // сколько «сырых» кадров показать на старте (0 — выкл)
-	debugVerbose   = true // печатать, какая ветка парсинга сработала
+	debugRawFirstN = 10   // сколько «сырых» кадров показать на старте (0 — выкл)
+	debugVerbose   = true // печатать ветки парсинга
 )
+
+// уникальные id для SUBSCRIPTION
+var subID int64
+
+func nextID() int64 { return atomic.AddInt64(&subID, 1) }
+
+// триммер для логов
+func trimBytes(b []byte, n int) string {
+	if n <= 0 || len(b) <= n {
+		return string(b)
+	}
+	return string(b[:n]) + "... (" + strconv.Itoa(len(b)) + " bytes)"
+}
 
 func chunkStrings(in []string, n int) [][]string {
 	if n <= 0 || len(in) == 0 {
@@ -580,9 +594,9 @@ func chunkStrings(in []string, n int) [][]string {
 	return out
 }
 
+// JSON-каналы
 func dealsChannel(sym string) string      { return "spot@public.deals.v3.api@" + strings.ToUpper(sym) }
 func bookTickerChannel(sym string) string { return "spot@public.bookTicker.v3.api@" + strings.ToUpper(sym) }
-func bookTickerBatch(sym string) string   { return "spot@public.bookTicker.batch.v3.api@" + strings.ToUpper(sym) }
 
 func symbolFromChannel(c string) string {
 	i := strings.LastIndexByte(c, '@')
@@ -592,17 +606,32 @@ func symbolFromChannel(c string) string {
 	return strings.ToUpper(c[i+1:])
 }
 
-func trimBytes(b []byte, n int) string {
-	if n <= 0 || len(b) <= n {
-		return string(b)
+// отправка подписки чанками (чтобы не получить "msg length invalid")
+func sendSubs(conn *websocket.Conn, params []string) error {
+	const maxTopics = 20 // безопасная порция на один SUBSCRIPTION
+	for i := 0; i < len(params); i += maxTopics {
+		end := i + maxTopics
+		if end > len(params) {
+			end = len(params)
+		}
+		sub := map[string]any{
+			"method": "SUBSCRIPTION",
+			"params": params[i:end],
+			"id":     nextID(),
+		}
+		if err := conn.WriteJSON(sub); err != nil {
+			return err
+		}
+		time.Sleep(50 * time.Millisecond) // лёгкий троттлинг
 	}
-	return string(b[:n]) + "... (" + strconv.Itoa(len(b)) + " bytes)"
+	return nil
 }
 
-// ---- SubscribeTickers: deals (last) + bookTicker(mid) ----
+// ---- SubscribeTickers: deals (last) ----
 
 func (m *MEXCExchange) SubscribeTickers(pairs []string, handler func(symbol string, price float64)) error {
-	perConn := mexcMaxPerConn / 2 // по 2 канала на символ
+	// по одному каналу на символ → можно держать 20 пар на коннект (с запасом)
+	perConn := 20
 	if perConn <= 0 {
 		perConn = 10
 	}
@@ -621,19 +650,17 @@ func (m *MEXCExchange) SubscribeTickers(pairs []string, handler func(symbol stri
 				}
 				log.Printf("✅ [MEXC] connected")
 
-				params := make([]string, 0, len(pairs)*2)
+				params := make([]string, 0, len(pairs))
 				for _, p := range pairs {
 					params = append(params, dealsChannel(p))
-					params = append(params, bookTickerChannel(p))
 				}
-				sub := map[string]any{"method": "SUBSCRIPTION", "params": params, "id": time.Now().Unix()}
-				if err := conn.WriteJSON(sub); err != nil {
-					log.Printf("❌ [MEXC] send sub: %v", err)
+				if err := sendSubs(conn, params); err != nil {
+					log.Printf("❌ [MEXC] send sub (tickers): %v", err)
 					_ = conn.Close()
 					time.Sleep(2 * time.Second)
 					continue
 				}
-				log.Printf("📩 [MEXC] subscribed (tickers-json): %d", len(params))
+				log.Printf("📩 [MEXC] subscribed (tickers-json): %d (chunked)", len(params))
 
 				donePing := make(chan struct{})
 				go func(c *websocket.Conn) {
@@ -659,11 +686,18 @@ func (m *MEXCExchange) SubscribeTickers(pairs []string, handler func(symbol stri
 						break
 					}
 
-					if mt == websocket.TextMessage && (bytes.Contains(msg, []byte(`"PONG"`)) || bytes.Contains(msg, []byte(`"success"`))) {
-						if debugVerbose {
-							log.Printf("↔️  [MEXC] control: %s", trimBytes(msg, 200))
+					// контрольные кадры / отказы сервера
+					if mt == websocket.TextMessage {
+						if bytes.Contains(msg, []byte(`"PONG"`)) || bytes.Contains(msg, []byte(`"success"`)) {
+							if debugVerbose {
+								log.Printf("↔️  [MEXC] control: %s", trimBytes(msg, 200))
+							}
+							continue
 						}
-						continue
+						if bytes.Contains(msg, []byte("Not Subscribed successfully")) {
+							log.Printf("🚫 [MEXC] refused: %s", trimBytes(msg, 500))
+							continue
+						}
 					}
 
 					if debugRawFirstN > 0 {
@@ -708,48 +742,6 @@ func (m *MEXCExchange) SubscribeTickers(pairs []string, handler func(symbol stri
 						}
 					}
 
-					// bookTicker → mid: {"s":"BTCUSDT","d":{"bp":"...","ap":"..."}}
-					var b1 struct {
-						S string `json:"s"`
-						D struct{ Bp, Ap string } `json:"d"`
-					}
-					if json.Unmarshal(msg, &b1) == nil && b1.S != "" && b1.D.Bp != "" && b1.D.Ap != "" {
-						bid, _ := strconv.ParseFloat(b1.D.Bp, 64)
-						ask, _ := strconv.ParseFloat(b1.D.Ap, 64)
-						if bid > 0 && ask > 0 {
-							mid := (bid + ask) / 2
-							if debugVerbose {
-								log.Printf("✅ [MEXC][BT→MID s] %s mid=%f (bid=%f ask=%f)", strings.ToUpper(b1.S), mid, bid, ask)
-							}
-							handler(strings.ToUpper(b1.S), mid)
-							if debugRawFirstN > 0 {
-								debugRawFirstN--
-							}
-							continue
-						}
-					}
-
-					// bookTicker → mid: {"c":"spot@public.bookTicker.v3.api@BTCUSDT","d":{"bp":"...","ap":"..."}}
-					var b2 struct {
-						C string `json:"c"`
-						D struct{ Bp, Ap string } `json:"d"`
-					}
-					if json.Unmarshal(msg, &b2) == nil && b2.C != "" && b2.D.Bp != "" && b2.D.Ap != "" {
-						bid, _ := strconv.ParseFloat(b2.D.Bp, 64)
-						ask, _ := strconv.ParseFloat(b2.D.Ap, 64)
-						if sym := symbolFromChannel(b2.C); sym != "" && bid > 0 && ask > 0 {
-							mid := (bid + ask) / 2
-							if debugVerbose {
-								log.Printf("✅ [MEXC][BT→MID c] %s mid=%f (bid=%f ask=%f)", sym, mid, bid, ask)
-							}
-							handler(sym, mid)
-							if debugRawFirstN > 0 {
-								debugRawFirstN--
-							}
-							continue
-						}
-					}
-
 					// неизвестный формат
 					if debugRawFirstN > 0 {
 						debugRawFirstN--
@@ -762,10 +754,11 @@ func (m *MEXCExchange) SubscribeTickers(pairs []string, handler func(symbol stri
 	return nil
 }
 
-// ---- SubscribeQuotes: bookTicker (+ batch) → bid/ask ----
+// ---- SubscribeQuotes: bookTicker (bid/ask) ----
 
 func (m *MEXCExchange) SubscribeQuotes(pairs []string, handler func(symbol string, bid, ask float64, ts time.Time)) error {
-	perConn := mexcMaxPerConn / 2 // два канала на символ
+	// по одному каналу на символ → можно держать 20 пар на коннект (с запасом)
+	perConn := 20
 	if perConn <= 0 {
 		perConn = 10
 	}
@@ -783,19 +776,18 @@ func (m *MEXCExchange) SubscribeQuotes(pairs []string, handler func(symbol strin
 					continue
 				}
 
-				params := make([]string, 0, len(pairs)*2)
+				// ТОЛЬКО bookTicker (без batch)
+				params := make([]string, 0, len(pairs))
 				for _, p := range pairs {
 					params = append(params, bookTickerChannel(p))
-					params = append(params, bookTickerBatch(p))
 				}
-				sub := map[string]any{"method": "SUBSCRIPTION", "params": params, "id": time.Now().Unix()}
-				if err := conn.WriteJSON(sub); err != nil {
-					log.Printf("❌ [MEXC] send sub: %v", err)
+				if err := sendSubs(conn, params); err != nil {
+					log.Printf("❌ [MEXC] send sub (quotes): %v", err)
 					_ = conn.Close()
 					time.Sleep(2 * time.Second)
 					continue
 				}
-				log.Printf("📩 [MEXC] subscribed (quotes-json): %d", len(params))
+				log.Printf("📩 [MEXC] subscribed (quotes-json): %d (chunked)", len(params))
 
 				donePing := make(chan struct{})
 				go func(c *websocket.Conn) {
@@ -820,11 +812,18 @@ func (m *MEXCExchange) SubscribeQuotes(pairs []string, handler func(symbol strin
 						break
 					}
 
-					if mt == websocket.TextMessage && (bytes.Contains(msg, []byte(`"PONG"`)) || bytes.Contains(msg, []byte(`"success"`))) {
-						if debugVerbose {
-							log.Printf("↔️  [MEXC] control: %s", trimBytes(msg, 200))
+					// контроль/отказы
+					if mt == websocket.TextMessage {
+						if bytes.Contains(msg, []byte(`"PONG"`)) || bytes.Contains(msg, []byte(`"success"`)) {
+							if debugVerbose {
+								log.Printf("↔️  [MEXC] control: %s", trimBytes(msg, 200))
+							}
+							continue
 						}
-						continue
+						if bytes.Contains(msg, []byte("Not Subscribed successfully")) {
+							log.Printf("🚫 [MEXC] refused: %s", trimBytes(msg, 500))
+							continue
+						}
 					}
 
 					if debugRawFirstN > 0 {
@@ -889,36 +888,6 @@ func (m *MEXCExchange) SubscribeQuotes(pairs []string, handler func(symbol strin
 						}
 					}
 
-					// batch: {"symbol":"BTCUSDT","publicBookTickerBatch":{"items":[{"bidPrice":"...","askPrice":"..."}]},"sendTime":"..."}
-					var c struct {
-						Symbol string `json:"symbol"`
-						Time   string `json:"sendTime"`
-						Batch  struct {
-							Items []struct {
-								BidPrice string `json:"bidPrice"`
-								AskPrice string `json:"askPrice"`
-							} `json:"items"`
-						} `json:"publicBookTickerBatch"`
-					}
-					if json.Unmarshal(msg, &c) == nil && c.Symbol != "" && len(c.Batch.Items) > 0 {
-						bid, _ := strconv.ParseFloat(c.Batch.Items[0].BidPrice, 64)
-						ask, _ := strconv.ParseFloat(c.Batch.Items[0].AskPrice, 64)
-						if bid > 0 && ask > 0 && ask >= bid {
-							ts := time.Now()
-							if ms, err := strconv.ParseInt(c.Time, 10, 64); err == nil && ms > 0 {
-								ts = time.UnixMilli(ms)
-							}
-							if debugVerbose {
-								log.Printf("✅ [MEXC][QUOTE batch] %s bid=%f ask=%f", strings.ToUpper(c.Symbol), bid, ask)
-							}
-							handler(strings.ToUpper(c.Symbol), bid, ask, ts)
-							if debugRawFirstN > 0 {
-								debugRawFirstN--
-							}
-							continue
-						}
-					}
-
 					// неизвестный формат
 					if debugRawFirstN > 0 {
 						debugRawFirstN--
@@ -969,78 +938,6 @@ func (m *MEXCExchange) GetBestBid(symbol string) (float64, error) {
 	return strconv.ParseFloat(data.Bids[0][0], 64)
 }
 
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ cd cmd/cryptarb
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/08/09 08:45:13 📈 Profiler: http://localhost:6060/debug/pprof/
-2025/08/09 08:45:14 ✅ MEXC: 1828 spot symbols
-2025/08/09 08:45:14 📊 Доступные пары (реальные+инверсии): 3656
-2025/08/09 08:45:14 [TRIANGLE] Found 282 triangles
-2025/08/09 08:45:14 [INIT] Треугольников найдено: 282
-2025/08/09 08:45:14 [INIT] Индекс по парам: 184 ключей
-2025/08/09 08:45:14 [INIT] Подписка на реальных пар: 92 шт.
-2025/08/09 08:45:14 [WS][MEXC] subscribed (quotes) to 17 pairs
-2025/08/09 08:45:14 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=2)
-2025/08/09 08:45:14 [WS][MEXC] subscribed (quotes) to 25 pairs
-2025/08/09 08:45:14 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=15)
-2025/08/09 08:45:14 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=15)
-2025/08/09 08:45:14 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=10)
-2025/08/09 08:45:14 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=15)
-2025/08/09 08:45:14 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=15)
-2025/08/09 08:45:14 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=10)
-2025/08/09 08:45:14 [WS][MEXC] subscribed (quotes) to 25 pairs
-2025/08/09 08:45:14 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=10)
-2025/08/09 08:45:14 [WS][MEXC] subscribed (quotes) to 25 pairs
-2025/08/09 08:45:15 📩 [MEXC] subscribed (quotes-json): 20
-2025/08/09 08:45:15 📩 [MEXC] subscribed (quotes-json): 30
-2025/08/09 08:45:15 📩 [MEXC] subscribed (quotes-json): 4
-2025/08/09 08:45:15 📩 [MEXC] subscribed (quotes-json): 20
-2025/08/09 08:45:15 📩 [MEXC] subscribed (quotes-json): 30
-2025/08/09 08:45:15 📩 [MEXC] subscribed (quotes-json): 20
-2025/08/09 08:45:15 📩 [MEXC] subscribed (quotes-json): 30
-2025/08/09 08:45:15 📩 [MEXC] subscribed (quotes-json): 30
-2025/08/09 08:45:15 [MEXC][RAW QUOTE] {"id":1754718315,"code":0,"msg":"msg length invalid"}
-2025/08/09 08:45:15 [MEXC][RAW QUOTE] {"id":1754718315,"code":0,"msg":"Not Subscribed successfully! [spot@public.bookTicker.batch.v3.api@KASEUR,spot@public.bookTicker.v3.api@XLMUSDC,spot@public.bookTicker.v3.api@MELANIAUSDT,spot@public.bookTicker.batch.v3.api@MELANIAUSDT,spot@public.bookTicker.v3.api@INJUSDT,spot@public.bookTicker.batch.v3.api@INJUSDC,spot@public.bookTicker.batch.v3.api@NAKAUSDC,spot@public.bookTicker.v3.api@SUPRAUSDT,spot@public.bookTicker.v3.api@CGPTUSDT,spot@public.bookTicker.v3.api@INJUSDC,spot@public.bookTicker.v3.api@NAKAUSDC,spot@public.bookTicker.batch.v3.api@CGPTUSDT,spot@public.bookTicker.batch.v3.api@TR... (929 bytes)
-2025/08/09 08:45:15 [MEXC][RAW QUOTE] {"id":1754718315,"code":0,"msg":"Not Subscribed successfully! [spot@public.bookTicker.v3.api@PIUSDC,spot@public.bookTicker.v3.api@ICPUSDT,spot@public.bookTicker.batch.v3.api@SUIUSDC,spot@public.bookTicker.v3.api@PEPEEUR,spot@public.bookTicker.v3.api@ONDOUSDC,spot@public.bookTicker.v3.api@BUTTHOLEUSDC,spot@public.bookTicker.batch.v3.api@BUTTHOLEUSDC,spot@public.bookTicker.batch.v3.api@TAOUSDT,spot@public.bookTicker.v3.api@VIRTUALUSDT,spot@public.bookTicker.batch.v3.api@ONDOUSDC,spot@public.bookTicker.batch.v3.api@PIUSDC,spot@public.bookTicker.v3.api@DSYNCUSDT,spot@public.bookTicker.batch.v3.api... (931 bytes)
-2025/08/09 08:45:15 [MEXC][RAW QUOTE] {"id":1754718315,"code":0,"msg":"msg length invalid"}
-2025/08/09 08:45:15 [MEXC][RAW QUOTE] {"id":1754718315,"code":0,"msg":"Not Subscribed successfully! [spot@public.bookTicker.batch.v3.api@TAOEUR,spot@public.bookTicker.batch.v3.api@PENGUUSDC,spot@public.bookTicker.batch.v3.api@TONUSDC,spot@public.bookTicker.v3.api@PEAQUSDT,spot@public.bookTicker.v3.api@PENGUUSDC,spot@public.bookTicker.v3.api@TONUSDC,spot@public.bookTicker.batch.v3.api@PEAQUSDT,spot@public.bookTicker.batch.v3.api@HBARUSDC,spot@public.bookTicker.v3.api@HBARUSDC,spot@public.bookTicker.batch.v3.api@PENGUUSDT,spot@public.bookTicker.v3.api@MELANIAUSDC,spot@public.bookTicker.batch.v3.api@TONUSDT,spot@public.bookTicker.v3.... (931 bytes)
-2025/08/09 08:45:15 🤷 [MEXC][QUOTE] unparsed frame (left=9)
-2025/08/09 08:45:15 🤷 [MEXC][QUOTE] unparsed frame (left=8)
-2025/08/09 08:45:15 🤷 [MEXC][QUOTE] unparsed frame (left=7)
-2025/08/09 08:45:15 [MEXC][RAW QUOTE] {"id":1754718315,"code":0,"msg":"Not Subscribed successfully! [spot@public.bookTicker.batch.v3.api@FETUSDC,spot@public.bookTicker.batch.v3.api@LINGOUSDC,spot@public.bookTicker.v3.api@LINGOUSDC,spot@public.bookTicker.v3.api@FETUSDC].  Reason： Blocked! "}
-2025/08/09 08:45:15 🤷 [MEXC][QUOTE] unparsed frame (left=6)
-2025/08/09 08:45:15 🤷 [MEXC][QUOTE] unparsed frame (left=5)
-2025/08/09 08:45:15 [MEXC][RAW QUOTE] {"id":1754718315,"code":0,"msg":"msg length invalid"}
-2025/08/09 08:45:15 🤷 [MEXC][QUOTE] unparsed frame (left=4)
-2025/08/09 08:45:15 🤷 [MEXC][QUOTE] unparsed frame (left=3)
-2025/08/09 08:45:15 [MEXC][RAW QUOTE] {"id":1754718315,"code":0,"msg":"msg length invalid"}
-2025/08/09 08:45:15 🤷 [MEXC][QUOTE] unparsed frame (left=2)
-2025/08/09 08:45:35 ↔️  [MEXC] control: {"id":0,"code":0,"msg":"PONG"}
-2025/08/09 08:45:35 ↔️  [MEXC] control: {"id":0,"code":0,"msg":"PONG"}
-2025/08/09 08:45:35 ↔️  [MEXC] control: {"id":0,"code":0,"msg":"PONG"}
-2025/08/09 08:45:35 ↔️  [MEXC] control: {"id":0,"code":0,"msg":"PONG"}
-2025/08/09 08:45:35 ↔️  [MEXC] control: {"id":0,"code":0,"msg":"PONG"}
-2025/08/09 08:45:35 ↔️  [MEXC] control: {"id":0,"code":0,"msg":"PONG"}
-2025/08/09 08:45:35 ↔️  [MEXC] control: {"id":0,"code":0,"msg":"PONG"}
-2025/08/09 08:45:35 ↔️  [MEXC] control: {"id":0,"code":0,"msg":"PONG"}
-2025/08/09 08:45:49 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=15)
-2025/08/09 08:45:49 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=2)
-2025/08/09 08:45:49 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=10)
-2025/08/09 08:45:49 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=15)
-2025/08/09 08:45:50 📩 [MEXC] subscribed (quotes-json): 4
-2025/08/09 08:45:50 📩 [MEXC] subscribed (quotes-json): 30
-2025/08/09 08:45:50 📩 [MEXC] subscribed (quotes-json): 20
-2025/08/09 08:45:50 📩 [MEXC] subscribed (quotes-json): 30
-2025/08/09 08:45:50 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=15)
-2025/08/09 08:45:50 [MEXC][RAW QUOTE] {"id":1754718350,"code":0,"msg":"Not Subscribed successfully! [spot@public.bookTicker.batch.v3.api@FETUSDC,spot@public.bookTicker.batch.v3.api@LINGOUSDC,spot@public.bookTicker.v3.api@LINGOUSDC,spot@public.bookTicker.v3.api@FETUSDC].  Reason： Blocked! "}
-2025/08/09 08:45:50 🤷 [MEXC][QUOTE] unparsed frame (left=1)
-2025/08/09 08:45:50 [MEXC][RAW QUOTE] {"id":1754718350,"code":0,"msg":"msg length invalid"}
-2025/08/09 08:45:50 🤷 [MEXC][QUOTE] unparsed frame (left=0)
-2025/08/09 08:45:50 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=15)
-2025/08/09 08:45:51 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=10)
-2025/08/09 08:45:51 📩 [MEXC] subscribed (quotes-json): 30
-2025/08/09 08:45:51 📩 [MEXC] subscribed (quotes-json): 30
 
 
 
