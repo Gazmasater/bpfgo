@@ -449,148 +449,526 @@ option go_package = "crypt_proto/pb";
 
 
 
-package main
+package mexc
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"log"
+	"net/http"
+	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	"cryptarb/internal/repository/mexc"
+	"github.com/gorilla/websocket"
 )
 
-type qv struct{ bid, ask float64 }
+// ---- Тип и конструктор ----
 
-func main() {
-	ex := mexc.NewMEXCExchange()
+type MEXCExchange struct{}
 
-	avail, _, _ := ex.FetchAvailableSymbols()
-	if len(avail) == 0 {
-		log.Fatal("MEXC avail empty")
+func NewMEXCExchange() *MEXCExchange { return &MEXCExchange{} }
+func (m *MEXCExchange) Name() string { return "MEXC" }
+
+// ---- Справочник доступных спот-символов ----
+
+func (m *MEXCExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64) {
+	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
+	if err != nil {
+		log.Printf("❌ MEXC exchangeInfo: %v", err)
+		return nil, nil, nil
+	}
+	defer resp.Body.Close()
+
+	var data struct {
+		Symbols []struct {
+			Symbol               string   `json:"symbol"`
+			Status               string   `json:"status"`
+			IsSpotTradingAllowed bool     `json:"isSpotTradingAllowed"`
+			OrderTypes           []string `json:"orderTypes"`
+			BaseSizePrecision    string   `json:"baseSizePrecision"`
+			Filters              []struct {
+				FilterType string `json:"filterType"`
+				MinQty     string `json:"minQty"`
+				StepSize   string `json:"stepSize"`
+			} `json:"filters"`
+		} `json:"symbols"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		log.Printf("❌ MEXC decode exchangeInfo: %v", err)
+		return nil, nil, nil
 	}
 
-	tri := pickTriangle(avail) // BTCUSDT + ALTUSDT + ALTBTC
-	log.Printf("🔺 TRI: %v", tri)
-
-	var (
-		mu   sync.Mutex
-		book = map[string]qv{}
-	)
-
-	const (
-		fee       = 0.0010 // 0.10% такер (подставь свою)
-		threshold = 0.02   // 0.02% порог (для теста можно 0.005)
-	)
-
-	// Дополнительно подпишемся на deals (last), чтобы видеть сам поток
-	go ex.SubscribeTickers(tri, func(sym string, last float64) {
-		log.Printf("[MEXC] TICK  %-10s last=%f", strings.ToUpper(sym), last)
-	})
-
-	// Основная подписка: bid/ask для арбитража
-	if err := ex.SubscribeQuotes(tri, func(sym string, bid, ask float64, ts time.Time) {
-		sym = strings.ToUpper(sym)
-
-		mu.Lock()
-		book[sym] = qv{bid: bid, ask: ask}
-		// снимем снапшот, чтобы не держать лок в расчёте
-		snap := make(map[string]qv, len(book))
-		for k, v := range book {
-			snap[k] = v
+	hasMarket := func(ot []string) bool {
+		for _, t := range ot {
+			if strings.EqualFold(t, "MARKET") {
+				return true
+			}
 		}
-		mu.Unlock()
-
-		log.Printf("[MEXC] QUOTE %-10s bid=%f ask=%f", sym, bid, ask)
-		tryProfit(snap, fee, threshold)
-	}); err != nil {
-		log.Fatalf("SubscribeQuotes error: %v", err)
+		return false
 	}
 
-	// держим процесс (SubscribeQuotes внутри запускает горутины)
-	select {}
-}
+	avail := make(map[string]bool, len(data.Symbols))
+	step := make(map[string]float64, len(data.Symbols))
+	min := make(map[string]float64, len(data.Symbols))
 
-// Возвращает корректный треугольник: BTCUSDT + ALTUSDT + ALTBTC.
-func pickTriangle(avail map[string]bool) []string {
-	if !avail["BTCUSDT"] {
-		// редкий фолбэк на ETH-хаб
-		if avail["ETHUSDT"] {
-			for s := range avail {
-				if strings.HasSuffix(s, "USDT") && len(s) > 4 {
-					alt := s[:len(s)-4]
-					if avail[alt+"ETH"] {
-						return []string{"ETHUSDT", alt + "USDT", alt + "ETH"}
-					}
+	for _, s := range data.Symbols {
+		statusOK := s.Status == "1" || strings.EqualFold(s.Status, "ENABLED") || strings.EqualFold(s.Status, "TRADING")
+		if !statusOK || !s.IsSpotTradingAllowed || !hasMarket(s.OrderTypes) {
+			continue
+		}
+		var stepSz, minQty float64
+		for _, f := range s.Filters {
+			if strings.EqualFold(f.FilterType, "LOT_SIZE") {
+				if v, err := strconv.ParseFloat(f.StepSize, 64); err == nil && v > 0 {
+					stepSz = v
+				}
+				if v, err := strconv.ParseFloat(f.MinQty, 64); err == nil && v > 0 {
+					minQty = v
 				}
 			}
 		}
-		return []string{"BTCUSDT", "ETHUSDT", "ETHBTC"}
-	}
-
-	hot := []string{"ETH", "BNB", "XRP", "SOL", "ADA", "DOGE", "TRX", "TON", "LINK", "LTC"}
-	for _, alt := range hot {
-		if avail[alt+"USDT"] && avail[alt+"BTC"] {
-			return []string{"BTCUSDT", alt + "USDT", alt + "BTC"}
-		}
-	}
-	for s := range avail {
-		if strings.HasSuffix(s, "USDT") && len(s) > 4 {
-			alt := s[:len(s)-4]
-			if avail[alt+"BTC"] {
-				return []string{"BTCUSDT", alt + "USDT", alt + "BTC"}
+		if stepSz == 0 && s.BaseSizePrecision != "" {
+			if v, err := strconv.ParseFloat(s.BaseSizePrecision, 64); err == nil && v > 0 {
+				stepSz = v
 			}
 		}
+		if minQty == 0 && stepSz > 0 {
+			minQty = stepSz
+		}
+		if stepSz == 0 {
+			stepSz = 0.0001
+		}
+		if minQty == 0 {
+			minQty = stepSz
+		}
+		avail[s.Symbol] = true
+		step[s.Symbol] = stepSz
+		min[s.Symbol] = minQty
 	}
-	return []string{"BTCUSDT", "ETHUSDT", "ETHBTC"}
+
+	log.Printf("✅ MEXC: %d spot symbols", len(avail))
+	return avail, step, min
 }
 
-// Печатает профит, если выше threshold (%). Возвращает true/false.
-func tryProfit(book map[string]qv, fee, threshold float64) bool {
-	a, ok1 := book["BTCUSDT"]
-	b, ok2 := book["ETHUSDT"]
-	c, ok3 := book["ETHBTC"]
-	if !(ok1 && ok2 && ok3) {
-		log.Printf("⛔ нет котировок: BTCUSDT=%v ETHUSDT=%v ETHBTC=%v", ok1, ok2, ok3)
-		return false
+// ---- WS (JSON) ----
+
+const (
+	wsURL          = "wss://wbs-api.mexc.com/ws"
+	mexcMaxPerConn = 30
+)
+
+// Управление логами
+var (
+	debugRawFirstN = 10  // сколько «сырых» кадров показать на старте (0 — выкл)
+	debugVerbose   = true // печатать, какая ветка парсинга сработала
+)
+
+func chunkStrings(in []string, n int) [][]string {
+	if n <= 0 || len(in) == 0 {
+		return nil
 	}
-	if a.ask <= 0 || b.ask <= 0 || c.ask <= 0 || a.bid <= 0 || b.bid <= 0 || c.bid <= 0 ||
-		a.ask < a.bid || b.ask < b.bid || c.ask < c.bid {
-		log.Printf("⛔ некорректные цены: BTCUSDT %.6f/%.6f ETHUSDT %.6f/%.6f ETHBTC %.6f/%.6f",
-			a.bid, a.ask, b.bid, b.ask, c.bid, c.ask)
-		return false
+	var out [][]string
+	for i := 0; i < len(in); i += n {
+		end := i + n
+		if end > len(in) {
+			end = len(in)
+		}
+		out = append(out, append([]string(nil), in[i:end]...))
 	}
-
-	start := 1.0 // 1 USDT
-
-	// Путь 1: USDT→BTC (ask), BTC→ETH (ask), ETH→USDT (bid)
-	btc := start / a.ask * (1 - fee)
-	eth := btc / c.ask * (1 - fee)
-	usdtBack := eth * b.bid * (1 - fee)
-	p1 := (usdtBack - start) * 100
-
-	// Путь 2: USDT→ETH (ask), ETH→BTC (bid), BTC→USDT (bid)
-	eth2 := start / b.ask * (1 - fee)
-	btc2 := eth2 * c.bid * (1 - fee)
-	usdtBack2 := btc2 * a.bid * (1 - fee)
-	p2 := (usdtBack2 - start) * 100
-
-	if p1 > threshold || p2 > threshold {
-		log.Printf("💹 PROFIT p1=%.3f%% p2=%.3f%% | BTCUSDT %.4f/%.4f ETHUSDT %.4f/%.4f ETHBTC %.6f/%.6f",
-			p1, p2, a.bid, a.ask, b.bid, b.ask, c.bid, c.ask)
-		return true
-	}
-	return false
+	return out
 }
 
+func dealsChannel(sym string) string      { return "spot@public.deals.v3.api@" + strings.ToUpper(sym) }
+func bookTickerChannel(sym string) string { return "spot@public.bookTicker.v3.api@" + strings.ToUpper(sym) }
+func bookTickerBatch(sym string) string   { return "spot@public.bookTicker.batch.v3.api@" + strings.ToUpper(sym) }
 
-az358@gaz358-BOD-WXX9:~/myprog/crypt$ cd cmd/cryptarb/moke
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb/moke$ go run .
-2025/08/09 08:32:09 ✅ MEXC: 1828 spot symbols
-2025/08/09 08:32:09 🔺 TRI: [BTCUSDT ETHUSDT ETHBTC]
-2025/08/09 08:32:09 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (pairs=3)
-2025/08/09 08:32:10 ✅ [MEXC] connected
-2025/08/09 08:32:10 📩 [MEXC] subscribed (deals/last): 3
+func symbolFromChannel(c string) string {
+	i := strings.LastIndexByte(c, '@')
+	if i < 0 || i+1 >= len(c) {
+		return ""
+	}
+	return strings.ToUpper(c[i+1:])
+}
+
+func trimBytes(b []byte, n int) string {
+	if n <= 0 || len(b) <= n {
+		return string(b)
+	}
+	return string(b[:n]) + "... (" + strconv.Itoa(len(b)) + " bytes)"
+}
+
+// ---- SubscribeTickers: deals (last) + bookTicker(mid) ----
+
+func (m *MEXCExchange) SubscribeTickers(pairs []string, handler func(symbol string, price float64)) error {
+	perConn := mexcMaxPerConn / 2 // по 2 канала на символ
+	if perConn <= 0 {
+		perConn = 10
+	}
+	chunks := chunkStrings(pairs, perConn)
+
+	for _, ch := range chunks {
+		ps := append([]string(nil), ch...)
+		go func(pairs []string) {
+			for {
+				log.Printf("🌐 [MEXC] dial %s (tickers json, pairs=%d)", wsURL, len(pairs))
+				conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+				if err != nil {
+					log.Printf("❌ [MEXC] dial: %v", err)
+					time.Sleep(3 * time.Second)
+					continue
+				}
+				log.Printf("✅ [MEXC] connected")
+
+				params := make([]string, 0, len(pairs)*2)
+				for _, p := range pairs {
+					params = append(params, dealsChannel(p))
+					params = append(params, bookTickerChannel(p))
+				}
+				sub := map[string]any{"method": "SUBSCRIPTION", "params": params, "id": time.Now().Unix()}
+				if err := conn.WriteJSON(sub); err != nil {
+					log.Printf("❌ [MEXC] send sub: %v", err)
+					_ = conn.Close()
+					time.Sleep(2 * time.Second)
+					continue
+				}
+				log.Printf("📩 [MEXC] subscribed (tickers-json): %d", len(params))
+
+				donePing := make(chan struct{})
+				go func(c *websocket.Conn) {
+					t := time.NewTicker(20 * time.Second)
+					defer t.Stop()
+					for {
+						select {
+						case <-donePing:
+							return
+						case <-t.C:
+							_ = c.WriteMessage(websocket.TextMessage, []byte(`{"method":"PING"}`))
+						}
+					}
+				}(conn)
+
+				for {
+					mt, msg, err := conn.ReadMessage()
+					if err != nil {
+						log.Printf("⚠️  [MEXC] read: %v", err)
+						close(donePing)
+						_ = conn.Close()
+						time.Sleep(2 * time.Second)
+						break
+					}
+
+					if mt == websocket.TextMessage && (bytes.Contains(msg, []byte(`"PONG"`)) || bytes.Contains(msg, []byte(`"success"`))) {
+						if debugVerbose {
+							log.Printf("↔️  [MEXC] control: %s", trimBytes(msg, 200))
+						}
+						continue
+					}
+
+					if debugRawFirstN > 0 {
+						log.Printf("[MEXC][RAW TICK] %s", trimBytes(msg, 600))
+					}
+
+					// deals: {"s":"BTCUSDT","d":[{"p":"123.45"}]}
+					var f1 struct {
+						S string `json:"s"`
+						D []struct{ P string `json:"p"` } `json:"d"`
+					}
+					if json.Unmarshal(msg, &f1) == nil && f1.S != "" && len(f1.D) > 0 && f1.D[0].P != "" {
+						if last, err := strconv.ParseFloat(f1.D[0].P, 64); err == nil && last > 0 {
+							if debugVerbose {
+								log.Printf("✅ [MEXC][DEALS s] %s last=%f", strings.ToUpper(f1.S), last)
+							}
+							handler(strings.ToUpper(f1.S), last)
+							if debugRawFirstN > 0 {
+								debugRawFirstN--
+							}
+							continue
+						}
+					}
+
+					// deals: {"c":"spot@public.deals.v3.api@BTCUSDT","d":[{"p":"123.45"}]}
+					var f2 struct {
+						C string `json:"c"`
+						D []struct{ P string `json:"p"` } `json:"d"`
+					}
+					if json.Unmarshal(msg, &f2) == nil && f2.C != "" && len(f2.D) > 0 && f2.D[0].P != "" {
+						if last, err := strconv.ParseFloat(f2.D[0].P, 64); err == nil && last > 0 {
+							if sym := symbolFromChannel(f2.C); sym != "" {
+								if debugVerbose {
+									log.Printf("✅ [MEXC][DEALS c] %s last=%f", sym, last)
+								}
+								handler(sym, last)
+								if debugRawFirstN > 0 {
+									debugRawFirstN--
+								}
+								continue
+							}
+						}
+					}
+
+					// bookTicker → mid: {"s":"BTCUSDT","d":{"bp":"...","ap":"..."}}
+					var b1 struct {
+						S string `json:"s"`
+						D struct{ Bp, Ap string } `json:"d"`
+					}
+					if json.Unmarshal(msg, &b1) == nil && b1.S != "" && b1.D.Bp != "" && b1.D.Ap != "" {
+						bid, _ := strconv.ParseFloat(b1.D.Bp, 64)
+						ask, _ := strconv.ParseFloat(b1.D.Ap, 64)
+						if bid > 0 && ask > 0 {
+							mid := (bid + ask) / 2
+							if debugVerbose {
+								log.Printf("✅ [MEXC][BT→MID s] %s mid=%f (bid=%f ask=%f)", strings.ToUpper(b1.S), mid, bid, ask)
+							}
+							handler(strings.ToUpper(b1.S), mid)
+							if debugRawFirstN > 0 {
+								debugRawFirstN--
+							}
+							continue
+						}
+					}
+
+					// bookTicker → mid: {"c":"spot@public.bookTicker.v3.api@BTCUSDT","d":{"bp":"...","ap":"..."}}
+					var b2 struct {
+						C string `json:"c"`
+						D struct{ Bp, Ap string } `json:"d"`
+					}
+					if json.Unmarshal(msg, &b2) == nil && b2.C != "" && b2.D.Bp != "" && b2.D.Ap != "" {
+						bid, _ := strconv.ParseFloat(b2.D.Bp, 64)
+						ask, _ := strconv.ParseFloat(b2.D.Ap, 64)
+						if sym := symbolFromChannel(b2.C); sym != "" && bid > 0 && ask > 0 {
+							mid := (bid + ask) / 2
+							if debugVerbose {
+								log.Printf("✅ [MEXC][BT→MID c] %s mid=%f (bid=%f ask=%f)", sym, mid, bid, ask)
+							}
+							handler(sym, mid)
+							if debugRawFirstN > 0 {
+								debugRawFirstN--
+							}
+							continue
+						}
+					}
+
+					// неизвестный формат
+					if debugRawFirstN > 0 {
+						debugRawFirstN--
+						log.Printf("🤷 [MEXC][TICK] unparsed frame (left=%d)", debugRawFirstN)
+					}
+				}
+			}
+		}(ps)
+	}
+	return nil
+}
+
+// ---- SubscribeQuotes: bookTicker (+ batch) → bid/ask ----
+
+func (m *MEXCExchange) SubscribeQuotes(pairs []string, handler func(symbol string, bid, ask float64, ts time.Time)) error {
+	perConn := mexcMaxPerConn / 2 // два канала на символ
+	if perConn <= 0 {
+		perConn = 10
+	}
+	chunks := chunkStrings(pairs, perConn)
+
+	for _, ch := range chunks {
+		ps := append([]string(nil), ch...)
+		go func(pairs []string) {
+			for {
+				log.Printf("🌐 [MEXC] dial %s (quotes json, pairs=%d)", wsURL, len(pairs))
+				conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+				if err != nil {
+					log.Printf("❌ [MEXC] dial: %v", err)
+					time.Sleep(3 * time.Second)
+					continue
+				}
+
+				params := make([]string, 0, len(pairs)*2)
+				for _, p := range pairs {
+					params = append(params, bookTickerChannel(p))
+					params = append(params, bookTickerBatch(p))
+				}
+				sub := map[string]any{"method": "SUBSCRIPTION", "params": params, "id": time.Now().Unix()}
+				if err := conn.WriteJSON(sub); err != nil {
+					log.Printf("❌ [MEXC] send sub: %v", err)
+					_ = conn.Close()
+					time.Sleep(2 * time.Second)
+					continue
+				}
+				log.Printf("📩 [MEXC] subscribed (quotes-json): %d", len(params))
+
+				donePing := make(chan struct{})
+				go func(c *websocket.Conn) {
+					t := time.NewTicker(20 * time.Second)
+					defer t.Stop()
+					for {
+						select {
+						case <-donePing:
+							return
+						case <-t.C:
+							_ = c.WriteMessage(websocket.TextMessage, []byte(`{"method":"PING"}`))
+						}
+					}
+				}(conn)
+
+				for {
+					mt, msg, err := conn.ReadMessage()
+					if err != nil {
+						close(donePing)
+						_ = conn.Close()
+						time.Sleep(2 * time.Second)
+						break
+					}
+
+					if mt == websocket.TextMessage && (bytes.Contains(msg, []byte(`"PONG"`)) || bytes.Contains(msg, []byte(`"success"`))) {
+						if debugVerbose {
+							log.Printf("↔️  [MEXC] control: %s", trimBytes(msg, 200))
+						}
+						continue
+					}
+
+					if debugRawFirstN > 0 {
+						log.Printf("[MEXC][RAW QUOTE] %s", trimBytes(msg, 600))
+					}
+
+					// {"s":"BTCUSDT","d":{"bp":"...","ap":"...","t":...}}
+					var a struct {
+						S string `json:"s"`
+						D struct {
+							Bp string `json:"bp"`
+							Ap string `json:"ap"`
+							T  int64  `json:"t"`
+						} `json:"d"`
+					}
+					if json.Unmarshal(msg, &a) == nil && a.S != "" && a.D.Bp != "" && a.D.Ap != "" {
+						bid, _ := strconv.ParseFloat(a.D.Bp, 64)
+						ask, _ := strconv.ParseFloat(a.D.Ap, 64)
+						if bid > 0 && ask > 0 && ask >= bid {
+							ts := time.Now()
+							if a.D.T > 0 {
+								ts = time.UnixMilli(a.D.T)
+							}
+							if debugVerbose {
+								log.Printf("✅ [MEXC][QUOTE s] %s bid=%f ask=%f", strings.ToUpper(a.S), bid, ask)
+							}
+							handler(strings.ToUpper(a.S), bid, ask, ts)
+							if debugRawFirstN > 0 {
+								debugRawFirstN--
+							}
+							continue
+						}
+					}
+
+					// {"c":"spot@public.bookTicker.v3.api@BTCUSDT","d":{"bp":"...","ap":"...","t":...}}
+					var b struct {
+						C string `json:"c"`
+						D struct {
+							Bp string `json:"bp"`
+							Ap string `json:"ap"`
+							T  int64  `json:"t"`
+						} `json:"d"`
+					}
+					if json.Unmarshal(msg, &b) == nil && b.C != "" && b.D.Bp != "" && b.D.Ap != "" {
+						bid, _ := strconv.ParseFloat(b.D.Bp, 64)
+						ask, _ := strconv.ParseFloat(b.D.Ap, 64)
+						if bid > 0 && ask > 0 && ask >= bid {
+							ts := time.Now()
+							if b.D.T > 0 {
+								ts = time.UnixMilli(b.D.T)
+							}
+							if sym := symbolFromChannel(b.C); sym != "" {
+								if debugVerbose {
+									log.Printf("✅ [MEXC][QUOTE c] %s bid=%f ask=%f", sym, bid, ask)
+								}
+								handler(sym, bid, ask, ts)
+								if debugRawFirstN > 0 {
+									debugRawFirstN--
+								}
+								continue
+							}
+						}
+					}
+
+					// batch: {"symbol":"BTCUSDT","publicBookTickerBatch":{"items":[{"bidPrice":"...","askPrice":"..."}]},"sendTime":"..."}
+					var c struct {
+						Symbol string `json:"symbol"`
+						Time   string `json:"sendTime"`
+						Batch  struct {
+							Items []struct {
+								BidPrice string `json:"bidPrice"`
+								AskPrice string `json:"askPrice"`
+							} `json:"items"`
+						} `json:"publicBookTickerBatch"`
+					}
+					if json.Unmarshal(msg, &c) == nil && c.Symbol != "" && len(c.Batch.Items) > 0 {
+						bid, _ := strconv.ParseFloat(c.Batch.Items[0].BidPrice, 64)
+						ask, _ := strconv.ParseFloat(c.Batch.Items[0].AskPrice, 64)
+						if bid > 0 && ask > 0 && ask >= bid {
+							ts := time.Now()
+							if ms, err := strconv.ParseInt(c.Time, 10, 64); err == nil && ms > 0 {
+								ts = time.UnixMilli(ms)
+							}
+							if debugVerbose {
+								log.Printf("✅ [MEXC][QUOTE batch] %s bid=%f ask=%f", strings.ToUpper(c.Symbol), bid, ask)
+							}
+							handler(strings.ToUpper(c.Symbol), bid, ask, ts)
+							if debugRawFirstN > 0 {
+								debugRawFirstN--
+							}
+							continue
+						}
+					}
+
+					// неизвестный формат
+					if debugRawFirstN > 0 {
+						debugRawFirstN--
+						log.Printf("🤷 [MEXC][QUOTE] unparsed frame (left=%d)", debugRawFirstN)
+					}
+				}
+			}
+		}(ps)
+	}
+	return nil
+}
+
+// ---- REST-заглушки ----
+
+func (m *MEXCExchange) PlaceMarketOrder(symbol, side string, quantity float64) (string, error) {
+	return "", fmt.Errorf("MEXC PlaceMarketOrder not implemented")
+}
+
+func (m *MEXCExchange) GetBestAsk(symbol string) (float64, error) {
+	resp, err := http.Get("https://api.mexc.com/api/v3/depth?symbol=" + symbol + "&limit=1")
+	if err != nil {
+		return 0, fmt.Errorf("get depth failed: %v", err)
+	}
+	defer resp.Body.Close()
+	var data struct{ Asks [][]string `json:"asks"` }
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return 0, fmt.Errorf("decode depth failed: %v", err)
+	}
+	if len(data.Asks) == 0 {
+		return 0, fmt.Errorf("no ask in depth for %s", symbol)
+	}
+	return strconv.ParseFloat(data.Asks[0][0], 64)
+}
+
+func (m *MEXCExchange) GetBestBid(symbol string) (float64, error) {
+	resp, err := http.Get("https://api.mexc.com/api/v3/depth?symbol=" + symbol + "&limit=1")
+	if err != nil {
+		return 0, fmt.Errorf("get depth failed: %v", err)
+	}
+	defer resp.Body.Close()
+	var data struct{ Bids [][]string `json:"bids"` }
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return 0, fmt.Errorf("decode depth failed: %v", err)
+	}
+	if len(data.Bids) == 0 {
+		return 0, fmt.Errorf("no bid in depth for %s", symbol)
+	}
+	return strconv.ParseFloat(data.Bids[0][0], 64)
+}
+
 
 
 
