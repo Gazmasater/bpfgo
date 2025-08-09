@@ -592,3 +592,4 @@ func tryProfit(book map[string]qv, fee, threshold float64) bool {
 
 
 
+
