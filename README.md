@@ -449,6 +449,88 @@ option go_package = "crypt_proto/pb";
 
 
 
+package main
+
+import (
+	"cryptarb/internal/repository/mexc"
+	"log"
+	"strings"
+	"sync"
+	"time"
+)
+
+type qv struct{ bid, ask float64 }
+
+func main() {
+	ex := mexc.NewMEXCExchange()
+
+	avail, _, _ := ex.FetchAvailableSymbols()
+	if len(avail) == 0 {
+		log.Fatal("MEXC avail empty")
+	}
+
+	// Подберём треугольник: USDT -> A -> B -> USDT
+	tri := pickTriangle(avail) // вернёт, например: BTCUSDT, ETHUSDT, ETHBTC
+	log.Printf("🔺 TRI: %v", tri)
+
+	// Локальный кэш котировок
+	var mu sync.RWMutex
+	book := map[string]qv{}
+	fee := 0.0010 // 0.1% такер — поставь свой
+
+	// Подписываемся на bid/ask (важно!)
+	go ex.SubscribeQuotes(tri, func(sym string, bid, ask float64, ts time.Time) {
+		sym = strings.ToUpper(sym)
+		mu.Lock()
+		book[sym] = qv{bid: bid, ask: ask}
+		mu.Unlock()
+		log.Printf("[MEXC] QUOTE %-10s bid=%f ask=%f", sym, bid, ask)
+		tryProfit(book, fee)
+	})
+
+	select {}
+}
+
+func pickTriangle(avail map[string]bool) []string {
+	// Требуем мост BTCUSDT
+	if !avail["BTCUSDT"] {
+		// на всякий случай фолбэк на ETH-хаб (редко понадобится)
+		if avail["ETHUSDT"] {
+			for s := range avail {
+				if strings.HasSuffix(s, "USDT") && len(s) > 4 {
+					alt := s[:len(s)-4] // ALT
+					if avail[alt+"ETH"] {
+						return []string{"ETHUSDT", alt + "USDT", alt + "ETH"}
+					}
+				}
+			}
+		}
+		// совсем уж дефолт
+		return []string{"BTCUSDT", "ETHUSDT", "ETHBTC"}
+	}
+
+	// Список ликвидных ALT, попробуем сначала их (быстрее схлопнется)
+	hot := []string{"ETH", "BNB", "XRP", "SOL", "ADA", "DOGE", "TRX", "TON", "LINK", "LTC"}
+	for _, alt := range hot {
+		if avail[alt+"USDT"] && avail[alt+"BTC"] {
+			return []string{"BTCUSDT", alt + "USDT", alt + "BTC"}
+		}
+	}
+
+	// Универсальный перебор: ищем любой ALT с двумя нужными рынками
+	for s := range avail {
+		if strings.HasSuffix(s, "USDT") && len(s) > 4 {
+			alt := s[:len(s)-4]
+			if avail[alt+"BTC"] {
+				return []string{"BTCUSDT", alt + "USDT", alt + "BTC"}
+			}
+		}
+	}
+
+	// Фолбэк по умолчанию
+	return []string{"BTCUSDT", "ETHUSDT", "ETHBTC"}
+}
+
 func tryProfit(book map[string]qv, fee, threshold float64) bool {
 	a, ok1 := book["BTCUSDT"]
 	b, ok2 := book["ETHUSDT"]
@@ -482,6 +564,29 @@ func tryProfit(book map[string]qv, fee, threshold float64) bool {
 	return false
 }
 
+
+[{
+	"resource": "/home/gaz358/myprog/crypt/cmd/cryptarb/moke/moke.go",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": {
+		"value": "WrongArgCount",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "WrongArgCount"
+		}
+	},
+	"severity": 8,
+	"message": "not enough arguments in call to tryProfit\n\thave (map[string]qv, float64)\n\twant (map[string]qv, float64, float64)",
+	"source": "compiler",
+	"startLineNumber": 37,
+	"startColumn": 22,
+	"endLineNumber": 37,
+	"endColumn": 22,
+	"origin": "extHost1"
+}]
 
 
 
