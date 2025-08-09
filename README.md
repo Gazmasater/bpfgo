@@ -449,598 +449,146 @@ option go_package = "crypt_proto/pb";
 
 
 
-package mexc
-
-import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"log"
-	"net/http"
-	"regexp"
-	"strconv"
-	"strings"
-	"sync/atomic"
-	"time"
-
-	"github.com/gorilla/websocket"
-)
-
-// ---- Тип и конструктор ----
-
-type MEXCExchange struct{}
-
-func NewMEXCExchange() *MEXCExchange { return &MEXCExchange{} }
-func (m *MEXCExchange) Name() string { return "MEXC" }
-
-// ---- Справочник доступных спот-символов ----
-
-func (m *MEXCExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64) {
-	resp, err := http.Get("https://api.mexc.com/api/v3/exchangeInfo")
-	if err != nil {
-		log.Printf("❌ MEXC exchangeInfo: %v", err)
-		return nil, nil, nil
-	}
-	defer resp.Body.Close()
-
-	var data struct {
-		Symbols []struct {
-			Symbol               string   `json:"symbol"`
-			Status               string   `json:"status"`
-			IsSpotTradingAllowed bool     `json:"isSpotTradingAllowed"`
-			OrderTypes           []string `json:"orderTypes"`
-			BaseSizePrecision    string   `json:"baseSizePrecision"`
-			Filters              []struct {
-				FilterType string `json:"filterType"`
-				MinQty     string `json:"minQty"`
-				StepSize   string `json:"stepSize"`
-			} `json:"filters"`
-		} `json:"symbols"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		log.Printf("❌ MEXC decode exchangeInfo: %v", err)
-		return nil, nil, nil
-	}
-
-	hasMarket := func(ot []string) bool {
-		for _, t := range ot {
-			if strings.EqualFold(t, "MARKET") {
-				return true
-			}
-		}
-		return false
-	}
-
-	avail := make(map[string]bool, len(data.Symbols))
-	step := make(map[string]float64, len(data.Symbols))
-	min := make(map[string]float64, len(data.Symbols))
-
-	for _, s := range data.Symbols {
-		statusOK := s.Status == "1" || strings.EqualFold(s.Status, "ENABLED") || strings.EqualFold(s.Status, "TRADING")
-		if !statusOK || !s.IsSpotTradingAllowed || !hasMarket(s.OrderTypes) {
-			continue
-		}
-		var stepSz, minQty float64
-		for _, f := range s.Filters {
-			if strings.EqualFold(f.FilterType, "LOT_SIZE") {
-				if v, err := strconv.ParseFloat(f.StepSize, 64); err == nil && v > 0 {
-					stepSz = v
-				}
-				if v, err := strconv.ParseFloat(f.MinQty, 64); err == nil && v > 0 {
-					minQty = v
-				}
-			}
-		}
-		if stepSz == 0 && s.BaseSizePrecision != "" {
-			if v, err := strconv.ParseFloat(s.BaseSizePrecision, 64); err == nil && v > 0 {
-				stepSz = v
-			}
-		}
-		if minQty == 0 && stepSz > 0 {
-			minQty = stepSz
-		}
-		if stepSz == 0 {
-			stepSz = 0.0001
-		}
-		if minQty == 0 {
-			minQty = stepSz
-		}
-		avail[s.Symbol] = true
-		step[s.Symbol] = stepSz
-		min[s.Symbol] = minQty
-	}
-
-	log.Printf("✅ MEXC: %d spot symbols", len(avail))
-	return avail, step, min
-}
-
-// ---- WS (JSON) ----
-
-const (
-	wsURL = "wss://wbs-api.mexc.com/ws"
-)
-
-// Управление логами
-var (
-	debugRawFirstN = 10   // сколько «сырых» кадров показать на старте (0 — выкл)
-	debugVerbose   = true // печатать ветки парсинга
-)
-
-// уникальные id для SUBSCRIPTION
-var subID int64
-
-func nextID() int64 { return atomic.AddInt64(&subID, 1) }
-
-// триммер для логов
-func trimBytes(b []byte, n int) string {
-	if n <= 0 || len(b) <= n {
-		return string(b)
-	}
-	return string(b[:n]) + "... (" + strconv.Itoa(len(b)) + " bytes)"
-}
-
-func chunkStrings(in []string, n int) [][]string {
-	if n <= 0 || len(in) == 0 {
-		return nil
-	}
-	var out [][]string
-	for i := 0; i < len(in); i += n {
-		end := i + n
-		if end > len(in) {
-			end = len(in)
-		}
-		out = append(out, append([]string(nil), in[i:end]...))
-	}
-	return out
-}
-
-// JSON-каналы
-func dealsChannel(sym string) string      { return "spot@public.deals.v3.api@" + strings.ToUpper(sym) }
-func bookTickerChannel(sym string) string { return "spot@public.bookTicker.v3.api@" + strings.ToUpper(sym) }
-
-func symbolFromChannel(c string) string {
-	i := strings.LastIndexByte(c, '@')
-	if i < 0 || i+1 >= len(c) {
-		return ""
-	}
-	return strings.ToUpper(c[i+1:])
-}
-
-// отправка подписки чанками (чтобы не получить "msg length invalid")
-func sendSubs(conn *websocket.Conn, params []string) error {
-	const maxTopics = 20 // безопасная порция на один SUBSCRIPTION
-	for i := 0; i < len(params); i += maxTopics {
-		end := i + maxTopics
-		if end > len(params) {
-			end = len(params)
-		}
-		sub := map[string]any{
-			"method": "SUBSCRIPTION",
-			"params": params[i:end],
-			"id":     nextID(),
-		}
-		if err := conn.WriteJSON(sub); err != nil {
-			return err
-		}
-		time.Sleep(50 * time.Millisecond) // лёгкий троттлинг
-	}
-	return nil
-}
-
-// ---- Вспомогалки для обработки отказов "Blocked!" ----
-
-var blockedRe = regexp.MustCompile(`\[(.*?)\]`)
-
-func extractBlockedSymbols(msg []byte) []string {
-	m := blockedRe.FindSubmatch(msg)
-	if len(m) < 2 {
-		return nil
-	}
-	s := string(m[1])
-	parts := strings.Split(s, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(strings.Trim(p, `"`))
-		if i := strings.LastIndexByte(p, '@'); i >= 0 && i+1 < len(p) {
-			out = append(out, strings.ToUpper(p[i+1:]))
-		}
-	}
-	return out
-}
-
-func channelsFromWant(want map[string]bool, builder func(string) string) []string {
-	res := make([]string, 0, len(want))
-	for sym, ok := range want {
-		if ok {
-			res = append(res, builder(sym))
-		}
-	}
-	return res
-}
-
-// ---- SubscribeTickers: deals (last) ----
-
-func (m *MEXCExchange) SubscribeTickers(pairs []string, handler func(symbol string, price float64)) error {
-	// по одному каналу на символ → держим ~20 пар на коннект
-	perConn := 20
-	if perConn <= 0 {
-		perConn = 10
-	}
-	chunks := chunkStrings(pairs, perConn)
-
-	for _, ch := range chunks {
-		ps := append([]string(nil), ch...)
-
-		go func(pairs []string) {
-			// множество желаемых символов (с учётом блокировок будем уменьшать)
-			want := make(map[string]bool, len(pairs))
-			for _, p := range pairs {
-				want[strings.ToUpper(p)] = true
-			}
-
-			for { // reconnect loop
-				log.Printf("🌐 [MEXC] dial %s (tickers json, pairs=%d)", wsURL, len(pairs))
-				conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-				if err != nil {
-					log.Printf("❌ [MEXC] dial: %v", err)
-					time.Sleep(3 * time.Second)
-					continue
-				}
-				log.Printf("✅ [MEXC] connected")
-
-				params := channelsFromWant(want, dealsChannel)
-				if len(params) == 0 {
-					log.Printf("⚠️  [MEXC] tickers: все символы заблокированы/исключены; завершение горутины")
-					_ = conn.Close()
-					return
-				}
-				if err := sendSubs(conn, params); err != nil {
-					log.Printf("❌ [MEXC] send sub (tickers): %v", err)
-					_ = conn.Close()
-					time.Sleep(2 * time.Second)
-					continue
-				}
-				log.Printf("📩 [MEXC] subscribed (tickers-json): %d (chunked)", len(params))
-
-				donePing := make(chan struct{})
-				go func(c *websocket.Conn) {
-					t := time.NewTicker(20 * time.Second)
-					defer t.Stop()
-					for {
-						select {
-						case <-donePing:
-							return
-						case <-t.C:
-							_ = c.WriteMessage(websocket.TextMessage, []byte(`{"method":"PING"}`))
-						}
-					}
-				}(conn)
-
-				for {
-					mt, msg, err := conn.ReadMessage()
-					if err != nil {
-						log.Printf("⚠️  [MEXC] read: %v", err)
-						close(donePing)
-						_ = conn.Close()
-						time.Sleep(2 * time.Second)
-						break
-					}
-
-					// БИНАРНЫЕ КАДРЫ → почти наверняка PB; в JSON-режиме пропускаем
-					if mt == websocket.BinaryMessage {
-						if debugVerbose {
-							log.Printf("📦 [MEXC] tickers: binary frame %d bytes (PB), JSON-режим пропускает", len(msg))
-						}
-						continue
-					}
-
-					// контрольные/отказы
-					if mt == websocket.TextMessage {
-						if bytes.Contains(msg, []byte(`"PONG"`)) || bytes.Contains(msg, []byte(`"success"`)) {
-							if debugVerbose {
-								log.Printf("↔️  [MEXC] control: %s", trimBytes(msg, 200))
-							}
-							continue
-						}
-						if bytes.Contains(msg, []byte("Not Subscribed successfully")) {
-							bad := extractBlockedSymbols(msg)
-							if len(bad) > 0 {
-								for _, s := range bad {
-									if want[s] {
-										delete(want, s)
-										log.Printf("🚫 [MEXC] tickers: %s blocked → исключаем из подписки", s)
-									}
-								}
-								left := channelsFromWant(want, dealsChannel)
-								if len(left) > 0 {
-									_ = sendSubs(conn, left)
-								} else {
-									log.Printf("⚠️  [MEXC] tickers: все символы заблокированы; закрываем коннект")
-									_ = conn.Close()
-									time.Sleep(2 * time.Second)
-									break
-								}
-								continue
-							}
-							log.Printf("🚫 [MEXC] refused (raw): %s", trimBytes(msg, 500))
-							continue
-						}
-					}
-
-					if debugRawFirstN > 0 {
-						log.Printf("[MEXC][RAW TICK] %s", trimBytes(msg, 600))
-					}
-
-					// deals: {"s":"BTCUSDT","d":[{"p":"123.45"}]}
-					var f1 struct {
-						S string `json:"s"`
-						D []struct{ P string `json:"p"` } `json:"d"`
-					}
-					if json.Unmarshal(msg, &f1) == nil && f1.S != "" && len(f1.D) > 0 && f1.D[0].P != "" {
-						if last, err := strconv.ParseFloat(f1.D[0].P, 64); err == nil && last > 0 {
-							if debugVerbose {
-								log.Printf("✅ [MEXC][DEALS s] %s last=%f", strings.ToUpper(f1.S), last)
-							}
-							handler(strings.ToUpper(f1.S), last)
-							if debugRawFirstN > 0 {
-								debugRawFirstN--
-							}
-							continue
-						}
-					}
-
-					// deals: {"c":"spot@public.deals.v3.api@BTCUSDT","d":[{"p":"123.45"}]}
-					var f2 struct {
-						C string `json:"c"`
-						D []struct{ P string `json:"p"` } `json:"d"`
-					}
-					if json.Unmarshal(msg, &f2) == nil && f2.C != "" && len(f2.D) > 0 && f2.D[0].P != "" {
-						if last, err := strconv.ParseFloat(f2.D[0].P, 64); err == nil && last > 0 {
-							if sym := symbolFromChannel(f2.C); sym != "" {
-								if debugVerbose {
-									log.Printf("✅ [MEXC][DEALS c] %s last=%f", sym, last)
-								}
-								handler(sym, last)
-								if debugRawFirstN > 0 {
-									debugRawFirstN--
-								}
-								continue
-							}
-						}
-					}
-
-					// неизвестный формат
-					if debugRawFirstN > 0 {
-						debugRawFirstN--
-						log.Printf("🤷 [MEXC][TICK] unparsed frame (left=%d)", debugRawFirstN)
-					}
-				}
-			}
-		}(ps)
-	}
-	return nil
-}
-
-// ---- SubscribeQuotes: bookTicker (bid/ask) ----
-
-func (m *MEXCExchange) SubscribeQuotes(pairs []string, handler func(symbol string, bid, ask float64, ts time.Time)) error {
-	// по одному каналу на символ → держим ~20 пар на коннект
-	perConn := 20
-	if perConn <= 0 {
-		perConn = 10
-	}
-	chunks := chunkStrings(pairs, perConn)
-
-	for _, ch := range chunks {
-		ps := append([]string(nil), ch...)
-
-		go func(pairs []string) {
-			// множество желаемых символов
-			want := make(map[string]bool, len(pairs))
-			for _, p := range pairs {
-				want[strings.ToUpper(p)] = true
-			}
-
-			for {
-				log.Printf("🌐 [MEXC] dial %s (quotes json, pairs=%d)", wsURL, len(pairs))
-				conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-				if err != nil {
-					log.Printf("❌ [MEXC] dial: %v", err)
-					time.Sleep(3 * time.Second)
-					continue
-				}
-
-				// ТОЛЬКО bookTicker (без batch)
-				params := channelsFromWant(want, bookTickerChannel)
-				if len(params) == 0 {
-					log.Printf("⚠️  [MEXC] quotes: все символы заблокированы/исключены; завершение горутины")
-					_ = conn.Close()
-					return
-				}
-				if err := sendSubs(conn, params); err != nil {
-					log.Printf("❌ [MEXC] send sub (quotes): %v", err)
-					_ = conn.Close()
-					time.Sleep(2 * time.Second)
-					continue
-				}
-				log.Printf("📩 [MEXC] subscribed (quotes-json): %d (chunked)", len(params))
-
-				donePing := make(chan struct{})
-				go func(c *websocket.Conn) {
-					t := time.NewTicker(20 * time.Second)
-					defer t.Stop()
-					for {
-						select {
-						case <-donePing:
-							return
-						case <-t.C:
-							_ = c.WriteMessage(websocket.TextMessage, []byte(`{"method":"PING"}`))
-						}
-					}
-				}(conn)
-
-				for {
-					mt, msg, err := conn.ReadMessage()
-					if err != nil {
-						close(donePing)
-						_ = conn.Close()
-						time.Sleep(2 * time.Second)
-						break
-					}
-
-					// БИНАРНЫЕ КАДРЫ → PB; в JSON-режиме пропускаем
-					if mt == websocket.BinaryMessage {
-						if debugVerbose {
-							log.Printf("📦 [MEXC] quotes: binary frame %d bytes (PB), JSON-режим пропускает", len(msg))
-						}
-						continue
-					}
-
-					// контроль/отказы
-					if mt == websocket.TextMessage {
-						if bytes.Contains(msg, []byte(`"PONG"`)) || bytes.Contains(msg, []byte(`"success"`)) {
-							if debugVerbose {
-								log.Printf("↔️  [MEXC] control: %s", trimBytes(msg, 200))
-							}
-							continue
-						}
-						if bytes.Contains(msg, []byte("Not Subscribed successfully")) {
-							bad := extractBlockedSymbols(msg)
-							if len(bad) > 0 {
-								for _, s := range bad {
-									if want[s] {
-										delete(want, s)
-										log.Printf("🚫 [MEXC] quotes: %s blocked → исключаем из подписки", s)
-									}
-								}
-								left := channelsFromWant(want, bookTickerChannel)
-								if len(left) > 0 {
-									_ = sendSubs(conn, left)
-								} else {
-									log.Printf("⚠️  [MEXC] quotes: все символы заблокированы; закрываем коннект")
-									_ = conn.Close()
-									time.Sleep(2 * time.Second)
-									break
-								}
-								continue
-							}
-							log.Printf("🚫 [MEXC] refused (raw): %s", trimBytes(msg, 500))
-							continue
-						}
-					}
-
-					if debugRawFirstN > 0 {
-						log.Printf("[MEXC][RAW QUOTE] %s", trimBytes(msg, 600))
-					}
-
-					// {"s":"BTCUSDT","d":{"bp":"...","ap":"...","t":...}}
-					var a struct {
-						S string `json:"s"`
-						D struct {
-							Bp string `json:"bp"`
-							Ap string `json:"ap"`
-							T  int64  `json:"t"`
-						} `json:"d"`
-					}
-					if json.Unmarshal(msg, &a) == nil && a.S != "" && a.D.Bp != "" && a.D.Ap != "" {
-						bid, _ := strconv.ParseFloat(a.D.Bp, 64)
-						ask, _ := strconv.ParseFloat(a.D.Ap, 64)
-						if bid > 0 && ask > 0 && ask >= bid {
-							ts := time.Now()
-							if a.D.T > 0 {
-								ts = time.UnixMilli(a.D.T)
-							}
-							if debugVerbose {
-								log.Printf("✅ [MEXC][QUOTE s] %s bid=%f ask=%f", strings.ToUpper(a.S), bid, ask)
-							}
-							handler(strings.ToUpper(a.S), bid, ask, ts)
-							if debugRawFirstN > 0 {
-								debugRawFirstN--
-							}
-							continue
-						}
-					}
-
-					// {"c":"spot@public.bookTicker.v3.api@BTCUSDT","d":{"bp":"...","ap":"...","t":...}}
-					var b struct {
-						C string `json:"c"`
-						D struct {
-							Bp string `json:"bp"`
-							Ap string `json:"ap"`
-							T  int64  `json:"t"`
-						} `json:"d"`
-					}
-					if json.Unmarshal(msg, &b) == nil && b.C != "" && b.D.Bp != "" && b.D.Ap != "" {
-						bid, _ := strconv.ParseFloat(b.D.Bp, 64)
-						ask, _ := strconv.ParseFloat(b.D.Ap, 64)
-						if bid > 0 && ask > 0 && ask >= bid {
-							ts := time.Now()
-							if b.D.T > 0 {
-								ts = time.UnixMilli(b.D.T)
-							}
-							if sym := symbolFromChannel(b.C); sym != "" {
-								if debugVerbose {
-									log.Printf("✅ [MEXC][QUOTE c] %s bid=%f ask=%f", sym, bid, ask)
-								}
-								handler(sym, bid, ask, ts)
-								if debugRawFirstN > 0 {
-									debugRawFirstN--
-								}
-								continue
-							}
-						}
-					}
-
-					// неизвестный формат
-					if debugRawFirstN > 0 {
-						debugRawFirstN--
-						log.Printf("🤷 [MEXC][QUOTE] unparsed frame (left=%d)", debugRawFirstN)
-					}
-				}
-			}
-		}(ps)
-	}
-	return nil
-}
-
-// ---- REST-заглушки ----
-
-func (m *MEXCExchange) PlaceMarketOrder(symbol, side string, quantity float64) (string, error) {
-	return "", fmt.Errorf("MEXC PlaceMarketOrder not implemented")
-}
-
-func (m *MEXCExchange) GetBestAsk(symbol string) (float64, error) {
-	resp, err := http.Get("https://api.mexc.com/api/v3/depth?symbol=" + symbol + "&limit=1")
-	if err != nil {
-		return 0, fmt.Errorf("get depth failed: %v", err)
-	}
-	defer resp.Body.Close()
-	var data struct{ Asks [][]string `json:"asks"` }
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return 0, fmt.Errorf("decode depth failed: %v", err)
-	}
-	if len(data.Asks) == 0 {
-		return 0, fmt.Errorf("no ask in depth for %s", symbol)
-	}
-	return strconv.ParseFloat(data.Asks[0][0], 64)
-}
-
-func (m *MEXCExchange) GetBestBid(symbol string) (float64, error) {
-	resp, err := http.Get("https://api.mexc.com/api/v3/depth?symbol=" + symbol + "&limit=1")
-	if err != nil {
-		return 0, fmt.Errorf("get depth failed: %v", err)
-	}
-	defer resp.Body.Close()
-	var data struct{ Bids [][]string `json:"bids"` }
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return 0, fmt.Errorf("decode depth failed: %v", err)
-	}
-	if len(data.Bids) == 0 {
-		return 0, fmt.Errorf("no bid in depth for %s", symbol)
-	}
-	return strconv.ParseFloat(data.Bids[0][0], 64)
-}
-
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ cd cmd/cryptarb
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
+2025/08/09 09:04:45 📈 Profiler: http://localhost:6060/debug/pprof/
+2025/08/09 09:04:45 ✅ MEXC: 1828 spot symbols
+2025/08/09 09:04:45 📊 Доступные пары (реальные+инверсии): 3656
+2025/08/09 09:04:46 [TRIANGLE] Found 282 triangles
+2025/08/09 09:04:46 [INIT] Треугольников найдено: 282
+2025/08/09 09:04:46 [INIT] Индекс по парам: 184 ключей
+2025/08/09 09:04:46 [INIT] Подписка на реальных пар: 92 шт.
+2025/08/09 09:04:46 [WS][MEXC] subscribed (quotes) to 17 pairs
+2025/08/09 09:04:46 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=17)
+2025/08/09 09:04:46 [WS][MEXC] subscribed (quotes) to 25 pairs
+2025/08/09 09:04:46 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=20)
+2025/08/09 09:04:46 [WS][MEXC] subscribed (quotes) to 25 pairs
+2025/08/09 09:04:46 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=5)
+2025/08/09 09:04:46 [WS][MEXC] subscribed (quotes) to 25 pairs
+2025/08/09 09:04:46 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=5)
+2025/08/09 09:04:46 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=5)
+2025/08/09 09:04:46 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=20)
+2025/08/09 09:04:46 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=20)
+2025/08/09 09:04:47 📩 [MEXC] subscribed (quotes-json): 20 (chunked)
+2025/08/09 09:04:47 📩 [MEXC] subscribed (quotes-json): 17 (chunked)
+2025/08/09 09:04:47 📩 [MEXC] subscribed (quotes-json): 5 (chunked)
+2025/08/09 09:04:47 📩 [MEXC] subscribed (quotes-json): 20 (chunked)
+2025/08/09 09:04:47 📩 [MEXC] subscribed (quotes-json): 5 (chunked)
+2025/08/09 09:04:47 📩 [MEXC] subscribed (quotes-json): 20 (chunked)
+2025/08/09 09:04:47 📩 [MEXC] subscribed (quotes-json): 5 (chunked)
+2025/08/09 09:04:47 🚫 [MEXC] quotes: AI16ZUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: NPCUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: KAITOUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: XLMUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: LINGOUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: NPCUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: ICPUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: INJUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: XMRUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: ENAUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: TURBOUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 ⚠️  [MEXC] quotes: все символы заблокированы; закрываем коннект
+2025/08/09 09:04:47 🚫 [MEXC] quotes: USDCUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: BUTTHOLEUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: SOSOUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: RIOUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: FARTCOINUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: TAOUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: NAKAUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: USDRUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: FARTCOINUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: ULTIMAUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: PEPEEUR blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: PEAQUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: KASUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: KEKIUSUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: LINKUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: PIUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: SUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: MELANIAUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: BABYDOGEUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: TRUMPUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: VIRTUALUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: BABYDOGEUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: AIXBTUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: VIRTUALUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: KAITOUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: PIUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: MELANIAUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: KASEUR blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: KASUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: XMRUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: TAOEUR blocked → исключаем из подписки
+2025/08/09 09:04:47 ⚠️  [MEXC] quotes: все символы заблокированы; закрываем коннект
+2025/08/09 09:04:47 🚫 [MEXC] quotes: USDCEUR blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: SUPRAUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: PENGUUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: CGPTUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: TONUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: TURBOUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: LINGOUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: SUPRAUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: RIOUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: CGPTUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: TAOUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: TRUMPUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: BUTTHOLEUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: DSYNCUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: ENAUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: TONUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 ⚠️  [MEXC] quotes: все символы заблокированы; закрываем коннект
+2025/08/09 09:04:47 🚫 [MEXC] quotes: NAKAUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 ⚠️  [MEXC] quotes: все символы заблокированы; закрываем коннект
+2025/08/09 09:04:47 🚫 [MEXC] quotes: RIOEUR blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: FETUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: ULTIMAUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: USDRUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: DSYNCUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: ICPUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: QUBICUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: ONDOUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: RAIUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: SUIUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: PEPEUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: RBNTUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 ⚠️  [MEXC] quotes: все символы заблокированы; закрываем коннект
+2025/08/09 09:04:47 🚫 [MEXC] quotes: LINKUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: HBARUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: PENGUUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: RBNTUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: FETUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: AI16ZUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 ⚠️  [MEXC] quotes: все символы заблокированы; закрываем коннект
+2025/08/09 09:04:47 🚫 [MEXC] quotes: SUIUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: INJUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: ONDOUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: SENUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: PEPEUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: HBARUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: QUBICUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: XLMUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: PEAQUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: SUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: KEKIUSUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: SENUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: SOSOUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: RAIUSDC blocked → исключаем из подписки
+2025/08/09 09:04:47 🚫 [MEXC] quotes: AIXBTUSDT blocked → исключаем из подписки
+2025/08/09 09:04:47 ⚠️  [MEXC] quotes: все символы заблокированы; закрываем коннект
+2025/08/09 09:04:49 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=5)
+2025/08/09 09:04:49 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=20)
+2025/08/09 09:04:49 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=5)
+2025/08/09 09:04:49 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=5)
+2025/08/09 09:04:49 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=17)
+2025/08/09 09:04:49 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=20)
+2025/08/09 09:04:49 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=20)
+2025/08/09 09:04:50 ⚠️  [MEXC] quotes: все символы заблокированы/исключены; завершение горутины
+2025/08/09 09:04:50 ⚠️  [MEXC] quotes: все символы заблокированы/исключены; завершение горутины
+2025/08/09 09:04:50 ⚠️  [MEXC] quotes: все символы заблокированы/исключены; завершение горутины
+2025/08/09 09:04:50 ⚠️  [MEXC] quotes: все символы заблокированы/исключены; завершение горутины
+2025/08/09 09:04:50 ⚠️  [MEXC] quotes: все символы заблокированы/исключены; завершение горутины
+2025/08/09 09:04:50 ⚠️  [MEXC] quotes: все символы заблокированы/исключены; завершение горутины
+2025/08/09 09:04:50 ⚠️  [MEXC] quotes: все символы заблокированы/исключены; завершение горутин
 
 
 
