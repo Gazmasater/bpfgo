@@ -458,20 +458,25 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+
+	// 👇 ЗАМЕНИ на реальные пакеты/типы из твоих *_pb.go
+	wrapperpb "path/to/your/generated/package" // из PushDataV3ApiWrapper.proto
+	bookpb    "path/to/your/generated/package" // из PublicAggreBookTickerV3Api.proto
 )
 
 func main() {
 	const wsURL = "wss://wbs-api.mexc.com/ws"
 
-	// 1) соединяемся
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		log.Fatal("dial:", err)
 	}
-	defer conn.Close()
+	defer c.Close()
 	log.Println("connected")
 
-	// 2) подписка (ровно как у тебя)
+	// подписка на три топика
 	sub := map[string]any{
 		"method": "SUBSCRIPTION",
 		"params": []string{
@@ -480,53 +485,82 @@ func main() {
 			"spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHBTC",
 		},
 	}
-	if err := conn.WriteJSON(sub); err != nil {
+	if err := c.WriteJSON(sub); err != nil {
 		log.Fatal("send sub:", err)
 	}
 	log.Println("subscription sent")
 
-	// 3) пингуем, чтобы не отвалиться
+	// пингуем периодически
 	go func() {
 		t := time.NewTicker(45 * time.Second)
 		defer t.Stop()
 		for range t.C {
-			_ = conn.WriteMessage(websocket.PingMessage, []byte("hb"))
+			_ = c.WriteMessage(websocket.PingMessage, []byte("hb"))
 		}
 	}()
 
-	// 4) читаем и печатаем
+	// читаем бесконечно
 	for {
-		mt, msg, err := conn.ReadMessage()
+		mt, msg, err := c.ReadMessage()
 		if err != nil {
 			log.Fatal("read:", err)
 		}
 
-		switch mt {
-		case websocket.TextMessage:
-			// ACK/сервисные ответы — JSON
-			var pretty any
-			if json.Unmarshal(msg, &pretty) == nil {
-				b, _ := json.MarshalIndent(pretty, "", "  ")
-				fmt.Printf("TEXT JSON:\n%s\n\n", b)
+		// ACK/ошибки приходят как TEXT/JSON — распечатаем красиво
+		if mt == websocket.TextMessage {
+			var v any
+			if json.Unmarshal(msg, &v) == nil {
+				pre, _ := json.MarshalIndent(v, "", "  ")
+				fmt.Printf("ACK:\n%s\n\n", pre)
 			} else {
 				fmt.Printf("TEXT:\n%s\n\n", string(msg))
 			}
-
-		case websocket.BinaryMessage:
-			// Рыночные данные — protobuf (бинарь)
-			const show = 64
-			n := len(msg)
-			if n > show {
-				fmt.Printf("BINARY: %d bytes, head %d bytes (hex): %x ...\n\n", n, show, msg[:show])
-			} else {
-				fmt.Printf("BINARY: %d bytes (hex): %x\n\n", n, msg)
-			}
-
-		default:
-			fmt.Printf("OTHER frame type=%d, %d bytes\n\n", mt, len(msg))
+			continue
 		}
+
+		if mt != websocket.BinaryMessage {
+			continue
+		}
+
+		// 1) Декодируем внешнюю обёртку
+		//    Тип возьми из PushDataV3ApiWrapper.proto (например, PushDataV3ApiWrapper / PushData)
+		var w wrapperpb.PushDataV3ApiWrapper // <-- подставь точное имя типа
+		if err := proto.Unmarshal(msg, &w); err != nil {
+			log.Printf("wrapper unmarshal: %v", err)
+			continue
+		}
+
+		// (необязательно) покажем метаданные обёртки
+		wJSON, _ := protojson.MarshalOptions{EmitUnpopulated: true}.Marshal(&w)
+		fmt.Printf("WRAPPER: %s\n", wJSON)
+
+		// 2) Декодируем полезную нагрузку как BookTicker
+		//    Тип возьми из PublicAggreBookTickerV3Api.proto (например, PublicAggreBookTickerV3Api / BookTicker)
+		var bt bookpb.PublicAggreBookTickerV3Api // <-- подставь точное имя типа
+		if err := proto.Unmarshal(w.GetD(), &bt); err != nil {
+			log.Printf("bookTicker unmarshal: %v", err)
+			continue
+		}
+
+		// 3) Выведем в JSON (универсально, без знания имён полей)
+		out, _ := protojson.MarshalOptions{EmitUnpopulated: true}.Marshal(&bt)
+		fmt.Printf("BOOK_TICKER: %s\n\n", out)
+
+		// Если хочешь конкретные поля (symbol/bid/ask/ts), используй геттеры:
+		// fmt.Println(bt.GetS(), bt.GetBp(), bt.GetAp(), bt.GetT())
 	}
 }
+
+
+# установи генератор
+go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+
+# из папки с .proto (склонируй репозиторий)
+protoc --go_out=. --go_opt=paths=source_relative \
+  PushDataV3ApiWrapper.proto PublicAggreBookTickerV3Api.proto
+
+
+
 
 
 
