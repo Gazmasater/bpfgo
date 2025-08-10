@@ -584,14 +584,9 @@ protoc -I=. -I=pb \
   --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
   pb/*.proto
 
-  gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ protoc -I=. -I=pb \
-  --go_out=pb --go_opt=paths=source_relative \
-  --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
-  pb/*.proto
-pb/PublicBookTickerV3Api.proto:12:10: "PublicBookTickerV3Api.bidPrice" is already defined in file "PublicBookTickerV3Api.proto".
-pb/PublicBookTickerV3Api.proto:13:10: "PublicBookTickerV3Api.bidQuantity" is already defined in file "PublicBookTickerV3Api.proto".
-pb/PublicBookTickerV3Api.proto:14:10: "PublicBookTickerV3Api.askPrice" is already defined in file "PublicBookTickerV3Api.proto".
-pb/PublicBookTickerV3Api.proto:15:10: "PublicBookTickerV3Api.askQuantity" is already defined in file "PublicBookTickerV3Api.proto".
-pb/PublicBookTickerV3Api.proto:10:9: "PublicBookTickerV3Api" is already defined in file "PublicBookTickerV3Api.proto".
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
+# Сколько раз объявлено сообщение в этом файле?
+grep -n "message PublicBookTickerV3Api" pb/PublicBookTickerV3Api.proto
+
+# Посмотри первые строки вокруг указанных номеров (у тебя ругается на ~10–15 строки)
+nl -ba pb/PublicBookTickerV3Api.proto | sed -n '1,80p'
 
