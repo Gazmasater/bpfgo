@@ -567,17 +567,16 @@ protoc --go_out=. --go_opt=paths=source_relative \
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto/pb$ protoc --go_out=. --go_opt=paths=source_relative   PushDataV3ApiWrapper.proto PublicAggreBookTickerV3Api.proto
-protoc-gen-go: unable to determine Go import path for "PublicDealsV3Api.proto"
+cd ~/myprog/crypt_proto/pb
 
-Please specify either:
-        • a "go_package" option in the .proto source file, or
-        • a "M" argument on the command line.
+# импортный путь вашего пакета, куда положатся *_pb.go
+GO_IMPORT="github.com/you/crypt_proto/pb"
 
-See https://protobuf.dev/reference/go/go-generated#package for more information.
-
---go_out: protoc-gen-go: Plugin failed with status code 1.
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto/pb$ 
+# сгенерить: добавим mapping для КАЖДОГО .proto в папке
+protoc -I . \
+  --go_out=. --go_opt=paths=source_relative \
+  $(for f in *.proto; do printf -- "--go_opt=M%s=%s " "$f" "$GO_IMPORT"; done) \
+  PushDataV3ApiWrapper.proto PublicAggreBookTickerV3Api.proto
 
 
 
