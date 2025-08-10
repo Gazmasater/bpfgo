@@ -590,3 +590,8 @@ grep -n "message PublicBookTickerV3Api" pb/PublicBookTickerV3Api.proto
 # Посмотри первые строки вокруг указанных номеров (у тебя ругается на ~10–15 строки)
 nl -ba pb/PublicBookTickerV3Api.proto | sed -n '1,80p'
 
+
+az358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ grep -n "message PublicBookTickerV3Api" pb/PublicBookTickerV3Api.proto
+10:message PublicBookTickerV3Api {
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
+
