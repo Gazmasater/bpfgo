@@ -579,10 +579,26 @@ protoc -I . \
   PushDataV3ApiWrapper.proto PublicAggreBookTickerV3Api.proto
 
 
-git fetch origin
-git rev-parse HEAD
-git rev-parse origin/main
-git ls-tree -r --name-only origin/main | grep 'pb/PublicBookTickerV3Api.proto'
-
-
+[{
+	"resource": "/home/gaz358/myprog/crypt_proto/pb/PushDataV3ApiWrapper.pb.go",
+	"owner": "_generated_diagnostic_collection_name_#2",
+	"code": {
+		"value": "UndeclaredName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: PublicDealsV3Api",
+	"source": "compiler",
+	"startLineNumber": 110,
+	"startColumn": 50,
+	"endLineNumber": 110,
+	"endColumn": 66,
+	"origin": "extHost1"
+}]
 
