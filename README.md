@@ -584,14 +584,7 @@ protoc -I=. -I=pb \
   --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
   pb/*.proto
 
-# Сколько раз объявлено сообщение в этом файле?
-grep -n "message PublicBookTickerV3Api" pb/PublicBookTickerV3Api.proto
+package pb;  // <— общий package для всех твоих .proto
+option go_package = "github.com/Gazmasater/crypt_proto/pb;pb"; // <— путь из go.mod + ;pb
 
-# Посмотри первые строки вокруг указанных номеров (у тебя ругается на ~10–15 строки)
-nl -ba pb/PublicBookTickerV3Api.proto | sed -n '1,80p'
-
-
-az358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ grep -n "message PublicBookTickerV3Api" pb/PublicBookTickerV3Api.proto
-10:message PublicBookTickerV3Api {
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
 
