@@ -579,26 +579,7 @@ protoc -I . \
   PushDataV3ApiWrapper.proto PublicAggreBookTickerV3Api.proto
 
 
-[{
-	"resource": "/home/gaz358/myprog/crypt_proto/pb/PushDataV3ApiWrapper.pb.go",
-	"owner": "_generated_diagnostic_collection_name_#2",
-	"code": {
-		"value": "UndeclaredName",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UndeclaredName"
-		}
-	},
-	"severity": 8,
-	"message": "undefined: PublicDealsV3Api",
-	"source": "compiler",
-	"startLineNumber": 110,
-	"startColumn": 50,
-	"endLineNumber": 110,
-	"endColumn": 66,
-	"origin": "extHost1"
-}]
-
+protoc -I=. -I=pb \
+  --go_out=pb --go_opt=paths=source_relative \
+  --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
+  pb/*.proto
