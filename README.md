@@ -449,146 +449,84 @@ option go_package = "crypt_proto/pb";
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt$ cd cmd/cryptarb
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt/cmd/cryptarb$ go run .
-2025/08/09 09:04:45 📈 Profiler: http://localhost:6060/debug/pprof/
-2025/08/09 09:04:45 ✅ MEXC: 1828 spot symbols
-2025/08/09 09:04:45 📊 Доступные пары (реальные+инверсии): 3656
-2025/08/09 09:04:46 [TRIANGLE] Found 282 triangles
-2025/08/09 09:04:46 [INIT] Треугольников найдено: 282
-2025/08/09 09:04:46 [INIT] Индекс по парам: 184 ключей
-2025/08/09 09:04:46 [INIT] Подписка на реальных пар: 92 шт.
-2025/08/09 09:04:46 [WS][MEXC] subscribed (quotes) to 17 pairs
-2025/08/09 09:04:46 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=17)
-2025/08/09 09:04:46 [WS][MEXC] subscribed (quotes) to 25 pairs
-2025/08/09 09:04:46 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=20)
-2025/08/09 09:04:46 [WS][MEXC] subscribed (quotes) to 25 pairs
-2025/08/09 09:04:46 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=5)
-2025/08/09 09:04:46 [WS][MEXC] subscribed (quotes) to 25 pairs
-2025/08/09 09:04:46 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=5)
-2025/08/09 09:04:46 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=5)
-2025/08/09 09:04:46 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=20)
-2025/08/09 09:04:46 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=20)
-2025/08/09 09:04:47 📩 [MEXC] subscribed (quotes-json): 20 (chunked)
-2025/08/09 09:04:47 📩 [MEXC] subscribed (quotes-json): 17 (chunked)
-2025/08/09 09:04:47 📩 [MEXC] subscribed (quotes-json): 5 (chunked)
-2025/08/09 09:04:47 📩 [MEXC] subscribed (quotes-json): 20 (chunked)
-2025/08/09 09:04:47 📩 [MEXC] subscribed (quotes-json): 5 (chunked)
-2025/08/09 09:04:47 📩 [MEXC] subscribed (quotes-json): 20 (chunked)
-2025/08/09 09:04:47 📩 [MEXC] subscribed (quotes-json): 5 (chunked)
-2025/08/09 09:04:47 🚫 [MEXC] quotes: AI16ZUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: NPCUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: KAITOUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: XLMUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: LINGOUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: NPCUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: ICPUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: INJUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: XMRUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: ENAUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: TURBOUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 ⚠️  [MEXC] quotes: все символы заблокированы; закрываем коннект
-2025/08/09 09:04:47 🚫 [MEXC] quotes: USDCUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: BUTTHOLEUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: SOSOUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: RIOUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: FARTCOINUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: TAOUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: NAKAUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: USDRUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: FARTCOINUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: ULTIMAUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: PEPEEUR blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: PEAQUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: KASUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: KEKIUSUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: LINKUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: PIUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: SUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: MELANIAUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: BABYDOGEUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: TRUMPUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: VIRTUALUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: BABYDOGEUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: AIXBTUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: VIRTUALUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: KAITOUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: PIUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: MELANIAUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: KASEUR blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: KASUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: XMRUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: TAOEUR blocked → исключаем из подписки
-2025/08/09 09:04:47 ⚠️  [MEXC] quotes: все символы заблокированы; закрываем коннект
-2025/08/09 09:04:47 🚫 [MEXC] quotes: USDCEUR blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: SUPRAUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: PENGUUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: CGPTUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: TONUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: TURBOUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: LINGOUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: SUPRAUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: RIOUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: CGPTUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: TAOUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: TRUMPUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: BUTTHOLEUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: DSYNCUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: ENAUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: TONUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 ⚠️  [MEXC] quotes: все символы заблокированы; закрываем коннект
-2025/08/09 09:04:47 🚫 [MEXC] quotes: NAKAUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 ⚠️  [MEXC] quotes: все символы заблокированы; закрываем коннект
-2025/08/09 09:04:47 🚫 [MEXC] quotes: RIOEUR blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: FETUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: ULTIMAUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: USDRUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: DSYNCUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: ICPUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: QUBICUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: ONDOUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: RAIUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: SUIUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: PEPEUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: RBNTUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 ⚠️  [MEXC] quotes: все символы заблокированы; закрываем коннект
-2025/08/09 09:04:47 🚫 [MEXC] quotes: LINKUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: HBARUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: PENGUUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: RBNTUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: FETUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: AI16ZUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 ⚠️  [MEXC] quotes: все символы заблокированы; закрываем коннект
-2025/08/09 09:04:47 🚫 [MEXC] quotes: SUIUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: INJUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: ONDOUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: SENUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: PEPEUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: HBARUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: QUBICUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: XLMUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: PEAQUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: SUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: KEKIUSUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: SENUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: SOSOUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: RAIUSDC blocked → исключаем из подписки
-2025/08/09 09:04:47 🚫 [MEXC] quotes: AIXBTUSDT blocked → исключаем из подписки
-2025/08/09 09:04:47 ⚠️  [MEXC] quotes: все символы заблокированы; закрываем коннект
-2025/08/09 09:04:49 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=5)
-2025/08/09 09:04:49 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=20)
-2025/08/09 09:04:49 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=5)
-2025/08/09 09:04:49 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=5)
-2025/08/09 09:04:49 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=17)
-2025/08/09 09:04:49 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=20)
-2025/08/09 09:04:49 🌐 [MEXC] dial wss://wbs-api.mexc.com/ws (quotes json, pairs=20)
-2025/08/09 09:04:50 ⚠️  [MEXC] quotes: все символы заблокированы/исключены; завершение горутины
-2025/08/09 09:04:50 ⚠️  [MEXC] quotes: все символы заблокированы/исключены; завершение горутины
-2025/08/09 09:04:50 ⚠️  [MEXC] quotes: все символы заблокированы/исключены; завершение горутины
-2025/08/09 09:04:50 ⚠️  [MEXC] quotes: все символы заблокированы/исключены; завершение горутины
-2025/08/09 09:04:50 ⚠️  [MEXC] quotes: все символы заблокированы/исключены; завершение горутины
-2025/08/09 09:04:50 ⚠️  [MEXC] quotes: все символы заблокированы/исключены; завершение горутины
-2025/08/09 09:04:50 ⚠️  [MEXC] quotes: все символы заблокированы/исключены; завершение горутин
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/gorilla/websocket"
+)
+
+func main() {
+	const wsURL = "wss://wbs-api.mexc.com/ws"
+
+	// 1) соединяемся
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		log.Fatal("dial:", err)
+	}
+	defer conn.Close()
+	log.Println("connected")
+
+	// 2) подписка (ровно как у тебя)
+	sub := map[string]any{
+		"method": "SUBSCRIPTION",
+		"params": []string{
+			"spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT",
+			"spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHUSDT",
+			"spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHBTC",
+		},
+	}
+	if err := conn.WriteJSON(sub); err != nil {
+		log.Fatal("send sub:", err)
+	}
+	log.Println("subscription sent")
+
+	// 3) пингуем, чтобы не отвалиться
+	go func() {
+		t := time.NewTicker(45 * time.Second)
+		defer t.Stop()
+		for range t.C {
+			_ = conn.WriteMessage(websocket.PingMessage, []byte("hb"))
+		}
+	}()
+
+	// 4) читаем и печатаем
+	for {
+		mt, msg, err := conn.ReadMessage()
+		if err != nil {
+			log.Fatal("read:", err)
+		}
+
+		switch mt {
+		case websocket.TextMessage:
+			// ACK/сервисные ответы — JSON
+			var pretty any
+			if json.Unmarshal(msg, &pretty) == nil {
+				b, _ := json.MarshalIndent(pretty, "", "  ")
+				fmt.Printf("TEXT JSON:\n%s\n\n", b)
+			} else {
+				fmt.Printf("TEXT:\n%s\n\n", string(msg))
+			}
+
+		case websocket.BinaryMessage:
+			// Рыночные данные — protobuf (бинарь)
+			const show = 64
+			n := len(msg)
+			if n > show {
+				fmt.Printf("BINARY: %d bytes, head %d bytes (hex): %x ...\n\n", n, show, msg[:show])
+			} else {
+				fmt.Printf("BINARY: %d bytes (hex): %x\n\n", n, msg)
+			}
+
+		default:
+			fmt.Printf("OTHER frame type=%d, %d bytes\n\n", mt, len(msg))
+		}
+	}
+}
 
 
 
