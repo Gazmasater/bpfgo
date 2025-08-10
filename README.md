@@ -579,43 +579,10 @@ protoc -I . \
   PushDataV3ApiWrapper.proto PublicAggreBookTickerV3Api.proto
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ git commit -m "proto"
-[main 4ecac61] proto
- 23 files changed, 1078 insertions(+), 283 deletions(-)
- create mode 100644 .env
- create mode 100644 check_key.sh
- delete mode 100644 main.go
- create mode 100644 pb/PrivateAccountV3Api.proto
- create mode 100644 pb/PrivateDealsV3Api.proto
- create mode 100644 pb/PrivateOrdersV3Api.proto
- create mode 100644 pb/PublicAggreBookTickerV3Api.pb.go
- create mode 100644 pb/PublicAggreBookTickerV3Api.proto
- create mode 100644 pb/PublicAggreDealsV3Api.proto
- delete mode 100644 pb/PublicAggreDepthsV3Api.pb.go
- rename PublicAggreDepthsV3Api.proto => pb/PublicAggreDepthsV3Api.proto (94%)
- create mode 100644 pb/PublicBookTickerBatchV3Api.proto
- create mode 100644 pb/PublicBookTickerV3Api.proto
- create mode 100644 pb/PublicDealsV3Api.proto
- create mode 100644 pb/PublicIncreaseDepthsBatchV3Api.proto
- create mode 100644 pb/PublicIncreaseDepthsV3Api.proto
- create mode 100644 pb/PublicLimitDepthsV3Api.proto
- create mode 100644 pb/PublicMiniTickerV3Api.proto
- create mode 100644 pb/PublicMiniTickersV3Api.proto
- create mode 100644 pb/PublicSpotKlineV3Api.proto
- create mode 100644 pb/PushDataV3ApiWrapper.pb.go
- create mode 100644 pb/PushDataV3ApiWrapper.proto
- create mode 100644 protobuf_aggre_available.txt
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ git push origin main
-Enumerating objects: 26, done.
-Counting objects: 100% (26/26), done.
-Delta compression using up to 8 threads
-Compressing objects: 100% (23/23), done.
-Writing objects: 100% (24/24), 9.25 KiB | 1.54 MiB/s, done.
-Total 24 (delta 10), reused 0 (delta 0), pack-reused 0
-remote: Resolving deltas: 100% (10/10), done.
-To https://github.com/Gazmasater/crypt_proto.git
-   f6defcd..4ecac61  main -> main
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ git add .
+git fetch origin
+git rev-parse HEAD
+git rev-parse origin/main
+git ls-tree -r --name-only origin/main | grep 'pb/PublicBookTickerV3Api.proto'
 
 
 
