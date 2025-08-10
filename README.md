@@ -438,6 +438,12 @@ ________________________________________________________________________________
 
 https://github.com/mexcdevelop/websocket-proto
 
+PushDataV3ApiWrapper.proto — внешняя «обёртка» WS-кадра (канал c, полезная нагрузка d, метка времени t). 
+GitHub
+
+PublicAggreBookTickerV3Api.proto — сам payload для spot@public.aggre.bookTicker.v3.api.pb... (best bid/ask). 
+GitHub
+
 
 sudo apt install -y protobuf-compiler
 go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
