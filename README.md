@@ -454,112 +454,126 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
 
-	pb "crypt_proto/pb"
+	pb "crypt_proto/pb" // твой пакет со сгенерёнными *.pb.go
 )
 
-const (
-	restBase = "https://api.mexc.com"                         // docs
-	wsBase   = "wss://wbs-api.mexc.com/ws"                    // docs
-)
+// ===== listenKey helpers (только API-KEY в заголовке, без подписи) =====
 
-// --- REST: получить и продлевать listenKey (валиден 60 мин; PUT продлевает ещё на 60) ---
-func getListenKey(apiKey string) (string, error) {
-	req, _ := http.NewRequest("POST", restBase+"/api/v3/userDataStream", nil)
+func createListenKey(apiKey string) (string, error) {
+	req, _ := http.NewRequest("POST", "https://api.mexc.com/api/v3/userDataStream", nil)
 	req.Header.Set("X-MEXC-APIKEY", apiKey)
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		b, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("userDataStream POST: %s", string(b))
-	}
+
 	var out struct{ ListenKey string `json:"listenKey"` }
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return "", err
 	}
+	if out.ListenKey == "" {
+		return "", fmt.Errorf("empty listenKey")
+	}
 	return out.ListenKey, nil
 }
 
-func keepAliveListenKey(apiKey, lk string) {
-	t := time.NewTicker(30 * time.Minute) // продлеваем до истечения 60 минут
+func keepAliveListenKey(apiKey, listenKey string, stop <-chan struct{}) {
+	t := time.NewTicker(30 * time.Minute) // продлеваем раньше, чем 60 минут TTL
 	defer t.Stop()
-	for range t.C {
-		u := restBase + "/api/v3/userDataStream?listenKey=" + url.QueryEscape(lk)
-		req, _ := http.NewRequest("PUT", u, nil)
-		req.Header.Set("X-MEXC-APIKEY", apiKey)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			log.Printf("keepalive error: %v", err)
-			continue
+	for {
+		select {
+		case <-t.C:
+			req, _ := http.NewRequest("PUT", "https://api.mexc.com/api/v3/userDataStream", nil)
+			req.Header.Set("X-MEXC-APIKEY", apiKey)
+			q := req.URL.Query()
+			q.Set("listenKey", listenKey)
+			req.URL.RawQuery = q.Encode()
+			_, _ = http.DefaultClient.Do(req)
+		case <-stop:
+			return
 		}
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
 	}
 }
 
+func closeListenKey(apiKey, listenKey string) {
+	req, _ := http.NewRequest("DELETE", "https://api.mexc.com/api/v3/userDataStream", nil)
+	req.Header.Set("X-MEXC-APIKEY", apiKey)
+	q := req.URL.Query()
+	q.Set("listenKey", listenKey)
+	req.URL.RawQuery = q.Encode()
+	_, _ = http.DefaultClient.Do(req)
+}
+
+// =====================================================================
+
 func main() {
+	const baseWS = "wss://wbs-api.mexc.com/ws"
+
 	apiKey := os.Getenv("MEXC_API_KEY")
 	if apiKey == "" {
-		log.Fatal("set MEXC_API_KEY in env (secret не нужен для listenKey)")
+		log.Fatal("MEXC_API_KEY is empty. Export it first.")
 	}
+	// secret пока не нужен для listenKey/WS
+	_ = os.Getenv("MEXC_SECRET_KEY")
 
-	// 1) listenKey (живет 60 минут; потом продлеваем PUT’ом), оф. доки. :contentReference[oaicite:0]{index=0}
-	lk, err := getListenKey(apiKey)
+	listenKey, err := createListenKey(apiKey)
 	if err != nil {
-		log.Fatalf("get listenKey: %v", err)
+		log.Fatal("listenKey:", err)
 	}
-	go keepAliveListenKey(apiKey, lk)
+	defer closeListenKey(apiKey, listenKey)
 
-	// 2) WS к приватному: /ws?listenKey=... (одно соединение живёт до 24 часов). :contentReference[oaicite:1]{index=1}
-	wsURL := wsBase + "?listenKey=" + url.QueryEscape(lk)
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	stopKA := make(chan struct{})
+	go keepAliveListenKey(apiKey, listenKey, stopKA)
+	defer close(stopKA)
+
+	// подключаемся к приватному ws-линку; подписываемся на те же public bookTicker
+	wsURL := baseWS + "?listenKey=" + listenKey
+	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
-		log.Fatalf("dial: %v", err)
+		log.Fatal("dial:", err)
 	}
-	defer conn.Close()
+	defer c.Close()
 
-	// 3) Подписываемся на приватные каналы (orders / deals / account) — protobuf-версии. :contentReference[oaicite:2]{index=2}
 	sub := map[string]any{
 		"method": "SUBSCRIPTION",
 		"params": []string{
-			"spot@private.orders.v3.api.pb",
-			"spot@private.deals.v3.api.pb",
-			"spot@private.account.v3.api.pb",
+			"spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT",
+			"spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHUSDT",
+			"spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHBTC",
 		},
 	}
-	if err := conn.WriteJSON(sub); err != nil {
-		log.Fatalf("send sub: %v", err)
+	if err := c.WriteJSON(sub); err != nil {
+		log.Fatal("send sub:", err)
 	}
 
-	// пингуем, чтобы линк не заглох
+	// поддерживаем линк
 	go func() {
 		t := time.NewTicker(45 * time.Second)
 		defer t.Stop()
 		for range t.C {
-			_ = conn.WriteMessage(websocket.PingMessage, []byte("hb"))
+			_ = c.WriteMessage(websocket.PingMessage, []byte("hb"))
 		}
 	}()
 
 	for {
-		mt, raw, err := conn.ReadMessage()
+		mt, raw, err := c.ReadMessage()
 		if err != nil {
-			log.Fatalf("read: %v", err)
+			log.Fatal("read:", err)
 		}
 
-		// ACK / ошибки — текстом
+		// ACK/ошибки — текст/JSON
 		if mt == websocket.TextMessage {
 			var v any
 			if json.Unmarshal(raw, &v) == nil {
@@ -574,51 +588,48 @@ func main() {
 			continue
 		}
 
-		// 4) protobuf-обёртка
+		// 1) Декодируем ОБЁРТКУ
 		var w pb.PushDataV3ApiWrapper
 		if err := proto.Unmarshal(raw, &w); err != nil {
+			// бинарь не нашей схемы — пропускаем
 			continue
 		}
 
-		// символ (может отсутствовать → берём из channel)
+		// 2) Вытаскиваем symbol/ts из обёртки
 		symbol := w.GetSymbol()
-		if symbol == "" && w.GetChannel() != "" {
-			parts := strings.Split(w.GetChannel(), "@")
-			symbol = parts[len(parts)-1]
+		if symbol == "" {
+			// если symbol пуст — берём из channel (последний сегмент после '@')
+			ch := w.GetChannel()
+			if ch != "" {
+				parts := strings.Split(ch, "@")
+				symbol = parts[len(parts)-1]
+			}
 		}
 		ts := time.Now()
 		if t := w.GetSendTime(); t > 0 {
 			ts = time.UnixMilli(t)
 		}
 
+		// 3) oneof Body → PublicAggreBookTicker (ВЫВОД НЕ МЕНЯЕМ)
 		switch body := w.GetBody().(type) {
-		// --- заявки (privateOrders) ---
-		case *pb.PushDataV3ApiWrapper_PrivateOrders:
-			o := body.PrivateOrders
-			fmt.Printf("ORD  %s  id=%s type=%d side=%d status=%d px=%s qty=%s cumQty=%s avgPx=%s  t=%s\n",
-				symbol, o.GetId(), o.GetOrderType(), o.GetTradeType(), o.GetStatus(),
-				o.GetPrice(), o.GetQuantity(), o.GetCumulativeQuantity(), o.GetAvgPrice(),
-				ts.Format(time.RFC3339Nano))
+		case *pb.PushDataV3ApiWrapper_PublicAggreBookTicker:
+			bt := body.PublicAggreBookTicker
 
-		// --- сделки (privateDeals) ---
-		case *pb.PushDataV3ApiWrapper_PrivateDeals:
-			d := body.PrivateDeals
-			fmt.Printf("FILL %s  dealId=%s px=%s qty=%s amt=%s fee=%s %s  t=%s\n",
-				symbol, d.GetDealId(), d.GetPrice(), d.GetQuantity(), d.GetAmount(),
-				d.GetCommission(), d.GetCommissionAsset(), ts.Format(time.RFC3339Nano))
+			bid, _ := strconv.ParseFloat(bt.GetBidPrice(), 64)
+			ask, _ := strconv.ParseFloat(bt.GetAskPrice(), 64)
+			bq, _ := strconv.ParseFloat(bt.GetBidQuantity(), 64)
+			aq, _ := strconv.ParseFloat(bt.GetAskQuantity(), 64)
 
-		// --- апдейты аккаунта (privateAccount) ---
-		case *pb.PushDataV3ApiWrapper_PrivateAccount:
-			a := body.PrivateAccount
-			// В этой структуре обычно массив балансов/изменений — выведем коротко:
-			fmt.Printf("ACCT %s  update received (%d items)  t=%s\n",
-				symbol, len(a.GetBalances()), ts.Format(time.RFC3339Nano))
+			// === точь-в-точь ваш формат ===
+			fmt.Printf("%s  bid=%.8f (%.6f)  ask=%.8f (%.6f)  ts=%s\n",
+				symbol, bid, bq, ask, aq, ts.Format(time.RFC3339Nano))
 
 		default:
-			// игнорим другие oneof-ветки
+			// игнорим прочее
 		}
 	}
 }
+
 
 
 
