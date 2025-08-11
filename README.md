@@ -455,14 +455,14 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	pb "crypt_proto/pb" // твои сгенерированные типы
+	pb "crypt_proto/pb" // твой пакет со сгенерёнными *.pb.go
 )
 
 func main() {
@@ -486,7 +486,7 @@ func main() {
 		log.Fatal("send sub:", err)
 	}
 
-	// поддерживаем линк
+	// поддерживаем соединение
 	go func() {
 		t := time.NewTicker(45 * time.Second)
 		defer t.Stop()
@@ -500,6 +500,8 @@ func main() {
 		if err != nil {
 			log.Fatal("read:", err)
 		}
+
+		// ACK/ошибки → текст/JSON
 		if mt == websocket.TextMessage {
 			var v any
 			if json.Unmarshal(raw, &v) == nil {
@@ -514,105 +516,98 @@ func main() {
 			continue
 		}
 
-		// 1) пробуем распарсить обёртку
+		// 1) распаковываем обёртку
 		var w pb.PushDataV3ApiWrapper
 		if err := proto.Unmarshal(raw, &w); err != nil {
 			log.Printf("wrapper unmarshal: %v", err)
 			continue
 		}
 
-		// 2) выковыриваем payload из обёртки без знания имён
-		payload, via := extractPayloadBytes(&w)
+		// вытащим канал/символ из обёртки (если поле есть)
+		channel := getStringField(&w, "c") // обычно поле называется c
+		symbol := parseSymbolFromChannel(channel)
+
+		// таймстемп из обёртки (обычно t=ms); если нет — ставим Now
+		tsMs := getIntField(&w, "t")
+		ts := time.Now()
+		if tsMs > 0 {
+			ts = time.UnixMilli(tsMs)
+		}
+
+		// полезная нагрузка (bytes) — имя поля может отличаться, поэтому ищем его безопасно
+		payload := firstBytesField(&w)
 		if len(payload) == 0 {
-			log.Printf("no payload bytes in wrapper (via=%s)", via)
+			log.Printf("no payload bytes in wrapper (channel=%s)", channel)
 			continue
 		}
 
-		// 3) декодируем BookTicker
+		// 2) декодируем bookTicker
 		var bt pb.PublicAggreBookTickerV3Api
 		if err := proto.Unmarshal(payload, &bt); err != nil {
-			log.Printf("bookTicker unmarshal: %v (via=%s)", err, via)
+			log.Printf("bookTicker unmarshal: %v (channel=%s)", err, channel)
 			continue
 		}
 
-		// 4а) печать как JSON — чтобы увидеть реальные имена полей
-		j, _ := protojson.MarshalOptions{EmitUnpopulated: true}.Marshal(&bt)
-		fmt.Printf("BOOK_TICKER JSON: %s\n", j)
+		// 3) читаем поля через геттеры (как в твоём JSON: bidPrice/askPrice/…)
+		bps := bt.GetBidPrice()
+		aps := bt.GetAskPrice()
+		bqs := bt.GetBidQuantity()
+		aqs := bt.GetAskQuantity()
 
-		// 4б) попытка достать s/bp/ap/t (если именно такие поля)
-		sym := bt.ProtoReflect().Get(bt.ProtoReflect().Descriptor().Fields().ByName("s")).String()
-		bps := bt.ProtoReflect().Get(bt.ProtoReflect().Descriptor().Fields().ByName("bp")).String()
-		aps := bt.ProtoReflect().Get(bt.ProtoReflect().Descriptor().Fields().ByName("ap")).String()
-		tsv := bt.ProtoReflect().Get(bt.ProtoReflect().Descriptor().Fields().ByName("t")).Int()
+		bid, _ := strconv.ParseFloat(bps, 64)
+		ask, _ := strconv.ParseFloat(aps, 64)
+		bq, _ := strconv.ParseFloat(bqs, 64)
+		aq, _ := strconv.ParseFloat(aqs, 64)
 
-		if sym != "" && bps != "" && aps != "" {
-			bid, _ := strconv.ParseFloat(string(bps), 64)
-			ask, _ := strconv.ParseFloat(string(aps), 64)
-			ts := time.UnixMilli(int64(tsv))
-			fmt.Printf("[PARSED] %s bid=%.8f ask=%.8f ts=%s\n", sym, bid, ask, ts.Format(time.RFC3339Nano))
-		}
+		fmt.Printf("%s  bid=%.8f (qty=%.6f)  ask=%.8f (qty=%.6f)  ts=%s\n",
+			symbol, bid, bq, ask, aq, ts.Format(time.RFC3339Nano))
 	}
 }
 
-// extractPayloadBytes ищет в обёртке bytes-поле или активный message/oneof и отдает его как []byte
-func extractPayloadBytes(m proto.Message) ([]byte, string) {
+// --- утилиты ---
+
+func parseSymbolFromChannel(ch string) string {
+	// пример: spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT
+	if ch == "" {
+		return ""
+	}
+	parts := strings.Split(ch, "@")
+	if len(parts) == 0 {
+		return ""
+	}
+	return parts[len(parts)-1]
+}
+
+func firstBytesField(m proto.Message) []byte {
 	rm := m.ProtoReflect()
-	// 1) bytes-поля
-	fds := rm.Descriptor().Fields()
-	for i := 0; i < fds.Len(); i++ {
-		fd := fds.Get(i)
+	fields := rm.Descriptor().Fields()
+	for i := 0; i < fields.Len(); i++ {
+		fd := fields.Get(i)
 		if fd.Kind() == protoreflect.BytesKind && rm.Has(fd) {
-			return append([]byte(nil), rm.Get(fd).Bytes()...), string(fd.Name())
+			return append([]byte(nil), rm.Get(fd).Bytes()...)
 		}
 	}
-	// 2) message-поля
-	for i := 0; i < fds.Len(); i++ {
-		fd := fds.Get(i)
-		if fd.Kind() == protoreflect.MessageKind && rm.Has(fd) {
-			msg := rm.Get(fd).Message().Interface()
-			b, _ := proto.Marshal(msg)
-			return b, string(fd.Name()) + "(msg)"
-		}
-	}
-	// 3) oneof
-	ods := rm.Descriptor().Oneofs()
-	for i := 0; i < ods.Len(); i++ {
-		od := ods.Get(i)
-		if fv := rm.WhichOneof(od); fv != nil {
-			v := rm.Get(fv)
-			if fv.Kind() == protoreflect.MessageKind {
-				b, _ := proto.Marshal(v.Message().Interface())
-				return b, string(fv.Name()) + "(oneof)"
-			}
-			if fv.Kind() == protoreflect.BytesKind {
-				return append([]byte(nil), v.Bytes()...), string(fv.Name()) + "(oneof)"
-			}
-		}
-	}
-	return nil, ""
+	return nil
 }
 
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-ACK:
-{
-  "code": 0,
-  "id": 0,
-  "msg": "spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHUSDT,spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHBTC,spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT"
+func getStringField(m proto.Message, name protoreflect.Name) string {
+	rm := m.ProtoReflect()
+	fd := rm.Descriptor().Fields().ByName(name)
+	if fd != nil && fd.Kind() == protoreflect.StringKind && rm.Has(fd) {
+		return rm.Get(fd).String()
+	}
+	return ""
 }
-BOOK_TICKER JSON: {"bidPrice":"4323.84","bidQuantity":"109.5684","askPrice":"4323.85","askQuantity":"1.34461"}
-panic: runtime error: invalid memory address or nil pointer dereference
-[signal SIGSEGV: segmentation violation code=0x1 addr=0xd8 pc=0x6d9a12]
 
-goroutine 1 [running]:
-google.golang.org/protobuf/internal/impl.(*MessageInfo).checkField(0xc0000c0600, {0x0, 0x0})
-        /home/gaz358/go/pkg/mod/google.golang.org/protobuf@v1.36.6/internal/impl/message_reflect.go:432 +0x32
-google.golang.org/protobuf/internal/impl.(*messageState).Get(0xc0001500e0, {0x0?, 0x0?})
-        /home/gaz358/go/pkg/mod/google.golang.org/protobuf@v1.36.6/internal/impl/message_reflect_gen.go:87 +0x65
-main.main()
-        /home/gaz358/myprog/crypt_proto/main.go:93 +0x788
-exit status 2
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
+func getIntField(m proto.Message, name protoreflect.Name) int64 {
+	rm := m.ProtoReflect()
+	fd := rm.Descriptor().Fields().ByName(name)
+	if fd != nil && (fd.Kind() == protoreflect.Int64Kind || fd.Kind() == protoreflect.Sint64Kind || fd.Kind() == protoreflect.Sfixed64Kind) && rm.Has(fd) {
+		return rm.Get(fd).Int()
+	}
+	return 0
+}
+
 
 
 
