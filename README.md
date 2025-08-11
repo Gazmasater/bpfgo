@@ -448,28 +448,149 @@ protoc -I=. \
   *.proto
 
 
-  [{
-	"resource": "/home/gaz358/myprog/crypt_proto/main.go",
-	"owner": "_generated_diagnostic_collection_name_#1",
-	"code": {
-		"value": "MissingFieldOrMethod",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingFieldOrMethod"
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"strconv"
+	"time"
+
+	"github.com/gorilla/websocket"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+
+	pb "crypt_proto/pb" // твои сгенерированные типы
+)
+
+func main() {
+	const wsURL = "wss://wbs-api.mexc.com/ws"
+
+	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		log.Fatal("dial:", err)
+	}
+	defer c.Close()
+
+	sub := map[string]any{
+		"method": "SUBSCRIPTION",
+		"params": []string{
+			"spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT",
+			"spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHUSDT",
+			"spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHBTC",
+		},
+	}
+	if err := c.WriteJSON(sub); err != nil {
+		log.Fatal("send sub:", err)
+	}
+
+	// поддерживаем линк
+	go func() {
+		t := time.NewTicker(45 * time.Second)
+		defer t.Stop()
+		for range t.C {
+			_ = c.WriteMessage(websocket.PingMessage, []byte("hb"))
 		}
-	},
-	"severity": 8,
-	"message": "w.GetD undefined (type pb.PushDataV3ApiWrapper has no field or method GetD)",
-	"source": "compiler",
-	"startLineNumber": 89,
-	"startColumn": 31,
-	"endLineNumber": 89,
-	"endColumn": 35,
-	"origin": "extHost1"
-}]
+	}()
+
+	for {
+		mt, raw, err := c.ReadMessage()
+		if err != nil {
+			log.Fatal("read:", err)
+		}
+		if mt == websocket.TextMessage {
+			var v any
+			if json.Unmarshal(raw, &v) == nil {
+				b, _ := json.MarshalIndent(v, "", "  ")
+				fmt.Printf("ACK:\n%s\n", b)
+			} else {
+				fmt.Printf("TEXT:\n%s\n", string(raw))
+			}
+			continue
+		}
+		if mt != websocket.BinaryMessage {
+			continue
+		}
+
+		// 1) пробуем распарсить обёртку
+		var w pb.PushDataV3ApiWrapper
+		if err := proto.Unmarshal(raw, &w); err != nil {
+			log.Printf("wrapper unmarshal: %v", err)
+			continue
+		}
+
+		// 2) выковыриваем payload из обёртки без знания имён
+		payload, via := extractPayloadBytes(&w)
+		if len(payload) == 0 {
+			log.Printf("no payload bytes in wrapper (via=%s)", via)
+			continue
+		}
+
+		// 3) декодируем BookTicker
+		var bt pb.PublicAggreBookTickerV3Api
+		if err := proto.Unmarshal(payload, &bt); err != nil {
+			log.Printf("bookTicker unmarshal: %v (via=%s)", err, via)
+			continue
+		}
+
+		// 4а) печать как JSON — чтобы увидеть реальные имена полей
+		j, _ := protojson.MarshalOptions{EmitUnpopulated: true}.Marshal(&bt)
+		fmt.Printf("BOOK_TICKER JSON: %s\n", j)
+
+		// 4б) попытка достать s/bp/ap/t (если именно такие поля)
+		sym := bt.ProtoReflect().Get(bt.ProtoReflect().Descriptor().Fields().ByName("s")).String()
+		bps := bt.ProtoReflect().Get(bt.ProtoReflect().Descriptor().Fields().ByName("bp")).String()
+		aps := bt.ProtoReflect().Get(bt.ProtoReflect().Descriptor().Fields().ByName("ap")).String()
+		tsv := bt.ProtoReflect().Get(bt.ProtoReflect().Descriptor().Fields().ByName("t")).Int()
+
+		if sym != "" && bps != "" && aps != "" {
+			bid, _ := strconv.ParseFloat(string(bps), 64)
+			ask, _ := strconv.ParseFloat(string(aps), 64)
+			ts := time.UnixMilli(int64(tsv))
+			fmt.Printf("[PARSED] %s bid=%.8f ask=%.8f ts=%s\n", sym, bid, ask, ts.Format(time.RFC3339Nano))
+		}
+	}
+}
+
+// extractPayloadBytes ищет в обёртке bytes-поле или активный message/oneof и отдает его как []byte
+func extractPayloadBytes(m proto.Message) ([]byte, string) {
+	rm := m.ProtoReflect()
+	// 1) bytes-поля
+	fds := rm.Descriptor().Fields()
+	for i := 0; i < fds.Len(); i++ {
+		fd := fds.Get(i)
+		if fd.Kind() == protoreflect.BytesKind && rm.Has(fd) {
+			return append([]byte(nil), rm.Get(fd).Bytes()...), string(fd.Name())
+		}
+	}
+	// 2) message-поля
+	for i := 0; i < fds.Len(); i++ {
+		fd := fds.Get(i)
+		if fd.Kind() == protoreflect.MessageKind && rm.Has(fd) {
+			msg := rm.Get(fd).Message().Interface()
+			b, _ := proto.Marshal(msg)
+			return b, string(fd.Name()) + "(msg)"
+		}
+	}
+	// 3) oneof
+	ods := rm.Descriptor().Oneofs()
+	for i := 0; i < ods.Len(); i++ {
+		od := ods.Get(i)
+		if fv := rm.WhichOneof(od); fv != nil {
+			v := rm.Get(fv)
+			if fv.Kind() == protoreflect.MessageKind {
+				b, _ := proto.Marshal(v.Message().Interface())
+				return b, string(fv.Name()) + "(oneof)"
+			}
+			if fv.Kind() == protoreflect.BytesKind {
+				return append([]byte(nil), v.Bytes()...), string(fv.Name()) + "(oneof)"
+			}
+		}
+	}
+	return nil, ""
+}
 
 
 
