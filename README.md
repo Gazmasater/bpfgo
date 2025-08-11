@@ -633,6 +633,8 @@ func main() {
 
 
 
-az358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/11 22:49:23 MEXC_API_KEY is empty. Export it first.
-exit status 1
+go get github.com/joho/godotenv
+go mod tidy
+
+
+    "github.com/joho/godotenv" // <— добавить
