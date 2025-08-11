@@ -609,5 +609,19 @@ func getIntField(m proto.Message, name protoreflect.Name) int64 {
 }
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
+ACK:
+{
+  "code": 0,
+  "id": 0,
+  "msg": "spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHUSDT,spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHBTC,spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT"
+}
+2025/08/11 05:23:18 no payload bytes in wrapper (channel=)
+2025/08/11 05:23:18 no payload bytes in wrapper (channel=)
+2025/08/11 05:23:18 no payload bytes in wrapper (channel=)
+2025/08/11 05:23:18 no payload bytes in wrapper (channel=)
+2025/08/11 05:23:18 no payload bytes in wrapper (channel=)
+2025/08/11 05:23:18 no payload bytes in wrapper (channel=)
+
 
 
