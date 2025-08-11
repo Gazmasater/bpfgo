@@ -592,9 +592,7 @@ option go_package = "crypt_proto/pb";
 pb/PublicBookTickerBatchV3Api.proto
 добавь импорт тикера:
 
-proto
-Копировать
-Редактировать
+
 syntax = "proto3";
 
 package pb;
@@ -605,12 +603,11 @@ import "PublicBookTickerV3Api.proto"; // <-- добавить
 message PublicBookTickerBatchV3Api {
   repeated PublicBookTickerV3Api items = 1;
 }
+
 pb/PublicIncreaseDepthsBatchV3Api.proto
 добавь импорт инкрементальных глубин:
 
-proto
-Копировать
-Редактировать
+
 syntax = "proto3";
 
 package pb;
@@ -621,12 +618,11 @@ import "PublicIncreaseDepthsV3Api.proto"; // <-- добавить
 message PublicIncreaseDepthsBatchV3Api {
   repeated PublicIncreaseDepthsV3Api items = 1;
 }
+
 pb/PublicMiniTickersV3Api.proto
 добавь импорт мини-тикера:
 
-proto
-Копировать
-Редактировать
+
 syntax = "proto3";
 
 package pb;
@@ -645,18 +641,21 @@ message PublicMiniTickersV3Api {
 
 Сборка после правок:
 
-bash
-Копировать
-Редактировать
+
 rm -f pb/*.pb.go
 protoc -I=pb \
   --go_out=pb --go_opt=paths=source_relative \
   --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
   pb/*.proto
 
-go build ./...
-Если после этого что-то ещё ругнётся — скажи на какой файл/строку, добьём точечно.
-
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ protoc -I=pb \
+  --go_out=pb --go_opt=paths=source_relative \
+  --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
+  pb/*.proto
+protoc-gen-go-grpc: program not found or is not executable
+Please specify a program using absolute path or make sure the program is available in your PATH system variable
+--go-grpc_out: protoc-gen-go-grpc: Plugin failed with status code 1.
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
 
 
 
