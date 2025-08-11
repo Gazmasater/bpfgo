@@ -593,5 +593,26 @@ func extractPayloadBytes(m proto.Message) ([]byte, string) {
 }
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
+ACK:
+{
+  "code": 0,
+  "id": 0,
+  "msg": "spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHUSDT,spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHBTC,spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT"
+}
+BOOK_TICKER JSON: {"bidPrice":"4323.84","bidQuantity":"109.5684","askPrice":"4323.85","askQuantity":"1.34461"}
+panic: runtime error: invalid memory address or nil pointer dereference
+[signal SIGSEGV: segmentation violation code=0x1 addr=0xd8 pc=0x6d9a12]
+
+goroutine 1 [running]:
+google.golang.org/protobuf/internal/impl.(*MessageInfo).checkField(0xc0000c0600, {0x0, 0x0})
+        /home/gaz358/go/pkg/mod/google.golang.org/protobuf@v1.36.6/internal/impl/message_reflect.go:432 +0x32
+google.golang.org/protobuf/internal/impl.(*messageState).Get(0xc0001500e0, {0x0?, 0x0?})
+        /home/gaz358/go/pkg/mod/google.golang.org/protobuf@v1.36.6/internal/impl/message_reflect_gen.go:87 +0x65
+main.main()
+        /home/gaz358/myprog/crypt_proto/main.go:93 +0x788
+exit status 2
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
+
 
 
