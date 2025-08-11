@@ -448,6 +448,7 @@ protoc -I=. \
   *.proto
 
 
+
 package main
 
 import (
@@ -460,21 +461,19 @@ import (
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 
-	pb "crypt_proto/pb"
+	pb "crypt_proto/pb" // твой пакет со сгенерёнными *.pb.go
 )
 
 func main() {
 	const wsURL = "wss://wbs-api.mexc.com/ws"
 
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		log.Fatal("dial:", err)
 	}
-	defer conn.Close()
+	defer c.Close()
 
-	// подписка на 3 .pb-топика
 	sub := map[string]any{
 		"method": "SUBSCRIPTION",
 		"params": []string{
@@ -483,26 +482,26 @@ func main() {
 			"spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHBTC",
 		},
 	}
-	if err := conn.WriteJSON(sub); err != nil {
+	if err := c.WriteJSON(sub); err != nil {
 		log.Fatal("send sub:", err)
 	}
 
-	// поддержка линка
+	// поддерживаем линк
 	go func() {
 		t := time.NewTicker(45 * time.Second)
 		defer t.Stop()
 		for range t.C {
-			_ = conn.WriteMessage(websocket.PingMessage, []byte("hb"))
+			_ = c.WriteMessage(websocket.PingMessage, []byte("hb"))
 		}
 	}()
 
 	for {
-		mt, raw, err := conn.ReadMessage()
+		mt, raw, err := c.ReadMessage()
 		if err != nil {
 			log.Fatal("read:", err)
 		}
 
-		// ACK / ошибки — TEXT/JSON
+		// ACK/ошибки — текст/JSON
 		if mt == websocket.TextMessage {
 			var v any
 			if json.Unmarshal(raw, &v) == nil {
@@ -517,703 +516,48 @@ func main() {
 			continue
 		}
 
-		// ====== 1) попытка: фрейм уже является PublicAggreBookTickerV3Api ======
-		if bt, ok := tryUnmarshalBookTicker(raw); ok {
-			printBookTicker("RAW", "", bt)
-			continue
-		}
-
-		// ====== 2) общий случай: сначала обёртка, из неё вынимаем payload ======
+		// 1) Декодируем ОБЁРТКУ
 		var w pb.PushDataV3ApiWrapper
 		if err := proto.Unmarshal(raw, &w); err != nil {
-			// если у тебя тип называется иначе (например PushDataV3Api), сюда можно добавить альтернативу
-			log.Printf("wrapper unmarshal failed: %v", err)
+			// бинарь не нашей схемы — пропускаем
 			continue
 		}
 
-		channel := getWrapperChannel(&w)
-		// соберём ВСЕ возможные payload (bytes/messages) рекурсивно
-		payloads := collectPayloads(&w)
-
-		if len(payloads) == 0 {
-			log.Printf("no payloads found in wrapper (channel=%s)", channel)
-			continue
-		}
-
-		decoded := false
-		for _, p := range payloads {
-			if bt, ok := tryUnmarshalBookTicker(p); ok {
-				printBookTicker("WRAP", channel, bt)
-				decoded = true
+		// 2) Вытаскиваем symbol/ts из обёртки
+		symbol := w.GetSymbol()
+		if symbol == "" {
+			// если symbol пуст — берём из channel (последний сегмент после '@')
+			ch := w.GetChannel()
+			if ch != "" {
+				parts := strings.Split(ch, "@")
+				symbol = parts[len(parts)-1]
 			}
 		}
-		if !decoded {
-			log.Printf("no bookTicker decoded (channel=%s, candidates=%d)", channel, len(payloads))
+		ts := time.Now()
+		if t := w.GetSendTime(); t > 0 {
+			ts = time.UnixMilli(t)
+		}
+
+		// 3) oneof Body → нас интересует PublicAggreBookTicker
+		switch body := w.GetBody().(type) {
+		case *pb.PushDataV3ApiWrapper_PublicAggreBookTicker:
+			bt := body.PublicAggreBookTicker
+
+			bid, _ := strconv.ParseFloat(bt.GetBidPrice(), 64)
+			ask, _ := strconv.ParseFloat(bt.GetAskPrice(), 64)
+			bq, _ := strconv.ParseFloat(bt.GetBidQuantity(), 64)
+			aq, _ := strconv.ParseFloat(bt.GetAskQuantity(), 64)
+
+			fmt.Printf("%s  bid=%.8f (%.6f)  ask=%.8f (%.6f)  ts=%s\n",
+				symbol, bid, bq, ask, aq, ts.Format(time.RFC3339Nano))
+
+		// (не обязательно) если вдруг придёт другой кейс — можно игнорить
+		default:
+			// fmt.Printf("other body: %T\n", body)
 		}
 	}
 }
 
-// tryUnmarshalBookTicker пытается распарсить buffer как PublicAggreBookTickerV3Api
-func tryUnmarshalBookTicker(buf []byte) (*pb.PublicAggreBookTickerV3Api, bool) {
-	var bt pb.PublicAggreBookTickerV3Api
-	if err := proto.Unmarshal(buf, &bt); err != nil {
-		return nil, false
-	}
-	// быстрая sanity-проверка: есть ли в нём цены
-	if bt.GetBidPrice() == "" && bt.GetAskPrice() == "" && bt.GetBidQuantity() == "" && bt.GetAskQuantity() == "" {
-		return nil, false
-	}
-	return &bt, true
-}
 
-// collectPayloads рекурсивно собирает кандидаты на payload из message:
-// bytes, repeated bytes, message (маршалим обратно), repeated message, активные oneof
-func collectPayloads(m proto.Message) [][]byte {
-	var out [][]byte
-	rm := m.ProtoReflect()
-
-	// поля
-	fds := rm.Descriptor().Fields()
-	for i := 0; i < fds.Len(); i++ {
-		fd := fds.Get(i)
-		if !rm.Has(fd) {
-			continue
-		}
-		val := rm.Get(fd)
-
-		switch {
-		case fd.IsList():
-			list := val.List()
-			for j := 0; j < list.Len(); j++ {
-				iv := list.Get(j)
-				switch fd.Kind() {
-				case protoreflect.BytesKind:
-					out = append(out, append([]byte(nil), iv.Bytes()...))
-				case protoreflect.MessageKind:
-					if b, err := proto.Marshal(iv.Message().Interface()); err == nil {
-						out = append(out, b)
-						// рекурсивно доберёмся до вложенных байт/сообщений
-						out = append(out, collectPayloads(iv.Message().Interface())...)
-					}
-				}
-			}
-
-		case fd.Kind() == protoreflect.BytesKind:
-			out = append(out, append([]byte(nil), val.Bytes()...))
-
-		case fd.Kind() == protoreflect.MessageKind:
-			if b, err := proto.Marshal(val.Message().Interface()); err == nil {
-				out = append(out, b)
-				out = append(out, collectPayloads(val.Message().Interface())...)
-			}
-		}
-	}
-
-	// oneof
-	ods := rm.Descriptor().Oneofs()
-	for i := 0; i < ods.Len(); i++ {
-		od := ods.Get(i)
-		fv := rm.WhichOneof(od)
-		if fv == nil {
-			continue
-		}
-		val := rm.Get(fv)
-		switch fv.Kind() {
-		case protoreflect.BytesKind:
-			out = append(out, append([]byte(nil), val.Bytes()...))
-		case protoreflect.MessageKind:
-			if b, err := proto.Marshal(val.Message().Interface()); err == nil {
-				out = append(out, b)
-				out = append(out, collectPayloads(val.Message().Interface())...)
-			}
-		}
-	}
-
-	return out
-}
-
-// getWrapperChannel пытается вытащить строковое поле канала (обычно "c"), иначе ""
-func getWrapperChannel(m proto.Message) string {
-	rm := m.ProtoReflect()
-	// часто поле называется "c" или "channel"
-	for _, name := range []protoreflect.Name{"c", "channel", "topic"} {
-		if fd := rm.Descriptor().Fields().ByName(name); fd != nil && fd.Kind() == protoreflect.StringKind && rm.Has(fd) {
-			return rm.Get(fd).String()
-		}
-	}
-	// если в обёртке нет строки канала — вернём пусто
-	return ""
-}
-
-func printBookTicker(src, channel string, bt *pb.PublicAggreBookTickerV3Api) {
-	// символ: из канала (последний сегмент после '@'), иначе пытаемся взять из payload если есть (часто его нет)
-	sym := ""
-	if channel != "" {
-		parts := strings.Split(channel, "@")
-		if len(parts) > 0 {
-			sym = parts[len(parts)-1]
-		}
-	}
-	bps := bt.GetBidPrice()
-	aps := bt.GetAskPrice()
-	bqs := bt.GetBidQuantity()
-	aqs := bt.GetAskQuantity()
-
-	bid, _ := strconv.ParseFloat(bps, 64)
-	ask, _ := strconv.ParseFloat(aps, 64)
-	bq, _ := strconv.ParseFloat(bqs, 64)
-	aq, _ := strconv.ParseFloat(aqs, 64)
-
-	fmt.Printf("[%s] %s  bid=%.8f (%.6f)  ask=%.8f (%.6f)\n", src, sym, bid, bq, ask, aq)
-}
-
-
-Если всё ещё будет «пусто», пришли сюда первые ~40 строк pb/PushDataV3ApiWrapper.pb.go (или выведем wrapper в JSON через protojson и посмотрим реальные поля) — подстрою под твою конкретную схему.
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-ACK:
-{
-  "code": 0,
-  "id": 0,
-  "msg": "spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHUSDT,spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHBTC,spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT"
-}
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-[RAW]   bid=0.00000000 (0.000000)  ask=0.00000000 (0.000000)
-
-
-
-// Code generated by protoc-gen-go. DO NOT EDIT.
-// versions:
-// 	protoc-gen-go v1.36.7
-// 	protoc        v3.21.12
-// source: PushDataV3ApiWrapper.proto
-
-package pb
-
-import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
-)
-
-const (
-	// Verify that this generated code is sufficiently up-to-date.
-	_ = protoimpl.EnforceVersion(20 - protoimpl.MinVersion)
-	// Verify that runtime/protoimpl is sufficiently up-to-date.
-	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
-)
-
-type PushDataV3ApiWrapper struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// *
-	// 频道
-	Channel string `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
-	// *
-	// 数据，NOTE：因为不能重复，所以类型和变量名尽量使用全名
-	//
-	// Types that are valid to be assigned to Body:
-	//
-	//	*PushDataV3ApiWrapper_PublicDeals
-	//	*PushDataV3ApiWrapper_PublicIncreaseDepths
-	//	*PushDataV3ApiWrapper_PublicLimitDepths
-	//	*PushDataV3ApiWrapper_PrivateOrders
-	//	*PushDataV3ApiWrapper_PublicBookTicker
-	//	*PushDataV3ApiWrapper_PrivateDeals
-	//	*PushDataV3ApiWrapper_PrivateAccount
-	//	*PushDataV3ApiWrapper_PublicSpotKline
-	//	*PushDataV3ApiWrapper_PublicMiniTicker
-	//	*PushDataV3ApiWrapper_PublicMiniTickers
-	//	*PushDataV3ApiWrapper_PublicBookTickerBatch
-	//	*PushDataV3ApiWrapper_PublicIncreaseDepthsBatch
-	//	*PushDataV3ApiWrapper_PublicAggreDepths
-	//	*PushDataV3ApiWrapper_PublicAggreDeals
-	//	*PushDataV3ApiWrapper_PublicAggreBookTicker
-	Body isPushDataV3ApiWrapper_Body `protobuf_oneof:"body"`
-	// *
-	// 交易对
-	Symbol *string `protobuf:"bytes,3,opt,name=symbol,proto3,oneof" json:"symbol,omitempty"`
-	// *
-	// 交易对ID
-	SymbolId *string `protobuf:"bytes,4,opt,name=symbolId,proto3,oneof" json:"symbolId,omitempty"`
-	// *
-	// 消息生成时间
-	CreateTime *int64 `protobuf:"varint,5,opt,name=createTime,proto3,oneof" json:"createTime,omitempty"`
-	// *
-	// 消息推送时间
-	SendTime      *int64 `protobuf:"varint,6,opt,name=sendTime,proto3,oneof" json:"sendTime,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PushDataV3ApiWrapper) Reset() {
-	*x = PushDataV3ApiWrapper{}
-	mi := &file_PushDataV3ApiWrapper_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PushDataV3ApiWrapper) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PushDataV3ApiWrapper) ProtoMessage() {}
-
-func (x *PushDataV3ApiWrapper) ProtoReflect() protoreflect.Message {
-	mi := &file_PushDataV3ApiWrapper_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PushDataV3ApiWrapper.ProtoReflect.Descriptor instead.
-func (*PushDataV3ApiWrapper) Descriptor() ([]byte, []int) {
-	return file_PushDataV3ApiWrapper_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *PushDataV3ApiWrapper) GetChannel() string {
-	if x != nil {
-		return x.Channel
-	}
-	return ""
-}
-
-func (x *PushDataV3ApiWrapper) GetBody() isPushDataV3ApiWrapper_Body {
-	if x != nil {
-		return x.Body
-	}
-	return nil
-}
-
-func (x *PushDataV3ApiWrapper) GetPublicDeals() *PublicDealsV3Api {
-	if x != nil {
-		if x, ok := x.Body.(*PushDataV3ApiWrapper_PublicDeals); ok {
-			return x.PublicDeals
-		}
-	}
-	return nil
-}
-
-func (x *PushDataV3ApiWrapper) GetPublicIncreaseDepths() *PublicIncreaseDepthsV3Api {
-	if x != nil {
-		if x, ok := x.Body.(*PushDataV3ApiWrapper_PublicIncreaseDepths); ok {
-			return x.PublicIncreaseDepths
-		}
-	}
-	return nil
-}
-
-func (x *PushDataV3ApiWrapper) GetPublicLimitDepths() *PublicLimitDepthsV3Api {
-	if x != nil {
-		if x, ok := x.Body.(*PushDataV3ApiWrapper_PublicLimitDepths); ok {
-			return x.PublicLimitDepths
-		}
-	}
-	return nil
-}
-
-func (x *PushDataV3ApiWrapper) GetPrivateOrders() *PrivateOrdersV3Api {
-	if x != nil {
-		if x, ok := x.Body.(*PushDataV3ApiWrapper_PrivateOrders); ok {
-			return x.PrivateOrders
-		}
-	}
-	return nil
-}
-
-func (x *PushDataV3ApiWrapper) GetPublicBookTicker() *PublicBookTickerV3Api {
-	if x != nil {
-		if x, ok := x.Body.(*PushDataV3ApiWrapper_PublicBookTicker); ok {
-			return x.PublicBookTicker
-		}
-	}
-	return nil
-}
-
-func (x *PushDataV3ApiWrapper) GetPrivateDeals() *PrivateDealsV3Api {
-	if x != nil {
-		if x, ok := x.Body.(*PushDataV3ApiWrapper_PrivateDeals); ok {
-			return x.PrivateDeals
-		}
-	}
-	return nil
-}
-
-func (x *PushDataV3ApiWrapper) GetPrivateAccount() *PrivateAccountV3Api {
-	if x != nil {
-		if x, ok := x.Body.(*PushDataV3ApiWrapper_PrivateAccount); ok {
-			return x.PrivateAccount
-		}
-	}
-	return nil
-}
-
-func (x *PushDataV3ApiWrapper) GetPublicSpotKline() *PublicSpotKlineV3Api {
-	if x != nil {
-		if x, ok := x.Body.(*PushDataV3ApiWrapper_PublicSpotKline); ok {
-			return x.PublicSpotKline
-		}
-	}
-	return nil
-}
-
-func (x *PushDataV3ApiWrapper) GetPublicMiniTicker() *PublicMiniTickerV3Api {
-	if x != nil {
-		if x, ok := x.Body.(*PushDataV3ApiWrapper_PublicMiniTicker); ok {
-			return x.PublicMiniTicker
-		}
-	}
-	return nil
-}
-
-func (x *PushDataV3ApiWrapper) GetPublicMiniTickers() *PublicMiniTickersV3Api {
-	if x != nil {
-		if x, ok := x.Body.(*PushDataV3ApiWrapper_PublicMiniTickers); ok {
-			return x.PublicMiniTickers
-		}
-	}
-	return nil
-}
-
-func (x *PushDataV3ApiWrapper) GetPublicBookTickerBatch() *PublicBookTickerBatchV3Api {
-	if x != nil {
-		if x, ok := x.Body.(*PushDataV3ApiWrapper_PublicBookTickerBatch); ok {
-			return x.PublicBookTickerBatch
-		}
-	}
-	return nil
-}
-
-func (x *PushDataV3ApiWrapper) GetPublicIncreaseDepthsBatch() *PublicIncreaseDepthsBatchV3Api {
-	if x != nil {
-		if x, ok := x.Body.(*PushDataV3ApiWrapper_PublicIncreaseDepthsBatch); ok {
-			return x.PublicIncreaseDepthsBatch
-		}
-	}
-	return nil
-}
-
-func (x *PushDataV3ApiWrapper) GetPublicAggreDepths() *PublicAggreDepthsV3Api {
-	if x != nil {
-		if x, ok := x.Body.(*PushDataV3ApiWrapper_PublicAggreDepths); ok {
-			return x.PublicAggreDepths
-		}
-	}
-	return nil
-}
-
-func (x *PushDataV3ApiWrapper) GetPublicAggreDeals() *PublicAggreDealsV3Api {
-	if x != nil {
-		if x, ok := x.Body.(*PushDataV3ApiWrapper_PublicAggreDeals); ok {
-			return x.PublicAggreDeals
-		}
-	}
-	return nil
-}
-
-func (x *PushDataV3ApiWrapper) GetPublicAggreBookTicker() *PublicAggreBookTickerV3Api {
-	if x != nil {
-		if x, ok := x.Body.(*PushDataV3ApiWrapper_PublicAggreBookTicker); ok {
-			return x.PublicAggreBookTicker
-		}
-	}
-	return nil
-}
-
-func (x *PushDataV3ApiWrapper) GetSymbol() string {
-	if x != nil && x.Symbol != nil {
-		return *x.Symbol
-	}
-	return ""
-}
-
-func (x *PushDataV3ApiWrapper) GetSymbolId() string {
-	if x != nil && x.SymbolId != nil {
-		return *x.SymbolId
-	}
-	return ""
-}
-
-func (x *PushDataV3ApiWrapper) GetCreateTime() int64 {
-	if x != nil && x.CreateTime != nil {
-		return *x.CreateTime
-	}
-	return 0
-}
-
-func (x *PushDataV3ApiWrapper) GetSendTime() int64 {
-	if x != nil && x.SendTime != nil {
-		return *x.SendTime
-	}
-	return 0
-}
-
-type isPushDataV3ApiWrapper_Body interface {
-	isPushDataV3ApiWrapper_Body()
-}
-
-type PushDataV3ApiWrapper_PublicDeals struct {
-	PublicDeals *PublicDealsV3Api `protobuf:"bytes,301,opt,name=publicDeals,proto3,oneof"`
-}
-
-type PushDataV3ApiWrapper_PublicIncreaseDepths struct {
-	PublicIncreaseDepths *PublicIncreaseDepthsV3Api `protobuf:"bytes,302,opt,name=publicIncreaseDepths,proto3,oneof"`
-}
-
-type PushDataV3ApiWrapper_PublicLimitDepths struct {
-	PublicLimitDepths *PublicLimitDepthsV3Api `protobuf:"bytes,303,opt,name=publicLimitDepths,proto3,oneof"`
-}
-
-type PushDataV3ApiWrapper_PrivateOrders struct {
-	PrivateOrders *PrivateOrdersV3Api `protobuf:"bytes,304,opt,name=privateOrders,proto3,oneof"`
-}
-
-type PushDataV3ApiWrapper_PublicBookTicker struct {
-	PublicBookTicker *PublicBookTickerV3Api `protobuf:"bytes,305,opt,name=publicBookTicker,proto3,oneof"`
-}
-
-type PushDataV3ApiWrapper_PrivateDeals struct {
-	PrivateDeals *PrivateDealsV3Api `protobuf:"bytes,306,opt,name=privateDeals,proto3,oneof"`
-}
-
-type PushDataV3ApiWrapper_PrivateAccount struct {
-	PrivateAccount *PrivateAccountV3Api `protobuf:"bytes,307,opt,name=privateAccount,proto3,oneof"`
-}
-
-type PushDataV3ApiWrapper_PublicSpotKline struct {
-	PublicSpotKline *PublicSpotKlineV3Api `protobuf:"bytes,308,opt,name=publicSpotKline,proto3,oneof"`
-}
-
-type PushDataV3ApiWrapper_PublicMiniTicker struct {
-	PublicMiniTicker *PublicMiniTickerV3Api `protobuf:"bytes,309,opt,name=publicMiniTicker,proto3,oneof"`
-}
-
-type PushDataV3ApiWrapper_PublicMiniTickers struct {
-	PublicMiniTickers *PublicMiniTickersV3Api `protobuf:"bytes,310,opt,name=publicMiniTickers,proto3,oneof"`
-}
-
-type PushDataV3ApiWrapper_PublicBookTickerBatch struct {
-	PublicBookTickerBatch *PublicBookTickerBatchV3Api `protobuf:"bytes,311,opt,name=publicBookTickerBatch,proto3,oneof"`
-}
-
-type PushDataV3ApiWrapper_PublicIncreaseDepthsBatch struct {
-	PublicIncreaseDepthsBatch *PublicIncreaseDepthsBatchV3Api `protobuf:"bytes,312,opt,name=publicIncreaseDepthsBatch,proto3,oneof"`
-}
-
-type PushDataV3ApiWrapper_PublicAggreDepths struct {
-	PublicAggreDepths *PublicAggreDepthsV3Api `protobuf:"bytes,313,opt,name=publicAggreDepths,proto3,oneof"`
-}
-
-type PushDataV3ApiWrapper_PublicAggreDeals struct {
-	PublicAggreDeals *PublicAggreDealsV3Api `protobuf:"bytes,314,opt,name=publicAggreDeals,proto3,oneof"`
-}
-
-type PushDataV3ApiWrapper_PublicAggreBookTicker struct {
-	PublicAggreBookTicker *PublicAggreBookTickerV3Api `protobuf:"bytes,315,opt,name=publicAggreBookTicker,proto3,oneof"`
-}
-
-func (*PushDataV3ApiWrapper_PublicDeals) isPushDataV3ApiWrapper_Body() {}
-
-func (*PushDataV3ApiWrapper_PublicIncreaseDepths) isPushDataV3ApiWrapper_Body() {}
-
-func (*PushDataV3ApiWrapper_PublicLimitDepths) isPushDataV3ApiWrapper_Body() {}
-
-func (*PushDataV3ApiWrapper_PrivateOrders) isPushDataV3ApiWrapper_Body() {}
-
-func (*PushDataV3ApiWrapper_PublicBookTicker) isPushDataV3ApiWrapper_Body() {}
-
-func (*PushDataV3ApiWrapper_PrivateDeals) isPushDataV3ApiWrapper_Body() {}
-
-func (*PushDataV3ApiWrapper_PrivateAccount) isPushDataV3ApiWrapper_Body() {}
-
-func (*PushDataV3ApiWrapper_PublicSpotKline) isPushDataV3ApiWrapper_Body() {}
-
-func (*PushDataV3ApiWrapper_PublicMiniTicker) isPushDataV3ApiWrapper_Body() {}
-
-func (*PushDataV3ApiWrapper_PublicMiniTickers) isPushDataV3ApiWrapper_Body() {}
-
-func (*PushDataV3ApiWrapper_PublicBookTickerBatch) isPushDataV3ApiWrapper_Body() {}
-
-func (*PushDataV3ApiWrapper_PublicIncreaseDepthsBatch) isPushDataV3ApiWrapper_Body() {}
-
-func (*PushDataV3ApiWrapper_PublicAggreDepths) isPushDataV3ApiWrapper_Body() {}
-
-func (*PushDataV3ApiWrapper_PublicAggreDeals) isPushDataV3ApiWrapper_Body() {}
-
-func (*PushDataV3ApiWrapper_PublicAggreBookTicker) isPushDataV3ApiWrapper_Body() {}
-
-var File_PushDataV3ApiWrapper_proto protoreflect.FileDescriptor
-
-const file_PushDataV3ApiWrapper_proto_rawDesc = "" +
-	"\n" +
-	"\x1aPushDataV3ApiWrapper.proto\x12\x02pb\x1a\x16PublicDealsV3Api.proto\x1a\x1fPublicIncreaseDepthsV3Api.proto\x1a\x1cPublicLimitDepthsV3Api.proto\x1a\x18PrivateOrdersV3Api.proto\x1a\x1bPublicBookTickerV3Api.proto\x1a\x17PrivateDealsV3Api.proto\x1a\x19PrivateAccountV3Api.proto\x1a\x1aPublicSpotKlineV3Api.proto\x1a\x1bPublicMiniTickerV3Api.proto\x1a\x1cPublicMiniTickersV3Api.proto\x1a PublicBookTickerBatchV3Api.proto\x1a$PublicIncreaseDepthsBatchV3Api.proto\x1a\x1cPublicAggreDepthsV3Api.proto\x1a\x1bPublicAggreDealsV3Api.proto\x1a PublicAggreBookTickerV3Api.proto\"\xe7\n" +
-	"\n" +
-	"\x14PushDataV3ApiWrapper\x12\x18\n" +
-	"\achannel\x18\x01 \x01(\tR\achannel\x129\n" +
-	"\vpublicDeals\x18\xad\x02 \x01(\v2\x14.pb.PublicDealsV3ApiH\x00R\vpublicDeals\x12T\n" +
-	"\x14publicIncreaseDepths\x18\xae\x02 \x01(\v2\x1d.pb.PublicIncreaseDepthsV3ApiH\x00R\x14publicIncreaseDepths\x12K\n" +
-	"\x11publicLimitDepths\x18\xaf\x02 \x01(\v2\x1a.pb.PublicLimitDepthsV3ApiH\x00R\x11publicLimitDepths\x12?\n" +
-	"\rprivateOrders\x18\xb0\x02 \x01(\v2\x16.pb.PrivateOrdersV3ApiH\x00R\rprivateOrders\x12H\n" +
-	"\x10publicBookTicker\x18\xb1\x02 \x01(\v2\x19.pb.PublicBookTickerV3ApiH\x00R\x10publicBookTicker\x12<\n" +
-	"\fprivateDeals\x18\xb2\x02 \x01(\v2\x15.pb.PrivateDealsV3ApiH\x00R\fprivateDeals\x12B\n" +
-	"\x0eprivateAccount\x18\xb3\x02 \x01(\v2\x17.pb.PrivateAccountV3ApiH\x00R\x0eprivateAccount\x12E\n" +
-	"\x0fpublicSpotKline\x18\xb4\x02 \x01(\v2\x18.pb.PublicSpotKlineV3ApiH\x00R\x0fpublicSpotKline\x12H\n" +
-	"\x10publicMiniTicker\x18\xb5\x02 \x01(\v2\x19.pb.PublicMiniTickerV3ApiH\x00R\x10publicMiniTicker\x12K\n" +
-	"\x11publicMiniTickers\x18\xb6\x02 \x01(\v2\x1a.pb.PublicMiniTickersV3ApiH\x00R\x11publicMiniTickers\x12W\n" +
-	"\x15publicBookTickerBatch\x18\xb7\x02 \x01(\v2\x1e.pb.PublicBookTickerBatchV3ApiH\x00R\x15publicBookTickerBatch\x12c\n" +
-	"\x19publicIncreaseDepthsBatch\x18\xb8\x02 \x01(\v2\".pb.PublicIncreaseDepthsBatchV3ApiH\x00R\x19publicIncreaseDepthsBatch\x12K\n" +
-	"\x11publicAggreDepths\x18\xb9\x02 \x01(\v2\x1a.pb.PublicAggreDepthsV3ApiH\x00R\x11publicAggreDepths\x12H\n" +
-	"\x10publicAggreDeals\x18\xba\x02 \x01(\v2\x19.pb.PublicAggreDealsV3ApiH\x00R\x10publicAggreDeals\x12W\n" +
-	"\x15publicAggreBookTicker\x18\xbb\x02 \x01(\v2\x1e.pb.PublicAggreBookTickerV3ApiH\x00R\x15publicAggreBookTicker\x12\x1b\n" +
-	"\x06symbol\x18\x03 \x01(\tH\x01R\x06symbol\x88\x01\x01\x12\x1f\n" +
-	"\bsymbolId\x18\x04 \x01(\tH\x02R\bsymbolId\x88\x01\x01\x12#\n" +
-	"\n" +
-	"createTime\x18\x05 \x01(\x03H\x03R\n" +
-	"createTime\x88\x01\x01\x12\x1f\n" +
-	"\bsendTime\x18\x06 \x01(\x03H\x04R\bsendTime\x88\x01\x01B\x06\n" +
-	"\x04bodyB\t\n" +
-	"\a_symbolB\v\n" +
-	"\t_symbolIdB\r\n" +
-	"\v_createTimeB\v\n" +
-	"\t_sendTimeBM\n" +
-	"\x1ccom.mxc.push.common.protobufB\x19PushDataV3ApiWrapperProtoH\x01P\x01Z\x0ecrypt_proto/pbb\x06proto3"
-
-var (
-	file_PushDataV3ApiWrapper_proto_rawDescOnce sync.Once
-	file_PushDataV3ApiWrapper_proto_rawDescData []byte
-)
-
-func file_PushDataV3ApiWrapper_proto_rawDescGZIP() []byte {
-	file_PushDataV3ApiWrapper_proto_rawDescOnce.Do(func() {
-		file_PushDataV3ApiWrapper_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_PushDataV3ApiWrapper_proto_rawDesc), len(file_PushDataV3ApiWrapper_proto_rawDesc)))
-	})
-	return file_PushDataV3ApiWrapper_proto_rawDescData
-}
-
-var file_PushDataV3ApiWrapper_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
-var file_PushDataV3ApiWrapper_proto_goTypes = []any{
-	(*PushDataV3ApiWrapper)(nil),           // 0: pb.PushDataV3ApiWrapper
-	(*PublicDealsV3Api)(nil),               // 1: pb.PublicDealsV3Api
-	(*PublicIncreaseDepthsV3Api)(nil),      // 2: pb.PublicIncreaseDepthsV3Api
-	(*PublicLimitDepthsV3Api)(nil),         // 3: pb.PublicLimitDepthsV3Api
-	(*PrivateOrdersV3Api)(nil),             // 4: pb.PrivateOrdersV3Api
-	(*PublicBookTickerV3Api)(nil),          // 5: pb.PublicBookTickerV3Api
-	(*PrivateDealsV3Api)(nil),              // 6: pb.PrivateDealsV3Api
-	(*PrivateAccountV3Api)(nil),            // 7: pb.PrivateAccountV3Api
-	(*PublicSpotKlineV3Api)(nil),           // 8: pb.PublicSpotKlineV3Api
-	(*PublicMiniTickerV3Api)(nil),          // 9: pb.PublicMiniTickerV3Api
-	(*PublicMiniTickersV3Api)(nil),         // 10: pb.PublicMiniTickersV3Api
-	(*PublicBookTickerBatchV3Api)(nil),     // 11: pb.PublicBookTickerBatchV3Api
-	(*PublicIncreaseDepthsBatchV3Api)(nil), // 12: pb.PublicIncreaseDepthsBatchV3Api
-	(*PublicAggreDepthsV3Api)(nil),         // 13: pb.PublicAggreDepthsV3Api
-	(*PublicAggreDealsV3Api)(nil),          // 14: pb.PublicAggreDealsV3Api
-	(*PublicAggreBookTickerV3Api)(nil),     // 15: pb.PublicAggreBookTickerV3Api
-}
-var file_PushDataV3ApiWrapper_proto_depIdxs = []int32{
-	1,  // 0: pb.PushDataV3ApiWrapper.publicDeals:type_name -> pb.PublicDealsV3Api
-	2,  // 1: pb.PushDataV3ApiWrapper.publicIncreaseDepths:type_name -> pb.PublicIncreaseDepthsV3Api
-	3,  // 2: pb.PushDataV3ApiWrapper.publicLimitDepths:type_name -> pb.PublicLimitDepthsV3Api
-	4,  // 3: pb.PushDataV3ApiWrapper.privateOrders:type_name -> pb.PrivateOrdersV3Api
-	5,  // 4: pb.PushDataV3ApiWrapper.publicBookTicker:type_name -> pb.PublicBookTickerV3Api
-	6,  // 5: pb.PushDataV3ApiWrapper.privateDeals:type_name -> pb.PrivateDealsV3Api
-	7,  // 6: pb.PushDataV3ApiWrapper.privateAccount:type_name -> pb.PrivateAccountV3Api
-	8,  // 7: pb.PushDataV3ApiWrapper.publicSpotKline:type_name -> pb.PublicSpotKlineV3Api
-	9,  // 8: pb.PushDataV3ApiWrapper.publicMiniTicker:type_name -> pb.PublicMiniTickerV3Api
-	10, // 9: pb.PushDataV3ApiWrapper.publicMiniTickers:type_name -> pb.PublicMiniTickersV3Api
-	11, // 10: pb.PushDataV3ApiWrapper.publicBookTickerBatch:type_name -> pb.PublicBookTickerBatchV3Api
-	12, // 11: pb.PushDataV3ApiWrapper.publicIncreaseDepthsBatch:type_name -> pb.PublicIncreaseDepthsBatchV3Api
-	13, // 12: pb.PushDataV3ApiWrapper.publicAggreDepths:type_name -> pb.PublicAggreDepthsV3Api
-	14, // 13: pb.PushDataV3ApiWrapper.publicAggreDeals:type_name -> pb.PublicAggreDealsV3Api
-	15, // 14: pb.PushDataV3ApiWrapper.publicAggreBookTicker:type_name -> pb.PublicAggreBookTickerV3Api
-	15, // [15:15] is the sub-list for method output_type
-	15, // [15:15] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
-}
-
-func init() { file_PushDataV3ApiWrapper_proto_init() }
-func file_PushDataV3ApiWrapper_proto_init() {
-	if File_PushDataV3ApiWrapper_proto != nil {
-		return
-	}
-	file_PublicDealsV3Api_proto_init()
-	file_PublicIncreaseDepthsV3Api_proto_init()
-	file_PublicLimitDepthsV3Api_proto_init()
-	file_PrivateOrdersV3Api_proto_init()
-	file_PublicBookTickerV3Api_proto_init()
-	file_PrivateDealsV3Api_proto_init()
-	file_PrivateAccountV3Api_proto_init()
-	file_PublicSpotKlineV3Api_proto_init()
-	file_PublicMiniTickerV3Api_proto_init()
-	file_PublicMiniTickersV3Api_proto_init()
-	file_PublicBookTickerBatchV3Api_proto_init()
-	file_PublicIncreaseDepthsBatchV3Api_proto_init()
-	file_PublicAggreDepthsV3Api_proto_init()
-	file_PublicAggreDealsV3Api_proto_init()
-	file_PublicAggreBookTickerV3Api_proto_init()
-	file_PushDataV3ApiWrapper_proto_msgTypes[0].OneofWrappers = []any{
-		(*PushDataV3ApiWrapper_PublicDeals)(nil),
-		(*PushDataV3ApiWrapper_PublicIncreaseDepths)(nil),
-		(*PushDataV3ApiWrapper_PublicLimitDepths)(nil),
-		(*PushDataV3ApiWrapper_PrivateOrders)(nil),
-		(*PushDataV3ApiWrapper_PublicBookTicker)(nil),
-		(*PushDataV3ApiWrapper_PrivateDeals)(nil),
-		(*PushDataV3ApiWrapper_PrivateAccount)(nil),
-		(*PushDataV3ApiWrapper_PublicSpotKline)(nil),
-		(*PushDataV3ApiWrapper_PublicMiniTicker)(nil),
-		(*PushDataV3ApiWrapper_PublicMiniTickers)(nil),
-		(*PushDataV3ApiWrapper_PublicBookTickerBatch)(nil),
-		(*PushDataV3ApiWrapper_PublicIncreaseDepthsBatch)(nil),
-		(*PushDataV3ApiWrapper_PublicAggreDepths)(nil),
-		(*PushDataV3ApiWrapper_PublicAggreDeals)(nil),
-		(*PushDataV3ApiWrapper_PublicAggreBookTicker)(nil),
-	}
-	type x struct{}
-	out := protoimpl.TypeBuilder{
-		File: protoimpl.DescBuilder{
-			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_PushDataV3ApiWrapper_proto_rawDesc), len(file_PushDataV3ApiWrapper_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   1,
-			NumExtensions: 0,
-			NumServices:   0,
-		},
-		GoTypes:           file_PushDataV3ApiWrapper_proto_goTypes,
-		DependencyIndexes: file_PushDataV3ApiWrapper_proto_depIdxs,
-		MessageInfos:      file_PushDataV3ApiWrapper_proto_msgTypes,
-	}.Build()
-	File_PushDataV3ApiWrapper_proto = out.File
-	file_PushDataV3ApiWrapper_proto_goTypes = nil
-	file_PushDataV3ApiWrapper_proto_depIdxs = nil
-}
 
 
