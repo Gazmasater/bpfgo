@@ -586,3 +586,13 @@ protoc -I=. -I=pb \
 
 package pb;
 option go_package = "crypt_proto/pb";
+
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ protoc -I=. -I=pb   --go_out=pb --go_opt=paths=source_relative   --go-grpc_out=pb --go-grpc_opt=paths=source_relative   pb/*.proto
+pb/PublicBookTickerV3Api.proto:14:10: "pb.PublicBookTickerV3Api.bidPrice" is already defined in file "PublicBookTickerV3Api.proto".
+pb/PublicBookTickerV3Api.proto:15:10: "pb.PublicBookTickerV3Api.bidQuantity" is already defined in file "PublicBookTickerV3Api.proto".
+pb/PublicBookTickerV3Api.proto:16:10: "pb.PublicBookTickerV3Api.askPrice" is already defined in file "PublicBookTickerV3Api.proto".
+pb/PublicBookTickerV3Api.proto:17:10: "pb.PublicBookTickerV3Api.askQuantity" is already defined in file "PublicBookTickerV3Api.proto".
+pb/PublicBookTickerV3Api.proto:12:9: "pb.PublicBookTickerV3Api" is already defined in file "PublicBookTickerV3Api.proto".
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
