@@ -454,54 +454,112 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
-	"strconv"
+	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
 
-	pb "crypt_proto/pb" // твой пакет со сгенерёнными *.pb.go
+	pb "crypt_proto/pb"
 )
 
-func main() {
-	const wsURL = "wss://wbs-api.mexc.com/ws"
+const (
+	restBase = "https://api.mexc.com"                         // docs
+	wsBase   = "wss://wbs-api.mexc.com/ws"                    // docs
+)
 
-	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+// --- REST: получить и продлевать listenKey (валиден 60 мин; PUT продлевает ещё на 60) ---
+func getListenKey(apiKey string) (string, error) {
+	req, _ := http.NewRequest("POST", restBase+"/api/v3/userDataStream", nil)
+	req.Header.Set("X-MEXC-APIKEY", apiKey)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Fatal("dial:", err)
+		return "", err
 	}
-	defer c.Close()
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		b, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("userDataStream POST: %s", string(b))
+	}
+	var out struct{ ListenKey string `json:"listenKey"` }
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", err
+	}
+	return out.ListenKey, nil
+}
 
+func keepAliveListenKey(apiKey, lk string) {
+	t := time.NewTicker(30 * time.Minute) // продлеваем до истечения 60 минут
+	defer t.Stop()
+	for range t.C {
+		u := restBase + "/api/v3/userDataStream?listenKey=" + url.QueryEscape(lk)
+		req, _ := http.NewRequest("PUT", u, nil)
+		req.Header.Set("X-MEXC-APIKEY", apiKey)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			log.Printf("keepalive error: %v", err)
+			continue
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}
+}
+
+func main() {
+	apiKey := os.Getenv("MEXC_API_KEY")
+	if apiKey == "" {
+		log.Fatal("set MEXC_API_KEY in env (secret не нужен для listenKey)")
+	}
+
+	// 1) listenKey (живет 60 минут; потом продлеваем PUT’ом), оф. доки. :contentReference[oaicite:0]{index=0}
+	lk, err := getListenKey(apiKey)
+	if err != nil {
+		log.Fatalf("get listenKey: %v", err)
+	}
+	go keepAliveListenKey(apiKey, lk)
+
+	// 2) WS к приватному: /ws?listenKey=... (одно соединение живёт до 24 часов). :contentReference[oaicite:1]{index=1}
+	wsURL := wsBase + "?listenKey=" + url.QueryEscape(lk)
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		log.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+
+	// 3) Подписываемся на приватные каналы (orders / deals / account) — protobuf-версии. :contentReference[oaicite:2]{index=2}
 	sub := map[string]any{
 		"method": "SUBSCRIPTION",
 		"params": []string{
-			"spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT",
-			"spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHUSDT",
-			"spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHBTC",
+			"spot@private.orders.v3.api.pb",
+			"spot@private.deals.v3.api.pb",
+			"spot@private.account.v3.api.pb",
 		},
 	}
-	if err := c.WriteJSON(sub); err != nil {
-		log.Fatal("send sub:", err)
+	if err := conn.WriteJSON(sub); err != nil {
+		log.Fatalf("send sub: %v", err)
 	}
 
-	// поддерживаем линк
+	// пингуем, чтобы линк не заглох
 	go func() {
 		t := time.NewTicker(45 * time.Second)
 		defer t.Stop()
 		for range t.C {
-			_ = c.WriteMessage(websocket.PingMessage, []byte("hb"))
+			_ = conn.WriteMessage(websocket.PingMessage, []byte("hb"))
 		}
 	}()
 
 	for {
-		mt, raw, err := c.ReadMessage()
+		mt, raw, err := conn.ReadMessage()
 		if err != nil {
-			log.Fatal("read:", err)
+			log.Fatalf("read: %v", err)
 		}
 
-		// ACK/ошибки — текст/JSON
+		// ACK / ошибки — текстом
 		if mt == websocket.TextMessage {
 			var v any
 			if json.Unmarshal(raw, &v) == nil {
@@ -516,80 +574,53 @@ func main() {
 			continue
 		}
 
-		// 1) Декодируем ОБЁРТКУ
+		// 4) protobuf-обёртка
 		var w pb.PushDataV3ApiWrapper
 		if err := proto.Unmarshal(raw, &w); err != nil {
-			// бинарь не нашей схемы — пропускаем
 			continue
 		}
 
-		// 2) Вытаскиваем symbol/ts из обёртки
+		// символ (может отсутствовать → берём из channel)
 		symbol := w.GetSymbol()
-		if symbol == "" {
-			// если symbol пуст — берём из channel (последний сегмент после '@')
-			ch := w.GetChannel()
-			if ch != "" {
-				parts := strings.Split(ch, "@")
-				symbol = parts[len(parts)-1]
-			}
+		if symbol == "" && w.GetChannel() != "" {
+			parts := strings.Split(w.GetChannel(), "@")
+			symbol = parts[len(parts)-1]
 		}
 		ts := time.Now()
 		if t := w.GetSendTime(); t > 0 {
 			ts = time.UnixMilli(t)
 		}
 
-		// 3) oneof Body → нас интересует PublicAggreBookTicker
 		switch body := w.GetBody().(type) {
-		case *pb.PushDataV3ApiWrapper_PublicAggreBookTicker:
-			bt := body.PublicAggreBookTicker
+		// --- заявки (privateOrders) ---
+		case *pb.PushDataV3ApiWrapper_PrivateOrders:
+			o := body.PrivateOrders
+			fmt.Printf("ORD  %s  id=%s type=%d side=%d status=%d px=%s qty=%s cumQty=%s avgPx=%s  t=%s\n",
+				symbol, o.GetId(), o.GetOrderType(), o.GetTradeType(), o.GetStatus(),
+				o.GetPrice(), o.GetQuantity(), o.GetCumulativeQuantity(), o.GetAvgPrice(),
+				ts.Format(time.RFC3339Nano))
 
-			bid, _ := strconv.ParseFloat(bt.GetBidPrice(), 64)
-			ask, _ := strconv.ParseFloat(bt.GetAskPrice(), 64)
-			bq, _ := strconv.ParseFloat(bt.GetBidQuantity(), 64)
-			aq, _ := strconv.ParseFloat(bt.GetAskQuantity(), 64)
+		// --- сделки (privateDeals) ---
+		case *pb.PushDataV3ApiWrapper_PrivateDeals:
+			d := body.PrivateDeals
+			fmt.Printf("FILL %s  dealId=%s px=%s qty=%s amt=%s fee=%s %s  t=%s\n",
+				symbol, d.GetDealId(), d.GetPrice(), d.GetQuantity(), d.GetAmount(),
+				d.GetCommission(), d.GetCommissionAsset(), ts.Format(time.RFC3339Nano))
 
-			fmt.Printf("%s  bid=%.8f (%.6f)  ask=%.8f (%.6f)  ts=%s\n",
-				symbol, bid, bq, ask, aq, ts.Format(time.RFC3339Nano))
+		// --- апдейты аккаунта (privateAccount) ---
+		case *pb.PushDataV3ApiWrapper_PrivateAccount:
+			a := body.PrivateAccount
+			// В этой структуре обычно массив балансов/изменений — выведем коротко:
+			fmt.Printf("ACCT %s  update received (%d items)  t=%s\n",
+				symbol, len(a.GetBalances()), ts.Format(time.RFC3339Nano))
 
-		// (не обязательно) если вдруг придёт другой кейс — можно игнорить
 		default:
-			// fmt.Printf("other body: %T\n", body)
+			// игнорим другие oneof-ветки
 		}
 	}
 }
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-ACK:
-{
-  "code": 0,
-  "id": 0,
-  "msg": "spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHUSDT,spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHBTC,spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT"
-}
-ETHUSDT  bid=4309.27000000 (28.790200)  ask=4309.28000000 (27.390900)  ts=2025-08-11T05:38:27.852+03:00
-BTCUSDT  bid=121588.77000000 (6.377880)  ask=121588.78000000 (0.340110)  ts=2025-08-11T05:38:27.852+03:00
-ETHBTC  bid=0.03543300 (0.068000)  ask=0.03545600 (0.068000)  ts=2025-08-11T05:38:27.898+03:00
-ETHUSDT  bid=4309.27000000 (28.790200)  ask=4309.28000000 (27.390900)  ts=2025-08-11T05:38:27.952+03:00
-BTCUSDT  bid=121588.77000000 (6.377880)  ask=121588.78000000 (0.473880)  ts=2025-08-11T05:38:27.952+03:00
-ETHBTC  bid=0.03543300 (0.068000)  ask=0.03545600 (0.068000)  ts=2025-08-11T05:38:27.998+03:00
-ETHUSDT  bid=4309.27000000 (28.790200)  ask=4309.28000000 (27.390900)  ts=2025-08-11T05:38:28.052+03:00
-BTCUSDT  bid=121588.77000000 (6.377880)  ask=121588.78000000 (0.984735)  ts=2025-08-11T05:38:28.052+03:00
-ETHBTC  bid=0.03543300 (0.068000)  ask=0.03545600 (0.068000)  ts=2025-08-11T05:38:28.098+03:00
-ETHUSDT  bid=4309.27000000 (28.790200)  ask=4309.28000000 (27.390900)  ts=2025-08-11T05:38:28.152+03:00
-BTCUSDT  bid=121588.77000000 (7.995195)  ask=121592.89000000 (0.166230)  ts=2025-08-11T05:38:28.153+03:00
-ETHBTC  bid=0.03543300 (0.068000)  ask=0.03545600 (0.068000)  ts=2025-08-11T05:38:28.198+03:00
-ETHUSDT  bid=4309.27000000 (28.790200)  ask=4309.28000000 (1.322220)  ts=2025-08-11T05:38:28.252+03:00
-BTCUSDT  bid=121592.27000000 (7.511933)  ask=121592.89000000 (0.166230)  ts=2025-08-11T05:38:28.253+03:00
-ETHBTC  bid=0.03543300 (0.068000)  ask=0.03545600 (0.068000)  ts=2025-08-11T05:38:28.298+03:00
-ETHUSDT  bid=4309.27000000 (28.790200)  ask=4309.28000000 (1.322220)  ts=2025-08-11T05:38:28.352+03:00
-BTCUSDT  bid=121592.88000000 (13.130325)  ask=121592.89000000 (0.166230)  ts=2025-08-11T05:38:28.352+03:00
-ETHBTC  bid=0.03543300 (0.068000)  ask=0.03545600 (0.068000)  ts=2025-08-11T05:38:28.398+03:00
-ETHUSDT  bid=4309.27000000 (28.790200)  ask=4309.28000000 (13.634900)  ts=2025-08-11T05:38:28.452+03:00
-BTCUSDT  bid=121592.88000000 (13.130325)  ask=121592.89000000 (0.432330)  ts=2025-08-11T05:38:28.452+03:00
-ETHBTC  bid=0.03543300 (0.068000)  ask=0.03545600 (0.068000)  ts=2025-08-11T05:38:28.498+03:00
-BTCUSDT  bid=121592.88000000 (13.130325)  ask=121593.50000000 (0.662835)  ts=2025-08-11T05:38:28.553+03:00
-ETHUSDT  bid=4309.27000000 (28.790200)  ask=4309.28000000 (13.634900)  ts=2025-08-11T05:38:28.552+03:00
-ETHBTC  bid=0.03543300 (0.068000)  ask=0.03545600 (0.068000)  ts=2025-08-11T05:38:28.598+03:00
 
-
-
+MEXC_API_KEY=mx0vglWtzbBOGF34or
+MEXC_SECRET_KEY=77658a3144bd469fa8050b9c91b9cd4e
