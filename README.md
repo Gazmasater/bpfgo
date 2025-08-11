@@ -589,10 +589,83 @@ option go_package = "crypt_proto/pb";
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ protoc -I=. -I=pb   --go_out=pb --go_opt=paths=source_relative   --go-grpc_out=pb --go-grpc_opt=paths=source_relative   pb/*.proto
-pb/PublicBookTickerV3Api.proto:14:10: "pb.PublicBookTickerV3Api.bidPrice" is already defined in file "PublicBookTickerV3Api.proto".
-pb/PublicBookTickerV3Api.proto:15:10: "pb.PublicBookTickerV3Api.bidQuantity" is already defined in file "PublicBookTickerV3Api.proto".
-pb/PublicBookTickerV3Api.proto:16:10: "pb.PublicBookTickerV3Api.askPrice" is already defined in file "PublicBookTickerV3Api.proto".
-pb/PublicBookTickerV3Api.proto:17:10: "pb.PublicBookTickerV3Api.askQuantity" is already defined in file "PublicBookTickerV3Api.proto".
-pb/PublicBookTickerV3Api.proto:12:9: "pb.PublicBookTickerV3Api" is already defined in file "PublicBookTickerV3Api.proto".
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
+pb/PublicBookTickerBatchV3Api.proto
+добавь импорт тикера:
+
+proto
+Копировать
+Редактировать
+syntax = "proto3";
+
+package pb;
+option go_package = "crypt_proto/pb";
+
+import "PublicBookTickerV3Api.proto"; // <-- добавить
+
+message PublicBookTickerBatchV3Api {
+  repeated PublicBookTickerV3Api items = 1;
+}
+pb/PublicIncreaseDepthsBatchV3Api.proto
+добавь импорт инкрементальных глубин:
+
+proto
+Копировать
+Редактировать
+syntax = "proto3";
+
+package pb;
+option go_package = "crypt_proto/pb";
+
+import "PublicIncreaseDepthsV3Api.proto"; // <-- добавить
+
+message PublicIncreaseDepthsBatchV3Api {
+  repeated PublicIncreaseDepthsV3Api items = 1;
+}
+pb/PublicMiniTickersV3Api.proto
+добавь импорт мини-тикера:
+
+proto
+Копировать
+Редактировать
+syntax = "proto3";
+
+package pb;
+option go_package = "crypt_proto/pb";
+
+import "PublicMiniTickerV3Api.proto"; // <-- добавить
+
+message PublicMiniTickersV3Api {
+  repeated PublicMiniTickerV3Api items = 1;
+}
+Подсказки:
+
+Импортируй по имени файла без префикса pb/, а в protoc используй -I=pb.
+
+Убедись, что PublicBookTickerV3Api.proto не импортирует сам себя (это и даёт «already defined»).
+
+Сборка после правок:
+
+bash
+Копировать
+Редактировать
+rm -f pb/*.pb.go
+protoc -I=pb \
+  --go_out=pb --go_opt=paths=source_relative \
+  --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
+  pb/*.proto
+
+go build ./...
+Если после этого что-то ещё ругнётся — скажи на какой файл/строку, добьём точечно.
+
+
+
+
+
+
+
+
+
+Источники
+
+Спросить ChatGPT
+
