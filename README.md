@@ -648,23 +648,124 @@ protoc -I=pb \
   --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
   pb/*.proto
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ protoc -I=pb \
-  --go_out=pb --go_opt=paths=source_relative \
-  --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
-  pb/*.proto
-protoc-gen-go-grpc: program not found or is not executable
-Please specify a program using absolute path or make sure the program is available in your PATH system variable
---go-grpc_out: protoc-gen-go-grpc: Plugin failed with status code 1.
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
+# 1) генератор Go
+go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+export PATH="$PATH:$(go env GOPATH)/bin"
+
+# 2) в каталог с .proto
+cd pb
+
+# 3) задаём mapping: КАЖДОМУ .proto сопоставляем Go-импорт crypt_proto/pb
+MAP=$(for f in *.proto; do printf -- "--go_opt=M%s=%s " "$f" "crypt_proto/pb"; done)
+
+# 4) генерим ТОЛЬКО нужные два файла (wrapper + bookTicker),
+#    но с mapping для всех, чтобы не падало на импортах
+protoc -I=. \
+  --go_out=. --go_opt=paths=source_relative \
+  $MAP \
+  PushDataV3ApiWrapper.proto PublicAggreBookTickerV3Api.proto
+
+
+
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"strconv"
+	"time"
+
+	"github.com/gorilla/websocket"
+	"google.golang.org/protobuf/proto"
+
+	pb "crypt_proto/pb" // <- твой пакет с сгенерёнными типами
+)
+
+func main() {
+	const wsURL = "wss://wbs-api.mexc.com/ws"
+
+	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		log.Fatal("dial:", err)
+	}
+	defer c.Close()
+
+	// подписка на три .pb топика
+	sub := map[string]any{
+		"method": "SUBSCRIPTION",
+		"params": []string{
+			"spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT",
+			"spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHUSDT",
+			"spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHBTC",
+		},
+	}
+	if err := c.WriteJSON(sub); err != nil {
+		log.Fatal("send sub:", err)
+	}
+
+	// держим соединение
+	go func() {
+		t := time.NewTicker(45 * time.Second)
+		defer t.Stop()
+		for range t.C {
+			_ = c.WriteMessage(websocket.PingMessage, []byte("hb"))
+		}
+	}()
+
+	for {
+		mt, raw, err := c.ReadMessage()
+		if err != nil {
+			log.Fatal("read:", err)
+		}
+
+		// ACK/ошибки приходят TEXT/JSON
+		if mt == websocket.TextMessage {
+			var v any
+			if json.Unmarshal(raw, &v) == nil {
+				b, _ := json.MarshalIndent(v, "", "  ")
+				fmt.Printf("ACK:\n%s\n", b)
+			} else {
+				fmt.Printf("TEXT:\n%s\n", string(raw))
+			}
+			continue
+		}
+		if mt != websocket.BinaryMessage {
+			continue
+		}
+
+		// 1) обёртка PushDataV3ApiWrapper
+		var w pb.PushDataV3ApiWrapper
+		if err := proto.Unmarshal(raw, &w); err != nil {
+			log.Printf("wrapper unmarshal: %v", err)
+			continue
+		}
+
+		// 2) payload PublicAggreBookTickerV3Api
+		var bt pb.PublicAggreBookTickerV3Api
+		if err := proto.Unmarshal(w.GetD(), &bt); err != nil {
+			log.Printf("bookTicker unmarshal: %v (chan=%s)", err, w.GetC())
+			continue
+		}
+
+		// 3) читаем поля (имена геттеров см. в *.pb.go)
+		sym := bt.GetS()   // symbol
+		bps := bt.GetBp()  // bidPrice (string)
+		aps := bt.GetAp()  // askPrice (string)
+		tsm := bt.GetT()   // timestamp (ms)
+
+		// parse в float
+		bid, _ := strconv.ParseFloat(bps, 64)
+		ask, _ := strconv.ParseFloat(aps, 64)
+		ts := time.UnixMilli(tsm)
+
+		fmt.Printf("%s bid=%f ask=%f ts=%s\n", sym, bid, ask, ts.Format(time.RFC3339Nano))
+	}
+}
 
 
 
 
 
 
-
-
-Источники
-
-Спросить ChatGPT
 
