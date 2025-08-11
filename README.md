@@ -638,3 +638,27 @@ curl -i -X POST 'https://api.mexc.com/api/v3/userDataStream' \
   -H "X-MEXC-APIKEY: $MEXC_API_KEY"
 
 
+  gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ export MEXC_API_KEY='mx0vglWtzbBOGF34or'  
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ curl -i -X POST 'https://api.mexc.com/api/v3/userDataStream' \
+  -H "X-MEXC-APIKEY: $MEXC_API_KEY"
+HTTP/2 400 
+content-type: application/json
+content-length: 99
+strict-transport-security: max-age=63072000; includeSubdomains; preload
+expires: Mon, 11 Aug 2025 21:17:33 GMT
+cache-control: max-age=0, no-cache, no-store
+pragma: no-cache
+date: Mon, 11 Aug 2025 21:17:33 GMT
+server-timing: cdn-cache; desc=MISS
+server-timing: edge; dur=258
+server-timing: origin; dur=16
+report-to: {"group": "nel","max_age": 2592000, "endpoints": [{"url":"https://nel-cf.gotoda.co/nel/report"},{"url":"https://nel-akm.gotoda.co/nel/report"}]}
+nel: {"report_to": "nel", "max_age": 2592000, "response_headers":["Akami-Grn"] }
+access-control-expose-headers: x-cache
+x-cache: NotCacheable from child
+akamai-grn: 0.17ed4b80.1754947053.1d41c95d
+server-timing: ak_p; desc="1754947053321_2152459543_490850653_27456_6603_10_65_15";dur=1
+
+{"code":700004,"msg":"Mandatory parameter 'signature' was not sent, was empty/null, or malformed."}gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
+
+
