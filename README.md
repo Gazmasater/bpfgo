@@ -633,7 +633,5 @@ func main() {
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-Successfully loaded .env file
-2025/08/12 00:01:24 listenKey:empty listenKey
-exit status 1
+curl -i -X POST 'https://api.mexc.com/api/v3/userDataStream' \
+  -H "X-MEXC-APIKEY: $MEXC_API_KEY"
