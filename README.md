@@ -584,9 +584,5 @@ protoc -I=. -I=pb \
   --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
   pb/*.proto
 
-358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ protoc -I=. -I=pb \
-  --go_out=pb --go_opt=paths=source_relative \
-  --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
-  pb/*.proto
-pb/PublicBookTickerBatchV3Api.proto:12:12: "PublicBookTickerV3Api" is not defined.
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
+package pb;
+option go_package = "crypt_proto/pb";
