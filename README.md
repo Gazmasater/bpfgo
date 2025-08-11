@@ -633,5 +633,6 @@ func main() {
 
 
 
-MEXC_API_KEY=mx0vglWtzbBOGF34or
-MEXC_SECRET_KEY=77658a3144bd469fa8050b9c91b9cd4e
+az358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
+2025/08/11 22:49:23 MEXC_API_KEY is empty. Export it first.
+exit status 1
