@@ -448,5 +448,29 @@ protoc -I=. \
   *.proto
 
 
+  [{
+	"resource": "/home/gaz358/myprog/crypt_proto/main.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "w.GetD undefined (type pb.PushDataV3ApiWrapper has no field or method GetD)",
+	"source": "compiler",
+	"startLineNumber": 89,
+	"startColumn": 31,
+	"endLineNumber": 89,
+	"endColumn": 35,
+	"origin": "extHost1"
+}]
+
+
 
 
