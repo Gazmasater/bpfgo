@@ -633,8 +633,7 @@ func main() {
 
 
 
-go get github.com/joho/godotenv
-go mod tidy
-
-
-    "github.com/joho/godotenv" // <— добавить
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
+Successfully loaded .env file
+2025/08/12 00:01:24 listenKey:empty listenKey
+exit status 1
