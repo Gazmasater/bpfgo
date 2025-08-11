@@ -462,18 +462,19 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	pb "crypt_proto/pb" // твой пакет со сгенерёнными *.pb.go
+	pb "crypt_proto/pb"
 )
 
 func main() {
 	const wsURL = "wss://wbs-api.mexc.com/ws"
 
-	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		log.Fatal("dial:", err)
 	}
-	defer c.Close()
+	defer conn.Close()
 
+	// подписка на 3 .pb-топика
 	sub := map[string]any{
 		"method": "SUBSCRIPTION",
 		"params": []string{
@@ -482,26 +483,26 @@ func main() {
 			"spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHBTC",
 		},
 	}
-	if err := c.WriteJSON(sub); err != nil {
+	if err := conn.WriteJSON(sub); err != nil {
 		log.Fatal("send sub:", err)
 	}
 
-	// поддерживаем соединение
+	// поддержка линка
 	go func() {
 		t := time.NewTicker(45 * time.Second)
 		defer t.Stop()
 		for range t.C {
-			_ = c.WriteMessage(websocket.PingMessage, []byte("hb"))
+			_ = conn.WriteMessage(websocket.PingMessage, []byte("hb"))
 		}
 	}()
 
 	for {
-		mt, raw, err := c.ReadMessage()
+		mt, raw, err := conn.ReadMessage()
 		if err != nil {
 			log.Fatal("read:", err)
 		}
 
-		// ACK/ошибки → текст/JSON
+		// ACK / ошибки — TEXT/JSON
 		if mt == websocket.TextMessage {
 			var v any
 			if json.Unmarshal(raw, &v) == nil {
@@ -516,112 +517,156 @@ func main() {
 			continue
 		}
 
-		// 1) распаковываем обёртку
+		// ====== 1) попытка: фрейм уже является PublicAggreBookTickerV3Api ======
+		if bt, ok := tryUnmarshalBookTicker(raw); ok {
+			printBookTicker("RAW", "", bt)
+			continue
+		}
+
+		// ====== 2) общий случай: сначала обёртка, из неё вынимаем payload ======
 		var w pb.PushDataV3ApiWrapper
 		if err := proto.Unmarshal(raw, &w); err != nil {
-			log.Printf("wrapper unmarshal: %v", err)
+			// если у тебя тип называется иначе (например PushDataV3Api), сюда можно добавить альтернативу
+			log.Printf("wrapper unmarshal failed: %v", err)
 			continue
 		}
 
-		// вытащим канал/символ из обёртки (если поле есть)
-		channel := getStringField(&w, "c") // обычно поле называется c
-		symbol := parseSymbolFromChannel(channel)
+		channel := getWrapperChannel(&w)
+		// соберём ВСЕ возможные payload (bytes/messages) рекурсивно
+		payloads := collectPayloads(&w)
 
-		// таймстемп из обёртки (обычно t=ms); если нет — ставим Now
-		tsMs := getIntField(&w, "t")
-		ts := time.Now()
-		if tsMs > 0 {
-			ts = time.UnixMilli(tsMs)
-		}
-
-		// полезная нагрузка (bytes) — имя поля может отличаться, поэтому ищем его безопасно
-		payload := firstBytesField(&w)
-		if len(payload) == 0 {
-			log.Printf("no payload bytes in wrapper (channel=%s)", channel)
+		if len(payloads) == 0 {
+			log.Printf("no payloads found in wrapper (channel=%s)", channel)
 			continue
 		}
 
-		// 2) декодируем bookTicker
-		var bt pb.PublicAggreBookTickerV3Api
-		if err := proto.Unmarshal(payload, &bt); err != nil {
-			log.Printf("bookTicker unmarshal: %v (channel=%s)", err, channel)
-			continue
+		decoded := false
+		for _, p := range payloads {
+			if bt, ok := tryUnmarshalBookTicker(p); ok {
+				printBookTicker("WRAP", channel, bt)
+				decoded = true
+			}
 		}
-
-		// 3) читаем поля через геттеры (как в твоём JSON: bidPrice/askPrice/…)
-		bps := bt.GetBidPrice()
-		aps := bt.GetAskPrice()
-		bqs := bt.GetBidQuantity()
-		aqs := bt.GetAskQuantity()
-
-		bid, _ := strconv.ParseFloat(bps, 64)
-		ask, _ := strconv.ParseFloat(aps, 64)
-		bq, _ := strconv.ParseFloat(bqs, 64)
-		aq, _ := strconv.ParseFloat(aqs, 64)
-
-		fmt.Printf("%s  bid=%.8f (qty=%.6f)  ask=%.8f (qty=%.6f)  ts=%s\n",
-			symbol, bid, bq, ask, aq, ts.Format(time.RFC3339Nano))
+		if !decoded {
+			log.Printf("no bookTicker decoded (channel=%s, candidates=%d)", channel, len(payloads))
+		}
 	}
 }
 
-// --- утилиты ---
-
-func parseSymbolFromChannel(ch string) string {
-	// пример: spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT
-	if ch == "" {
-		return ""
+// tryUnmarshalBookTicker пытается распарсить buffer как PublicAggreBookTickerV3Api
+func tryUnmarshalBookTicker(buf []byte) (*pb.PublicAggreBookTickerV3Api, bool) {
+	var bt pb.PublicAggreBookTickerV3Api
+	if err := proto.Unmarshal(buf, &bt); err != nil {
+		return nil, false
 	}
-	parts := strings.Split(ch, "@")
-	if len(parts) == 0 {
-		return ""
+	// быстрая sanity-проверка: есть ли в нём цены
+	if bt.GetBidPrice() == "" && bt.GetAskPrice() == "" && bt.GetBidQuantity() == "" && bt.GetAskQuantity() == "" {
+		return nil, false
 	}
-	return parts[len(parts)-1]
+	return &bt, true
 }
 
-func firstBytesField(m proto.Message) []byte {
+// collectPayloads рекурсивно собирает кандидаты на payload из message:
+// bytes, repeated bytes, message (маршалим обратно), repeated message, активные oneof
+func collectPayloads(m proto.Message) [][]byte {
+	var out [][]byte
 	rm := m.ProtoReflect()
-	fields := rm.Descriptor().Fields()
-	for i := 0; i < fields.Len(); i++ {
-		fd := fields.Get(i)
-		if fd.Kind() == protoreflect.BytesKind && rm.Has(fd) {
-			return append([]byte(nil), rm.Get(fd).Bytes()...)
+
+	// поля
+	fds := rm.Descriptor().Fields()
+	for i := 0; i < fds.Len(); i++ {
+		fd := fds.Get(i)
+		if !rm.Has(fd) {
+			continue
+		}
+		val := rm.Get(fd)
+
+		switch {
+		case fd.IsList():
+			list := val.List()
+			for j := 0; j < list.Len(); j++ {
+				iv := list.Get(j)
+				switch fd.Kind() {
+				case protoreflect.BytesKind:
+					out = append(out, append([]byte(nil), iv.Bytes()...))
+				case protoreflect.MessageKind:
+					if b, err := proto.Marshal(iv.Message().Interface()); err == nil {
+						out = append(out, b)
+						// рекурсивно доберёмся до вложенных байт/сообщений
+						out = append(out, collectPayloads(iv.Message().Interface())...)
+					}
+				}
+			}
+
+		case fd.Kind() == protoreflect.BytesKind:
+			out = append(out, append([]byte(nil), val.Bytes()...))
+
+		case fd.Kind() == protoreflect.MessageKind:
+			if b, err := proto.Marshal(val.Message().Interface()); err == nil {
+				out = append(out, b)
+				out = append(out, collectPayloads(val.Message().Interface())...)
+			}
 		}
 	}
-	return nil
+
+	// oneof
+	ods := rm.Descriptor().Oneofs()
+	for i := 0; i < ods.Len(); i++ {
+		od := ods.Get(i)
+		fv := rm.WhichOneof(od)
+		if fv == nil {
+			continue
+		}
+		val := rm.Get(fv)
+		switch fv.Kind() {
+		case protoreflect.BytesKind:
+			out = append(out, append([]byte(nil), val.Bytes()...))
+		case protoreflect.MessageKind:
+			if b, err := proto.Marshal(val.Message().Interface()); err == nil {
+				out = append(out, b)
+				out = append(out, collectPayloads(val.Message().Interface())...)
+			}
+		}
+	}
+
+	return out
 }
 
-func getStringField(m proto.Message, name protoreflect.Name) string {
+// getWrapperChannel пытается вытащить строковое поле канала (обычно "c"), иначе ""
+func getWrapperChannel(m proto.Message) string {
 	rm := m.ProtoReflect()
-	fd := rm.Descriptor().Fields().ByName(name)
-	if fd != nil && fd.Kind() == protoreflect.StringKind && rm.Has(fd) {
-		return rm.Get(fd).String()
+	// часто поле называется "c" или "channel"
+	for _, name := range []protoreflect.Name{"c", "channel", "topic"} {
+		if fd := rm.Descriptor().Fields().ByName(name); fd != nil && fd.Kind() == protoreflect.StringKind && rm.Has(fd) {
+			return rm.Get(fd).String()
+		}
 	}
+	// если в обёртке нет строки канала — вернём пусто
 	return ""
 }
 
-func getIntField(m proto.Message, name protoreflect.Name) int64 {
-	rm := m.ProtoReflect()
-	fd := rm.Descriptor().Fields().ByName(name)
-	if fd != nil && (fd.Kind() == protoreflect.Int64Kind || fd.Kind() == protoreflect.Sint64Kind || fd.Kind() == protoreflect.Sfixed64Kind) && rm.Has(fd) {
-		return rm.Get(fd).Int()
+func printBookTicker(src, channel string, bt *pb.PublicAggreBookTickerV3Api) {
+	// символ: из канала (последний сегмент после '@'), иначе пытаемся взять из payload если есть (часто его нет)
+	sym := ""
+	if channel != "" {
+		parts := strings.Split(channel, "@")
+		if len(parts) > 0 {
+			sym = parts[len(parts)-1]
+		}
 	}
-	return 0
+	bps := bt.GetBidPrice()
+	aps := bt.GetAskPrice()
+	bqs := bt.GetBidQuantity()
+	aqs := bt.GetAskQuantity()
+
+	bid, _ := strconv.ParseFloat(bps, 64)
+	ask, _ := strconv.ParseFloat(aps, 64)
+	bq, _ := strconv.ParseFloat(bqs, 64)
+	aq, _ := strconv.ParseFloat(aqs, 64)
+
+	fmt.Printf("[%s] %s  bid=%.8f (%.6f)  ask=%.8f (%.6f)\n", src, sym, bid, bq, ask, aq)
 }
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-ACK:
-{
-  "code": 0,
-  "id": 0,
-  "msg": "spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHUSDT,spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHBTC,spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT"
-}
-2025/08/11 05:23:18 no payload bytes in wrapper (channel=)
-2025/08/11 05:23:18 no payload bytes in wrapper (channel=)
-2025/08/11 05:23:18 no payload bytes in wrapper (channel=)
-2025/08/11 05:23:18 no payload bytes in wrapper (channel=)
-2025/08/11 05:23:18 no payload bytes in wrapper (channel=)
-2025/08/11 05:23:18 no payload bytes in wrapper (channel=)
-
-
+Если всё ещё будет «пусто», пришли сюда первые ~40 строк pb/PushDataV3ApiWrapper.pb.go (или выведем wrapper в JSON через protojson и посмотрим реальные поля) — подстрою под твою конкретную схему.
 
