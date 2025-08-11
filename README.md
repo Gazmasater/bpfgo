@@ -452,10 +452,15 @@ protoc -I=. \
 package main
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -464,81 +469,125 @@ import (
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
 
+	// если не используешь .env, просто убери этот импорт и вызов godotenv.Load()
+	"github.com/joho/godotenv"
+
 	pb "crypt_proto/pb" // твой пакет со сгенерёнными *.pb.go
 )
 
-// ===== listenKey helpers (только API-KEY в заголовке, без подписи) =====
+// ============ общие утилиты ============
 
-func createListenKey(apiKey string) (string, error) {
-	req, _ := http.NewRequest("POST", "https://api.mexc.com/api/v3/userDataStream", nil)
+func hmacSHA256Hex(secret, data string) string {
+	m := hmac.New(sha256.New, []byte(secret))
+	m.Write([]byte(data))
+	return hex.EncodeToString(m.Sum(nil))
+}
+
+func httpClient() *http.Client {
+	return &http.Client{Timeout: 10 * time.Second}
+}
+
+func doSigned(method, endpoint, apiKey, secret string, form url.Values) (int, []byte, error) {
+	// добавим timestamp/recvWindow если не переданы
+	if form.Get("timestamp") == "" {
+		form.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	}
+	if form.Get("recvWindow") == "" {
+		form.Set("recvWindow", "5000")
+	}
+	// signature по всему body (form.Encode())
+	sig := hmacSHA256Hex(secret, form.Encode())
+	form.Set("signature", sig)
+
+	req, _ := http.NewRequest(method, endpoint, strings.NewReader(form.Encode()))
 	req.Header.Set("X-MEXC-APIKEY", apiKey)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient().Do(req)
 	if err != nil {
-		return "", err
+		return 0, nil, err
 	}
 	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, body, nil
+}
 
-	var out struct{ ListenKey string `json:"listenKey"` }
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", err
+// ============ listenKey helpers (теперь все запросы подписаны) ============
+
+func createListenKey(apiKey, secret string) (string, error) {
+	status, body, err := doSigned("POST", "https://api.mexc.com/api/v3/userDataStream", apiKey, secret, url.Values{})
+	if err != nil {
+		return "", fmt.Errorf("listenKey request: %w", err)
+	}
+	if status != http.StatusOK {
+		return "", fmt.Errorf("listenKey http %d: %s", status, strings.TrimSpace(string(body)))
+	}
+	var out struct {
+		ListenKey string `json:"listenKey"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return "", fmt.Errorf("listenKey decode: %v; body=%s", err, body)
 	}
 	if out.ListenKey == "" {
-		return "", fmt.Errorf("empty listenKey")
+		return "", fmt.Errorf("empty listenKey; body=%s", body)
 	}
 	return out.ListenKey, nil
 }
 
-func keepAliveListenKey(apiKey, listenKey string, stop <-chan struct{}) {
-	t := time.NewTicker(30 * time.Minute) // продлеваем раньше, чем 60 минут TTL
+func keepAliveListenKey(apiKey, secret, listenKey string, stop <-chan struct{}) {
+	t := time.NewTicker(30 * time.Minute) // продлеваем до истечения 60м
 	defer t.Stop()
 	for {
 		select {
 		case <-t.C:
-			req, _ := http.NewRequest("PUT", "https://api.mexc.com/api/v3/userDataStream", nil)
-			req.Header.Set("X-MEXC-APIKEY", apiKey)
-			q := req.URL.Query()
-			q.Set("listenKey", listenKey)
-			req.URL.RawQuery = q.Encode()
-			_, _ = http.DefaultClient.Do(req)
+			form := url.Values{}
+			form.Set("listenKey", listenKey)
+			if status, body, err := doSigned("PUT",
+				"https://api.mexc.com/api/v3/userDataStream", apiKey, secret, form); err != nil || status != http.StatusOK {
+				log.Printf("keepAlive listenKey error: status=%d err=%v body=%s", status, err, strings.TrimSpace(string(body)))
+			}
 		case <-stop:
 			return
 		}
 	}
 }
 
-func closeListenKey(apiKey, listenKey string) {
-	req, _ := http.NewRequest("DELETE", "https://api.mexc.com/api/v3/userDataStream", nil)
-	req.Header.Set("X-MEXC-APIKEY", apiKey)
-	q := req.URL.Query()
-	q.Set("listenKey", listenKey)
-	req.URL.RawQuery = q.Encode()
-	_, _ = http.DefaultClient.Do(req)
+func closeListenKey(apiKey, secret, listenKey string) {
+	form := url.Values{}
+	form.Set("listenKey", listenKey)
+	if status, body, err := doSigned("DELETE",
+		"https://api.mexc.com/api/v3/userDataStream", apiKey, secret, form); err != nil || status != http.StatusOK {
+		log.Printf("close listenKey error: status=%d err=%v body=%s", status, err, strings.TrimSpace(string(body)))
+	}
 }
 
-// =====================================================================
+// ============ main ============
 
 func main() {
+	// подхватим .env (необязательно)
+	_ = godotenv.Load(".env")
+
 	const baseWS = "wss://wbs-api.mexc.com/ws"
 
 	apiKey := os.Getenv("MEXC_API_KEY")
-	if apiKey == "" {
-		log.Fatal("MEXC_API_KEY is empty. Export it first.")
+	secret := os.Getenv("MEXC_SECRET_KEY")
+	if apiKey == "" || secret == "" {
+		log.Fatal("MEXC_API_KEY / MEXC_SECRET_KEY пусты. Проверь .env или экспорт.")
 	}
-	// secret пока не нужен для listenKey/WS
-	_ = os.Getenv("MEXC_SECRET_KEY")
 
-	listenKey, err := createListenKey(apiKey)
+	// 1) создаём listenKey (подписанный POST)
+	listenKey, err := createListenKey(apiKey, secret)
 	if err != nil {
 		log.Fatal("listenKey:", err)
 	}
-	defer closeListenKey(apiKey, listenKey)
+	defer closeListenKey(apiKey, secret, listenKey)
 
+	// 2) продлеваем listenKey в фоне (подписанный PUT)
 	stopKA := make(chan struct{})
-	go keepAliveListenKey(apiKey, listenKey, stopKA)
+	go keepAliveListenKey(apiKey, secret, listenKey, stopKA)
 	defer close(stopKA)
 
-	// подключаемся к приватному ws-линку; подписываемся на те же public bookTicker
+	// 3) подключаемся к приватному ws и подписываемся на PUBLIC .pb каналы
 	wsURL := baseWS + "?listenKey=" + listenKey
 	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
@@ -558,7 +607,7 @@ func main() {
 		log.Fatal("send sub:", err)
 	}
 
-	// поддерживаем линк
+	// пингуем линк
 	go func() {
 		t := time.NewTicker(45 * time.Second)
 		defer t.Stop()
@@ -567,6 +616,7 @@ func main() {
 		}
 	}()
 
+	// читаем и печатаем ТЕМ ЖЕ ФОРМАТОМ
 	for {
 		mt, raw, err := c.ReadMessage()
 		if err != nil {
@@ -595,10 +645,9 @@ func main() {
 			continue
 		}
 
-		// 2) Вытаскиваем symbol/ts из обёртки
+		// 2) symbol/ts
 		symbol := w.GetSymbol()
 		if symbol == "" {
-			// если symbol пуст — берём из channel (последний сегмент после '@')
 			ch := w.GetChannel()
 			if ch != "" {
 				parts := strings.Split(ch, "@")
@@ -610,7 +659,7 @@ func main() {
 			ts = time.UnixMilli(t)
 		}
 
-		// 3) oneof Body → PublicAggreBookTicker (ВЫВОД НЕ МЕНЯЕМ)
+		// 3) интересует PublicAggreBookTicker — вывод НЕ МЕНЯЕМ
 		switch body := w.GetBody().(type) {
 		case *pb.PushDataV3ApiWrapper_PublicAggreBookTicker:
 			bt := body.PublicAggreBookTicker
@@ -620,7 +669,6 @@ func main() {
 			bq, _ := strconv.ParseFloat(bt.GetBidQuantity(), 64)
 			aq, _ := strconv.ParseFloat(bt.GetAskQuantity(), 64)
 
-			// === точь-в-точь ваш формат ===
 			fmt.Printf("%s  bid=%.8f (%.6f)  ask=%.8f (%.6f)  ts=%s\n",
 				symbol, bid, bq, ask, aq, ts.Format(time.RFC3339Nano))
 
@@ -636,29 +684,5 @@ func main() {
 export MEXC_API_KEY='mx0vglWtzbBOGF34or'   # можно без export, но так надёжнее
 curl -i -X POST 'https://api.mexc.com/api/v3/userDataStream' \
   -H "X-MEXC-APIKEY: $MEXC_API_KEY"
-
-
-  gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ export MEXC_API_KEY='mx0vglWtzbBOGF34or'  
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ curl -i -X POST 'https://api.mexc.com/api/v3/userDataStream' \
-  -H "X-MEXC-APIKEY: $MEXC_API_KEY"
-HTTP/2 400 
-content-type: application/json
-content-length: 99
-strict-transport-security: max-age=63072000; includeSubdomains; preload
-expires: Mon, 11 Aug 2025 21:17:33 GMT
-cache-control: max-age=0, no-cache, no-store
-pragma: no-cache
-date: Mon, 11 Aug 2025 21:17:33 GMT
-server-timing: cdn-cache; desc=MISS
-server-timing: edge; dur=258
-server-timing: origin; dur=16
-report-to: {"group": "nel","max_age": 2592000, "endpoints": [{"url":"https://nel-cf.gotoda.co/nel/report"},{"url":"https://nel-akm.gotoda.co/nel/report"}]}
-nel: {"report_to": "nel", "max_age": 2592000, "response_headers":["Akami-Grn"] }
-access-control-expose-headers: x-cache
-x-cache: NotCacheable from child
-akamai-grn: 0.17ed4b80.1754947053.1d41c95d
-server-timing: ak_p; desc="1754947053321_2152459543_490850653_27456_6603_10_65_15";dur=1
-
-{"code":700004,"msg":"Mandatory parameter 'signature' was not sent, was empty/null, or malformed."}gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
 
 
