@@ -635,3 +635,26 @@ func main() {
 
 curl -i -X POST 'https://api.mexc.com/api/v3/userDataStream' \
   -H "X-MEXC-APIKEY: $MEXC_API_KEY"
+
+
+  gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ curl -i -X POST 'https://api.mexc.com/api/v3/userDataStream' \
+  -H "X-MEXC-APIKEY: $mx0vglWtzbBOGF34or"
+HTTP/2 400 
+content-type: application/json
+content-length: 37
+strict-transport-security: max-age=63072000; includeSubdomains; preload
+expires: Mon, 11 Aug 2025 21:10:10 GMT
+cache-control: max-age=0, no-cache, no-store
+pragma: no-cache
+date: Mon, 11 Aug 2025 21:10:10 GMT
+server-timing: cdn-cache; desc=MISS
+server-timing: edge; dur=213
+server-timing: origin; dur=3
+report-to: {"group": "nel","max_age": 2592000, "endpoints": [{"url":"https://nel-cf.gotoda.co/nel/report"},{"url":"https://nel-akm.gotoda.co/nel/report"}]}
+nel: {"report_to": "nel", "max_age": 2592000, "response_headers":["Akami-Grn"] }
+access-control-expose-headers: x-cache
+x-cache: NotCacheable from child
+akamai-grn: 0.4eed4b80.1754946610.12b41db9
+server-timing: ak_p; desc="1754946610085_2152459598_313793977_21570_6705_9_58_15";dur=1
+
+{"code":400,"msg":"api key required"}gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
