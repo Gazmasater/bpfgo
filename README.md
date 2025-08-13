@@ -465,10 +465,14 @@ import (
 	pb "crypt_proto/pb" // твой пакет со сгенерёнными *.pb.go
 )
 
+// хранит последний top по символу для дедупликации
+type top struct{ bp, bq, ap, aq string } // bidPrice, bidQty, askPrice, askQty
+var lastTop = map[string]top{}
+
 func main() {
 	const wsURL = "wss://wbs-api.mexc.com/ws"
 
-	// 1) Подключаемся к публичному WS
+	// 1) Подключение к публичному WS
 	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		log.Fatal("dial:", err)
@@ -488,7 +492,7 @@ func main() {
 		log.Fatal("send sub:", err)
 	}
 
-	// 3) Пинги, чтобы держать соединение живым
+	// 3) Пинги для поддержания соединения
 	go func() {
 		t := time.NewTicker(45 * time.Second)
 		defer t.Stop()
@@ -497,7 +501,7 @@ func main() {
 		}
 	}()
 
-	// 4) Чтение сообщений и печать в прежнем формате
+	// 4) Чтение сообщений
 	for {
 		mt, raw, err := c.ReadMessage()
 		if err != nil {
@@ -529,8 +533,7 @@ func main() {
 		// symbol/ts
 		symbol := w.GetSymbol()
 		if symbol == "" {
-			ch := w.GetChannel()
-			if ch != "" {
+			if ch := w.GetChannel(); ch != "" {
 				parts := strings.Split(ch, "@")
 				symbol = parts[len(parts)-1]
 			}
@@ -540,60 +543,36 @@ func main() {
 			ts = time.UnixMilli(t)
 		}
 
-		// Интересует PublicAggreBookTicker — ВЫВОД НЕ МЕНЯЕМ
+		// Интересует PublicAggreBookTicker — выводим только при изменениях
 		switch body := w.GetBody().(type) {
 		case *pb.PushDataV3ApiWrapper_PublicAggreBookTicker:
 			bt := body.PublicAggreBookTicker
 
-			bid, _ := strconv.ParseFloat(bt.GetBidPrice(), 64)
-			ask, _ := strconv.ParseFloat(bt.GetAskPrice(), 64)
-			bq, _ := strconv.ParseFloat(bt.GetBidQuantity(), 64)
-			aq, _ := strconv.ParseFloat(bt.GetAskQuantity(), 64)
+			// строки для дедупа
+			bpS, bqS := bt.GetBidPrice(), bt.GetBidQuantity()
+			apS, aqS := bt.GetAskPrice(), bt.GetAskQuantity()
+			cur := top{bpS, bqS, apS, aqS}
+
+			// если значения идентичны предыдущим — пропускаем вывод
+			if prev, ok := lastTop[symbol]; ok && prev == cur {
+				continue // перейти к следующему сообщению цикла for
+			}
+			lastTop[symbol] = cur
+
+			// парсим в числа и печатаем в исходном формате
+			bid, _ := strconv.ParseFloat(bpS, 64)
+			ask, _ := strconv.ParseFloat(apS, 64)
+			bq, _ := strconv.ParseFloat(bqS, 64)
+			aq, _ := strconv.ParseFloat(aqS, 64)
 
 			fmt.Printf("%s  bid=%.8f (%.6f)  ask=%.8f (%.6f)  ts=%s\n",
 				symbol, bid, bq, ask, aq, ts.Format(time.RFC3339Nano))
 
 		default:
-			// другое тело — игнор
+			// другие типы тел не выводим
 		}
 	}
 }
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-ACK:
-{
-  "code": 0,
-  "id": 0,
-  "msg": "spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHUSDT,spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHBTC,spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT"
-}
-ETHBTC  bid=0.03904200 (0.063000)  ask=0.03908200 (0.096000)  ts=2025-08-13T13:20:59.098+03:00
-ETHUSDT  bid=4704.15000000 (118.966420)  ask=4704.16000000 (13.044340)  ts=2025-08-13T13:20:59.152+03:00
-BTCUSDT  bid=120415.87000000 (10.533105)  ask=120415.88000000 (1.656000)  ts=2025-08-13T13:20:59.152+03:00
-ETHBTC  bid=0.03904200 (0.063000)  ask=0.03908200 (0.096000)  ts=2025-08-13T13:20:59.198+03:00
-ETHUSDT  bid=4704.15000000 (118.966420)  ask=4704.16000000 (13.044340)  ts=2025-08-13T13:20:59.252+03:00
-BTCUSDT  bid=120415.87000000 (10.533105)  ask=120415.88000000 (1.656000)  ts=2025-08-13T13:20:59.253+03:00
-ETHBTC  bid=0.03904400 (0.063000)  ask=0.03908200 (0.096000)  ts=2025-08-13T13:20:59.298+03:00
-ETHUSDT  bid=4704.15000000 (118.966420)  ask=4704.16000000 (13.044340)  ts=2025-08-13T13:20:59.352+03:00
-BTCUSDT  bid=120415.87000000 (10.533105)  ask=120415.88000000 (2.189325)  ts=2025-08-13T13:20:59.353+03:00
-ETHBTC  bid=0.03904400 (0.063000)  ask=0.03908200 (0.096000)  ts=2025-08-13T13:20:59.398+03:00
-ETHUSDT  bid=4704.15000000 (118.966420)  ask=4704.16000000 (13.044340)  ts=2025-08-13T13:20:59.452+03:00
-BTCUSDT  bid=120415.87000000 (10.533105)  ask=120415.88000000 (1.751460)  ts=2025-08-13T13:20:59.453+03:00
-ETHBTC  bid=0.03904600 (0.063000)  ask=0.03908200 (0.096000)  ts=2025-08-13T13:20:59.498+03:00
-ETHUSDT  bid=4704.15000000 (118.966420)  ask=4704.16000000 (13.044340)  ts=2025-08-13T13:20:59.552+03:00
-BTCUSDT  bid=120415.87000000 (10.533105)  ask=120415.88000000 (0.184252)  ts=2025-08-13T13:20:59.553+03:00
-ETHBTC  bid=0.03904600 (0.063000)  ask=0.03908200 (0.096000)  ts=2025-08-13T13:20:59.598+03:00
-ETHUSDT  bid=4704.15000000 (118.966420)  ask=4704.16000000 (13.044340)  ts=2025-08-13T13:20:59.652+03:00
-BTCUSDT  bid=120415.88000000 (14.119725)  ask=120415.89000000 (0.194767)  ts=2025-08-13T13:20:59.652+03:00
-ETHBTC  bid=0.03904800 (0.063000)  ask=0.03908200 (0.096000)  ts=2025-08-13T13:20:59.698+03:00
-ETHUSDT  bid=4704.15000000 (118.966420)  ask=4704.16000000 (13.044340)  ts=2025-08-13T13:20:59.752+03:00
-BTCUSDT  bid=120415.88000000 (14.119725)  ask=120415.89000000 (0.194767)  ts=2025-08-13T13:20:59.753+03:00
-ETHBTC  bid=0.03904900 (0.028000)  ask=0.03908200 (0.096000)  ts=2025-08-13T13:20:59.798+03:00
-ETHUSDT  bid=4704.15000000 (118.966420)  ask=4704.16000000 (5.665940)  ts=2025-08-13T13:20:59.852+03:00
-BTCUSDT  bid=120415.88000000 (14.119725)  ask=120415.89000000 (0.194767)  ts=2025-08-13T13:20:59.856+03:00
-ETHBTC  bid=0.03905000 (0.063000)  ask=0.03908200 (0.096000)  ts=2025-08-13T13:20:59.898+03:00
-ETHUSDT  bid=4704.15000000 (118.966420)  ask=4704.16000000 (5.665940)  ts=2025-08-13T13:20:59.952+03:00
-BTCUSDT  bid=120415.88000000 (14.119725)  ask=120415.89000000 (0.194767)  ts=2025-08-13T13:20:59.953+03:00
 
 
 
