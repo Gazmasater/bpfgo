@@ -810,6 +810,12 @@ func (m *MexcExchange) GetBestBid(symbol string) (float64, error) {
 
 
 
+az358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go build .
+# crypt_proto
+runtime.main_main·f: function main is undeclared in the main package
+
+
+
 
 
 
