@@ -1,6 +1,6 @@
 
-mx0vglWtzbBOGF34or  апи кей
-77658a3144bd469fa8050b9c91b9cd4e секр кей
+mx0vgldDsxPkp5g9tc
+82889cdd48fe4437b474558b91066c9d
 
 swag init -g cmd/server/main.go -o cmd/server/docs
 
