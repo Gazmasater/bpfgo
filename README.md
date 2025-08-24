@@ -685,12 +685,5 @@ func parsePBWrapperToSP(raw []byte) ([]byte, bool) {
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/24 15:27:28 ✅ SUB → spot@public.bookTicker.v3.api.pb@100ms@BTCUSDT
-ACK:
-{
-  "code": 0,
-  "id": 1756038448,
-  "msg": "Not Subscribed successfully! [spot@public.bookTicker.v3.api.pb@100ms@BTCUSDT].  Reason： Blocked! "
-}
+curl https://api.ipify.org
 
