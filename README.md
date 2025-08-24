@@ -562,4 +562,7 @@ func main() {
 }
 
 
-
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
+2025/08/24 15:01:08 listenKey = 7969c34fa917bd6dfbc17c531c801d5118816137e342fccb6d299b469b88e92c
+2025/08/24 15:01:09 TEXT: {"id":1756036869,"code":0,"msg":"Not Subscribed successfully! [spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT].  Reason： Blocked! "}
+2025/08/2
