@@ -654,6 +654,11 @@ func main() {
 
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
+2025/08/24 13:30:36 listenKey http 400: {"code":700004,"msg":"Mandatory parameter 'signature' was not sent, was empty/null, or malformed."}
+exit status 1
+
+
 
 
 
