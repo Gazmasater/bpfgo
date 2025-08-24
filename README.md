@@ -687,3 +687,24 @@ func parsePBWrapperToSP(raw []byte) ([]byte, bool) {
 
 curl https://api.ipify.org
 
+
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host noprefixroute 
+       valid_lft forever preferred_lft forever
+2: wlp0s20f3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    link/ether e4:fd:45:a8:ec:0b brd ff:ff:ff:ff:ff:ff
+    inet 192.168.1.71/24 brd 192.168.1.255 scope global dynamic noprefixroute wlp0s20f3
+       valid_lft 86258sec preferred_lft 86258sec
+    inet6 fe80::d6b2:9200:15bb:a0e8/64 scope link noprefixroute 
+       valid_lft forever preferred_lft forever
+3: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN group default 
+    link/ether 02:42:05:e2:0c:b6 brd ff:ff:ff:ff:ff:ff
+    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0
+       valid_lft forever preferred_lft forever
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ curl https://api.ipify.org
+2.94.139.198gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ 
+
