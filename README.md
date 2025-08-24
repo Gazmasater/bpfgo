@@ -436,16 +436,9 @@ go tool pprof --text --focus="cryptarb" --ignore="runtime\..*" cpu.prof
 __________________________________________________________________________________
 
 
-https://github.com/mexcdevelop/websocket-proto
-
-
-
-MAP=$(for f in *.proto; do printf -- "--go_opt=M%s=%s " "$f" "crypt_proto/pb"; done)
-
-protoc -I=. \
-  --go_out=. --go_opt=paths=source_relative \
-  $MAP \
-  *.proto
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
+2025/08/24 13:15:17 listenKey:listenKey http 400: {"code":700013,"msg":"Invalid content Type."}
+exit status 1
 
 
 
