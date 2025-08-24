@@ -566,3 +566,8 @@ func main() {
 "spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT"
 // попробуй:
 "spot@public.bookTicker.v3.api.pb@100ms@BTCUSDT"
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
+2025/08/24 15:15:29 listenKey 400: {"code":700003,"msg":"Timestamp for this request is outside of the recvWindow."}
+exit status 1
