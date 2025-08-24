@@ -773,5 +773,12 @@ func main() {
 
 
 
+gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
+2025/08/24 14:22:52 🔌 Подключаюсь к MEXC WS (private) и подписываюсь на deals...
+{"id":1756034573,"code":0,"msg":"Not Subscribed successfully! [spot@public.deals.v3.api@ETHUSDT,spot@public.deals.v3.api@ETHBTC,spot@public.deals.v3.api@BTCUSDT].  Reason： Blocked! "}
+2025/08/24 14:23:27 WS error:websocket: close 1005 (no status)
+exit status 1
+
+
 
 
