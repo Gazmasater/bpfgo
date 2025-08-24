@@ -436,9 +436,222 @@ go tool pprof --text --focus="cryptarb" --ignore="runtime\..*" cpu.prof
 __________________________________________________________________________________
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/24 13:15:17 listenKey:listenKey http 400: {"code":700013,"msg":"Invalid content Type."}
-exit status 1
+package main
+
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/gorilla/websocket"
+	"github.com/joho/godotenv"
+	"google.golang.org/protobuf/proto"
+
+	pb "crypt_proto/pb" // пакет со сгенерёнными *.pb.go из MEXC схем
+)
+
+// ==================== H E L P E R S ====================
+
+func httpClient() *http.Client { return &http.Client{Timeout: 10 * time.Second} }
+
+// (Для ордеров пригодится; в этом примере не используем)
+func hmacSHA256Hex(secret, data string) string {
+	m := hmac.New(sha256.New, []byte(secret))
+	m.Write([]byte(data))
+	return hex.EncodeToString(m.Sum(nil))
+}
+
+// ==================== L I S T E N  K E Y ====================
+// MEXC требует JSON и НЕ требует подпись для userDataStream.
+
+func createListenKey(apiKey string) (string, error) {
+	req, _ := http.NewRequest("POST", "https://api.mexc.com/api/v3/userDataStream", strings.NewReader(`{}`))
+	req.Header.Set("X-MEXC-APIKEY", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpClient().Do(req)
+	if err != nil {
+		return "", fmt.Errorf("listenKey request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("listenKey http %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var out struct{ ListenKey string `json:"listenKey"` }
+	if err := json.Unmarshal(body, &out); err != nil || out.ListenKey == "" {
+		return "", fmt.Errorf("listenKey decode: %v; body=%s", err, body)
+	}
+	return out.ListenKey, nil
+}
+
+func keepAliveListenKey(apiKey, listenKey string, stop <-chan struct{}) {
+	t := time.NewTicker(30 * time.Minute) // ключ живёт ~60м, продлеваем заранее
+	defer t.Stop()
+	for {
+		select {
+		case <-t.C:
+			req, _ := http.NewRequest("PUT", "https://api.mexc.com/api/v3/userDataStream", strings.NewReader(`{"listenKey":"`+listenKey+`"}`))
+			req.Header.Set("X-MEXC-APIKEY", apiKey)
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := httpClient().Do(req)
+			if err != nil {
+				log.Printf("keepAlive error: %v", err)
+				continue
+			}
+			io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				log.Printf("keepAlive http %d", resp.StatusCode)
+			}
+		case <-stop:
+			return
+		}
+	}
+}
+
+func closeListenKey(apiKey, listenKey string) {
+	req, _ := http.NewRequest("DELETE", "https://api.mexc.com/api/v3/userDataStream", strings.NewReader(`{"listenKey":"`+listenKey+`"}`))
+	req.Header.Set("X-MEXC-APIKEY", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := httpClient().Do(req)
+	if err != nil {
+		log.Printf("close listenKey error: %v", err)
+		return
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("close listenKey http %d", resp.StatusCode)
+	}
+}
+
+// ==================== M A I N ====================
+
+func main() {
+	_ = godotenv.Load(".env")
+
+	apiKey := os.Getenv("MEXC_API_KEY")
+	secret := os.Getenv("MEXC_SECRET_KEY") // не используем тут, но пусть будет
+	if apiKey == "" || secret == "" {
+		log.Fatal("MEXC_API_KEY / MEXC_SECRET_KEY пусты — проверь .env")
+	}
+
+	// 1) listenKey
+	lk, err := createListenKey(apiKey)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer closeListenKey(apiKey, lk)
+
+	stopKA := make(chan struct{})
+	go keepAliveListenKey(apiKey, lk, stopKA)
+	defer close(stopKA)
+
+	// 2) Подключаемся к приватному WS и подписываемся на PUBLIC .pb каналы
+	// Рабочий хост: wss://wbs.mexc.com/ws
+	wsURL := "wss://wbs.mexc.com/ws?listenKey=" + lk
+	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		log.Fatal("dial:", err)
+	}
+	defer c.Close()
+
+	// Подписки: aggre.bookTicker .pb (100ms) по нескольким символам
+	sub := map[string]any{
+		"method": "SUBSCRIPTION",
+		"params": []string{
+			"spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT",
+			"spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHUSDT",
+			"spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHBTC",
+		},
+	}
+	if err := c.WriteJSON(sub); err != nil {
+		log.Fatal("send sub:", err)
+	}
+
+	// Пингуем, чтобы не отваливаться
+	go func() {
+		t := time.NewTicker(45 * time.Second)
+		defer t.Stop()
+		for range t.C {
+			_ = c.WriteMessage(websocket.PingMessage, []byte("hb"))
+		}
+	}()
+
+	log.Println("✅ Subscribed. Ждём бинарные protobuf сообщения...")
+
+	// 3) Чтение: текст = ACK/ошибки; бинарь = protobuf PushDataV3ApiWrapper
+	for {
+		mt, raw, err := c.ReadMessage()
+		if err != nil {
+			log.Fatal("read:", err)
+		}
+
+		if mt == websocket.TextMessage {
+			// Красиво печатаем ACK/ошибки
+			var v any
+			if json.Unmarshal(raw, &v) == nil {
+				b, _ := json.MarshalIndent(v, "", "  ")
+				fmt.Printf("ACK:\n%s\n", b)
+				continue
+			}
+			fmt.Printf("TEXT:\n%s\n", string(raw))
+			continue
+		}
+		if mt != websocket.BinaryMessage {
+			continue
+		}
+
+		// ---------- Пробуем распарсить как PushDataV3ApiWrapper ----------
+		var w pb.PushDataV3ApiWrapper
+		if err := proto.Unmarshal(raw, &w); err != nil {
+			// Не наш бинарь — пропускаем
+			continue
+		}
+
+		// Достаём symbol (если пуст — возьмём из channel)
+		symbol := w.GetSymbol()
+		if symbol == "" && w.GetChannel() != "" {
+			ch := w.GetChannel() // например: spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT
+			if i := strings.LastIndex(ch, "@"); i >= 0 && i+1 < len(ch) {
+				symbol = ch[i+1:]
+			}
+		}
+		ts := time.Now()
+		if t := w.GetSendTime(); t > 0 {
+			ts = time.UnixMilli(t)
+		}
+
+		switch body := w.GetBody().(type) {
+		case *pb.PushDataV3ApiWrapper_PublicAggreBookTicker:
+			bt := body.PublicAggreBookTicker
+
+			// Поля уже строками — выводим как есть (или парсим float по желанию)
+			bid := bt.GetBidPrice()
+			bq := bt.GetBidQuantity()
+			ask := bt.GetAskPrice()
+			aq := bt.GetAskQuantity()
+
+			fmt.Printf("%s  bid=%s (%s)  ask=%s (%s)  ts=%s\n",
+				symbol, bid, bq, ask, aq, ts.Format(time.RFC3339Nano))
+
+		default:
+			// здесь можно обработать другие типы (deals, depth и т.д.)
+		}
+	}
+}
+
 
 
 
