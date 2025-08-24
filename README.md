@@ -436,7 +436,7 @@ go tool pprof --text --focus="cryptarb" --ignore="runtime\..*" cpu.prof
 __________________________________________________________________________________
 
 
-package mexc
+package main
 
 import (
 	"crypto/hmac"
@@ -455,27 +455,23 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/joho/godotenv"
 )
 
-type Mexc struct{}
+// ===================== КЛИЕНТ MEXC (одним пакетом) =====================
 
-// MexcExchange реализует интерфейс биржи и хранит ключи API.
 type MexcExchange struct {
 	apiKey    string
 	apiSecret string
 }
 
-// NewMexcExchange создаёт экземпляр клиента.
 func NewMexcExchange(apiKey, apiSecret string) *MexcExchange {
-	return &MexcExchange{
-		apiKey:    apiKey,
-		apiSecret: apiSecret,
-	}
+	return &MexcExchange{apiKey: apiKey, apiSecret: apiSecret}
 }
 
 func (m *MexcExchange) Name() string { return "MEXC" }
 
-// ===================== ВСПОМОГАТЕЛЬНОЕ =====================
+// --------------------- ВСПОМОГАТЕЛЬНОЕ ---------------------
 
 func createSignature(secret, query string) string {
 	h := hmac.New(sha256.New, []byte(secret))
@@ -483,9 +479,7 @@ func createSignature(secret, query string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func httpClient() *http.Client {
-	return &http.Client{Timeout: 10 * time.Second}
-}
+func httpClient() *http.Client { return &http.Client{Timeout: 10 * time.Second} }
 
 // Добавляем timestamp/recvWindow и signature в query
 func signParams(secret string, params url.Values) url.Values {
@@ -519,7 +513,7 @@ func doReq(method, endpoint, apiKey string, params url.Values) (int, []byte, err
 	return resp.StatusCode, body, nil
 }
 
-// ===================== LISTEN KEY (SIGNED) =====================
+// --------------------- LISTEN KEY (SIGNED) ---------------------
 
 func (m *MexcExchange) createListenKey() (string, error) {
 	params := signParams(m.apiSecret, nil)
@@ -566,20 +560,15 @@ func (m *MexcExchange) closeListenKey(listenKey string) {
 	}
 }
 
-// ===================== СПИСОК ПАР / ФИЛЬТРЫ =====================
+// --------------------- PUBLIC: пары/фильтры ---------------------
 
-func (m *MexcExchange) FetchAvailableSymbols() (
-	map[string]bool, map[string]float64, map[string]float64,
-) {
-	// 1) HTTP-клиент без gzip и без HTTP/2
+// Вернём: available(symbol->true), stepSizes(symbol->step), minQtys(symbol->minQty)
+func (m *MexcExchange) FetchAvailableSymbols() (map[string]bool, map[string]float64, map[string]float64) {
 	transport := &http.Transport{
 		DisableCompression: true,
 		TLSNextProto:       make(map[string]func(string, *tls.Conn) http.RoundTripper),
 	}
-	client := &http.Client{
-		Timeout:   10 * time.Second,
-		Transport: transport,
-	}
+	client := &http.Client{Timeout: 10 * time.Second, Transport: transport}
 
 	resp, err := client.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
@@ -590,7 +579,7 @@ func (m *MexcExchange) FetchAvailableSymbols() (
 
 	dec := json.NewDecoder(resp.Body)
 
-	// Проматываем до ключа "symbols"
+	// Проматываем до "symbols"
 	for {
 		tok, err := dec.Token()
 		if err != nil {
@@ -634,8 +623,7 @@ func (m *MexcExchange) FetchAvailableSymbols() (
 		}
 		valids = append(valids, valid{s.Symbol, step})
 	}
-	// Закрываем массив ']'
-	_, _ = dec.Token()
+	_, _ = dec.Token() // закрываем ']'
 
 	n := len(valids)
 	available := make(map[string]bool, n)
@@ -643,7 +631,6 @@ func (m *MexcExchange) FetchAvailableSymbols() (
 	minQtys := make(map[string]float64, n)
 
 	var logLines []string
-	logLines = make([]string, 0, n)
 	for _, v := range valids {
 		available[v.sym] = true
 		stepSizes[v.sym] = v.step
@@ -656,10 +643,8 @@ func (m *MexcExchange) FetchAvailableSymbols() (
 	return available, stepSizes, minQtys
 }
 
-// ===================== WS ПОДПИСКИ =====================
+// --------------------- WS подписки (deals JSON) ---------------------
 
-// SubscribeDeals — подключение к приватному ws с listenKey и подписка на JSON deals.
-// Ничего не меняем в формате raw: app.HandleRaw продолжит парсить "s"/"p".
 func (m *MexcExchange) SubscribeDeals(pairs []string, handler func(exchange string, raw []byte)) error {
 	// 1) создаём listenKey
 	lk, err := m.createListenKey()
@@ -681,7 +666,7 @@ func (m *MexcExchange) SubscribeDeals(pairs []string, handler func(exchange stri
 	}
 	defer conn.Close()
 
-	// 4) подписка на сделки JSON (как у тебя было)
+	// 4) подписка на сделки JSON
 	sub := map[string]interface{}{
 		"method": "SUBSCRIPTION",
 		"params": buildChannels(pairs),
@@ -691,7 +676,7 @@ func (m *MexcExchange) SubscribeDeals(pairs []string, handler func(exchange stri
 		return fmt.Errorf("ws write sub: %w", err)
 	}
 
-	// 5) heartbeat, чтобы не отваливаться
+	// 5) heartbeat
 	go func() {
 		t := time.NewTicker(45 * time.Second)
 		defer t.Stop()
@@ -718,57 +703,7 @@ func buildChannels(pairs []string) []string {
 	return out
 }
 
-// ===================== РЫНОЧНЫЙ ОРДЕР (SIGNED) =====================
-
-func (m *MexcExchange) PlaceMarketOrder(symbol, side string, quantity float64) (string, error) {
-	endpoint := "https://api.mexc.com/api/v3/order"
-	timestamp := strconv.FormatInt(time.Now().UnixMilli(), 10)
-
-	params := make(map[string]string, 5)
-	params["symbol"] = symbol
-	params["side"] = strings.ToUpper(side) // "BUY" или "SELL"
-	params["type"] = "MARKET"
-
-	if side == "BUY" {
-		params["quoteOrderQty"] = fmt.Sprintf("%.4f", quantity)
-	} else {
-		params["quantity"] = fmt.Sprintf("%.6f", quantity)
-	}
-
-	q := url.Values{}
-	for k, v := range params {
-		q.Set(k, v)
-	}
-	q.Set("timestamp", timestamp)
-
-	sig := createSignature(m.apiSecret, q.Encode())
-	q.Set("signature", sig)
-
-	req, _ := http.NewRequest("POST", endpoint+"?"+q.Encode(), nil)
-	req.Header.Set("X-MEXC-APIKEY", m.apiKey)
-
-	resp, err := httpClient().Do(req)
-	if err != nil {
-		return "", fmt.Errorf("HTTP error: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("order failed: %s", string(body))
-	}
-
-	var result struct {
-		OrderID string `json:"orderId"`
-	}
-	dec := json.NewDecoder(resp.Body)
-	if err := dec.Decode(&result); err != nil {
-		return "", fmt.Errorf("decode error: %v", err)
-	}
-	return result.OrderID, nil
-}
-
-// ===================== ЛУЧШИЙ BID/ASK (PUBLIC) =====================
+// --------------------- PUBLIC best bid/ask ---------------------
 
 func (m *MexcExchange) GetBestAsk(symbol string) (float64, error) {
 	resp, err := http.Get("https://api.mexc.com/api/v3/depth?symbol=" + symbol + "&limit=1")
@@ -808,12 +743,33 @@ func (m *MexcExchange) GetBestBid(symbol string) (float64, error) {
 	return strconv.ParseFloat(data.Bids[0][0], 64)
 }
 
+// ===================== MAIN =====================
 
+func main() {
+	_ = godotenv.Load(".env")
 
-az358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go build .
-# crypt_proto
-runtime.main_main·f: function main is undeclared in the main package
+	apiKey := os.Getenv("MEXC_API_KEY")
+	secret := os.Getenv("MEXC_SECRET_KEY")
+	if apiKey == "" || secret == "" {
+		log.Fatal("❌ MEXC_API_KEY / MEXC_SECRET_KEY пусты — проверь .env")
+	}
 
+	ex := NewMexcExchange(apiKey, secret)
+
+	// Пример: подписываемся на 3 пары
+	pairs := []string{"BTCUSDT", "ETHUSDT", "ETHBTC"}
+
+	// Хендлер просто печатает сырой JSON (как у тебя парсит app.HandleRaw "s"/"p")
+	handler := func(exchange string, raw []byte) {
+		// Быстрая фильтрация по "s" и "p" не делаем — просто покажем строку.
+		fmt.Println(string(raw))
+	}
+
+	log.Println("🔌 Подключаюсь к MEXC WS (private) и подписываюсь на deals...")
+	if err := ex.SubscribeDeals(pairs, handler); err != nil {
+		log.Fatal("WS error:", err)
+	}
+}
 
 
 
