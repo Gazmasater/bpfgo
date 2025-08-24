@@ -436,83 +436,119 @@ go tool pprof --text --focus="cryptarb" --ignore="runtime\..*" cpu.prof
 __________________________________________________________________________________
 
 
-package main
+package mexc
 
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/joho/godotenv"
-	"google.golang.org/protobuf/proto"
-
-	pb "crypt_proto/pb" // пакет со сгенерёнными *.pb.go из MEXC схем
 )
 
-// ==================== H E L P E R S ====================
+type Mexc struct{}
 
-func httpClient() *http.Client { return &http.Client{Timeout: 10 * time.Second} }
-
-// (Для ордеров пригодится; в этом примере не используем)
-func hmacSHA256Hex(secret, data string) string {
-	m := hmac.New(sha256.New, []byte(secret))
-	m.Write([]byte(data))
-	return hex.EncodeToString(m.Sum(nil))
+// MexcExchange реализует интерфейс биржи и хранит ключи API.
+type MexcExchange struct {
+	apiKey    string
+	apiSecret string
 }
 
-// ==================== L I S T E N  K E Y ====================
-// MEXC требует JSON и НЕ требует подпись для userDataStream.
+// NewMexcExchange создаёт экземпляр клиента.
+func NewMexcExchange(apiKey, apiSecret string) *MexcExchange {
+	return &MexcExchange{
+		apiKey:    apiKey,
+		apiSecret: apiSecret,
+	}
+}
 
-func createListenKey(apiKey string) (string, error) {
-	req, _ := http.NewRequest("POST", "https://api.mexc.com/api/v3/userDataStream", strings.NewReader(`{}`))
+func (m *MexcExchange) Name() string { return "MEXC" }
+
+// ===================== ВСПОМОГАТЕЛЬНОЕ =====================
+
+func createSignature(secret, query string) string {
+	h := hmac.New(sha256.New, []byte(secret))
+	h.Write([]byte(query))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func httpClient() *http.Client {
+	return &http.Client{Timeout: 10 * time.Second}
+}
+
+// Добавляем timestamp/recvWindow и signature в query
+func signParams(secret string, params url.Values) url.Values {
+	if params == nil {
+		params = url.Values{}
+	}
+	if params.Get("timestamp") == "" {
+		params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	}
+	if params.Get("recvWindow") == "" {
+		params.Set("recvWindow", "5000")
+	}
+	sig := createSignature(secret, params.Encode())
+	params.Set("signature", sig)
+	return params
+}
+
+// Выполнить запрос с APIKEY и, при необходимости, подписанными params в query
+func doReq(method, endpoint, apiKey string, params url.Values) (int, []byte, error) {
+	if len(params) > 0 {
+		endpoint += "?" + params.Encode()
+	}
+	req, _ := http.NewRequest(method, endpoint, nil)
 	req.Header.Set("X-MEXC-APIKEY", apiKey)
-	req.Header.Set("Content-Type", "application/json")
-
 	resp, err := httpClient().Do(req)
 	if err != nil {
-		return "", fmt.Errorf("listenKey request: %w", err)
+		return 0, nil, err
 	}
 	defer resp.Body.Close()
-
 	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("listenKey http %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
+	return resp.StatusCode, body, nil
+}
 
+// ===================== LISTEN KEY (SIGNED) =====================
+
+func (m *MexcExchange) createListenKey() (string, error) {
+	params := signParams(m.apiSecret, nil)
+	status, body, err := doReq("POST", "https://api.mexc.com/api/v3/userDataStream", m.apiKey, params)
+	if err != nil {
+		return "", fmt.Errorf("create listenKey: %w", err)
+	}
+	if status != http.StatusOK {
+		return "", fmt.Errorf("listenKey http %d: %s", status, strings.TrimSpace(string(body)))
+	}
 	var out struct{ ListenKey string `json:"listenKey"` }
 	if err := json.Unmarshal(body, &out); err != nil || out.ListenKey == "" {
-		return "", fmt.Errorf("listenKey decode: %v; body=%s", err, body)
+		return "", fmt.Errorf("decode listenKey: %v; body=%s", err, body)
 	}
 	return out.ListenKey, nil
 }
 
-func keepAliveListenKey(apiKey, listenKey string, stop <-chan struct{}) {
-	t := time.NewTicker(30 * time.Minute) // ключ живёт ~60м, продлеваем заранее
+func (m *MexcExchange) keepAliveListenKey(listenKey string, stop <-chan struct{}) {
+	t := time.NewTicker(30 * time.Minute) // ключ живёт ~60м — продлеваем заранее
 	defer t.Stop()
 	for {
 		select {
 		case <-t.C:
-			req, _ := http.NewRequest("PUT", "https://api.mexc.com/api/v3/userDataStream", strings.NewReader(`{"listenKey":"`+listenKey+`"}`))
-			req.Header.Set("X-MEXC-APIKEY", apiKey)
-			req.Header.Set("Content-Type", "application/json")
-			resp, err := httpClient().Do(req)
-			if err != nil {
-				log.Printf("keepAlive error: %v", err)
-				continue
-			}
-			io.Copy(io.Discard, resp.Body)
-			resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				log.Printf("keepAlive http %d", resp.StatusCode)
+			params := url.Values{}
+			params.Set("listenKey", listenKey)
+			params = signParams(m.apiSecret, params)
+			status, body, err := doReq("PUT", "https://api.mexc.com/api/v3/userDataStream", m.apiKey, params)
+			if err != nil || status != http.StatusOK {
+				log.Printf("[MEXC] keepAlive error: status=%d err=%v body=%s", status, err, strings.TrimSpace(string(body)))
 			}
 		case <-stop:
 			return
@@ -520,144 +556,257 @@ func keepAliveListenKey(apiKey, listenKey string, stop <-chan struct{}) {
 	}
 }
 
-func closeListenKey(apiKey, listenKey string) {
-	req, _ := http.NewRequest("DELETE", "https://api.mexc.com/api/v3/userDataStream", strings.NewReader(`{"listenKey":"`+listenKey+`"}`))
-	req.Header.Set("X-MEXC-APIKEY", apiKey)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := httpClient().Do(req)
-	if err != nil {
-		log.Printf("close listenKey error: %v", err)
-		return
-	}
-	io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("close listenKey http %d", resp.StatusCode)
+func (m *MexcExchange) closeListenKey(listenKey string) {
+	params := url.Values{}
+	params.Set("listenKey", listenKey)
+	params = signParams(m.apiSecret, params)
+	status, body, err := doReq("DELETE", "https://api.mexc.com/api/v3/userDataStream", m.apiKey, params)
+	if err != nil || status != http.StatusOK {
+		log.Printf("[MEXC] close listenKey error: status=%d err=%v body=%s", status, err, strings.TrimSpace(string(body)))
 	}
 }
 
-// ==================== M A I N ====================
+// ===================== СПИСОК ПАР / ФИЛЬТРЫ =====================
 
-func main() {
-	_ = godotenv.Load(".env")
-
-	apiKey := os.Getenv("MEXC_API_KEY")
-	secret := os.Getenv("MEXC_SECRET_KEY") // не используем тут, но пусть будет
-	if apiKey == "" || secret == "" {
-		log.Fatal("MEXC_API_KEY / MEXC_SECRET_KEY пусты — проверь .env")
+func (m *MexcExchange) FetchAvailableSymbols() (
+	map[string]bool, map[string]float64, map[string]float64,
+) {
+	// 1) HTTP-клиент без gzip и без HTTP/2
+	transport := &http.Transport{
+		DisableCompression: true,
+		TLSNextProto:       make(map[string]func(string, *tls.Conn) http.RoundTripper),
+	}
+	client := &http.Client{
+		Timeout:   10 * time.Second,
+		Transport: transport,
 	}
 
-	// 1) listenKey
-	lk, err := createListenKey(apiKey)
+	resp, err := client.Get("https://api.mexc.com/api/v3/exchangeInfo")
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("❌ Ошибка запроса exchangeInfo: %v", err)
+		return nil, nil, nil
 	}
-	defer closeListenKey(apiKey, lk)
+	defer resp.Body.Close()
 
+	dec := json.NewDecoder(resp.Body)
+
+	// Проматываем до ключа "symbols"
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			log.Printf("❌ Не нашли поле symbols: %v", err)
+			return nil, nil, nil
+		}
+		if key, ok := tok.(string); ok && key == "symbols" {
+			break
+		}
+	}
+	// Ожидаем '['
+	if _, err := dec.Token(); err != nil {
+		log.Printf("❌ Ожидаем '[': %v", err)
+		return nil, nil, nil
+	}
+
+	type symInfo struct {
+		Symbol               string `json:"symbol"`
+		Status               string `json:"status"`
+		IsSpotTradingAllowed bool   `json:"isSpotTradingAllowed"`
+		BaseSizePrecision    string `json:"baseSizePrecision"`
+	}
+	type valid struct {
+		sym  string
+		step float64
+	}
+	valids := make([]valid, 0, 64)
+
+	for dec.More() {
+		var s symInfo
+		if err := dec.Decode(&s); err != nil {
+			log.Printf("❌ Ошибка Decode: %v", err)
+			return nil, nil, nil
+		}
+		if s.Status != "1" || !s.IsSpotTradingAllowed {
+			continue
+		}
+		step, err := strconv.ParseFloat(s.BaseSizePrecision, 64)
+		if err != nil || step <= 0 {
+			continue
+		}
+		valids = append(valids, valid{s.Symbol, step})
+	}
+	// Закрываем массив ']'
+	_, _ = dec.Token()
+
+	n := len(valids)
+	available := make(map[string]bool, n)
+	stepSizes := make(map[string]float64, n)
+	minQtys := make(map[string]float64, n)
+
+	var logLines []string
+	logLines = make([]string, 0, n)
+	for _, v := range valids {
+		available[v.sym] = true
+		stepSizes[v.sym] = v.step
+		minQtys[v.sym] = v.step
+		logLines = append(logLines, fmt.Sprintf("%s\tstep=%g", v.sym, v.step))
+	}
+	_ = os.WriteFile("available_all_symbols.log", []byte(strings.Join(logLines, "\n")), 0644)
+	log.Printf("✅ Подходящих пар: %d", n)
+
+	return available, stepSizes, minQtys
+}
+
+// ===================== WS ПОДПИСКИ =====================
+
+// SubscribeDeals — подключение к приватному ws с listenKey и подписка на JSON deals.
+// Ничего не меняем в формате raw: app.HandleRaw продолжит парсить "s"/"p".
+func (m *MexcExchange) SubscribeDeals(pairs []string, handler func(exchange string, raw []byte)) error {
+	// 1) создаём listenKey
+	lk, err := m.createListenKey()
+	if err != nil {
+		return fmt.Errorf("get listenKey: %w", err)
+	}
+	defer m.closeListenKey(lk)
+
+	// 2) продлеваем в фоне
 	stopKA := make(chan struct{})
-	go keepAliveListenKey(apiKey, lk, stopKA)
+	go m.keepAliveListenKey(lk, stopKA)
 	defer close(stopKA)
 
-	// 2) Подключаемся к приватному WS и подписываемся на PUBLIC .pb каналы
-	// Рабочий хост: wss://wbs.mexc.com/ws
+	// 3) подключаемся к приватному ws
 	wsURL := "wss://wbs.mexc.com/ws?listenKey=" + lk
-	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
-		log.Fatal("dial:", err)
+		return fmt.Errorf("ws dial: %w", err)
 	}
-	defer c.Close()
+	defer conn.Close()
 
-	// Подписки: aggre.bookTicker .pb (100ms) по нескольким символам
-	sub := map[string]any{
+	// 4) подписка на сделки JSON (как у тебя было)
+	sub := map[string]interface{}{
 		"method": "SUBSCRIPTION",
-		"params": []string{
-			"spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT",
-			"spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHUSDT",
-			"spot@public.aggre.bookTicker.v3.api.pb@100ms@ETHBTC",
-		},
+		"params": buildChannels(pairs),
+		"id":     time.Now().Unix(),
 	}
-	if err := c.WriteJSON(sub); err != nil {
-		log.Fatal("send sub:", err)
+	if err := conn.WriteJSON(sub); err != nil {
+		return fmt.Errorf("ws write sub: %w", err)
 	}
 
-	// Пингуем, чтобы не отваливаться
+	// 5) heartbeat, чтобы не отваливаться
 	go func() {
 		t := time.NewTicker(45 * time.Second)
 		defer t.Stop()
 		for range t.C {
-			_ = c.WriteMessage(websocket.PingMessage, []byte("hb"))
+			_ = conn.WriteMessage(websocket.PingMessage, []byte("hb"))
 		}
 	}()
 
-	log.Println("✅ Subscribed. Ждём бинарные protobuf сообщения...")
-
-	// 3) Чтение: текст = ACK/ошибки; бинарь = protobuf PushDataV3ApiWrapper
+	// 6) чтение
 	for {
-		mt, raw, err := c.ReadMessage()
+		_, raw, err := conn.ReadMessage()
 		if err != nil {
-			log.Fatal("read:", err)
+			return err
 		}
-
-		if mt == websocket.TextMessage {
-			// Красиво печатаем ACK/ошибки
-			var v any
-			if json.Unmarshal(raw, &v) == nil {
-				b, _ := json.MarshalIndent(v, "", "  ")
-				fmt.Printf("ACK:\n%s\n", b)
-				continue
-			}
-			fmt.Printf("TEXT:\n%s\n", string(raw))
-			continue
-		}
-		if mt != websocket.BinaryMessage {
-			continue
-		}
-
-		// ---------- Пробуем распарсить как PushDataV3ApiWrapper ----------
-		var w pb.PushDataV3ApiWrapper
-		if err := proto.Unmarshal(raw, &w); err != nil {
-			// Не наш бинарь — пропускаем
-			continue
-		}
-
-		// Достаём symbol (если пуст — возьмём из channel)
-		symbol := w.GetSymbol()
-		if symbol == "" && w.GetChannel() != "" {
-			ch := w.GetChannel() // например: spot@public.aggre.bookTicker.v3.api.pb@100ms@BTCUSDT
-			if i := strings.LastIndex(ch, "@"); i >= 0 && i+1 < len(ch) {
-				symbol = ch[i+1:]
-			}
-		}
-		ts := time.Now()
-		if t := w.GetSendTime(); t > 0 {
-			ts = time.UnixMilli(t)
-		}
-
-		switch body := w.GetBody().(type) {
-		case *pb.PushDataV3ApiWrapper_PublicAggreBookTicker:
-			bt := body.PublicAggreBookTicker
-
-			// Поля уже строками — выводим как есть (или парсим float по желанию)
-			bid := bt.GetBidPrice()
-			bq := bt.GetBidQuantity()
-			ask := bt.GetAskPrice()
-			aq := bt.GetAskQuantity()
-
-			fmt.Printf("%s  bid=%s (%s)  ask=%s (%s)  ts=%s\n",
-				symbol, bid, bq, ask, aq, ts.Format(time.RFC3339Nano))
-
-		default:
-			// здесь можно обработать другие типы (deals, depth и т.д.)
-		}
+		handler("MEXC", raw)
 	}
 }
 
+func buildChannels(pairs []string) []string {
+	out := make([]string, 0, len(pairs))
+	for _, p := range pairs {
+		out = append(out, "spot@public.deals.v3.api@"+p)
+	}
+	return out
+}
 
+// ===================== РЫНОЧНЫЙ ОРДЕР (SIGNED) =====================
 
-gaz358@gaz358-BOD-WXX9:~/myprog/crypt_proto$ go run .
-2025/08/24 13:30:36 listenKey http 400: {"code":700004,"msg":"Mandatory parameter 'signature' was not sent, was empty/null, or malformed."}
-exit status 1
+func (m *MexcExchange) PlaceMarketOrder(symbol, side string, quantity float64) (string, error) {
+	endpoint := "https://api.mexc.com/api/v3/order"
+	timestamp := strconv.FormatInt(time.Now().UnixMilli(), 10)
 
+	params := make(map[string]string, 5)
+	params["symbol"] = symbol
+	params["side"] = strings.ToUpper(side) // "BUY" или "SELL"
+	params["type"] = "MARKET"
+
+	if side == "BUY" {
+		params["quoteOrderQty"] = fmt.Sprintf("%.4f", quantity)
+	} else {
+		params["quantity"] = fmt.Sprintf("%.6f", quantity)
+	}
+
+	q := url.Values{}
+	for k, v := range params {
+		q.Set(k, v)
+	}
+	q.Set("timestamp", timestamp)
+
+	sig := createSignature(m.apiSecret, q.Encode())
+	q.Set("signature", sig)
+
+	req, _ := http.NewRequest("POST", endpoint+"?"+q.Encode(), nil)
+	req.Header.Set("X-MEXC-APIKEY", m.apiKey)
+
+	resp, err := httpClient().Do(req)
+	if err != nil {
+		return "", fmt.Errorf("HTTP error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("order failed: %s", string(body))
+	}
+
+	var result struct {
+		OrderID string `json:"orderId"`
+	}
+	dec := json.NewDecoder(resp.Body)
+	if err := dec.Decode(&result); err != nil {
+		return "", fmt.Errorf("decode error: %v", err)
+	}
+	return result.OrderID, nil
+}
+
+// ===================== ЛУЧШИЙ BID/ASK (PUBLIC) =====================
+
+func (m *MexcExchange) GetBestAsk(symbol string) (float64, error) {
+	resp, err := http.Get("https://api.mexc.com/api/v3/depth?symbol=" + symbol + "&limit=1")
+	if err != nil {
+		return 0, fmt.Errorf("get depth failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var data struct {
+		Asks [][]string `json:"asks"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return 0, fmt.Errorf("decode depth failed: %v", err)
+	}
+	if len(data.Asks) == 0 {
+		return 0, fmt.Errorf("no ask in depth for %s", symbol)
+	}
+	return strconv.ParseFloat(data.Asks[0][0], 64)
+}
+
+func (m *MexcExchange) GetBestBid(symbol string) (float64, error) {
+	resp, err := http.Get("https://api.mexc.com/api/v3/depth?symbol=" + symbol + "&limit=1")
+	if err != nil {
+		return 0, fmt.Errorf("get depth failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var data struct {
+		Bids [][]string `json:"bids"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return 0, fmt.Errorf("decode depth failed: %v", err)
+	}
+	if len(data.Bids) == 0 {
+		return 0, fmt.Errorf("no bid in depth for %s", symbol)
+	}
+	return strconv.ParseFloat(data.Bids[0][0], 64)
+}
 
 
 
