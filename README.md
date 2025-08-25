@@ -516,3 +516,38 @@ go run .
 
 
 Готово. Если хочешь — дам минимальный systemd‑юнит, но для тестов tmux + go run максимально быстрый вариант.
+
+
+
+root@ceqwcufjpa:/opt/arb/crypt_proto# go run .
+go: downloading github.com/joho/godotenv v1.5.1
+2025/08/25 06:21:22 ✅ SUB → spot@public.bookTicker.v3.api.pb@100ms@BTCUSDT
+ACK:
+{
+  "code": 0,
+  "id": 1756102882,
+  "msg": "Not Subscribed successfully! [spot@public.bookTicker.v3.api.pb@100ms@BTCUSDT].  Reason： Blocked! "
+}
+^Csignal: interrupt
+root@ceqwcufjpa:/opt/arb/crypt_proto# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host noprefixroute 
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 00:40:02:f3:30:b5 brd ff:ff:ff:ff:ff:ff
+    altname enp0s3
+    inet 45.145.5.125/32 brd 45.145.5.125 scope global eth0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::240:2ff:fef3:30b5/64 scope link 
+       valid_lft forever preferred_lft forever
+root@ceqwcufjpa:/opt/arb/crypt_proto# go run .
+2025/08/25 06:22:22 ✅ SUB → spot@public.bookTicker.v3.api.pb@100ms@BTCUSDT
+ACK:
+{
+  "code": 0,
+  "id": 1756102942,
+  "msg": "Not Subscribed successfully! [spot@public.bookTicker.v3.api.pb@100ms@BTCUSDT].  Reason： Blocked! "
+}
