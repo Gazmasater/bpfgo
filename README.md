@@ -554,11 +554,11 @@ ACK:
 
 
 
-root@a605545881:/tmp# rm -rf /usr/local/go
-root@a605545881:/tmp# tar -C /usr/local -xzf go1.23.0.linux-amd64.tar.gz
-root@a605545881:/tmp# echo 'export PATH=$PATH:/usr/local/go/bin' >/etc/profile.d/go.sh
-root@a605545881:/tmp# source /etc/profile.d/go.sh
-root@a605545881:/tmp# go version
-go version go1.18.1 linux/amd64
-root@a605545881:/tmp# 
+/usr/local/go/bin/go version
+
+update-alternatives --install /usr/bin/go go /usr/local/go/bin/go 100
+update-alternatives --config go
+
+go version
+
 
