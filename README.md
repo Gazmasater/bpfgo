@@ -554,9 +554,5 @@ ACK:
 
 
 
-root@a605545881:/opt/arb/crypt_proto# go run .
-go: downloading github.com/joho/godotenv v1.5.1
-2025/09/05 20:05:55 listenKey 400: {"code":10072,"msg":"Api key info invalid"}
-exit status 1
-root@a605545881:/opt/arb/crypt_proto# 
-
+mx0vgl2NlUsFKXnmdy
+763394af98d44f6e80f5d20905f2660d
