@@ -554,5 +554,14 @@ ACK:
 
 
 
-mx0vgl2NlUsFKXnmdy
-763394af98d44f6e80f5d20905f2660d
+root@a605545881:/opt/arb/crypt_proto# go run .
+2025/09/05 20:30:13 ✅ SUB → spot@public.bookTicker.v3.api.pb@100ms@BTCUSDT
+ACK:
+{
+  "code": 0,
+  "id": 1757104213,
+  "msg": "Not Subscribed successfully! [spot@public.bookTicker.v3.api.pb@100ms@BTCUSDT].  Reason： Blocked! "
+}
+2025/09/05 20:30:48 read:websocket: close 1005 (no status)
+exit status 1
+root@a605545881:/opt/arb/crypt_proto# 
