@@ -554,9 +554,11 @@ ACK:
 
 
 
-oot@a605545881:/opt/arb/crypt_proto# go run .
-go: errors parsing go.mod:
-/opt/arb/crypt_proto/go.mod:3: invalid go version '1.24.0': must match format 1.23
-root@a605545881:/opt/arb/crypt_proto# go version
-go version go1.18.1 linux/amd64
-root@a605545881:/opt/arb/crypt_proto# 
+cd /tmp
+wget https://go.dev/dl/go1.23.0.linux-amd64.tar.gz
+rm -rf /usr/local/go
+tar -C /usr/local -xzf go1.23.0.linux-amd64.tar.gz
+echo 'export PATH=$PATH:/usr/local/go/bin' >/etc/profile.d/go.sh
+source /etc/profile.d/go.sh
+go version
+
