@@ -554,11 +554,9 @@ ACK:
 
 
 
-/usr/local/go/bin/go version
-
-update-alternatives --install /usr/bin/go go /usr/local/go/bin/go 100
-update-alternatives --config go
-
-go version
-
+root@a605545881:/opt/arb/crypt_proto# go run .
+go: downloading github.com/joho/godotenv v1.5.1
+2025/09/05 20:05:55 listenKey 400: {"code":10072,"msg":"Api key info invalid"}
+exit status 1
+root@a605545881:/opt/arb/crypt_proto# 
 
