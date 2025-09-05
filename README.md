@@ -554,11 +554,11 @@ ACK:
 
 
 
-cd /tmp
-wget https://go.dev/dl/go1.23.0.linux-amd64.tar.gz
-rm -rf /usr/local/go
-tar -C /usr/local -xzf go1.23.0.linux-amd64.tar.gz
-echo 'export PATH=$PATH:/usr/local/go/bin' >/etc/profile.d/go.sh
-source /etc/profile.d/go.sh
-go version
+root@a605545881:/tmp# rm -rf /usr/local/go
+root@a605545881:/tmp# tar -C /usr/local -xzf go1.23.0.linux-amd64.tar.gz
+root@a605545881:/tmp# echo 'export PATH=$PATH:/usr/local/go/bin' >/etc/profile.d/go.sh
+root@a605545881:/tmp# source /etc/profile.d/go.sh
+root@a605545881:/tmp# go version
+go version go1.18.1 linux/amd64
+root@a605545881:/tmp# 
 
