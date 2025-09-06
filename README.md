@@ -638,4 +638,9 @@ func runPublicBookTicker(ctx context.Context, wg *sync.WaitGroup, symbol, interv
 }
 
 
+Услуга: Lite - Linux SSD
+IP: 38.180.106.46
+Имя пользователя: root
+Пароль: tkP6FoppKo (настоятельно рекомендуем сменить в целях безопасности)
+
 
