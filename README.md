@@ -1124,3 +1124,11 @@ func main() {
 
 
 
+
+2025/09/30 02:46:26.364875 [PRIV] listenKey OK
+2025/09/30 02:46:26.441140 [DIAL] wbs-api.mexc.com → [3.164.230.89 3.164.230.26 3.164.230.19 3.164.230.69] (port 443)
+{"type":"bookTicker","s":"BTCUSDT","mid":114261.5750000000}
+2025/09/30 02:46:26.470880 [DIAL] CONNECT ok remote=3.164.230.89:443 local=192.168.1.71:33152 url=wss://wbs-api.mexc.com/ws?listenKey=4313dbbbdf477cad133adc572093f0d2bcbbccc3bce89963a87527806be0f279
+
+
+
