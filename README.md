@@ -271,6 +271,12 @@ lev@lev-VirtualBox:~/bpfgo$
 strace -f -e trace=sendto,sendmsg ./send_udp 127.0.0.1 9999 ping
 
 
+ev@lev-VirtualBox:~/bpfgo$ strace -f -e trace=sendto,sendmsg ./send_udp 127.0.0.1 9999 ping
+sendto(3, "ping", 4, 0, {sa_family=AF_INET, sin_port=htons(9999), sin_addr=inet_addr("127.0.0.1")}, 16) = 4
+[pid=13201 tid=13201] sent 4 bytes to 127.0.0.1:9999
++++ exited with 0 +++
+
+
 
 
 
