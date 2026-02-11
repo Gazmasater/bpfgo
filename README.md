@@ -250,6 +250,25 @@ gcc -O2 -Wall -o send_udp send_udp.c
 
 
 
+lev@lev-VirtualBox:~/bpfgo$ gcc -O2 -Wall -o recvmsg_test recvmsg_test.c
+gcc -O2 -Wall -o send_udp send_udp.c
+recvmsg_test.c:106:14: error: redefinition of ‘gettid_linux’
+  106 | static pid_t gettid_linux(void) {
+      |              ^~~~~~~~~~~~
+recvmsg_test.c:15:14: note: previous definition of ‘gettid_linux’ with type ‘pid_t(void)’ {aka ‘int(void)’}
+   15 | static pid_t gettid_linux(void) {
+      |              ^~~~~~~~~~~~
+recvmsg_test.c:110:5: error: redefinition of ‘main’
+  110 | int main(int argc, char **argv) {
+      |     ^~~~
+recvmsg_test.c:19:5: note: previous definition of ‘main’ with type ‘int(int,  char **)’
+   19 | int main(int argc, char **argv) {
+      |     ^~~~
+lev@lev-VirtualBox:~/bpfgo$ 
+
+
+
+
 
 
 
