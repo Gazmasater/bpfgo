@@ -27,7 +27,7 @@ struct
 {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 1024);
-    __type(key, u32);
+    __type(key, __u64);
     __type(value, struct sockaddr*);
 } addrSend_map SEC(".maps");
 
@@ -35,7 +35,7 @@ struct
 {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 1024);
-    __type(key, u32);
+    __type(key, __u64);
     __type(value, struct sockaddr*);
 } addrRecv_map SEC(".maps");
 
@@ -45,7 +45,7 @@ struct
 {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 1024);
-    __type(key, u32);
+    __type(key, __u64);
     __type(value, struct conn_info_t);
 } conn_info_map SEC(".maps");
 
@@ -77,9 +77,7 @@ struct trace_info {
     __u16 family;
     __u8 sysexit;
     __u8 state;
-
-
-    char comm[32];
+   __s8 comm[32];
 } ;
 
 
@@ -99,20 +97,21 @@ char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 SEC("tracepoint/syscalls/sys_enter_sendto")
 int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid=id>>32;
     struct conn_info_t conn_info = {};
     
 
-    conn_info.pid = pid;
+    conn_info.pid = tgid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
-    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+    bpf_map_update_elem(&conn_info_map, &id, &conn_info, BPF_ANY);
 
     const struct sockaddr *addr = (const struct sockaddr *)ctx->args[4];
     if (!addr)
         return 0;
 
-    bpf_map_update_elem(&addrSend_map, &pid, &addr, BPF_ANY);
+    bpf_map_update_elem(&addrSend_map, &id, &addr, BPF_ANY);
 
 
     return 0;
@@ -121,7 +120,7 @@ int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx) {
 
 SEC("tracepoint/syscalls/sys_exit_sendto")
 int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    __u64 id = bpf_get_current_pid_tgid();
 
     __s64 ret;
 if (BPF_CORE_READ_INTO(&ret, ctx, ret) < 0)
@@ -129,14 +128,14 @@ if (BPF_CORE_READ_INTO(&ret, ctx, ret) < 0)
 if (ret < 0)
     goto cleanup;
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &id);
     if (!conn_info)
         return 0;
     if (ret < 0) {
         goto cleanup;
     }
 
-    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addrSend_map, &pid);
+    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addrSend_map, &id);
     if (!addr_ptr)
         goto cleanup;
 
@@ -197,27 +196,30 @@ if (ret < 0)
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
 cleanup:
-    bpf_map_delete_elem(&addrSend_map, &pid);
-    bpf_map_delete_elem(&conn_info_map, &pid);
+    bpf_map_delete_elem(&addrSend_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
     return 0;
 }
 
 SEC("tracepoint/syscalls/sys_enter_recvfrom")
 int trace_recvfrom_enter(struct trace_event_raw_sys_enter *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
+   
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid=id>>32;
+
     struct conn_info_t conn_info = {};
 
-    conn_info.pid = pid;
+    conn_info.pid = tgid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
-    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+    bpf_map_update_elem(&conn_info_map, &id, &conn_info, BPF_ANY);
 
     if (!ctx->args[4]) return 0;
 
 
     struct sockaddr *addr = (struct sockaddr *)ctx->args[4];  
 
-    bpf_map_update_elem(&addrRecv_map, &pid, &addr, BPF_ANY);
+    bpf_map_update_elem(&addrRecv_map, &id, &addr, BPF_ANY);
 
 
     return 0;
@@ -226,7 +228,8 @@ int trace_recvfrom_enter(struct trace_event_raw_sys_enter *ctx) {
 
 SEC("tracepoint/syscalls/sys_exit_recvfrom")
 int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid=id>>32;
 
 __s64 ret;
 if (BPF_CORE_READ_INTO(&ret, ctx, ret) < 0)
@@ -234,16 +237,16 @@ if (BPF_CORE_READ_INTO(&ret, ctx, ret) < 0)
 if (ret < 0)
     goto cleanup;
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &id);
     if (!conn_info)
         return 0;
     if (ret < 0) {
-        bpf_printk("sys_exit_recvfrom failed for PID=%d\n", pid);
-        bpf_map_delete_elem(&conn_info_map, &pid);
+        bpf_printk("sys_exit_recvfrom failed for PID=%d\n", tgid);
+        bpf_map_delete_elem(&conn_info_map, &id);
         return 0;
     }
 
-    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addrRecv_map, &pid);
+    struct sockaddr **addr_ptr = bpf_map_lookup_elem(&addrRecv_map, &id);
     if (!addr_ptr)
     goto cleanup;
 
@@ -251,7 +254,7 @@ if (ret < 0)
     struct trace_info info = {};
     __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
     info.sysexit = 2;
-    info.pid     = pid;
+    info.pid     = tgid;
 
     /* читаем семейство адреса */
     __u16 family;
@@ -307,26 +310,29 @@ if (ret < 0)
     }
 
 cleanup:
-    bpf_map_delete_elem(&addrRecv_map, &pid);
-    bpf_map_delete_elem(&conn_info_map, &pid);
+    bpf_map_delete_elem(&addrRecv_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
     return 0;
 }
 
 SEC("tracepoint/syscalls/sys_enter_sendmsg")
 int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
+   
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid=id>>32;
+
     struct conn_info_t conn_info = {};
     
 
-    conn_info.pid = pid;
+    conn_info.pid = tgid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
-    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+    bpf_map_update_elem(&conn_info_map, &id, &conn_info, BPF_ANY);
 
     struct msghdr *addr = (struct msghdr *)ctx->args[1];  
 
-    bpf_printk("sys_enter_sendmsg addr=%p",addr);
-    bpf_map_update_elem(&addrSend_map, &pid, &addr, BPF_ANY);
+  //  bpf_printk("sys_enter_sendmsg addr=%p",addr);
+    bpf_map_update_elem(&addrSend_map, &id, &addr, BPF_ANY);
 
 
     return 0;
@@ -335,7 +341,10 @@ int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx) {
 
 SEC("tracepoint/syscalls/sys_exit_sendmsg")
 int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
+   
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid=id>>32;
+
 
 __s64 ret;
 if (BPF_CORE_READ_INTO(&ret, ctx, ret) < 0)
@@ -343,21 +352,21 @@ if (BPF_CORE_READ_INTO(&ret, ctx, ret) < 0)
 if (ret < 0)
     goto cleanup;
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &id);
     if (!conn_info) {
-        bpf_printk("No conn_info for pid=%d", pid);
+        bpf_printk("No conn_info for pid=%d", tgid);
         goto cleanup;
     }
 
     if (ret < 0) {
-        bpf_printk("recvmsg failed for PID=%d", pid);
+        bpf_printk("recvmsg failed for PID=%d", tgid);
         goto cleanup;
 
     }
 
-    struct msghdr **addr_ptr = bpf_map_lookup_elem(&addrSend_map, &pid);
+    struct msghdr **addr_ptr = bpf_map_lookup_elem(&addrSend_map, &id);
     if (!addr_ptr) {
-        bpf_printk("No addr_ptr for pid=%d", pid);
+        bpf_printk("No addr_ptr for pid=%d", tgid);
         goto cleanup;
     }
 
@@ -365,7 +374,7 @@ if (ret < 0)
     bpf_core_read_user(&msg, sizeof(msg), *addr_ptr);
 
     if (!msg) {
-        bpf_printk("msg is NULL for pid=%d", pid);
+        bpf_printk("msg is NULL for pid=%d", tgid);
         goto cleanup;
     }
 
@@ -405,13 +414,13 @@ if (ret < 0)
 
         }
 
-        bpf_printk("sys_exit_recvmsg IP6 PORT=%d SYSEXIT=%d",port,info.sysexit);
+     //   bpf_printk("sys_exit_recvmsg IP6 PORT=%d SYSEXIT=%d",port,info.sysexit);
 
 
 
         info.family=AF_INET6;
         info.dport=port;
-        info.pid=pid;
+        info.pid=tgid;
 
         if (BPF_CORE_READ_INTO(&info.dstIP6, &sa6, sin6_addr.in6_u.u6_addr32) < 0)
     goto cleanup;
@@ -425,26 +434,29 @@ if (ret < 0)
 
 cleanup:
 
-    bpf_map_delete_elem(&addrSend_map, &pid);
-    bpf_map_delete_elem(&conn_info_map, &pid);
+    bpf_map_delete_elem(&addrSend_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
     return 0;
 }
 
 SEC("tracepoint/syscalls/sys_enter_recvmsg")
 int trace_recvmsg_enter(struct trace_event_raw_sys_enter *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid=id>>32;
+
     struct conn_info_t conn_info = {};
     
 
-    conn_info.pid = pid;
+    conn_info.pid = tgid;
     bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
-    bpf_map_update_elem(&conn_info_map, &pid, &conn_info, BPF_ANY);
+    bpf_map_update_elem(&conn_info_map, &id, &conn_info, BPF_ANY);
 
     struct msghdr *addr = (struct msghdr *)ctx->args[1];  
 
-    bpf_printk("sys_enter_recvmsg addr=%p",addr);
-    bpf_map_update_elem(&addrRecv_map, &pid, &addr, BPF_ANY);
+  //  bpf_printk("sys_enter_recvmsg addr=%p",addr);
+    bpf_map_update_elem(&addrRecv_map, &id, &addr, BPF_ANY);
 
 
     return 0;
@@ -453,7 +465,9 @@ int trace_recvmsg_enter(struct trace_event_raw_sys_enter *ctx) {
 
 SEC("tracepoint/syscalls/sys_exit_recvmsg")
 int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx) {
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid=id>>32;
     
 __s64 ret;
 if (BPF_CORE_READ_INTO(&ret, ctx, ret) < 0)
@@ -462,21 +476,21 @@ if (ret < 0)
     goto cleanup;
     
 
-    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &pid);
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &id);
     if (!conn_info) {
-        bpf_printk("No conn_info for pid=%d", pid);
+        bpf_printk("No conn_info for pid=%d", tgid);
         goto cleanup;
     }
 
     if (ret < 0) {
-        bpf_printk("recvmsg failed for PID=%d", pid);
+        bpf_printk("recvmsg failed for PID=%d", tgid);
         goto cleanup;
 
     }
 
-    struct msghdr **addr_ptr = bpf_map_lookup_elem(&addrRecv_map, &pid);
+    struct msghdr **addr_ptr = bpf_map_lookup_elem(&addrRecv_map, &id);
     if (!addr_ptr) {
-        bpf_printk("No addr_ptr for pid=%d", pid);
+        bpf_printk("No addr_ptr for pid=%d", tgid);
         goto cleanup;
 
     }
@@ -485,7 +499,7 @@ if (ret < 0)
     bpf_core_read_user(&msg, sizeof(msg), *addr_ptr);
 
     if (!msg) {
-        bpf_printk("msg is NULL for pid=%d", pid);
+        bpf_printk("msg is NULL for pid=%d", tgid);
         goto cleanup;
     }
 
@@ -523,11 +537,11 @@ if (ret < 0)
 
         }
 
-        bpf_printk("sys_exit_recvmsg IP6 PORT=%d SYSEXIT=%d",port,info.sysexit);
+      //  bpf_printk("sys_exit_recvmsg IP6 PORT=%d SYSEXIT=%d",port,info.sysexit);
 
         info.family=AF_INET6;
         info.sport=port;
-        info.pid=pid;
+        info.pid=tgid;
 
         if (BPF_CORE_READ_INTO(&info.srcIP6, &sa6, sin6_addr.in6_u.u6_addr32) < 0)
     goto cleanup;
@@ -537,8 +551,8 @@ if (ret < 0)
 
 cleanup:
 
-    bpf_map_delete_elem(&addrRecv_map, &pid);
-    bpf_map_delete_elem(&conn_info_map, &pid);
+    bpf_map_delete_elem(&addrRecv_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
 
     return 0;
 }
