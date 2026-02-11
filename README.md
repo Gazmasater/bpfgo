@@ -650,9 +650,7 @@ ssh root@38.180.106.46
 
 
 
-SEC("tracepoint/syscalls/sys_enter_recvmsg")
-int trace_recvmsg_enter(struct trace_event_raw_sys_enter *ctx) {
-    
+S
 
 
 
