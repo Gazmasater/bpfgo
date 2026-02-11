@@ -268,6 +268,10 @@ lev@lev-VirtualBox:~/bpfgo$
 
 
 
+strace -f -e trace=sendto,sendmsg ./send_udp 127.0.0.1 9999 ping
+
+
+
 
 
 
