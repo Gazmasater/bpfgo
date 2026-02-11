@@ -271,12 +271,19 @@ lev@lev-VirtualBox:~/bpfgo$
 strace -f -e trace=sendto,sendmsg ./send_udp 127.0.0.1 9999 ping
 
 
-ev@lev-VirtualBox:~/bpfgo$ strace -f -e trace=sendto,sendmsg ./send_udp 127.0.0.1 9999 ping
-sendto(3, "ping", 4, 0, {sa_family=AF_INET, sin_port=htons(9999), sin_addr=inet_addr("127.0.0.1")}, 16) = 4
-[pid=13201 tid=13201] sent 4 bytes to 127.0.0.1:9999
-+++ exited with 0 +++
-
-
+[{
+	"resource": "/home/lev/bpfgo/bpf_x86_bpfel.go",
+	"owner": "_generated_diagnostic_collection_name_#2",
+	"severity": 8,
+	"message": "C source files not allowed when not using cgo or SWIG: recvmsg_test.c send_udp.c",
+	"source": "go list",
+	"startLineNumber": 1,
+	"startColumn": 1,
+	"endLineNumber": 1,
+	"endColumn": 1,
+	"modelVersionId": 2,
+	"origin": "extHost1"
+}]
 
 
 
