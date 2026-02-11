@@ -95,40 +95,129 @@ git push --force-with-lease origin ProcNet_monitor
 
 
 
-cat > /tmp/recvmsg_test.c <<'EOF'
-#include <sys/socket.h>
-#include <netinet/in.h>
+// recvmsg_test.c
+#define _GNU_SOURCE
 #include <arpa/inet.h>
-#include <unistd.h>
-#include <string.h>
+#include <errno.h>
+#include <netinet/in.h>
 #include <stdio.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
 
-int main() {
-    int s = socket(AF_INET, SOCK_DGRAM, 0);
-    struct sockaddr_in addr = {0};
+int main(int argc, char **argv) {
+    int port = 9999;
+    if (argc > 1) port = atoi(argv[1]);
+
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) { perror("socket"); return 1; }
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(9999);
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    bind(s, (struct sockaddr*)&addr, sizeof(addr));
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr.sin_port = htons((uint16_t)port);
 
-    char buf[256];
-    struct iovec iov = { .iov_base = buf, .iov_len = sizeof(buf) };
-    struct msghdr msg = {0};
-    msg.msg_iov = &iov;
-    msg.msg_iovlen = 1;
+    if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("bind");
+        return 1;
+    }
 
-    printf("waiting recvmsg on 127.0.0.1:9999...\n");
-    int n = recvmsg(s, &msg, 0);
-    printf("recvmsg got %d bytes: %.*s\n", n, n, buf);
+    printf("recvmsg UDP server listening on 0.0.0.0:%d\n", port);
+
+    for (;;) {
+        char buf[2048];
+
+        struct sockaddr_storage peer;
+        socklen_t peerlen = sizeof(peer);
+
+        struct iovec iov = {
+            .iov_base = buf,
+            .iov_len  = sizeof(buf),
+        };
+
+        struct msghdr msg;
+        memset(&msg, 0, sizeof(msg));
+        msg.msg_name = &peer;
+        msg.msg_namelen = peerlen;
+        msg.msg_iov = &iov;
+        msg.msg_iovlen = 1;
+
+        ssize_t n = recvmsg(fd, &msg, 0);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            perror("recvmsg");
+            break;
+        }
+
+        // распечатаем src ip:port
+        char ipstr[INET6_ADDRSTRLEN] = {0};
+        int pport = 0;
+
+        if (peer.ss_family == AF_INET) {
+            struct sockaddr_in *sin = (struct sockaddr_in*)&peer;
+            inet_ntop(AF_INET, &sin->sin_addr, ipstr, sizeof(ipstr));
+            pport = ntohs(sin->sin_port);
+        } else if (peer.ss_family == AF_INET6) {
+            struct sockaddr_in6 *sin6 = (struct sockaddr_in6*)&peer;
+            inet_ntop(AF_INET6, &sin6->sin6_addr, ipstr, sizeof(ipstr));
+            pport = ntohs(sin6->sin6_port);
+        } else {
+            strcpy(ipstr, "unknown_family");
+        }
+
+        printf("got %zd bytes from %s:%d: %.*s\n", n, ipstr, pport, (int)n, buf);
+        fflush(stdout);
+    }
+
+    close(fd);
     return 0;
 }
-EOF
-
-gcc -O2 -o /tmp/recvmsg_test /tmp/recvmsg_test.c
-/tmp/recvmsg_test
 
 
-echo "hi" | nc -u 127.0.0.1 9999
+
+// send_udp.c
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+int main(int argc, char **argv) {
+    const char *ip = "127.0.0.1";
+    int port = 9999;
+    const char *msg = "hello";
+
+    if (argc > 1) ip = argv[1];
+    if (argc > 2) port = atoi(argv[2]);
+    if (argc > 3) msg = argv[3];
+
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) { perror("socket"); return 1; }
+
+    struct sockaddr_in dst;
+    memset(&dst, 0, sizeof(dst));
+    dst.sin_family = AF_INET;
+    dst.sin_port = htons((uint16_t)port);
+    inet_pton(AF_INET, ip, &dst.sin_addr);
+
+    ssize_t n = sendto(fd, msg, strlen(msg), 0, (struct sockaddr*)&dst, sizeof(dst));
+    if (n < 0) { perror("sendto"); return 1; }
+
+    printf("sent %zd bytes to %s:%d\n", n, ip, port);
+    close(fd);
+    return 0;
+}
+
+
+gcc -O2 -Wall -o recvmsg_test recvmsg_test.c
+gcc -O2 -Wall -o send_udp send_udp.c
+
+
+./recvmsg_test 9999
+./send_udp 127.0.0.1 9999 "ping1"
 
 
 
