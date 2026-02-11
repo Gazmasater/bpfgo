@@ -222,18 +222,7 @@ gcc -O2 -Wall -o send_udp send_udp.c
 
 
 
-lev@lev-VirtualBox:~/bpfgo$ gcc -O2 -Wall -o recvmsg_test recvmsg_test.c
-gcc -O2 -Wall -o send_udp send_udp.c
 
-recvmsg_test.c: In function ‘main’:
-recvmsg_test.c:15:26: warning: implicit declaration of function ‘atoi’ [-Wimplicit-function-declaration]
-   15 |     if (argc > 1) port = atoi(argv[1]);
-      |                          ^~~~
-send_udp.c: In function ‘main’:
-send_udp.c:15:26: warning: implicit declaration of function ‘atoi’ [-Wimplicit-function-declaration]
-   15 |     if (argc > 2) port = atoi(argv[2]);
-      |                          ^~~~
-lev@lev-VirtualBox:~/bpfgo$ 
 
 
 
