@@ -250,21 +250,23 @@ gcc -O2 -Wall -o send_udp send_udp.c
 
 
 
-lev@lev-VirtualBox:~/bpfgo$ gcc -O2 -Wall -o recvmsg_test recvmsg_test.c
-gcc -O2 -Wall -o send_udp send_udp.c
-recvmsg_test.c:106:14: error: redefinition of ‘gettid_linux’
-  106 | static pid_t gettid_linux(void) {
-      |              ^~~~~~~~~~~~
-recvmsg_test.c:15:14: note: previous definition of ‘gettid_linux’ with type ‘pid_t(void)’ {aka ‘int(void)’}
-   15 | static pid_t gettid_linux(void) {
-      |              ^~~~~~~~~~~~
-recvmsg_test.c:110:5: error: redefinition of ‘main’
-  110 | int main(int argc, char **argv) {
-      |     ^~~~
-recvmsg_test.c:19:5: note: previous definition of ‘main’ with type ‘int(int,  char **)’
-   19 | int main(int argc, char **argv) {
-      |     ^~~~
+RECVMSG PID=12435 NAME=recvmsg_test   UDP://localhost[127.0.0.1:56217]->localhost[127.0.0.1:9999]
+RECVMSG PID=12515  NAME=recvmsg_test   UDP://localhost[127.0.0.1:56217]<-localhost[127.0.0.1:9999]
+
+
+[pid=12435 tid=12435] recvmsg UDP server listening on 0.0.0.0:9999
+[pid=12435 tid=12435] got 4 bytes from 127.0.0.1:39439: ping
+[pid=12435 tid=12435] got 4 bytes from 127.0.0.1:56217: ping
+
+
+
+lev@lev-VirtualBox:~/bpfgo$ ./send_udp 127.0.0.1 9999 "ping"
+[pid=12470 tid=12470] sent 4 bytes to 127.0.0.1:9999
+lev@lev-VirtualBox:~/bpfgo$ ./send_udp 127.0.0.1 9999 "ping"
+[pid=12515 tid=12515] sent 4 bytes to 127.0.0.1:9999
 lev@lev-VirtualBox:~/bpfgo$ 
+
+
 
 
 
