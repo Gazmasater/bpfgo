@@ -95,13 +95,40 @@ git push --force-with-lease origin ProcNet_monitor
 
 
 
-curl -s https://example.com >/dev/null
+cat > /tmp/recvmsg_test.c <<'EOF'
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <string.h>
+#include <stdio.h>
 
-sudo apt update
-sudo apt install -y curl
-curl --version
+int main() {
+    int s = socket(AF_INET, SOCK_DGRAM, 0);
+    struct sockaddr_in addr = {0};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(9999);
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    bind(s, (struct sockaddr*)&addr, sizeof(addr));
+
+    char buf[256];
+    struct iovec iov = { .iov_base = buf, .iov_len = sizeof(buf) };
+    struct msghdr msg = {0};
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+
+    printf("waiting recvmsg on 127.0.0.1:9999...\n");
+    int n = recvmsg(s, &msg, 0);
+    printf("recvmsg got %d bytes: %.*s\n", n, n, buf);
+    return 0;
+}
+EOF
+
+gcc -O2 -o /tmp/recvmsg_test /tmp/recvmsg_test.c
+/tmp/recvmsg_test
 
 
+echo "hi" | nc -u 127.0.0.1 9999
 
 
 
