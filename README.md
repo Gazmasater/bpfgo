@@ -97,6 +97,11 @@ git push --force-with-lease origin ProcNet_monitor
 
 curl -s https://example.com >/dev/null
 
+sudo apt update
+sudo apt install -y curl
+curl --version
+
+
 
 
 
