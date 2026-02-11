@@ -553,6 +553,9 @@ int look_up(struct bpf_sk_lookup *ctx) {
     info.sysexit = 3;
     info.family=ctx->family;
 
+    if (ctx->protocol!=IPPROTO_TCP && ctx->protocol != IPPROTO_UDP)
+        return SK_PASS;
+
 
 
     if (ctx->family == AF_INET) {
