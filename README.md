@@ -104,11 +104,20 @@ git push --force-with-lease origin ProcNet_monitor
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/syscall.h>
 #include <unistd.h>
+#include <stdlib.h>   // atoi
+
+static pid_t gettid_linux(void) {
+    return (pid_t)syscall(SYS_gettid);
+}
 
 int main(int argc, char **argv) {
     int port = 9999;
     if (argc > 1) port = atoi(argv[1]);
+
+    pid_t pid = getpid();
+    pid_t tid = gettid_linux();
 
     int fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (fd < 0) { perror("socket"); return 1; }
@@ -124,7 +133,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    printf("recvmsg UDP server listening on 0.0.0.0:%d\n", port);
+    printf("[pid=%d tid=%d] recvmsg UDP server listening on 0.0.0.0:%d\n",
+           (int)pid, (int)tid, port);
 
     for (;;) {
         char buf[2048];
@@ -167,7 +177,8 @@ int main(int argc, char **argv) {
             strcpy(ipstr, "unknown_family");
         }
 
-        printf("got %zd bytes from %s:%d: %.*s\n", n, ipstr, pport, (int)n, buf);
+        printf("[pid=%d tid=%d] got %zd bytes from %s:%d: %.*s\n",
+               (int)pid, (int)tid, n, ipstr, pport, (int)n, buf);
         fflush(stdout);
     }
 
@@ -177,13 +188,21 @@ int main(int argc, char **argv) {
 
 
 
+
 // send_udp.c
+#define _GNU_SOURCE
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/syscall.h>
 #include <unistd.h>
+#include <stdlib.h>   // atoi
+
+static pid_t gettid_linux(void) {
+    return (pid_t)syscall(SYS_gettid);
+}
 
 int main(int argc, char **argv) {
     const char *ip = "127.0.0.1";
@@ -193,6 +212,9 @@ int main(int argc, char **argv) {
     if (argc > 1) ip = argv[1];
     if (argc > 2) port = atoi(argv[2]);
     if (argc > 3) msg = argv[3];
+
+    pid_t pid = getpid();
+    pid_t tid = gettid_linux();
 
     int fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (fd < 0) { perror("socket"); return 1; }
@@ -206,10 +228,13 @@ int main(int argc, char **argv) {
     ssize_t n = sendto(fd, msg, strlen(msg), 0, (struct sockaddr*)&dst, sizeof(dst));
     if (n < 0) { perror("sendto"); return 1; }
 
-    printf("sent %zd bytes to %s:%d\n", n, ip, port);
+    printf("[pid=%d tid=%d] sent %zd bytes to %s:%d\n",
+           (int)pid, (int)tid, n, ip, port);
+
     close(fd);
     return 0;
 }
+
 
 
 gcc -O2 -Wall -o recvmsg_test recvmsg_test.c
