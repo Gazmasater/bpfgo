@@ -653,6 +653,55 @@ sed -i 's/bpf_core_read_kernel/bpf_probe_read_kernel/g' /home/lev/bpfgo/trace.c
 
 
 
+// --- connect ---
+ConnEnter, err := link.Tracepoint("syscalls", "sys_enter_connect", objs.TraceConnectEnter, nil)
+if err != nil {
+	log.Fatalf("opening tracepoint sys_enter_connect: %s", err)
+}
+defer ConnEnter.Close()
+
+ConnExit, err := link.Tracepoint("syscalls", "sys_exit_connect", objs.TraceConnectExit, nil)
+if err != nil {
+	log.Fatalf("opening tracepoint sys_exit_connect: %s", err)
+}
+defer ConnExit.Close()
+
+// --- accept4 ---
+Acc4Enter, err := link.Tracepoint("syscalls", "sys_enter_accept4", objs.TraceAccept4Enter, nil)
+if err != nil {
+	log.Fatalf("opening tracepoint sys_enter_accept4: %s", err)
+}
+defer Acc4Enter.Close()
+
+Acc4Exit, err := link.Tracepoint("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit, nil)
+if err != nil {
+	log.Fatalf("opening tracepoint sys_exit_accept4: %s", err)
+}
+defer Acc4Exit.Close()
+
+// --- accept (если кто-то вызывает accept, а не accept4) ---
+AccEnter, err := link.Tracepoint("syscalls", "sys_enter_accept", objs.TraceAcceptEnter, nil)
+if err != nil {
+	log.Fatalf("opening tracepoint sys_enter_accept: %s", err)
+}
+defer AccEnter.Close()
+
+AccExit, err := link.Tracepoint("syscalls", "sys_exit_accept", objs.TraceAcceptExit, nil)
+if err != nil {
+	log.Fatalf("opening tracepoint sys_exit_accept: %s", err)
+}
+defer AccExit.Close()
+
+// --- close (чистим fd_state_map) ---
+CloseEnter, err := link.Tracepoint("syscalls", "sys_enter_close", objs.TraceCloseEnter, nil)
+if err != nil {
+	log.Fatalf("opening tracepoint sys_enter_close: %s", err)
+}
+defer CloseEnter.Close()
+
+
+
+
 
 
 
