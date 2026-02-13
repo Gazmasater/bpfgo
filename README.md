@@ -757,7 +757,6 @@ func resolveHost(ip net.IP) string {
 	cacheMu.Lock()
 	resolveCache[key] = host
 	cacheMu.Unlock()
-
 	return host
 }
 
@@ -771,29 +770,6 @@ func ip6FromArr(a [16]uint8) net.IP {
 	ip := make(net.IP, net.IPv6len)
 	copy(ip, a[:])
 	return ip
-}
-
-func peerKeyV4(family uint16, ipBE uint32, port uint16) PeerKey {
-	var k PeerKey
-	k.Family = family
-	k.Port = port
-	binary.BigEndian.PutUint32(k.IP[:4], ipBE)
-	return k
-}
-
-func peerKeyV6(family uint16, ip16 [16]uint8, port uint16) PeerKey {
-	var k PeerKey
-	k.Family = family
-	k.Port = port
-	copy(k.IP[:], ip16[:])
-	return k
-}
-
-func ipFromKey(k PeerKey) net.IP {
-	if k.Family == AF_INET {
-		return net.IP(k.IP[:4])
-	}
-	return net.IP(k.IP[:16])
 }
 
 func protoStr(p uint8) string {
@@ -822,7 +798,7 @@ func saveLookupBothDirections(family uint16, proto uint8, srcIP [16]byte, srcPor
 		Seen:      now,
 	}
 
-	// интерпретация #2: peer = dst, local = src
+	// интерпретация #2: peer = dst, local = src (на случай, если local/remote перепутаны в BPF)
 	k2 := PeerKey{Family: family, Port: dstPort, IP: dstIP}
 	v2 := LookupInfo{
 		Family:    family,
@@ -842,12 +818,8 @@ func saveLookupBothDirections(family uint16, proto uint8, srcIP [16]byte, srcPor
 
 func takeLookup(family uint16, peerIP [16]byte, peerPort uint16) (LookupInfo, bool) {
 	k := PeerKey{Family: family, Port: peerPort, IP: peerIP}
-
 	lookupMu.Lock()
 	v, ok := lookupByPeer[k]
-	if ok {
-		// оставим запись (не удаляем сразу), но проверим TTL при использовании
-	}
 	lookupMu.Unlock()
 	return v, ok
 }
@@ -885,7 +857,6 @@ func main() {
 
 	defer objs.Close()
 
-	// cleanup of lookup cache
 	go cleanupLookups(3 * time.Second)
 
 	netns, err := os.Open("/proc/self/ns/net")
@@ -897,36 +868,84 @@ func main() {
 	fmt.Printf("netns fd=%d\n", netns.Fd())
 	fmt.Printf("sizeof(traceInfo)=%d\n", unsafe.Sizeof(bpfTraceInfo{}))
 
-	// Attach tracepoints
 	links := make([]link.Link, 0, 16)
-	must := func(l link.Link, err error, what string) {
-		if err != nil {
-			log.Fatalf("attach %s: %v", what, err)
-		}
-		links = append(links, l)
-	}
-
-	must(link.Tracepoint("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter, nil), err, "sys_enter_sendmsg")
-	must(link.Tracepoint("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit, nil), err, "sys_exit_sendmsg")
-	must(link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil), err, "sys_enter_sendto")
-	must(link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil), err, "sys_exit_sendto")
-	must(link.Tracepoint("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter, nil), err, "sys_enter_recvmsg")
-	must(link.Tracepoint("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit, nil), err, "sys_exit_recvmsg")
-	must(link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil), err, "sys_enter_recvfrom")
-	must(link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil), err, "sys_exit_recvfrom")
-	must(link.Tracepoint("sock", "inet_sock_set_state", objs.TraceTcpEst, nil), err, "inet_sock_set_state")
-
-	skLookupLink, err := link.AttachNetNs(int(netns.Fd()), objs.LookUp)
-	if err != nil {
-		log.Fatalf("attach sk_lookup: %v", err)
-	}
-	links = append(links, skLookupLink)
-
 	defer func() {
 		for _, l := range links {
 			_ = l.Close()
 		}
 	}()
+
+	// --- Attach tracepoints correctly (two-value returns) ---
+	{
+		l, err := link.Tracepoint("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter, nil)
+		if err != nil {
+			log.Fatalf("attach sys_enter_sendmsg: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.Tracepoint("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit, nil)
+		if err != nil {
+			log.Fatalf("attach sys_exit_sendmsg: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
+		if err != nil {
+			log.Fatalf("attach sys_enter_sendto: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
+		if err != nil {
+			log.Fatalf("attach sys_exit_sendto: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.Tracepoint("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter, nil)
+		if err != nil {
+			log.Fatalf("attach sys_enter_recvmsg: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.Tracepoint("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit, nil)
+		if err != nil {
+			log.Fatalf("attach sys_exit_recvmsg: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
+		if err != nil {
+			log.Fatalf("attach sys_enter_recvfrom: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
+		if err != nil {
+			log.Fatalf("attach sys_exit_recvfrom: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.Tracepoint("sock", "inet_sock_set_state", objs.TraceTcpEst, nil)
+		if err != nil {
+			log.Fatalf("attach inet_sock_set_state: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.AttachNetNs(int(netns.Fd()), objs.LookUp)
+		if err != nil {
+			log.Fatalf("attach sk_lookup: %v", err)
+		}
+		links = append(links, l)
+	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -1008,9 +1027,8 @@ func main() {
 			// sk_lookup
 			case 3:
 				if ev.Family == AF_INET {
-					// ВАЖНО: не пытаемся угадать, где local/remote — сохраняем обе интерпретации.
-					srcIP := make([16]byte)
-					dstIP := make([16]byte)
+					var srcIP [16]byte
+					var dstIP [16]byte
 					binary.BigEndian.PutUint32(srcIP[:4], ev.SrcIP.S_addr)
 					binary.BigEndian.PutUint32(dstIP[:4], ev.DstIP.S_addr)
 
@@ -1021,8 +1039,8 @@ func main() {
 						dstIP, uint16(ev.Dport),
 					)
 				} else if ev.Family == AF_INET6 {
-					srcIP := make([16]byte)
-					dstIP := make([16]byte)
+					var srcIP [16]byte
+					var dstIP [16]byte
 					copy(srcIP[:], ev.SrcIP6.In6U.U6Addr8[:])
 					copy(dstIP[:], ev.DstIP6.In6U.U6Addr8[:])
 
@@ -1034,19 +1052,14 @@ func main() {
 					)
 				}
 
-			// inet_sock_set_state (оставил только “как факт”, без твоих каналов/склейки)
+			// inet_sock_set_state (опционально)
 			case 6:
-				// печатай только установление, если нужно
-				// (у тебя в BPF state пишется newstate, proto, ports, ips)
 				if ev.Family == AF_INET && ev.State != 0 {
 					src := ip4FromBE(ev.SrcIP.S_addr)
 					dst := ip4FromBE(ev.DstIP.S_addr)
 					fmt.Printf("TCPSTATE pid=%d comm=%s state=%d %s:%d -> %s:%d\n",
 						ev.Pid, comm, ev.State, src.String(), ev.Sport, dst.String(), ev.Dport)
 				}
-
-			default:
-				// игнор
 			}
 		}
 	}()
@@ -1057,9 +1070,6 @@ func main() {
 }
 
 func handleRecv(tag string, ev bpfTraceInfo, comm string) {
-	// recvmsg/recvfrom у тебя несут peer (src ip:port) + pid/comm.
-	// dst (local ip:port) берём из sk_lookup по ключу peer.
-
 	if ev.Family == AF_INET {
 		peerIPBE := ev.SrcIP.S_addr
 		peer := ip4FromBE(peerIPBE)
@@ -1068,7 +1078,7 @@ func handleRecv(tag string, ev bpfTraceInfo, comm string) {
 		var peerKeyIP [16]byte
 		binary.BigEndian.PutUint32(peerKeyIP[:4], peerIPBE)
 
-		li, ok := takeLookup(AF_INET, peerKeyIP, peerPort)
+		li, ok := takeLookup(uint16(AF_INET), peerKeyIP, peerPort)
 		if ok && time.Since(li.Seen) <= 3*time.Second {
 			local := net.IP(li.LocalIP[:4])
 			p := protoStr(li.Proto)
@@ -1083,7 +1093,6 @@ func handleRecv(tag string, ev bpfTraceInfo, comm string) {
 			return
 		}
 
-		// fallback без lookup
 		fmt.Printf("%-7s pid=%d comm=%s  peer=%s:%d (no lookup)\n",
 			tag, ev.Pid, comm, peer.String(), peerPort)
 		return
@@ -1096,7 +1105,7 @@ func handleRecv(tag string, ev bpfTraceInfo, comm string) {
 		var peerKeyIP [16]byte
 		copy(peerKeyIP[:], ev.SrcIP6.In6U.U6Addr8[:])
 
-		li, ok := takeLookup(AF_INET6, peerKeyIP, peerPort)
+		li, ok := takeLookup(uint16(AF_INET6), peerKeyIP, peerPort)
 		if ok && time.Since(li.Seen) <= 3*time.Second {
 			local := net.IP(li.LocalIP[:16])
 			p := protoStr(li.Proto)
@@ -1115,37 +1124,5 @@ func handleRecv(tag string, ev bpfTraceInfo, comm string) {
 			tag, ev.Pid, comm, peer.String(), peerPort)
 	}
 }
-
-
-
-
-
-[{
-	"resource": "/home/lev/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#2",
-	"code": {
-		"value": "TooManyValues",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "TooManyValues"
-		}
-	},
-	"severity": 8,
-	"message": "multiple-value link.Tracepoint(\"syscalls\", \"sys_enter_sendmsg\", objs.TraceSendmsgEnter, nil) (value of type (link.Link, error)) in single-value context",
-	"source": "compiler",
-	"startLineNumber": 258,
-	"startColumn": 7,
-	"endLineNumber": 258,
-	"endColumn": 84,
-	"modelVersionId": 7,
-	"origin": "extHost1"
-}]
-
-
-
-
 
 
