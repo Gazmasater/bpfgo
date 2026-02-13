@@ -1217,3 +1217,11 @@ cleanup:
     return 0;
 }
 
+
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, __u64);
+    __type(value, __u64); // user pointer to sockaddr
+} addrBind_map SEC(".maps");
