@@ -649,507 +649,487 @@ ssh root@38.180.106.46
 
 
 
-package main
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, __u64);
+    __type(value, __u64); // user pointer: struct user_msghdr *
+} msgSend_map SEC(".maps");
 
-import (
-	"bpfgo/pkg"
-	"encoding/binary"
-	"errors"
-	"fmt"
-	"log"
-	"net"
-	"net/http"
-	_ "net/http/pprof"
-	"os"
-	"os/signal"
-	"path/filepath"
-	"sync"
-	"syscall"
-	"time"
-	"unsafe"
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, __u64);
+    __type(value, __u64); // user pointer: struct user_msghdr *
+} msgRecv_map SEC(".maps");
 
-	"github.com/cilium/ebpf/link"
-	"github.com/cilium/ebpf/perf"
-	"github.com/cilium/ebpf/rlimit"
-)
 
-var objs bpfObjects
 
-const (
-	AF_INET  = 2
-	AF_INET6 = 10
-)
 
-type PeerKey struct {
-	Family uint16
-	Port   uint16
-	IP     [16]byte // for IPv4: first 4 bytes used
+SEC("tracepoint/syscalls/sys_enter_sendmsg")
+int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    struct conn_info_t conn_info = {};
+    conn_info.pid = tgid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &conn_info, BPF_ANY);
+
+    __u64 msg_ptr = (__u64)ctx->args[1]; // struct user_msghdr * (user)
+    if (msg_ptr)
+        bpf_map_update_elem(&msgSend_map, &id, &msg_ptr, BPF_ANY);
+
+    return 0;
 }
 
-type LookupInfo struct {
-	Family uint16
-	Proto  uint8
-
-	PeerIP   [16]byte
-	PeerPort uint16
-
-	LocalIP   [16]byte
-	LocalPort uint16
-
-	Seen time.Time
-}
-
-var (
-	lookupMu     sync.Mutex
-	lookupByPeer = make(map[PeerKey]LookupInfo, 8192)
-)
-
-var (
-	resolveCache = make(map[string]string)
-	cacheMu      sync.RWMutex
-
-	commCache = make(map[[32]int8]string)
-	commMu    sync.RWMutex
-)
-
-func cachedComm(c [32]int8) string {
-	commMu.RLock()
-	if s, ok := commCache[c]; ok {
-		commMu.RUnlock()
-		return s
-	}
-	commMu.RUnlock()
-
-	s := pkg.Int8ToString(c)
-
-	commMu.Lock()
-	commCache[c] = s
-	commMu.Unlock()
-	return s
-}
-
-func resolveHost(ip net.IP) string {
-	key := ip.String()
-
-	cacheMu.RLock()
-	if host, ok := resolveCache[key]; ok {
-		cacheMu.RUnlock()
-		return host
-	}
-	cacheMu.RUnlock()
-
-	var host string
-	if ip.IsLoopback() {
-		host = "localhost"
-	} else {
-		if ip.To4() != nil {
-			host = pkg.ResolveIP(ip)
-		} else {
-			h, err := pkg.ResolveIP_n(ip)
-			if err != nil {
-				host = "unknown"
-			} else {
-				host = h
-			}
-		}
-	}
-
-	cacheMu.Lock()
-	resolveCache[key] = host
-	cacheMu.Unlock()
-	return host
-}
-
-func ip4FromBE(u uint32) net.IP {
-	var b [4]byte
-	binary.BigEndian.PutUint32(b[:], u)
-	return net.IP(b[:])
-}
-
-func ip6FromArr(a [16]uint8) net.IP {
-	ip := make(net.IP, net.IPv6len)
-	copy(ip, a[:])
-	return ip
-}
-
-func protoStr(p uint8) string {
-	switch p {
-	case 6:
-		return "TCP"
-	case 17:
-		return "UDP"
-	default:
-		return fmt.Sprintf("P%d", p)
-	}
-}
-
-func saveLookupBothDirections(family uint16, proto uint8, srcIP [16]byte, srcPort uint16, dstIP [16]byte, dstPort uint16) {
-	now := time.Now()
-
-	// интерпретация #1: peer = src, local = dst
-	k1 := PeerKey{Family: family, Port: srcPort, IP: srcIP}
-	v1 := LookupInfo{
-		Family:    family,
-		Proto:     proto,
-		PeerIP:    srcIP,
-		PeerPort:  srcPort,
-		LocalIP:   dstIP,
-		LocalPort: dstPort,
-		Seen:      now,
-	}
-
-	// интерпретация #2: peer = dst, local = src (на случай, если local/remote перепутаны в BPF)
-	k2 := PeerKey{Family: family, Port: dstPort, IP: dstIP}
-	v2 := LookupInfo{
-		Family:    family,
-		Proto:     proto,
-		PeerIP:    dstIP,
-		PeerPort:  dstPort,
-		LocalIP:   srcIP,
-		LocalPort: srcPort,
-		Seen:      now,
-	}
-
-	lookupMu.Lock()
-	lookupByPeer[k1] = v1
-	lookupByPeer[k2] = v2
-	lookupMu.Unlock()
-}
-
-func takeLookup(family uint16, peerIP [16]byte, peerPort uint16) (LookupInfo, bool) {
-	k := PeerKey{Family: family, Port: peerPort, IP: peerIP}
-	lookupMu.Lock()
-	v, ok := lookupByPeer[k]
-	lookupMu.Unlock()
-	return v, ok
-}
-
-func cleanupLookups(ttl time.Duration) {
-	t := time.NewTicker(2 * time.Second)
-	defer t.Stop()
-
-	for range t.C {
-		cut := time.Now().Add(-ttl)
-		lookupMu.Lock()
-		for k, v := range lookupByPeer {
-			if v.Seen.Before(cut) {
-				delete(lookupByPeer, k)
-			}
-		}
-		lookupMu.Unlock()
-	}
-}
-
-func init() {
-	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatalf("failed to remove memory limit: %v", err)
-	}
-	if err := loadBpfObjects(&objs, nil); err != nil {
-		log.Fatalf("failed to load bpf objects: %v", err)
-	}
-}
-
-func main() {
-	go func() {
-		log.Println("pprof on :6060")
-		_ = http.ListenAndServe(":6060", nil)
-	}()
-
-	defer objs.Close()
-
-	go cleanupLookups(3 * time.Second)
-
-	netns, err := os.Open("/proc/self/ns/net")
-	if err != nil {
-		log.Fatalf("open netns: %v", err)
-	}
-	defer netns.Close()
-
-	fmt.Printf("netns fd=%d\n", netns.Fd())
-	fmt.Printf("sizeof(traceInfo)=%d\n", unsafe.Sizeof(bpfTraceInfo{}))
-
-	links := make([]link.Link, 0, 16)
-	defer func() {
-		for _, l := range links {
-			_ = l.Close()
-		}
-	}()
-
-	// --- Attach tracepoints correctly (two-value returns) ---
-	{
-		l, err := link.Tracepoint("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter, nil)
-		if err != nil {
-			log.Fatalf("attach sys_enter_sendmsg: %v", err)
-		}
-		links = append(links, l)
-	}
-	{
-		l, err := link.Tracepoint("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit, nil)
-		if err != nil {
-			log.Fatalf("attach sys_exit_sendmsg: %v", err)
-		}
-		links = append(links, l)
-	}
-	{
-		l, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
-		if err != nil {
-			log.Fatalf("attach sys_enter_sendto: %v", err)
-		}
-		links = append(links, l)
-	}
-	{
-		l, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
-		if err != nil {
-			log.Fatalf("attach sys_exit_sendto: %v", err)
-		}
-		links = append(links, l)
-	}
-	{
-		l, err := link.Tracepoint("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter, nil)
-		if err != nil {
-			log.Fatalf("attach sys_enter_recvmsg: %v", err)
-		}
-		links = append(links, l)
-	}
-	{
-		l, err := link.Tracepoint("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit, nil)
-		if err != nil {
-			log.Fatalf("attach sys_exit_recvmsg: %v", err)
-		}
-		links = append(links, l)
-	}
-	{
-		l, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
-		if err != nil {
-			log.Fatalf("attach sys_enter_recvfrom: %v", err)
-		}
-		links = append(links, l)
-	}
-	{
-		l, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
-		if err != nil {
-			log.Fatalf("attach sys_exit_recvfrom: %v", err)
-		}
-		links = append(links, l)
-	}
-	{
-		l, err := link.Tracepoint("sock", "inet_sock_set_state", objs.TraceTcpEst, nil)
-		if err != nil {
-			log.Fatalf("attach inet_sock_set_state: %v", err)
-		}
-		links = append(links, l)
-	}
-	{
-		l, err := link.AttachNetNs(int(netns.Fd()), objs.LookUp)
-		if err != nil {
-			log.Fatalf("attach sk_lookup: %v", err)
-		}
-		links = append(links, l)
-	}
-
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		const buffLen = 256 * 1024
-		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
-		if err != nil {
-			log.Fatalf("perf.NewReader: %v", err)
-		}
-		defer rd.Close()
-
-		selfName := filepath.Base(os.Args[0])
-
-		for {
-			record, err := rd.Read()
-			if err != nil {
-				if errors.Is(err, perf.ErrClosed) {
-					return
-				}
-				log.Printf("perf read error: %v", err)
-				continue
-			}
-
-			if record.LostSamples != 0 {
-				log.Printf("LOST %d samples", record.LostSamples)
-				continue
-			}
-
-			if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
-				log.Printf("invalid event size: %d", len(record.RawSample))
-				continue
-			}
-
-			ev := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
-			comm := cachedComm(ev.Comm)
-			if comm == selfName {
-				continue
-			}
-
-			switch ev.Sysexit {
-
-			// sendto_exit
-			case 1:
-				if ev.Family == AF_INET {
-					dst := ip4FromBE(ev.DstIP.S_addr)
-					fmt.Printf("SENDTO  pid=%d comm=%s  %s dst=%s:%d\n",
-						ev.Pid, comm, protoStr(uint8(ev.Proto)),
-						dst.String(), ev.Dport)
-				} else if ev.Family == AF_INET6 {
-					dst := ip6FromArr(ev.DstIP6.In6U.U6Addr8)
-					fmt.Printf("SENDTO6 pid=%d comm=%s  %s dst=[%s]:%d\n",
-						ev.Pid, comm, protoStr(uint8(ev.Proto)),
-						dst.String(), ev.Dport)
-				}
-
-			// recvfrom_exit
-			case 2:
-				handleRecv("RECVFROM", ev, comm)
-
-			// recvmsg_exit
-			case 12:
-				handleRecv("RECVMSG", ev, comm)
-
-			// sendmsg_exit
-			case 11:
-				if ev.Family == AF_INET {
-					dst := ip4FromBE(ev.DstIP.S_addr)
-					fmt.Printf("SENDMSG  pid=%d comm=%s  %s dst=%s:%d\n",
-						ev.Pid, comm, protoStr(uint8(ev.Proto)),
-						dst.String(), ev.Dport)
-				} else if ev.Family == AF_INET6 {
-					dst := ip6FromArr(ev.DstIP6.In6U.U6Addr8)
-					fmt.Printf("SENDMSG6 pid=%d comm=%s  %s dst=[%s]:%d\n",
-						ev.Pid, comm, protoStr(uint8(ev.Proto)),
-						dst.String(), ev.Dport)
-				}
-
-			// sk_lookup
-			case 3:
-				if ev.Family == AF_INET {
-					var srcIP [16]byte
-					var dstIP [16]byte
-					binary.BigEndian.PutUint32(srcIP[:4], ev.SrcIP.S_addr)
-					binary.BigEndian.PutUint32(dstIP[:4], ev.DstIP.S_addr)
-
-					saveLookupBothDirections(
-						uint16(ev.Family),
-						uint8(ev.Proto),
-						srcIP, uint16(ev.Sport),
-						dstIP, uint16(ev.Dport),
-					)
-				} else if ev.Family == AF_INET6 {
-					var srcIP [16]byte
-					var dstIP [16]byte
-					copy(srcIP[:], ev.SrcIP6.In6U.U6Addr8[:])
-					copy(dstIP[:], ev.DstIP6.In6U.U6Addr8[:])
-
-					saveLookupBothDirections(
-						uint16(ev.Family),
-						uint8(ev.Proto),
-						srcIP, uint16(ev.Sport),
-						dstIP, uint16(ev.Dport),
-					)
-				}
-
-			// inet_sock_set_state (опционально)
-			case 6:
-				if ev.Family == AF_INET && ev.State != 0 {
-					src := ip4FromBE(ev.SrcIP.S_addr)
-					dst := ip4FromBE(ev.DstIP.S_addr)
-					fmt.Printf("TCPSTATE pid=%d comm=%s state=%d %s:%d -> %s:%d\n",
-						ev.Pid, comm, ev.State, src.String(), ev.Sport, dst.String(), ev.Dport)
-				}
-			}
-		}
-	}()
-
-	fmt.Println("Press Ctrl+C to exit")
-	<-stop
-	fmt.Println("Exiting...")
-}
-
-func handleRecv(tag string, ev bpfTraceInfo, comm string) {
-	if ev.Family == AF_INET {
-		peerIPBE := ev.SrcIP.S_addr
-		peer := ip4FromBE(peerIPBE)
-		peerPort := uint16(ev.Sport)
-
-		var peerKeyIP [16]byte
-		binary.BigEndian.PutUint32(peerKeyIP[:4], peerIPBE)
-
-		li, ok := takeLookup(uint16(AF_INET), peerKeyIP, peerPort)
-		if ok && time.Since(li.Seen) <= 3*time.Second {
-			local := net.IP(li.LocalIP[:4])
-			p := protoStr(li.Proto)
-
-			dstHost := resolveHost(local)
-			srcHost := resolveHost(peer)
-
-			fmt.Printf("%-7s pid=%d comm=%s  %s  %s[%s:%d] -> %s[%s:%d]\n",
-				tag, ev.Pid, comm, p,
-				srcHost, peer.String(), peerPort,
-				dstHost, local.String(), li.LocalPort)
-			return
-		}
-
-		fmt.Printf("%-7s pid=%d comm=%s  peer=%s:%d (no lookup)\n",
-			tag, ev.Pid, comm, peer.String(), peerPort)
-		return
-	}
-
-	if ev.Family == AF_INET6 {
-		peer := ip6FromArr(ev.SrcIP6.In6U.U6Addr8)
-		peerPort := uint16(ev.Sport)
-
-		var peerKeyIP [16]byte
-		copy(peerKeyIP[:], ev.SrcIP6.In6U.U6Addr8[:])
-
-		li, ok := takeLookup(uint16(AF_INET6), peerKeyIP, peerPort)
-		if ok && time.Since(li.Seen) <= 3*time.Second {
-			local := net.IP(li.LocalIP[:16])
-			p := protoStr(li.Proto)
-
-			dstHost := resolveHost(local)
-			srcHost := resolveHost(peer)
-
-			fmt.Printf("%-7s pid=%d comm=%s  %s  %s[%s:%d] -> %s[%s:%d]\n",
-				tag, ev.Pid, comm, p,
-				srcHost, peer.String(), peerPort,
-				dstHost, local.String(), li.LocalPort)
-			return
-		}
-
-		fmt.Printf("%-7s pid=%d comm=%s  peer=[%s]:%d (no lookup)\n",
-			tag, ev.Pid, comm, peer.String(), peerPort)
-	}
-}
-
-
-
-
-mv recvmsg_test.c recvmsg_test.c.txt
-mv send_udp.c send_udp.c.txt
-
-
-
-import "encoding/binary"
-
-func ip4FromBE(u uint32) net.IP {
-    var b [4]byte
-    binary.BigEndian.PutUint32(b[:], u)
-    return net.IP(b[:])
-}
-
-
-if event.Sysexit == 20 {
-    if event.Family == 2 {
-        ip := ip4FromBE(event.DstIP.S_addr)
-        fmt.Printf("BIND OK pid=%d comm=%s  %s:%d\n",
-            event.Pid, cachedComm(event.Comm), ip.String(), event.Dport)
-    } else if event.Family == 10 {
-        // IPv6 печать как у тебя (через words/bytes)
-        fmt.Printf("BIND6 OK pid=%d comm=%s  port=%d\n",
-            event.Pid, cachedComm(event.Comm), event.Dport)
+SEC("tracepoint/syscalls/sys_exit_sendmsg")
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+
+    __s64 ret = ctx->ret;
+    if (ret <= 0) // 0 или ошибка
+        goto cleanup;
+
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!conn_info)
+        goto cleanup;
+
+    __u64 *msg_ptrp = bpf_map_lookup_elem(&msgSend_map, &id);
+    if (!msg_ptrp || !*msg_ptrp)
+        goto cleanup;
+
+    struct user_msghdr umsg = {};
+    if (bpf_core_read_user(&umsg, sizeof(umsg), (void *)*msg_ptrp) < 0)
+        goto cleanup;
+
+    // Для connected TCP/UDP msg_name часто NULL -> dst тут не узнать чисто из sendmsg
+    if (!umsg.msg_name || umsg.msg_namelen < sizeof(struct sockaddr))
+        goto cleanup;
+
+    struct sockaddr sa = {};
+    if (bpf_core_read_user(&sa, sizeof(sa), (void *)umsg.msg_name) < 0)
+        goto cleanup;
+
+    struct trace_info info = {};
+    __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+    info.sysexit = 11;
+    info.pid     = conn_info->pid;
+
+    if (sa.sa_family == AF_INET) {
+        struct sockaddr_in sin = {};
+        if (bpf_core_read_user(&sin, sizeof(sin), (void *)umsg.msg_name) < 0)
+            goto cleanup;
+
+        __u16 port = bpf_ntohs(sin.sin_port);
+        if (!port)
+            goto cleanup;
+
+        info.family = AF_INET;
+        info.dport  = port;
+        info.dstIP.s_addr = bpf_ntohl(sin.sin_addr.s_addr);
+
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+    } else if (sa.sa_family == AF_INET6) {
+        struct sockaddr_in6 sin6 = {};
+        if (bpf_core_read_user(&sin6, sizeof(sin6), (void *)umsg.msg_name) < 0)
+            goto cleanup;
+
+        __u16 port6 = bpf_ntohs(sin6.sin6_port);
+        if (!port6)
+            goto cleanup;
+
+        info.family = AF_INET6;
+        info.dport  = port6;
+        __builtin_memcpy(&info.dstIP6, &sin6.sin6_addr, sizeof(info.dstIP6));
+
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
     }
+
+cleanup:
+    bpf_map_delete_elem(&msgSend_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
 }
+
+
+
+
+SEC("tracepoint/syscalls/sys_enter_recvmsg")
+int trace_recvmsg_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    struct conn_info_t conn_info = {};
+    conn_info.pid = tgid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &conn_info, BPF_ANY);
+
+    __u64 msg_ptr = (__u64)ctx->args[1]; // struct user_msghdr * (user)
+    if (msg_ptr)
+        bpf_map_update_elem(&msgRecv_map, &id, &msg_ptr, BPF_ANY);
+
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_recvmsg")
+int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+
+    __s64 ret = ctx->ret;
+    if (ret <= 0)
+        goto cleanup;
+
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!conn_info)
+        goto cleanup;
+
+    __u64 *msg_ptrp = bpf_map_lookup_elem(&msgRecv_map, &id);
+    if (!msg_ptrp || !*msg_ptrp)
+        goto cleanup;
+
+    struct user_msghdr umsg = {};
+    if (bpf_core_read_user(&umsg, sizeof(umsg), (void *)*msg_ptrp) < 0)
+        goto cleanup;
+
+    // src-адрес придёт только если пользователь дал буфер msg_name
+    if (!umsg.msg_name || umsg.msg_namelen < sizeof(struct sockaddr))
+        goto cleanup;
+
+    struct sockaddr sa = {};
+    if (bpf_core_read_user(&sa, sizeof(sa), (void *)umsg.msg_name) < 0)
+        goto cleanup;
+
+    struct trace_info info = {};
+    __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+    info.sysexit = 12;
+    info.pid     = conn_info->pid;
+
+    if (sa.sa_family == AF_INET) {
+        struct sockaddr_in sin = {};
+        if (bpf_core_read_user(&sin, sizeof(sin), (void *)umsg.msg_name) < 0)
+            goto cleanup;
+
+        __u16 port = bpf_ntohs(sin.sin_port);
+        if (!port)
+            goto cleanup;
+
+        info.family = AF_INET;
+        info.sport  = port;
+        info.srcIP.s_addr = bpf_ntohl(sin.sin_addr.s_addr);
+
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+    } else if (sa.sa_family == AF_INET6) {
+        struct sockaddr_in6 sin6 = {};
+        if (bpf_core_read_user(&sin6, sizeof(sin6), (void *)umsg.msg_name) < 0)
+            goto cleanup;
+
+        __u16 port6 = bpf_ntohs(sin6.sin6_port);
+        if (!port6)
+            goto cleanup;
+
+        info.family = AF_INET6;
+        info.sport  = port6;
+        __builtin_memcpy(&info.srcIP6, &sin6.sin6_addr, sizeof(info.srcIP6));
+
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    }
+
+cleanup:
+    bpf_map_delete_elem(&msgRecv_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
+
+
+
+
+
+
+struct fd_key_t {
+    __u32 tgid;
+    __s32 fd;
+};
+
+struct fd_state_t {
+    __u16 family;
+    __u8  proto;
+
+    __u16 lport;
+    __u16 rport;
+
+    __u32 lip;
+    __u32 rip;
+
+    struct in6_addr lip6;
+    struct in6_addr rip6;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 65536);
+    __type(key, struct fd_key_t);
+    __type(value, struct fd_state_t);
+} fd_state_map SEC(".maps");
+
+struct inflight_fd_t {
+    __s32 fd;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 16384);
+    __type(key, __u64);              // pid_tgid
+    __type(value, struct inflight_fd_t);
+} connect_fd_map SEC(".maps");
+
+
+
+static __always_inline struct sock *sock_from_fd(int fd)
+{
+    if (fd < 0)
+        return 0;
+
+    struct task_struct *task = (struct task_struct *)bpf_get_current_task_btf();
+    if (!task)
+        return 0;
+
+    struct files_struct *files = BPF_CORE_READ(task, files);
+    if (!files)
+        return 0;
+
+    struct fdtable *fdt = BPF_CORE_READ(files, fdt);
+    if (!fdt)
+        return 0;
+
+    int max_fds = BPF_CORE_READ(fdt, max_fds);
+    if (fd >= max_fds)
+        return 0;
+
+    struct file **fd_array = BPF_CORE_READ(fdt, fd);
+    if (!fd_array)
+        return 0;
+
+    struct file *file = 0;
+    if (bpf_core_read_kernel(&file, sizeof(file), &fd_array[fd]) < 0 || !file)
+        return 0;
+
+    struct socket *sock = 0;
+    if (bpf_core_read_kernel(&sock, sizeof(sock), &file->private_data) < 0 || !sock)
+        return 0;
+
+    return BPF_CORE_READ(sock, sk);
+}
+
+static __always_inline int fill_fd_state(int fd, struct fd_state_t *st)
+{
+    struct sock *sk = sock_from_fd(fd);
+    if (!sk)
+        return -1;
+
+    st->family = BPF_CORE_READ(sk, __sk_common.skc_family);
+    st->proto  = BPF_CORE_READ(sk, sk_protocol);
+
+    st->lport  = BPF_CORE_READ(sk, __sk_common.skc_num);
+
+    __u16 dport_be = BPF_CORE_READ(sk, __sk_common.skc_dport);
+    st->rport = bpf_ntohs(dport_be);
+
+    if (st->family == AF_INET) {
+        st->lip = BPF_CORE_READ(sk, __sk_common.skc_rcv_saddr);
+        st->rip = BPF_CORE_READ(sk, __sk_common.skc_daddr);
+        // ip оставляем как есть (network order) — ты уже где-то то так, то так делаешь.
+        // Если хочешь в host order — скажи, приведём единообразно.
+        return 0;
+    }
+
+    if (st->family == AF_INET6) {
+        if (BPF_CORE_READ_INTO(&st->lip6, sk, __sk_common.skc_v6_rcv_saddr) < 0)
+            return -1;
+        if (BPF_CORE_READ_INTO(&st->rip6, sk, __sk_common.skc_v6_daddr) < 0)
+            return -1;
+        return 0;
+    }
+
+    return -1;
+}
+
+
+
+
+SEC("tracepoint/syscalls/sys_enter_connect")
+int trace_connect_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    struct conn_info_t conn_info = {};
+    conn_info.pid = tgid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &conn_info, BPF_ANY);
+
+    struct inflight_fd_t in = {};
+    in.fd = (int)ctx->args[0];
+    bpf_map_update_elem(&connect_fd_map, &id, &in, BPF_ANY);
+
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_connect")
+int trace_connect_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 ret = ctx->ret;
+    if (ret < 0)
+        goto cleanup;
+
+    struct inflight_fd_t *in = bpf_map_lookup_elem(&connect_fd_map, &id);
+    if (!in)
+        goto cleanup;
+
+    struct fd_state_t st = {};
+    if (fill_fd_state(in->fd, &st) < 0)
+        goto cleanup;
+
+    // сохраняем fd -> endpoints
+    struct fd_key_t k = { .tgid = tgid, .fd = in->fd };
+    bpf_map_update_elem(&fd_state_map, &k, &st, BPF_ANY);
+
+    // событие (src=local, dst=remote)
+    struct conn_info_t *conn = bpf_map_lookup_elem(&conn_info_map, &id);
+
+    struct trace_info info = {};
+    info.sysexit = 3;
+    info.pid     = tgid;
+    info.proto   = st.proto;
+    info.family  = st.family;
+    info.sport   = st.lport;
+    info.dport   = st.rport;
+
+    if (conn)
+        __builtin_memcpy(info.comm, conn->comm, sizeof(info.comm));
+    else
+        bpf_get_current_comm((char *)info.comm, sizeof(info.comm));
+
+    if (st.family == AF_INET) {
+        info.srcIP.s_addr = st.lip;
+        info.dstIP.s_addr = st.rip;
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    } else if (st.family == AF_INET6) {
+        __builtin_memcpy(&info.srcIP6, &st.lip6, sizeof(info.srcIP6));
+        __builtin_memcpy(&info.dstIP6, &st.rip6, sizeof(info.dstIP6));
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    }
+
+cleanup:
+    bpf_map_delete_elem(&connect_fd_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
+
+
+SEC("tracepoint/syscalls/sys_enter_accept4")
+int trace_accept4_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    struct conn_info_t conn_info = {};
+    conn_info.pid = tgid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &conn_info, BPF_ANY);
+
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_accept4")
+int trace_accept4_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 newfd = ctx->ret;
+    if (newfd < 0)
+        goto cleanup;
+
+    struct fd_state_t st = {};
+    if (fill_fd_state((int)newfd, &st) < 0)
+        goto cleanup;
+
+    struct fd_key_t k = { .tgid = tgid, .fd = (int)newfd };
+    bpf_map_update_elem(&fd_state_map, &k, &st, BPF_ANY);
+
+    // событие (src=remote, dst=local) — входящее соединение
+    struct conn_info_t *conn = bpf_map_lookup_elem(&conn_info_map, &id);
+
+    struct trace_info info = {};
+    info.sysexit = 4;
+    info.pid     = tgid;
+    info.proto   = st.proto;
+    info.family  = st.family;
+
+    // src=клиент
+    info.sport = st.rport;
+    // dst=сервер
+    info.dport = st.lport;
+
+    if (conn)
+        __builtin_memcpy(info.comm, conn->comm, sizeof(info.comm));
+    else
+        bpf_get_current_comm((char *)info.comm, sizeof(info.comm));
+
+    if (st.family == AF_INET) {
+        info.srcIP.s_addr = st.rip;
+        info.dstIP.s_addr = st.lip;
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    } else if (st.family == AF_INET6) {
+        __builtin_memcpy(&info.srcIP6, &st.rip6, sizeof(info.srcIP6));
+        __builtin_memcpy(&info.dstIP6, &st.lip6, sizeof(info.dstIP6));
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    }
+
+cleanup:
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
+// accept (не accept4) — на всякий
+SEC("tracepoint/syscalls/sys_enter_accept")
+int trace_accept_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    return trace_accept4_enter(ctx);
+}
+
+SEC("tracepoint/syscalls/sys_exit_accept")
+int trace_accept_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    return trace_accept4_exit(ctx);
+}
+
+
+
+SEC("tracepoint/syscalls/sys_enter_close")
+int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+    int fd = (int)ctx->args[0];
+
+    struct fd_key_t k = { .tgid = tgid, .fd = fd };
+    bpf_map_delete_elem(&fd_state_map, &k);
+    return 0;
+}
+
+
+
+
