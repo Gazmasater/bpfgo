@@ -1133,15 +1133,23 @@ mv send_udp.c send_udp.c.txt
 
 
 
-BindEnter, err := link.Tracepoint("syscalls", "sys_enter_bind", objs.TraceBindEnter, nil)
-if err != nil {
-    log.Fatalf("opening tracepoint sys_enter_bind: %s", err)
-}
-defer BindEnter.Close()
+import "encoding/binary"
 
-BindExit, err := link.Tracepoint("syscalls", "sys_exit_bind", objs.TraceBindExit, nil)
-if err != nil {
-    log.Fatalf("opening tracepoint sys_exit_bind: %s", err)
+func ip4FromBE(u uint32) net.IP {
+    var b [4]byte
+    binary.BigEndian.PutUint32(b[:], u)
+    return net.IP(b[:])
 }
-defer BindExit.Close()
 
+
+if event.Sysexit == 20 {
+    if event.Family == 2 {
+        ip := ip4FromBE(event.DstIP.S_addr)
+        fmt.Printf("BIND OK pid=%d comm=%s  %s:%d\n",
+            event.Pid, cachedComm(event.Comm), ip.String(), event.Dport)
+    } else if event.Family == 10 {
+        // IPv6 печать как у тебя (через words/bytes)
+        fmt.Printf("BIND6 OK pid=%d comm=%s  port=%d\n",
+            event.Pid, cachedComm(event.Comm), event.Dport)
+    }
+}
