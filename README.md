@@ -1133,3 +1133,54 @@ int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
 
 
 
+
+/home/lev/bpfgo/trace.c:225:9: warning: implicit declaration of function 'bpf_core_read_kernel' is invalid in C99 [-Wimplicit-function-declaration]
+    if (bpf_core_read_kernel(&file, sizeof(file), &fd_array[fd]) < 0 || !file)
+        ^
+/home/lev/bpfgo/trace.c:435:5: error: redefinition of 'trace_connect_enter'
+int trace_connect_enter(struct trace_event_raw_sys_enter *ctx)
+    ^
+/home/lev/bpfgo/trace.c:270:5: note: previous definition is here
+int trace_connect_enter(struct trace_event_raw_sys_enter *ctx)
+    ^
+/home/lev/bpfgo/trace.c:453:5: error: redefinition of 'trace_connect_exit'
+int trace_connect_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+/home/lev/bpfgo/trace.c:288:5: note: previous definition is here
+int trace_connect_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+/home/lev/bpfgo/trace.c:509:5: error: redefinition of 'trace_accept4_enter'
+int trace_accept4_enter(struct trace_event_raw_sys_enter *ctx)
+    ^
+/home/lev/bpfgo/trace.c:344:5: note: previous definition is here
+int trace_accept4_enter(struct trace_event_raw_sys_enter *ctx)
+    ^
+/home/lev/bpfgo/trace.c:523:5: error: redefinition of 'trace_accept4_exit'
+int trace_accept4_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+/home/lev/bpfgo/trace.c:358:5: note: previous definition is here
+int trace_accept4_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+/home/lev/bpfgo/trace.c:575:5: error: redefinition of 'trace_accept_enter'
+int trace_accept_enter(struct trace_event_raw_sys_enter *ctx)
+    ^
+/home/lev/bpfgo/trace.c:410:5: note: previous definition is here
+int trace_accept_enter(struct trace_event_raw_sys_enter *ctx)
+    ^
+/home/lev/bpfgo/trace.c:581:5: error: redefinition of 'trace_accept_exit'
+int trace_accept_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+/home/lev/bpfgo/trace.c:416:5: note: previous definition is here
+int trace_accept_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+/home/lev/bpfgo/trace.c:589:5: error: redefinition of 'trace_close_enter'
+int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
+    ^
+/home/lev/bpfgo/trace.c:424:5: note: previous definition is here
+int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
+    ^
+1 warning and 7 errors generated.
+Error: compile: exit status 1
+
+
+
