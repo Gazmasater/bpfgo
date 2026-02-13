@@ -401,6 +401,48 @@ int main(int argc, char **argv) {
 
 
 
+SEC("sk_lookup")
+int look_up(struct bpf_sk_lookup *ctx) {
+    struct trace_info info = {};
+    info.sysexit = 3;
+    info.family  = ctx->family;
+
+    if (ctx->protocol != IPPROTO_TCP && ctx->protocol != IPPROTO_UDP)
+        return SK_PASS;
+
+    info.proto = ctx->protocol;
+
+    if (ctx->family == AF_INET) {
+        // src = remote (клиент), dst = local (сервер)
+        info.srcIP.s_addr = ctx->remote_ip4;
+        info.sport        = bpf_ntohs(ctx->remote_port); // remote_port обычно в network order
+        info.dstIP.s_addr = ctx->local_ip4;
+        info.dport        = ctx->local_port;             // local_port обычно host order
+
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+    } else if (ctx->family == AF_INET6) {
+        info.srcIP6.in6_u.u6_addr32[0] = ctx->remote_ip6[0];
+        info.srcIP6.in6_u.u6_addr32[1] = ctx->remote_ip6[1];
+        info.srcIP6.in6_u.u6_addr32[2] = ctx->remote_ip6[2];
+        info.srcIP6.in6_u.u6_addr32[3] = ctx->remote_ip6[3];
+
+        info.dstIP6.in6_u.u6_addr32[0] = ctx->local_ip6[0];
+        info.dstIP6.in6_u.u6_addr32[1] = ctx->local_ip6[1];
+        info.dstIP6.in6_u.u6_addr32[2] = ctx->local_ip6[2];
+        info.dstIP6.in6_u.u6_addr32[3] = ctx->local_ip6[3];
+
+        info.sport = bpf_ntohs(ctx->remote_port);
+        info.dport = ctx->local_port;
+
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    }
+
+    return SK_PASS;
+}
+
+
+
 
 
 
