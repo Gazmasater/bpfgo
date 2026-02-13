@@ -1130,3 +1130,9 @@ func handleRecv(tag string, ev bpfTraceInfo, comm string) {
 
 mv recvmsg_test.c recvmsg_test.c.txt
 mv send_udp.c send_udp.c.txt
+
+
+
+lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
+[sudo] password for lev: 
+2026/02/13 21:33:36 failed to load bpf objects: field LookUp: program look_up: load program: permission denied: dereference of modified ctx ptr R2 off=60 disallowed (64 line(s) omitted)
