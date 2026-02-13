@@ -1126,3 +1126,18 @@ func handleRecv(tag string, ev bpfTraceInfo, comm string) {
 }
 
 
+
+
+[{
+	"resource": "/home/lev/bpfgo/bpf_x86_bpfel.go",
+	"owner": "_generated_diagnostic_collection_name_#3",
+	"severity": 8,
+	"message": "C source files not allowed when not using cgo or SWIG: recvmsg_test.c send_udp.c",
+	"source": "go list",
+	"startLineNumber": 1,
+	"startColumn": 1,
+	"endLineNumber": 1,
+	"endColumn": 1,
+	"modelVersionId": 1,
+	"origin": "extHost1"
+}]
