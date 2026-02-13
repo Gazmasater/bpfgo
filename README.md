@@ -649,8 +649,472 @@ ssh root@38.180.106.46
 
 
 
+package main
 
-S
+import (
+	"bpfgo/pkg"
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"log"
+	"net"
+	"net/http"
+	_ "net/http/pprof"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"sync"
+	"syscall"
+	"time"
+	"unsafe"
+
+	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/perf"
+	"github.com/cilium/ebpf/rlimit"
+)
+
+var objs bpfObjects
+
+const (
+	AF_INET  = 2
+	AF_INET6 = 10
+)
+
+type PeerKey struct {
+	Family uint16
+	Port   uint16
+	IP     [16]byte // for IPv4: first 4 bytes used
+}
+
+type LookupInfo struct {
+	Family uint16
+	Proto  uint8
+
+	PeerIP   [16]byte
+	PeerPort uint16
+
+	LocalIP   [16]byte
+	LocalPort uint16
+
+	Seen time.Time
+}
+
+var (
+	lookupMu     sync.Mutex
+	lookupByPeer = make(map[PeerKey]LookupInfo, 8192)
+)
+
+var (
+	resolveCache = make(map[string]string)
+	cacheMu      sync.RWMutex
+
+	commCache = make(map[[32]int8]string)
+	commMu    sync.RWMutex
+)
+
+func cachedComm(c [32]int8) string {
+	commMu.RLock()
+	if s, ok := commCache[c]; ok {
+		commMu.RUnlock()
+		return s
+	}
+	commMu.RUnlock()
+
+	s := pkg.Int8ToString(c)
+
+	commMu.Lock()
+	commCache[c] = s
+	commMu.Unlock()
+	return s
+}
+
+func resolveHost(ip net.IP) string {
+	key := ip.String()
+
+	cacheMu.RLock()
+	if host, ok := resolveCache[key]; ok {
+		cacheMu.RUnlock()
+		return host
+	}
+	cacheMu.RUnlock()
+
+	var host string
+	if ip.IsLoopback() {
+		host = "localhost"
+	} else {
+		if ip.To4() != nil {
+			host = pkg.ResolveIP(ip)
+		} else {
+			h, err := pkg.ResolveIP_n(ip)
+			if err != nil {
+				host = "unknown"
+			} else {
+				host = h
+			}
+		}
+	}
+
+	cacheMu.Lock()
+	resolveCache[key] = host
+	cacheMu.Unlock()
+
+	return host
+}
+
+func ip4FromBE(u uint32) net.IP {
+	var b [4]byte
+	binary.BigEndian.PutUint32(b[:], u)
+	return net.IP(b[:])
+}
+
+func ip6FromArr(a [16]uint8) net.IP {
+	ip := make(net.IP, net.IPv6len)
+	copy(ip, a[:])
+	return ip
+}
+
+func peerKeyV4(family uint16, ipBE uint32, port uint16) PeerKey {
+	var k PeerKey
+	k.Family = family
+	k.Port = port
+	binary.BigEndian.PutUint32(k.IP[:4], ipBE)
+	return k
+}
+
+func peerKeyV6(family uint16, ip16 [16]uint8, port uint16) PeerKey {
+	var k PeerKey
+	k.Family = family
+	k.Port = port
+	copy(k.IP[:], ip16[:])
+	return k
+}
+
+func ipFromKey(k PeerKey) net.IP {
+	if k.Family == AF_INET {
+		return net.IP(k.IP[:4])
+	}
+	return net.IP(k.IP[:16])
+}
+
+func protoStr(p uint8) string {
+	switch p {
+	case 6:
+		return "TCP"
+	case 17:
+		return "UDP"
+	default:
+		return fmt.Sprintf("P%d", p)
+	}
+}
+
+func saveLookupBothDirections(family uint16, proto uint8, srcIP [16]byte, srcPort uint16, dstIP [16]byte, dstPort uint16) {
+	now := time.Now()
+
+	// интерпретация #1: peer = src, local = dst
+	k1 := PeerKey{Family: family, Port: srcPort, IP: srcIP}
+	v1 := LookupInfo{
+		Family:    family,
+		Proto:     proto,
+		PeerIP:    srcIP,
+		PeerPort:  srcPort,
+		LocalIP:   dstIP,
+		LocalPort: dstPort,
+		Seen:      now,
+	}
+
+	// интерпретация #2: peer = dst, local = src
+	k2 := PeerKey{Family: family, Port: dstPort, IP: dstIP}
+	v2 := LookupInfo{
+		Family:    family,
+		Proto:     proto,
+		PeerIP:    dstIP,
+		PeerPort:  dstPort,
+		LocalIP:   srcIP,
+		LocalPort: srcPort,
+		Seen:      now,
+	}
+
+	lookupMu.Lock()
+	lookupByPeer[k1] = v1
+	lookupByPeer[k2] = v2
+	lookupMu.Unlock()
+}
+
+func takeLookup(family uint16, peerIP [16]byte, peerPort uint16) (LookupInfo, bool) {
+	k := PeerKey{Family: family, Port: peerPort, IP: peerIP}
+
+	lookupMu.Lock()
+	v, ok := lookupByPeer[k]
+	if ok {
+		// оставим запись (не удаляем сразу), но проверим TTL при использовании
+	}
+	lookupMu.Unlock()
+	return v, ok
+}
+
+func cleanupLookups(ttl time.Duration) {
+	t := time.NewTicker(2 * time.Second)
+	defer t.Stop()
+
+	for range t.C {
+		cut := time.Now().Add(-ttl)
+		lookupMu.Lock()
+		for k, v := range lookupByPeer {
+			if v.Seen.Before(cut) {
+				delete(lookupByPeer, k)
+			}
+		}
+		lookupMu.Unlock()
+	}
+}
+
+func init() {
+	if err := rlimit.RemoveMemlock(); err != nil {
+		log.Fatalf("failed to remove memory limit: %v", err)
+	}
+	if err := loadBpfObjects(&objs, nil); err != nil {
+		log.Fatalf("failed to load bpf objects: %v", err)
+	}
+}
+
+func main() {
+	go func() {
+		log.Println("pprof on :6060")
+		_ = http.ListenAndServe(":6060", nil)
+	}()
+
+	defer objs.Close()
+
+	// cleanup of lookup cache
+	go cleanupLookups(3 * time.Second)
+
+	netns, err := os.Open("/proc/self/ns/net")
+	if err != nil {
+		log.Fatalf("open netns: %v", err)
+	}
+	defer netns.Close()
+
+	fmt.Printf("netns fd=%d\n", netns.Fd())
+	fmt.Printf("sizeof(traceInfo)=%d\n", unsafe.Sizeof(bpfTraceInfo{}))
+
+	// Attach tracepoints
+	links := make([]link.Link, 0, 16)
+	must := func(l link.Link, err error, what string) {
+		if err != nil {
+			log.Fatalf("attach %s: %v", what, err)
+		}
+		links = append(links, l)
+	}
+
+	must(link.Tracepoint("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter, nil), err, "sys_enter_sendmsg")
+	must(link.Tracepoint("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit, nil), err, "sys_exit_sendmsg")
+	must(link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil), err, "sys_enter_sendto")
+	must(link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil), err, "sys_exit_sendto")
+	must(link.Tracepoint("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter, nil), err, "sys_enter_recvmsg")
+	must(link.Tracepoint("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit, nil), err, "sys_exit_recvmsg")
+	must(link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil), err, "sys_enter_recvfrom")
+	must(link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil), err, "sys_exit_recvfrom")
+	must(link.Tracepoint("sock", "inet_sock_set_state", objs.TraceTcpEst, nil), err, "inet_sock_set_state")
+
+	skLookupLink, err := link.AttachNetNs(int(netns.Fd()), objs.LookUp)
+	if err != nil {
+		log.Fatalf("attach sk_lookup: %v", err)
+	}
+	links = append(links, skLookupLink)
+
+	defer func() {
+		for _, l := range links {
+			_ = l.Close()
+		}
+	}()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		const buffLen = 256 * 1024
+		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
+		if err != nil {
+			log.Fatalf("perf.NewReader: %v", err)
+		}
+		defer rd.Close()
+
+		selfName := filepath.Base(os.Args[0])
+
+		for {
+			record, err := rd.Read()
+			if err != nil {
+				if errors.Is(err, perf.ErrClosed) {
+					return
+				}
+				log.Printf("perf read error: %v", err)
+				continue
+			}
+
+			if record.LostSamples != 0 {
+				log.Printf("LOST %d samples", record.LostSamples)
+				continue
+			}
+
+			if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
+				log.Printf("invalid event size: %d", len(record.RawSample))
+				continue
+			}
+
+			ev := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
+			comm := cachedComm(ev.Comm)
+			if comm == selfName {
+				continue
+			}
+
+			switch ev.Sysexit {
+
+			// sendto_exit
+			case 1:
+				if ev.Family == AF_INET {
+					dst := ip4FromBE(ev.DstIP.S_addr)
+					fmt.Printf("SENDTO  pid=%d comm=%s  %s dst=%s:%d\n",
+						ev.Pid, comm, protoStr(uint8(ev.Proto)),
+						dst.String(), ev.Dport)
+				} else if ev.Family == AF_INET6 {
+					dst := ip6FromArr(ev.DstIP6.In6U.U6Addr8)
+					fmt.Printf("SENDTO6 pid=%d comm=%s  %s dst=[%s]:%d\n",
+						ev.Pid, comm, protoStr(uint8(ev.Proto)),
+						dst.String(), ev.Dport)
+				}
+
+			// recvfrom_exit
+			case 2:
+				handleRecv("RECVFROM", ev, comm)
+
+			// recvmsg_exit
+			case 12:
+				handleRecv("RECVMSG", ev, comm)
+
+			// sendmsg_exit
+			case 11:
+				if ev.Family == AF_INET {
+					dst := ip4FromBE(ev.DstIP.S_addr)
+					fmt.Printf("SENDMSG  pid=%d comm=%s  %s dst=%s:%d\n",
+						ev.Pid, comm, protoStr(uint8(ev.Proto)),
+						dst.String(), ev.Dport)
+				} else if ev.Family == AF_INET6 {
+					dst := ip6FromArr(ev.DstIP6.In6U.U6Addr8)
+					fmt.Printf("SENDMSG6 pid=%d comm=%s  %s dst=[%s]:%d\n",
+						ev.Pid, comm, protoStr(uint8(ev.Proto)),
+						dst.String(), ev.Dport)
+				}
+
+			// sk_lookup
+			case 3:
+				if ev.Family == AF_INET {
+					// ВАЖНО: не пытаемся угадать, где local/remote — сохраняем обе интерпретации.
+					srcIP := make([16]byte)
+					dstIP := make([16]byte)
+					binary.BigEndian.PutUint32(srcIP[:4], ev.SrcIP.S_addr)
+					binary.BigEndian.PutUint32(dstIP[:4], ev.DstIP.S_addr)
+
+					saveLookupBothDirections(
+						uint16(ev.Family),
+						uint8(ev.Proto),
+						srcIP, uint16(ev.Sport),
+						dstIP, uint16(ev.Dport),
+					)
+				} else if ev.Family == AF_INET6 {
+					srcIP := make([16]byte)
+					dstIP := make([16]byte)
+					copy(srcIP[:], ev.SrcIP6.In6U.U6Addr8[:])
+					copy(dstIP[:], ev.DstIP6.In6U.U6Addr8[:])
+
+					saveLookupBothDirections(
+						uint16(ev.Family),
+						uint8(ev.Proto),
+						srcIP, uint16(ev.Sport),
+						dstIP, uint16(ev.Dport),
+					)
+				}
+
+			// inet_sock_set_state (оставил только “как факт”, без твоих каналов/склейки)
+			case 6:
+				// печатай только установление, если нужно
+				// (у тебя в BPF state пишется newstate, proto, ports, ips)
+				if ev.Family == AF_INET && ev.State != 0 {
+					src := ip4FromBE(ev.SrcIP.S_addr)
+					dst := ip4FromBE(ev.DstIP.S_addr)
+					fmt.Printf("TCPSTATE pid=%d comm=%s state=%d %s:%d -> %s:%d\n",
+						ev.Pid, comm, ev.State, src.String(), ev.Sport, dst.String(), ev.Dport)
+				}
+
+			default:
+				// игнор
+			}
+		}
+	}()
+
+	fmt.Println("Press Ctrl+C to exit")
+	<-stop
+	fmt.Println("Exiting...")
+}
+
+func handleRecv(tag string, ev bpfTraceInfo, comm string) {
+	// recvmsg/recvfrom у тебя несут peer (src ip:port) + pid/comm.
+	// dst (local ip:port) берём из sk_lookup по ключу peer.
+
+	if ev.Family == AF_INET {
+		peerIPBE := ev.SrcIP.S_addr
+		peer := ip4FromBE(peerIPBE)
+		peerPort := uint16(ev.Sport)
+
+		var peerKeyIP [16]byte
+		binary.BigEndian.PutUint32(peerKeyIP[:4], peerIPBE)
+
+		li, ok := takeLookup(AF_INET, peerKeyIP, peerPort)
+		if ok && time.Since(li.Seen) <= 3*time.Second {
+			local := net.IP(li.LocalIP[:4])
+			p := protoStr(li.Proto)
+
+			dstHost := resolveHost(local)
+			srcHost := resolveHost(peer)
+
+			fmt.Printf("%-7s pid=%d comm=%s  %s  %s[%s:%d] -> %s[%s:%d]\n",
+				tag, ev.Pid, comm, p,
+				srcHost, peer.String(), peerPort,
+				dstHost, local.String(), li.LocalPort)
+			return
+		}
+
+		// fallback без lookup
+		fmt.Printf("%-7s pid=%d comm=%s  peer=%s:%d (no lookup)\n",
+			tag, ev.Pid, comm, peer.String(), peerPort)
+		return
+	}
+
+	if ev.Family == AF_INET6 {
+		peer := ip6FromArr(ev.SrcIP6.In6U.U6Addr8)
+		peerPort := uint16(ev.Sport)
+
+		var peerKeyIP [16]byte
+		copy(peerKeyIP[:], ev.SrcIP6.In6U.U6Addr8[:])
+
+		li, ok := takeLookup(AF_INET6, peerKeyIP, peerPort)
+		if ok && time.Since(li.Seen) <= 3*time.Second {
+			local := net.IP(li.LocalIP[:16])
+			p := protoStr(li.Proto)
+
+			dstHost := resolveHost(local)
+			srcHost := resolveHost(peer)
+
+			fmt.Printf("%-7s pid=%d comm=%s  %s  %s[%s:%d] -> %s[%s:%d]\n",
+				tag, ev.Pid, comm, p,
+				srcHost, peer.String(), peerPort,
+				dstHost, local.String(), li.LocalPort)
+			return
+		}
+
+		fmt.Printf("%-7s pid=%d comm=%s  peer=[%s]:%d (no lookup)\n",
+			tag, ev.Pid, comm, peer.String(), peerPort)
+	}
+}
 
 
 
