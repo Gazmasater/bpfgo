@@ -1120,6 +1120,30 @@ func handleRecv(tag string, ev bpfTraceInfo, comm string) {
 
 
 
+[{
+	"resource": "/home/lev/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#2",
+	"code": {
+		"value": "TooManyValues",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "TooManyValues"
+		}
+	},
+	"severity": 8,
+	"message": "multiple-value link.Tracepoint(\"syscalls\", \"sys_enter_sendmsg\", objs.TraceSendmsgEnter, nil) (value of type (link.Link, error)) in single-value context",
+	"source": "compiler",
+	"startLineNumber": 258,
+	"startColumn": 7,
+	"endLineNumber": 258,
+	"endColumn": 84,
+	"modelVersionId": 7,
+	"origin": "extHost1"
+}]
+
 
 
 
