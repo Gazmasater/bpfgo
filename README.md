@@ -1133,6 +1133,87 @@ mv send_udp.c send_udp.c.txt
 
 
 
-lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
-[sudo] password for lev: 
-2026/02/13 21:33:36 failed to load bpf objects: field LookUp: program look_up: load program: permission denied: dereference of modified ctx ptr R2 off=60 disallowed (64 line(s) omitted)
+SEC("tracepoint/syscalls/sys_enter_bind")
+int trace_bind_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    struct conn_info_t ci = {};
+    ci.pid = tgid;
+    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
+
+    // args: fd, sockaddr*, addrlen
+    ci.fd = (__u32)ctx->args[0];
+    ci.addrlen = (__u32)ctx->args[2];
+
+    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+
+    __u64 uaddr = (__u64)ctx->args[1];
+    if (uaddr)
+        bpf_map_update_elem(&addrBind_map, &id, &uaddr, BPF_ANY);
+
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_bind")
+int trace_bind_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+
+    __s64 ret;
+    if (BPF_CORE_READ_INTO(&ret, ctx, ret) < 0)
+        goto cleanup;
+    if (ret < 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+    __u64 *uaddrp = bpf_map_lookup_elem(&addrBind_map, &id);
+    if (!uaddrp)
+        goto cleanup;
+
+    void *uaddr = (void *)(*uaddrp);
+    if (!uaddr)
+        goto cleanup;
+
+    struct trace_info info = {};
+    __builtin_memcpy(info.comm, ci->comm, sizeof(info.comm));
+    info.pid = ci->pid;
+    info.sysexit = 20; // <- код события "BIND OK"
+
+    __u16 family = 0;
+    if (bpf_probe_read_user(&family, sizeof(family), uaddr) < 0)
+        goto cleanup;
+
+    if (family == AF_INET) {
+        struct sockaddr_in sa = {};
+        if (bpf_probe_read_user(&sa, sizeof(sa), uaddr) < 0)
+            goto cleanup;
+
+        info.family = AF_INET;
+        info.dport  = bpf_ntohs(sa.sin_port);
+        info.dstIP.s_addr = sa.sin_addr.s_addr; // BE, БЕЗ ntohl
+
+    } else if (family == AF_INET6) {
+        struct sockaddr_in6 sa6 = {};
+        if (bpf_probe_read_user(&sa6, sizeof(sa6), uaddr) < 0)
+            goto cleanup;
+
+        info.family = AF_INET6;
+        info.dport  = bpf_ntohs(sa6.sin6_port);
+        __builtin_memcpy(&info.dstIP6, &sa6.sin6_addr, sizeof(info.dstIP6));
+    } else {
+        goto cleanup;
+    }
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+cleanup:
+    bpf_map_delete_elem(&addrBind_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
