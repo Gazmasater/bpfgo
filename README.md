@@ -95,145 +95,6 @@ git push --force-with-lease origin ProcNet_monitor
 
 
 
-// recvmsg_test.c
-#define _GNU_SOURCE
-#include <arpa/inet.h>
-#include <errno.h>
-#include <netinet/in.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <sys/syscall.h>
-#include <unistd.h>
-#include <stdlib.h>   // atoi
-
-static pid_t gettid_linux(void) {
-    return (pid_t)syscall(SYS_gettid);
-}
-
-int main(int argc, char **argv) {
-    int port = 9999;
-    if (argc > 1) port = atoi(argv[1]);
-
-    pid_t pid = getpid();
-    pid_t tid = gettid_linux();
-
-    int fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (fd < 0) { perror("socket"); return 1; }
-
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    addr.sin_port = htons((uint16_t)port);
-
-    if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        perror("bind");
-        return 1;
-    }
-
-    printf("[pid=%d tid=%d] recvmsg UDP server listening on 0.0.0.0:%d\n",
-           (int)pid, (int)tid, port);
-
-    for (;;) {
-        char buf[2048];
-
-        struct sockaddr_storage peer;
-        socklen_t peerlen = sizeof(peer);
-
-        struct iovec iov = {
-            .iov_base = buf,
-            .iov_len  = sizeof(buf),
-        };
-
-        struct msghdr msg;
-        memset(&msg, 0, sizeof(msg));
-        msg.msg_name = &peer;
-        msg.msg_namelen = peerlen;
-        msg.msg_iov = &iov;
-        msg.msg_iovlen = 1;
-
-        ssize_t n = recvmsg(fd, &msg, 0);
-        if (n < 0) {
-            if (errno == EINTR) continue;
-            perror("recvmsg");
-            break;
-        }
-
-        // распечатаем src ip:port
-        char ipstr[INET6_ADDRSTRLEN] = {0};
-        int pport = 0;
-
-        if (peer.ss_family == AF_INET) {
-            struct sockaddr_in *sin = (struct sockaddr_in*)&peer;
-            inet_ntop(AF_INET, &sin->sin_addr, ipstr, sizeof(ipstr));
-            pport = ntohs(sin->sin_port);
-        } else if (peer.ss_family == AF_INET6) {
-            struct sockaddr_in6 *sin6 = (struct sockaddr_in6*)&peer;
-            inet_ntop(AF_INET6, &sin6->sin6_addr, ipstr, sizeof(ipstr));
-            pport = ntohs(sin6->sin6_port);
-        } else {
-            strcpy(ipstr, "unknown_family");
-        }
-
-        printf("[pid=%d tid=%d] got %zd bytes from %s:%d: %.*s\n",
-               (int)pid, (int)tid, n, ipstr, pport, (int)n, buf);
-        fflush(stdout);
-    }
-
-    close(fd);
-    return 0;
-}
-
-
-
-
-// send_udp.c
-#define _GNU_SOURCE
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <sys/syscall.h>
-#include <unistd.h>
-#include <stdlib.h>   // atoi
-
-static pid_t gettid_linux(void) {
-    return (pid_t)syscall(SYS_gettid);
-}
-
-int main(int argc, char **argv) {
-    const char *ip = "127.0.0.1";
-    int port = 9999;
-    const char *msg = "hello";
-
-    if (argc > 1) ip = argv[1];
-    if (argc > 2) port = atoi(argv[2]);
-    if (argc > 3) msg = argv[3];
-
-    pid_t pid = getpid();
-    pid_t tid = gettid_linux();
-
-    int fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (fd < 0) { perror("socket"); return 1; }
-
-    struct sockaddr_in dst;
-    memset(&dst, 0, sizeof(dst));
-    dst.sin_family = AF_INET;
-    dst.sin_port = htons((uint16_t)port);
-    inet_pton(AF_INET, ip, &dst.sin_addr);
-
-    ssize_t n = sendto(fd, msg, strlen(msg), 0, (struct sockaddr*)&dst, sizeof(dst));
-    if (n < 0) { perror("sendto"); return 1; }
-
-    printf("[pid=%d tid=%d] sent %zd bytes to %s:%d\n",
-           (int)pid, (int)tid, n, ip, port);
-
-    close(fd);
-    return 0;
-}
 
 
 
@@ -245,45 +106,203 @@ gcc -O2 -Wall -o send_udp send_udp.c
 ./send_udp 127.0.0.1 9999 "ping1"
 
 
-#include <stdlib.h>
 
+1) Замени определения addrSend_map и addrRecv_map
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, __u64);
+    __type(value, __u64); // user pointer (sockaddr* or msghdr*)
+} addrSend_map SEC(".maps");
 
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, __u64);
+    __type(value, __u64); // user pointer (sockaddr* or msghdr*)
+} addrRecv_map SEC(".maps");
 
+2) Добавь helper для парсинга sockaddr (один раз, где удобно)
+static __always_inline int fill_from_sockaddr(struct trace_info *info, const void *uaddr, int is_dst)
+{
+    __u16 family = 0;
 
-RECVMSG PID=12435 NAME=recvmsg_test   UDP://localhost[127.0.0.1:56217]->localhost[127.0.0.1:9999]
-RECVMSG PID=12515  NAME=recvmsg_test   UDP://localhost[127.0.0.1:56217]<-localhost[127.0.0.1:9999]
+    if (!uaddr)
+        return -1;
 
+    if (bpf_probe_read_user(&family, sizeof(family), uaddr) < 0)
+        return -1;
 
-[pid=12435 tid=12435] recvmsg UDP server listening on 0.0.0.0:9999
-[pid=12435 tid=12435] got 4 bytes from 127.0.0.1:39439: ping
-[pid=12435 tid=12435] got 4 bytes from 127.0.0.1:56217: ping
+    if (family == AF_INET) {
+        struct sockaddr_in sa = {};
+        if (bpf_probe_read_user(&sa, sizeof(sa), uaddr) < 0)
+            return -1;
 
+        __u16 port = bpf_ntohs(sa.sin_port);
+        if (port == 0)
+            return -1;
 
+        info->family = AF_INET;
 
-lev@lev-VirtualBox:~/bpfgo$ ./send_udp 127.0.0.1 9999 "ping"
-[pid=12470 tid=12470] sent 4 bytes to 127.0.0.1:9999
-lev@lev-VirtualBox:~/bpfgo$ ./send_udp 127.0.0.1 9999 "ping"
-[pid=12515 tid=12515] sent 4 bytes to 127.0.0.1:9999
-lev@lev-VirtualBox:~/bpfgo$ 
+        if (is_dst) {
+            info->dport = port;
+            info->dstIP.s_addr = sa.sin_addr.s_addr; // ВАЖНО: без ntohl
+        } else {
+            info->sport = port;
+            info->srcIP.s_addr = sa.sin_addr.s_addr; // ВАЖНО: без ntohl
+        }
+        return 0;
+    }
 
+    if (family == AF_INET6) {
+        struct sockaddr_in6 sa6 = {};
+        if (bpf_probe_read_user(&sa6, sizeof(sa6), uaddr) < 0)
+            return -1;
 
+        __u16 port = bpf_ntohs(sa6.sin6_port);
+        if (port == 0)
+            return -1;
 
-strace -f -e trace=sendto,sendmsg ./send_udp 127.0.0.1 9999 ping
+        info->family = AF_INET6;
 
+        if (is_dst) {
+            info->dport = port;
+            __builtin_memcpy(&info->dstIP6, &sa6.sin6_addr, sizeof(info->dstIP6));
+        } else {
+            info->sport = port;
+            __builtin_memcpy(&info->srcIP6, &sa6.sin6_addr, sizeof(info->srcIP6));
+        }
+        return 0;
+    }
 
-[{
-	"resource": "/home/lev/bpfgo/bpf_x86_bpfel.go",
-	"owner": "_generated_diagnostic_collection_name_#2",
-	"severity": 8,
-	"message": "C source files not allowed when not using cgo or SWIG: recvmsg_test.c send_udp.c",
-	"source": "go list",
-	"startLineNumber": 1,
-	"startColumn": 1,
-	"endLineNumber": 1,
-	"endColumn": 1,
-	"modelVersionId": 2,
-	"origin": "extHost1"
-}]
+    return -1;
+}
+
+3) Перепиши sendmsg enter/exit (вставь вместо твоих)
+SEC("tracepoint/syscalls/sys_enter_sendmsg")
+int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    struct conn_info_t conn_info = {};
+    conn_info.pid = tgid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
+    bpf_map_update_elem(&conn_info_map, &id, &conn_info, BPF_ANY);
+
+    __u64 msg_u = (__u64)ctx->args[1]; // struct msghdr * (user)
+    if (msg_u)
+        bpf_map_update_elem(&addrSend_map, &id, &msg_u, BPF_ANY);
+
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_sendmsg")
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+
+    __s64 ret;
+    if (BPF_CORE_READ_INTO(&ret, ctx, ret) < 0)
+        goto cleanup;
+    if (ret < 0)
+        goto cleanup;
+
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!conn_info)
+        goto cleanup;
+
+    __u64 *msg_u_ptr = bpf_map_lookup_elem(&addrSend_map, &id);
+    if (!msg_u_ptr)
+        goto cleanup;
+
+    struct msghdr msg = {};
+    if (bpf_probe_read_user(&msg, sizeof(msg), (const void *)*msg_u_ptr) < 0)
+        goto cleanup;
+
+    void *name = msg.msg_name; // user sockaddr*
+    if (!name)
+        goto cleanup; // connected socket -> тут адреса нет
+
+    struct trace_info info = {};
+    __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+    info.sysexit = 11;
+    info.pid = conn_info->pid;
+
+    if (fill_from_sockaddr(&info, name, /*is_dst=*/1) < 0)
+        goto cleanup;
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+cleanup:
+    bpf_map_delete_elem(&addrSend_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
+4) Перепиши recvmsg enter/exit (вставь вместо твоих)
+SEC("tracepoint/syscalls/sys_enter_recvmsg")
+int trace_recvmsg_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    struct conn_info_t conn_info = {};
+    conn_info.pid = tgid;
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
+    bpf_map_update_elem(&conn_info_map, &id, &conn_info, BPF_ANY);
+
+    __u64 msg_u = (__u64)ctx->args[1]; // struct msghdr * (user)
+    if (msg_u)
+        bpf_map_update_elem(&addrRecv_map, &id, &msg_u, BPF_ANY);
+
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_recvmsg")
+int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+
+    __s64 ret;
+    if (BPF_CORE_READ_INTO(&ret, ctx, ret) < 0)
+        goto cleanup;
+    if (ret < 0)
+        goto cleanup;
+
+    struct conn_info_t *conn_info = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!conn_info)
+        goto cleanup;
+
+    __u64 *msg_u_ptr = bpf_map_lookup_elem(&addrRecv_map, &id);
+    if (!msg_u_ptr)
+        goto cleanup;
+
+    struct msghdr msg = {};
+    if (bpf_probe_read_user(&msg, sizeof(msg), (const void *)*msg_u_ptr) < 0)
+        goto cleanup;
+
+    void *name = msg.msg_name; // user sockaddr*
+    if (!name)
+        goto cleanup; // часто бывает, зависит от сокета/флагов
+
+    struct trace_info info = {};
+    __builtin_memcpy(info.comm, conn_info->comm, sizeof(info.comm));
+    info.sysexit = 12;
+    info.pid = conn_info->pid;
+
+    if (fill_from_sockaddr(&info, name, /*is_dst=*/0) < 0)
+        goto cleanup;
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+cleanup:
+    bpf_map_delete_elem(&addrRecv_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
 
 
 
