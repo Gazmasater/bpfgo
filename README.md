@@ -307,6 +307,28 @@ cleanup:
 
 
 
+lev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+/home/lev/bpfgo/trace.c:278:5: error: redefinition of 'trace_sendmsg_enter'
+int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx) {
+    ^
+/home/lev/bpfgo/trace.c:152:5: note: previous definition is here
+int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx)
+    ^
+/home/lev/bpfgo/trace.c:302:5: error: redefinition of 'trace_sendmsg_exit'
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx) {
+    ^
+/home/lev/bpfgo/trace.c:171:5: note: previous definition is here
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+/home/lev/bpfgo/trace.c:401:5: error: redefinition of 'trace_recvmsg_enter'
+int trace_recvmsg_enter(struct trace_event_raw_sys_enter *ctx) {
+    ^
+/home/lev/bpfgo/trace.c:215:5: note: previous definition is here
+int trace_recvmsg_enter(struct trace_event_raw_sys_enter *ctx)
+    ^
+/home/lev/bpfgo/trace.c:425:5: error: redefinition of 'trace_recvmsg_exit'
+int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx) {
+
 
 
 
