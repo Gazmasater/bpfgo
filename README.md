@@ -1105,6 +1105,31 @@ func main() {
 }
 
 
+[{
+	"resource": "/home/lev/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#2",
+	"code": {
+		"value": "InvalidConversion",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "InvalidConversion"
+		}
+	},
+	"severity": 8,
+	"message": "cannot convert b (variable of type [32]byte) to type string",
+	"source": "compiler",
+	"startLineNumber": 99,
+	"startColumn": 14,
+	"endLineNumber": 99,
+	"endColumn": 15,
+	"modelVersionId": 18,
+	"origin": "extHost1"
+}]
+
+
 
 
 
