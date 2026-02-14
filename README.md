@@ -663,6 +663,47 @@ TCP ACCEPT   client=?  1.0.0.127:1111 -> 1.0.0.127:45134  server=13318(nc)
 TCP ACCEPT   server=13318(nc)  1.0.0.127:45134 -> 1.0.0.127:1111  client=?
 
 
+#define EINPROGRESS 115
+#define EALREADY    114
+
+
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 16384);
+    __type(key, __u64);   // pid_tgid
+    __type(value, __u64); // user pointer to sockaddr
+} addrConnect_map SEC(".maps");
+
+
+
+
+SEC("tracepoint/syscalls/sys_enter_connect")
+int trace_connect_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    struct conn_info_t ci = {};
+    ci.pid = tgid;
+    ci.fd  = (__u32)ctx->args[0];
+    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+
+    struct inflight_fd_t in = {};
+    in.fd = (int)ctx->args[0];
+    bpf_map_update_elem(&connect_fd_map, &id, &in, BPF_ANY);
+
+    // sockaddr* аргумент connect(fd, sockaddr*, addrlen)
+    __u64 uaddr = (__u64)ctx->args[1];
+    if (uaddr)
+        bpf_map_update_elem(&addrConnect_map, &id, &uaddr, BPF_ANY);
+
+    return 0;
+}
+
+
+
 SEC("tracepoint/syscalls/sys_exit_connect")
 int trace_connect_exit(struct trace_event_raw_sys_exit *ctx)
 {
@@ -670,7 +711,11 @@ int trace_connect_exit(struct trace_event_raw_sys_exit *ctx)
     __u32 tgid = id >> 32;
 
     __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret < 0)
+    if (read_sys_exit_ret(ctx, &ret) < 0)
+        goto cleanup;
+
+    // allow non-blocking connect
+    if (ret < 0 && ret != -EINPROGRESS && ret != -EALREADY)
         goto cleanup;
 
     struct inflight_fd_t *in = bpf_map_lookup_elem(&connect_fd_map, &id);
@@ -687,18 +732,22 @@ int trace_connect_exit(struct trace_event_raw_sys_exit *ctx)
     struct conn_info_t *conn = bpf_map_lookup_elem(&conn_info_map, &id);
 
     struct trace_info info = {};
-    info.sysexit = 3;
+    info.sysexit = 3;          // CONNECT
     info.pid     = tgid;
     info.proto   = st.proto;
     info.family  = st.family;
     info.sport   = st.lport;
     info.dport   = st.rport;
 
+    // 0 = ok, 1 = in-progress
+    info.state   = (ret < 0) ? 1 : 0;
+
     if (conn)
         __builtin_memcpy(info.comm, conn->comm, sizeof(info.comm));
     else
         bpf_get_current_comm(info.comm, sizeof(info.comm));
 
+    // базово из sock
     if (st.family == AF_INET) {
         info.srcIP.s_addr = st.lip;
         info.dstIP.s_addr = st.rip;
@@ -709,14 +758,19 @@ int trace_connect_exit(struct trace_event_raw_sys_exit *ctx)
         goto cleanup;
     }
 
+    // override dst из connect(sockaddr*), если есть
+    __u64 *uaddrp = bpf_map_lookup_elem(&addrConnect_map, &id);
+    if (uaddrp && *uaddrp)
+        (void)fill_from_sockaddr(&info, (void *)*uaddrp, /*is_dst=*/1);
+
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
 cleanup:
+    bpf_map_delete_elem(&addrConnect_map, &id);
     bpf_map_delete_elem(&connect_fd_map, &id);
     bpf_map_delete_elem(&conn_info_map, &id);
     return 0;
 }
-
 
 
 
