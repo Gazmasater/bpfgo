@@ -663,6 +663,61 @@ TCP ACCEPT   client=?  1.0.0.127:1111 -> 1.0.0.127:45134  server=13318(nc)
 TCP ACCEPT   server=13318(nc)  1.0.0.127:45134 -> 1.0.0.127:1111  client=?
 
 
+SEC("tracepoint/syscalls/sys_exit_connect")
+int trace_connect_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0 || ret < 0)
+        goto cleanup;
+
+    struct inflight_fd_t *in = bpf_map_lookup_elem(&connect_fd_map, &id);
+    if (!in)
+        goto cleanup;
+
+    struct fd_state_t st = {};
+    if (fill_fd_state(in->fd, &st) < 0)
+        goto cleanup;
+
+    struct fd_key_t k = { .tgid = tgid, .fd = in->fd };
+    bpf_map_update_elem(&fd_state_map, &k, &st, BPF_ANY);
+
+    struct conn_info_t *conn = bpf_map_lookup_elem(&conn_info_map, &id);
+
+    struct trace_info info = {};
+    info.sysexit = 3;
+    info.pid     = tgid;
+    info.proto   = st.proto;
+    info.family  = st.family;
+    info.sport   = st.lport;
+    info.dport   = st.rport;
+
+    if (conn)
+        __builtin_memcpy(info.comm, conn->comm, sizeof(info.comm));
+    else
+        bpf_get_current_comm(info.comm, sizeof(info.comm));
+
+    if (st.family == AF_INET) {
+        info.srcIP.s_addr = st.lip;
+        info.dstIP.s_addr = st.rip;
+    } else if (st.family == AF_INET6) {
+        __builtin_memcpy(&info.srcIP6, &st.lip6, sizeof(info.srcIP6));
+        __builtin_memcpy(&info.dstIP6, &st.rip6, sizeof(info.dstIP6));
+    } else {
+        goto cleanup;
+    }
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+cleanup:
+    bpf_map_delete_elem(&connect_fd_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
+
 
 
 
