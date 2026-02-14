@@ -662,92 +662,240 @@ conn_info.fd = (__u32)ctx->args[0];
 
 
 
-static __always_inline int accept_enter_common(void)
+static __always_inline int fill_from_fd_state_map(struct trace_info *info, __u32 tgid, int fd, int is_send)
 {
-    __u64 id = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
+    struct fd_key_t k = { .tgid = tgid, .fd = fd };
+    struct fd_state_t *st = bpf_map_lookup_elem(&fd_state_map, &k);
+    if (!st)
+        return -1;
 
-    struct conn_info_t conn_info = {};
-    conn_info.pid = tgid;
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &conn_info, BPF_ANY);
+    info->proto  = st->proto;
+    info->family = st->family;
 
-    return 0;
-}
-
-static __always_inline int accept_exit_common(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 newfd = ctx->ret;
-    if (newfd < 0)
-        goto cleanup;
-
-    struct fd_state_t st = {};
-    if (fill_fd_state((int)newfd, &st) < 0)
-        goto cleanup;
-
-    struct fd_key_t k = { .tgid = tgid, .fd = (int)newfd };
-    bpf_map_update_elem(&fd_state_map, &k, &st, BPF_ANY);
-
-    struct conn_info_t *conn = bpf_map_lookup_elem(&conn_info_map, &id);
-
-    struct trace_info info = {};
-    info.sysexit = 4;
-    info.pid     = tgid;
-    info.proto   = st.proto;
-    info.family  = st.family;
-
-    // входящее: src=remote, dst=local
-    info.sport = st.rport;
-    info.dport = st.lport;
-
-    if (conn)
-        __builtin_memcpy(info.comm, conn->comm, sizeof(info.comm));
-    else
-        bpf_get_current_comm((char *)info.comm, sizeof(info.comm));
-
-    if (st.family == AF_INET) {
-        info.srcIP.s_addr = st.rip;
-        info.dstIP.s_addr = st.lip;
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    } else if (st.family == AF_INET6) {
-        __builtin_memcpy(&info.srcIP6, &st.rip6, sizeof(info.srcIP6));
-        __builtin_memcpy(&info.dstIP6, &st.lip6, sizeof(info.dstIP6));
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    if (st->family == AF_INET) {
+        if (is_send) { // local -> remote
+            info->srcIP.s_addr = st->lip;
+            info->dstIP.s_addr = st->rip;
+            info->sport = st->lport;
+            info->dport = st->rport;
+        } else {       // remote -> local
+            info->srcIP.s_addr = st->rip;
+            info->dstIP.s_addr = st->lip;
+            info->sport = st->rport;
+            info->dport = st->lport;
+        }
+        return 0;
     }
 
+    if (st->family == AF_INET6) {
+        if (is_send) {
+            __builtin_memcpy(&info->srcIP6, &st->lip6, sizeof(info->srcIP6));
+            __builtin_memcpy(&info->dstIP6, &st->rip6, sizeof(info->dstIP6));
+            info->sport = st->lport;
+            info->dport = st->rport;
+        } else {
+            __builtin_memcpy(&info->srcIP6, &st->rip6, sizeof(info->srcIP6));
+            __builtin_memcpy(&info->dstIP6, &st->lip6, sizeof(info->dstIP6));
+            info->sport = st->rport;
+            info->dport = st->lport;
+        }
+        return 0;
+    }
+
+    return -1;
+}
+
+
+
+
+2) sendto_enter/recvfrom_enter: клади в мапу u64, не &addr указателя
+
+sendto_enter:
+
+__u64 uaddr = (__u64)ctx->args[4];   // dest sockaddr*
+if (uaddr)
+    bpf_map_update_elem(&addrSend_map, &id, &uaddr, BPF_ANY);
+
+
+recvfrom_enter:
+
+__u64 uaddr = (__u64)ctx->args[4];   // src sockaddr* (kernel заполнит на exit)
+if (uaddr)
+    bpf_map_update_elem(&addrRecv_map, &id, &uaddr, BPF_ANY);
+
+3) sendto_exit/recvfrom_exit: всегда делай fallback из fd_state_map, addr — только override
+sendto_exit (замени целиком)
+SEC("tracepoint/syscalls/sys_exit_sendto")
+int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 ret = ctx->ret;
+    if (ret <= 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+    struct trace_info info = {};
+    __builtin_memcpy(info.comm, ci->comm, sizeof(info.comm));
+    info.sysexit = 1;
+    info.pid     = ci->pid;
+
+    // 1) базово: src/dst из connect/accept4 (fd_state_map)
+    (void)fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1);
+
+    // 2) если sendto дал dest — переопределим dst
+    __u64 *uaddrp = bpf_map_lookup_elem(&addrSend_map, &id);
+    if (uaddrp && *uaddrp)
+        (void)fill_from_sockaddr(&info, (void *)*uaddrp, 1);
+
+    // если вообще ничего не заполнилось — не шлём
+    if (info.family == 0)
+        goto cleanup;
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
 cleanup:
+    bpf_map_delete_elem(&addrSend_map, &id);
     bpf_map_delete_elem(&conn_info_map, &id);
     return 0;
 }
 
-
-
-SEC("tracepoint/syscalls/sys_enter_accept4")
-int trace_accept4_enter(struct trace_event_raw_sys_enter *ctx)
+recvfrom_exit (замени целиком; и УБЕРИ ntohl)
+SEC("tracepoint/syscalls/sys_exit_recvfrom")
+int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx)
 {
-    return accept_enter_common();
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 ret = ctx->ret;
+    if (ret <= 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+    struct trace_info info = {};
+    __builtin_memcpy(info.comm, ci->comm, sizeof(info.comm));
+    info.sysexit = 2;
+    info.pid     = ci->pid;
+
+    // 1) базово: src/dst из fd_state_map
+    (void)fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0);
+
+    // 2) если recvfrom вернул src в uaddr — переопределим src
+    __u64 *uaddrp = bpf_map_lookup_elem(&addrRecv_map, &id);
+    if (uaddrp && *uaddrp)
+        (void)fill_from_sockaddr(&info, (void *)*uaddrp, 0);
+
+    if (info.family == 0)
+        goto cleanup;
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+cleanup:
+    bpf_map_delete_elem(&addrRecv_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
 }
 
-SEC("tracepoint/syscalls/sys_exit_accept4")
-int trace_accept4_exit(struct trace_event_raw_sys_exit *ctx)
+4) sendmsg/recvmsg: не msghdr, а первые поля user_msghdr, и НЕ падать при msg_name==NULL
+
+Добавь маленький “хедер”:
+
+struct user_msghdr_head {
+    void *msg_name;
+    int   msg_namelen;
+};
+
+sendmsg_exit (замени)
+SEC("tracepoint/syscalls/sys_exit_sendmsg")
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
 {
-    return accept_exit_common(ctx);
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 ret = ctx->ret;
+    if (ret <= 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+    struct trace_info info = {};
+    __builtin_memcpy(info.comm, ci->comm, sizeof(info.comm));
+    info.sysexit = 11;
+    info.pid = ci->pid;
+
+    // базово: tuple из fd_state_map (TCP/connected UDP)
+    (void)fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1);
+
+    // override dst, если msg_name != NULL (unconnected UDP sendmsg)
+    __u64 *msgp = bpf_map_lookup_elem(&addrSend_map, &id);
+    if (msgp && *msgp) {
+        struct user_msghdr_head h = {};
+        if (bpf_probe_read_user(&h, sizeof(h), (void *)*msgp) == 0) {
+            if (h.msg_name)
+                (void)fill_from_sockaddr(&info, h.msg_name, 1);
+        }
+    }
+
+    if (info.family == 0)
+        goto cleanup;
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+cleanup:
+    bpf_map_delete_elem(&addrSend_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
 }
 
-SEC("tracepoint/syscalls/sys_enter_accept")
-int trace_accept_enter(struct trace_event_raw_sys_enter *ctx)
+recvmsg_exit (аналогично, только src и is_send=0)
+SEC("tracepoint/syscalls/sys_exit_recvmsg")
+int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx)
 {
-    return accept_enter_common();
-}
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
 
-SEC("tracepoint/syscalls/sys_exit_accept")
-int trace_accept_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    return accept_exit_common(ctx);
-}
+    __s64 ret = ctx->ret;
+    if (ret <= 0)
+        goto cleanup;
 
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+    struct trace_info info = {};
+    __builtin_memcpy(info.comm, ci->comm, sizeof(info.comm));
+    info.sysexit = 12;
+    info.pid = ci->pid;
+
+    (void)fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0);
+
+    __u64 *msgp = bpf_map_lookup_elem(&addrRecv_map, &id);
+    if (msgp && *msgp) {
+        struct user_msghdr_head h = {};
+        if (bpf_probe_read_user(&h, sizeof(h), (void *)*msgp) == 0) {
+            if (h.msg_name)
+                (void)fill_from_sockaddr(&info, h.msg_name, 0);
+        }
+    }
+
+    if (info.family == 0)
+        goto cleanup;
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+cleanup:
+    bpf_map_delete_elem(&addrRecv_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
 
 
