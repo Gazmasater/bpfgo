@@ -1153,12 +1153,11 @@ func main() {
 
 
 
-TCP CONNECT client=3084(Chrome_ChildIOT)  10.0.2.15:55936 -> 13.107.246.53:443  server=?
-TCP CONNECT server=?  13.107.246.53:443 -> 10.0.2.15:55936  client=3084(Chrome_ChildIOT)
-------------------------------------------------------------
-TCP CONNECT client=16667(nc)  127.0.0.1:57892 -> 127.0.0.1:1111  server=?
-TCP CONNECT server=?  127.0.0.1:1111 -> 127.0.0.1:57892  client=16667(nc)
-
+func printBlock(kind string, client Proc, server Proc, clientEp, serverEp string) {
+	fmt.Println(sepLine)
+	fmt.Printf("TCP %-7s client=%s  %s -> %s  server=%s\n", kind, client.String(), clientEp, serverEp, server.String())
+	fmt.Printf("TCP %-7s server=%s  %s -> %s  client=%s\n", kind, server.String(), serverEp, clientEp, client.String())
+}
 
 
 
