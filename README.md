@@ -1153,33 +1153,11 @@ func main() {
 
 
 
-[{
-	"resource": "/home/lev/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#2",
-	"code": {
-		"value": "UnusedVar",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UnusedVar"
-		}
-	},
-	"severity": 8,
-	"message": "declared and not used: mustAttach",
-	"source": "compiler",
-	"startLineNumber": 247,
-	"startColumn": 2,
-	"endLineNumber": 247,
-	"endColumn": 12,
-	"modelVersionId": 12,
-	"tags": [
-		1
-	],
-	"origin": "extHost1"
-}]
-
+TCP CONNECT client=3084(Chrome_ChildIOT)  10.0.2.15:55936 -> 13.107.246.53:443  server=?
+TCP CONNECT server=?  13.107.246.53:443 -> 10.0.2.15:55936  client=3084(Chrome_ChildIOT)
+------------------------------------------------------------
+TCP CONNECT client=16667(nc)  127.0.0.1:57892 -> 127.0.0.1:1111  server=?
+TCP CONNECT server=?  127.0.0.1:1111 -> 127.0.0.1:57892  client=16667(nc)
 
 
 
