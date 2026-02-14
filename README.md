@@ -658,8 +658,8 @@ git pull --rebase origin ProcNet_monitor
 git push origin ProcNet_monitor
 
 
-struct user_msghdr umsg = {};
-bpf_probe_read_user(&umsg, sizeof(umsg), (void*)ptr);
+conn_info.fd = (__u32)ctx->args[0];
+
 
 
 
