@@ -1224,3 +1224,27 @@ func main() {
 
 
 
+[{
+	"resource": "/home/lev/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"code": {
+		"value": "UndeclaredName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: ebpfProgramCompat",
+	"source": "compiler",
+	"startLineNumber": 316,
+	"startColumn": 34,
+	"endLineNumber": 316,
+	"endColumn": 51,
+	"modelVersionId": 4,
+	"origin": "extHost1"
+}]
+
