@@ -662,7 +662,8 @@ git push origin ProcNet_monitor
 package main
 
 import (
-	"context"
+	"bpfgo/pkg"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"log"
@@ -672,8 +673,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"sort"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -701,220 +700,162 @@ func init() {
 	}
 }
 
-/* ---------------- pretty flow model ---------------- */
-
-type EndPoint struct {
+type Endpoint struct {
 	Family uint16
+	IP     [16]byte
 	Port   uint16
-	IP     [16]byte // for v4: only first 4 bytes used
-}
-
-func (e EndPoint) String() string {
-	if e.Family == AF_INET {
-		return fmt.Sprintf("%s:%d", net.IP(e.IP[:4]).String(), e.Port)
-	}
-	if e.Family == AF_INET6 {
-		return fmt.Sprintf("[%s]:%d", net.IP(e.IP[:16]).String(), e.Port)
-	}
-	return fmt.Sprintf("fam=%d:%d", e.Family, e.Port)
-}
-
-type Owner struct {
-	Pid  uint32
-	Comm string
-	Seen time.Time
 }
 
 type FlowKey struct {
-	Proto  uint8
 	Family uint16
-	A      EndPoint
-	B      EndPoint
+	Proto  uint8
+	A      Endpoint
+	B      Endpoint
 }
 
-// canonical order: (A,B) is sorted so that A <= B
-func canonKey(proto uint8, family uint16, src EndPoint, dst EndPoint) (FlowKey, bool) {
-	a, b := src, dst
-	swapped := false
-	if lessEP(b, a) {
-		a, b = b, a
-		swapped = true
-	}
-	return FlowKey{Proto: proto, Family: family, A: a, B: b}, swapped
-}
-
-func lessEP(x, y EndPoint) bool {
-	// compare IP bytes then port
-	if c := strings.Compare(string(x.IP[:]), string(y.IP[:])); c != 0 {
-		return c < 0
-	}
-	return x.Port < y.Port
+type ProcInfo struct {
+	Pid  uint32
+	Comm string
 }
 
 type FlowState struct {
-	Key       FlowKey
-	FirstSeen time.Time
-	LastSeen  time.Time
+	Key FlowKey
 
-	OwnerA Owner
-	OwnerB Owner
+	// "клиент" обычно тот, кто сделал connect
+	Client ProcInfo
 
-	AtoB uint64
-	BtoA uint64
+	// "сервер" обычно тот, кто сделал accept
+	Server ProcInfo
 
-	LastDir string // "A->B" or "B->A"
+	Seen time.Time
 }
 
 var (
 	flowMu sync.Mutex
-	flows  = make(map[FlowKey]*FlowState, 4096)
+	flows  = make(map[FlowKey]*FlowState, 8192)
+
+	commCache = make(map[[32]int8]string)
+	commMu    sync.RWMutex
 )
 
-func commToString(c [32]int8) string {
-	var b []byte
-	for _, v := range c {
-		if v == 0 {
-			break
-		}
-		b = append(b, byte(v))
-	}
-	return string(b)
-}
-
-func short(s string, n int) string {
-	if n <= 0 {
-		return ""
-	}
-	if len(s) <= n {
+func cachedComm(c [32]int8) string {
+	commMu.RLock()
+	if s, ok := commCache[c]; ok {
+		commMu.RUnlock()
 		return s
 	}
-	return s[:n]
+	commMu.RUnlock()
+
+	s := pkg.Int8ToString(c)
+
+	commMu.Lock()
+	commCache[c] = s
+	commMu.Unlock()
+	return s
 }
 
-func endpointFromEvSrc(ev bpfTraceInfo) EndPoint {
-	var ep EndPoint
-	ep.Family = uint16(ev.Family)
-	ep.Port = uint16(ev.Sport)
+func ip4FromBE(u uint32) net.IP {
+	var b [4]byte
+	binary.BigEndian.PutUint32(b[:], u)
+	return net.IP(b[:])
+}
 
-	if ep.Family == AF_INET {
-		// ВАЖНО: bpf пишет __be32 как bytes в памяти; в Go uint32 читается little-endian.
-		// Поэтому берём bytes через uint32->little-endian.
-		u := ev.SrcIP.S_addr
-		ep.IP[0] = byte(u)
-		ep.IP[1] = byte(u >> 8)
-		ep.IP[2] = byte(u >> 16)
-		ep.IP[3] = byte(u >> 24)
-		return ep
+func ip6FromArr(a [16]uint8) net.IP {
+	ip := make(net.IP, net.IPv6len)
+	copy(ip, a[:])
+	return ip
+}
+
+func packIP16v4(ipBE uint32) [16]byte {
+	var out [16]byte
+	binary.BigEndian.PutUint32(out[:4], ipBE) // keep network-order bytes
+	return out
+}
+
+func packIP16v6(a [16]uint8) [16]byte {
+	var out [16]byte
+	copy(out[:], a[:])
+	return out
+}
+
+func endpointFromEventSrc(ev bpfTraceInfo) Endpoint {
+	ep := Endpoint{Family: uint16(ev.Family), Port: uint16(ev.Sport)}
+	if ev.Family == AF_INET {
+		ep.IP = packIP16v4(ev.SrcIP.S_addr)
+	} else if ev.Family == AF_INET6 {
+		ep.IP = packIP16v6(ev.SrcIP6.In6U.U6Addr8)
 	}
-
-	if ep.Family == AF_INET6 {
-		copy(ep.IP[:], ev.SrcIP6.In6U.U6Addr8[:])
-		return ep
-	}
-
 	return ep
 }
 
-func endpointFromEvDst(ev bpfTraceInfo) EndPoint {
-	var ep EndPoint
-	ep.Family = uint16(ev.Family)
-	ep.Port = uint16(ev.Dport)
-
-	if ep.Family == AF_INET {
-		u := ev.DstIP.S_addr
-		ep.IP[0] = byte(u)
-		ep.IP[1] = byte(u >> 8)
-		ep.IP[2] = byte(u >> 16)
-		ep.IP[3] = byte(u >> 24)
-		return ep
+func endpointFromEventDst(ev bpfTraceInfo) Endpoint {
+	ep := Endpoint{Family: uint16(ev.Family), Port: uint16(ev.Dport)}
+	if ev.Family == AF_INET {
+		ep.IP = packIP16v4(ev.DstIP.S_addr)
+	} else if ev.Family == AF_INET6 {
+		ep.IP = packIP16v6(ev.DstIP6.In6U.U6Addr8)
 	}
-
-	if ep.Family == AF_INET6 {
-		copy(ep.IP[:], ev.DstIP6.In6U.U6Addr8[:])
-		return ep
-	}
-
 	return ep
 }
 
-func isSendEvent(code uint8) bool {
-	// 1=sendto_exit, 11=sendmsg_exit
-	return code == 1 || code == 11
+func lessEndpoint(a, b Endpoint) bool {
+	// compare IP bytes lexicographically, then port
+	for i := 0; i < 16; i++ {
+		if a.IP[i] < b.IP[i] {
+			return true
+		}
+		if a.IP[i] > b.IP[i] {
+			return false
+		}
+	}
+	return a.Port < b.Port
 }
-func isRecvEvent(code uint8) bool {
-	// 2=recvfrom_exit, 12=recvmsg_exit
-	return code == 2 || code == 12
+
+func canonicalKey(family uint16, proto uint8, e1, e2 Endpoint) FlowKey {
+	a, b := e1, e2
+	if lessEndpoint(b, a) {
+		a, b = b, a
+	}
+	return FlowKey{
+		Family: family,
+		Proto:  proto,
+		A:      a,
+		B:      b,
+	}
 }
 
-func updateFlowFromData(ev bpfTraceInfo, comm string) {
-	if uint32(ev.Proto) != IPPROTO_TCP {
-		return
+func endpointString(ep Endpoint) string {
+	if ep.Family == AF_INET {
+		ip := net.IP(ep.IP[:4])
+		return fmt.Sprintf("%s:%d", ip.String(), ep.Port)
 	}
-	if ev.Family != AF_INET && ev.Family != AF_INET6 {
-		return
+	if ep.Family == AF_INET6 {
+		ip := net.IP(ep.IP[:16])
+		return fmt.Sprintf("[%s]:%d", ip.String(), ep.Port)
 	}
+	return fmt.Sprintf("?:%d", ep.Port)
+}
 
-	src := endpointFromEvSrc(ev)
-	dst := endpointFromEvDst(ev)
-	if src.Family == 0 || dst.Family == 0 || src.Port == 0 || dst.Port == 0 {
-		return
+func printFlowPretty(tag string, st *FlowState) {
+	a := endpointString(st.Key.A)
+	b := endpointString(st.Key.B)
+
+	c := st.Client
+	s := st.Server
+
+	clientStr := "client=?"
+	serverStr := "server=?"
+	if c.Pid != 0 {
+		clientStr = fmt.Sprintf("client=%d(%s)", c.Pid, c.Comm)
 	}
-
-	key, _ := canonKey(uint8(ev.Proto), uint16(ev.Family), src, dst)
-
-	now := time.Now()
-
-	flowMu.Lock()
-	st, ok := flows[key]
-	if !ok {
-		st = &FlowState{
-			Key:       key,
-			FirstSeen: now,
-			LastSeen:  now,
-		}
-		flows[key] = st
-	} else {
-		st.LastSeen = now
+	if s.Pid != 0 {
+		serverStr = fmt.Sprintf("server=%d(%s)", s.Pid, s.Comm)
 	}
 
-	// направление считаем по src/dst относительно canonical A/B
-	if src == key.A && dst == key.B {
-		st.AtoB++
-		st.LastDir = "A->B"
-	} else if src == key.B && dst == key.A {
-		st.BtoA++
-		st.LastDir = "B->A"
-	} else {
-		// странный кейс — не трогаем счётчики
-	}
-
-	// owner назначаем на "локальную" сторону:
-	// send: локальный = src, recv: локальный = dst
-	var local EndPoint
-	if isSendEvent(uint8(ev.Sysexit)) {
-		local = src
-	} else if isRecvEvent(uint8(ev.Sysexit)) {
-		local = dst
-	} else {
-		flowMu.Unlock()
-		return
-	}
-
-	if local == key.A {
-		if st.OwnerA.Pid == 0 || st.OwnerA.Pid != uint32(ev.Pid) {
-			st.OwnerA.Pid = uint32(ev.Pid)
-			st.OwnerA.Comm = comm
-		}
-		st.OwnerA.Seen = now
-	} else if local == key.B {
-		if st.OwnerB.Pid == 0 || st.OwnerB.Pid != uint32(ev.Pid) {
-			st.OwnerB.Pid = uint32(ev.Pid)
-			st.OwnerB.Comm = comm
-		}
-		st.OwnerB.Seen = now
-	}
-
-	flowMu.Unlock()
+	// печатаем обе стороны src->dst и dst->src
+	fmt.Printf("%s  %s  %s -> %s  %s\n", tag, clientStr, a, b, serverStr)
+	fmt.Printf("%s  %s  %s -> %s  %s\n", tag, serverStr, b, a, clientStr)
+	fmt.Println("------------------------------------------------------------")
 }
 
 func cleanupFlows(ttl time.Duration) {
@@ -924,7 +865,7 @@ func cleanupFlows(ttl time.Duration) {
 		cut := time.Now().Add(-ttl)
 		flowMu.Lock()
 		for k, v := range flows {
-			if v.LastSeen.Before(cut) {
+			if v.Seen.Before(cut) {
 				delete(flows, k)
 			}
 		}
@@ -932,81 +873,10 @@ func cleanupFlows(ttl time.Duration) {
 	}
 }
 
-func renderDashboard(ctx context.Context, interval time.Duration, maxLines int) {
-	t := time.NewTicker(interval)
-	defer t.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			// snapshot
-			flowMu.Lock()
-			list := make([]*FlowState, 0, len(flows))
-			for _, v := range flows {
-				list = append(list, v)
-			}
-			flowMu.Unlock()
-
-			sort.Slice(list, func(i, j int) bool {
-				return list[i].LastSeen.After(list[j].LastSeen)
-			})
-
-			if len(list) > maxLines {
-				list = list[:maxLines]
-			}
-
-			// clear + print
-			fmt.Print("\033[2J\033[H") // clear screen + home
-			now := time.Now()
-			fmt.Printf("TCP flows: %d  (showing %d)   now=%s\n", len(flows), len(list), now.Format("15:04:05.000"))
-			fmt.Printf("%-8s %-8s %-38s %-22s %-38s %-22s %-10s %-10s %-6s\n",
-				"AGE", "IDLE", "A(endpoint)", "A(pid/comm)", "B(endpoint)", "B(pid/comm)", "A->B", "B->A", "LAST")
-
-			for _, st := range list {
-				age := now.Sub(st.FirstSeen)
-				idle := now.Sub(st.LastSeen)
-
-				aOwner := "-"
-				if st.OwnerA.Pid != 0 {
-					aOwner = fmt.Sprintf("%d/%s", st.OwnerA.Pid, short(st.OwnerA.Comm, 12))
-				}
-				bOwner := "-"
-				if st.OwnerB.Pid != 0 {
-					bOwner = fmt.Sprintf("%d/%s", st.OwnerB.Pid, short(st.OwnerB.Comm, 12))
-				}
-
-				fmt.Printf("%-8s %-8s %-38s %-22s %-38s %-22s %-10d %-10d %-6s\n",
-					fmtDur(age), fmtDur(idle),
-					st.Key.A.String(), aOwner,
-					st.Key.B.String(), bOwner,
-					st.AtoB, st.BtoA, st.LastDir,
-				)
-			}
-
-			fmt.Println("\nCtrl+C to exit")
-		}
-	}
-}
-
-func fmtDur(d time.Duration) string {
-	// компактно: 12ms, 1.2s, 3.4m
-	if d < time.Second {
-		return fmt.Sprintf("%dms", d.Milliseconds())
-	}
-	if d < time.Minute {
-		return fmt.Sprintf("%.1fs", d.Seconds())
-	}
-	return fmt.Sprintf("%.1fm", d.Minutes())
-}
-
-/* ---------------- main ---------------- */
-
-func attach(tpGroup, tpName string, prog *ebpf.Program, links *[]link.Link) {
-	l, err := link.Tracepoint(tpGroup, tpName, prog, nil)
+func attachTP(cat, name string, prog *ebpf.Program, links *[]link.Link) {
+	l, err := link.Tracepoint(cat, name, prog, nil)
 	if err != nil {
-		log.Fatalf("attach %s/%s: %v", tpGroup, tpName, err)
+		log.Fatalf("attach %s/%s: %v", cat, name, err)
 	}
 	*links = append(*links, l)
 }
@@ -1018,62 +888,45 @@ func main() {
 	}()
 
 	defer objs.Close()
+	go cleanupFlows(10 * time.Second)
 
-	// чистка “умерших” flow
-	go cleanupFlows(30 * time.Second)
+	selfName := filepath.Base(os.Args[0])
 
-	links := make([]link.Link, 0, 16)
+	var links []link.Link
 	defer func() {
 		for _, l := range links {
 			_ = l.Close()
 		}
 	}()
 
-	// attach только то, что нужно для TCP потоков
-	attach("syscalls", "sys_enter_connect", objs.TraceConnectEnter, &links)
-	attach("syscalls", "sys_exit_connect", objs.TraceConnectExit, &links)
+	// IMPORTANT: используем accept/connect (TCP база)
+	attachTP("syscalls", "sys_enter_connect", objs.TraceConnectEnter, &links)
+	attachTP("syscalls", "sys_exit_connect",  objs.TraceConnectExit,  &links)
 
-	attach("syscalls", "sys_enter_accept4", objs.TraceAccept4Enter, &links)
-	attach("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit, &links)
-	attach("syscalls", "sys_enter_accept", objs.TraceAcceptEnter, &links)
-	attach("syscalls", "sys_exit_accept", objs.TraceAcceptExit, &links)
+	attachTP("syscalls", "sys_enter_accept4", objs.TraceAccept4Enter, &links)
+	attachTP("syscalls", "sys_exit_accept4",  objs.TraceAccept4Exit,  &links)
 
-	attach("syscalls", "sys_enter_close", objs.TraceCloseEnter, &links)
+	attachTP("syscalls", "sys_enter_accept",  objs.TraceAcceptEnter,  &links)
+	attachTP("syscalls", "sys_exit_accept",   objs.TraceAcceptExit,   &links)
 
-	// data-path: и sendto/recvfrom, и sendmsg/recvmsg — иначе TCP часть трафика пропустишь
-	attach("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, &links)
-	attach("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, &links)
-	attach("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, &links)
-	attach("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, &links)
+	attachTP("syscalls", "sys_enter_close",   objs.TraceCloseEnter,   &links)
 
-	attach("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter, &links)
-	attach("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit, &links)
-	attach("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter, &links)
-	attach("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit, &links)
+	// bind можешь оставить для красивого "SERVER BIND ..."
+	attachTP("syscalls", "sys_enter_bind", objs.TraceBindEnter, &links)
+	attachTP("syscalls", "sys_exit_bind",  objs.TraceBindExit,  &links)
 
-	// perf reader
-	const buffLen = 256 * 1024
-	rd, err := perf.NewReader(objs.TraceEvents, buffLen)
+	rd, err := perf.NewReader(objs.TraceEvents, 256*1024)
 	if err != nil {
 		log.Fatalf("perf.NewReader: %v", err)
 	}
 	defer rd.Close()
 
-	selfName := filepath.Base(os.Args[0])
-
-	// dashboard
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go renderDashboard(ctx, 500*time.Millisecond, 25)
-
-	// signal
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	// read loop
 	go func() {
 		for {
-			record, err := rd.Read()
+			rec, err := rd.Read()
 			if err != nil {
 				if errors.Is(err, perf.ErrClosed) {
 					return
@@ -1081,33 +934,86 @@ func main() {
 				log.Printf("perf read error: %v", err)
 				continue
 			}
-			if record.LostSamples != 0 {
-				log.Printf("LOST %d samples", record.LostSamples)
+			if rec.LostSamples != 0 {
+				log.Printf("LOST %d samples", rec.LostSamples)
 				continue
 			}
-			if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
+			if len(rec.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
+				log.Printf("invalid event size: %d", len(rec.RawSample))
 				continue
 			}
 
-			ev := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
-			comm := commToString(ev.Comm)
+			ev := *(*bpfTraceInfo)(unsafe.Pointer(&rec.RawSample[0]))
+			comm := cachedComm(ev.Comm)
 			if comm == selfName {
 				continue
 			}
 
-			// интересуют только data events (send/recv) — и только TCP
-			if !isSendEvent(uint8(ev.Sysexit)) && !isRecvEvent(uint8(ev.Sysexit)) {
+			// TCP only
+			if uint8(ev.Proto) != IPPROTO_TCP {
 				continue
 			}
-			updateFlowFromData(ev, comm)
+
+			switch ev.Sysexit {
+
+			// CONNECT (у тебя в BPF sysexit=3)
+			case 3:
+				// ev: src=local, dst=remote
+				src := endpointFromEventSrc(ev)
+				dst := endpointFromEventDst(ev)
+				key := canonicalKey(uint16(ev.Family), uint8(ev.Proto), src, dst)
+
+				flowMu.Lock()
+				st := flows[key]
+				if st == nil {
+					st = &FlowState{Key: key}
+					flows[key] = st
+				}
+				st.Seen = time.Now()
+				st.Client = ProcInfo{Pid: uint32(ev.Pid), Comm: comm}
+				flowMu.Unlock()
+
+				printFlowPretty("TCP CONNECT", st)
+
+			// ACCEPT (у тебя в BPF sysexit=4)
+			case 4:
+				// accept_exit_common в BPF делает incoming: src=remote, dst=local
+				remote := endpointFromEventSrc(ev)
+				local  := endpointFromEventDst(ev)
+				// для ключа соединения логично хранить local<->remote как пару
+				key := canonicalKey(uint16(ev.Family), uint8(ev.Proto), local, remote)
+
+				flowMu.Lock()
+				st := flows[key]
+				if st == nil {
+					st = &FlowState{Key: key}
+					flows[key] = st
+				}
+				st.Seen = time.Now()
+				st.Server = ProcInfo{Pid: uint32(ev.Pid), Comm: comm}
+				flowMu.Unlock()
+
+				printFlowPretty("TCP ACCEPT ", st)
+
+			// BIND OK (у тебя sysexit=20)
+			case 20:
+				// просто красиво покажем bind, это полезно для сервера
+				if ev.Family == AF_INET {
+					ip := ip4FromBE(ev.DstIP.S_addr)
+					fmt.Printf("TCP BIND   pid=%d(%s)  %s:%d\n", ev.Pid, comm, ip.String(), ev.Dport)
+				} else if ev.Family == AF_INET6 {
+					ip := ip6FromArr(ev.DstIP6.In6U.U6Addr8)
+					fmt.Printf("TCP BIND6  pid=%d(%s)  [%s]:%d\n", ev.Pid, comm, ip.String(), ev.Dport)
+				}
+				fmt.Println("------------------------------------------------------------")
+			}
 		}
 	}()
 
+	fmt.Println("Press Ctrl+C to exit")
 	<-stop
-	cancel()
-	fmt.Println("\nExiting...")
+	fmt.Println("Exiting...")
 }
-
 
 
 
