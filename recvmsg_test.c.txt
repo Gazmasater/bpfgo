@@ -1,0 +1,91 @@
+// recvmsg_test.c
+#define _GNU_SOURCE
+#include <arpa/inet.h>
+#include <errno.h>
+#include <netinet/in.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+#include <stdlib.h>   // atoi
+
+static pid_t gettid_linux(void) {
+    return (pid_t)syscall(SYS_gettid);
+}
+
+int main(int argc, char **argv) {
+    int port = 9999;
+    if (argc > 1) port = atoi(argv[1]);
+
+    pid_t pid = getpid();
+    pid_t tid = gettid_linux();
+
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) { perror("socket"); return 1; }
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr.sin_port = htons((uint16_t)port);
+
+    if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("bind");
+        return 1;
+    }
+
+    printf("[pid=%d tid=%d] recvmsg UDP server listening on 0.0.0.0:%d\n",
+           (int)pid, (int)tid, port);
+
+    for (;;) {
+        char buf[2048];
+
+        struct sockaddr_storage peer;
+        socklen_t peerlen = sizeof(peer);
+
+        struct iovec iov = {
+            .iov_base = buf,
+            .iov_len  = sizeof(buf),
+        };
+
+        struct msghdr msg;
+        memset(&msg, 0, sizeof(msg));
+        msg.msg_name = &peer;
+        msg.msg_namelen = peerlen;
+        msg.msg_iov = &iov;
+        msg.msg_iovlen = 1;
+
+        ssize_t n = recvmsg(fd, &msg, 0);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            perror("recvmsg");
+            break;
+        }
+
+        // распечатаем src ip:port
+        char ipstr[INET6_ADDRSTRLEN] = {0};
+        int pport = 0;
+
+        if (peer.ss_family == AF_INET) {
+            struct sockaddr_in *sin = (struct sockaddr_in*)&peer;
+            inet_ntop(AF_INET, &sin->sin_addr, ipstr, sizeof(ipstr));
+            pport = ntohs(sin->sin_port);
+        } else if (peer.ss_family == AF_INET6) {
+            struct sockaddr_in6 *sin6 = (struct sockaddr_in6*)&peer;
+            inet_ntop(AF_INET6, &sin6->sin6_addr, ipstr, sizeof(ipstr));
+            pport = ntohs(sin6->sin6_port);
+        } else {
+            strcpy(ipstr, "unknown_family");
+        }
+
+        printf("[pid=%d tid=%d] got %zd bytes from %s:%d: %.*s\n",
+               (int)pid, (int)tid, n, ipstr, pport, (int)n, buf);
+        fflush(stdout);
+    }
+
+    close(fd);
+    return 0;
+}
+

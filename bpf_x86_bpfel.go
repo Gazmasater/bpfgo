@@ -26,6 +26,25 @@ type bpfConnInfoT struct {
 	_       [3]byte
 }
 
+type bpfFdKeyT struct {
+	Tgid uint32
+	Fd   int32
+}
+
+type bpfFdStateT struct {
+	Family uint16
+	Proto  uint8
+	_      [1]byte
+	Lport  uint16
+	Rport  uint16
+	Lip    uint32
+	Rip    uint32
+	Lip6   struct{ In6U struct{ U6Addr8 [16]uint8 } }
+	Rip6   struct{ In6U struct{ U6Addr8 [16]uint8 } }
+}
+
+type bpfInflightFdT struct{ Fd int32 }
+
 type bpfTraceInfo struct {
 	SrcIP   struct{ S_addr uint32 }
 	DstIP   struct{ S_addr uint32 }
@@ -83,7 +102,15 @@ type bpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfProgramSpecs struct {
-	LookUp             *ebpf.ProgramSpec `ebpf:"look_up"`
+	TraceAccept4Enter  *ebpf.ProgramSpec `ebpf:"trace_accept4_enter"`
+	TraceAccept4Exit   *ebpf.ProgramSpec `ebpf:"trace_accept4_exit"`
+	TraceAcceptEnter   *ebpf.ProgramSpec `ebpf:"trace_accept_enter"`
+	TraceAcceptExit    *ebpf.ProgramSpec `ebpf:"trace_accept_exit"`
+	TraceBindEnter     *ebpf.ProgramSpec `ebpf:"trace_bind_enter"`
+	TraceBindExit      *ebpf.ProgramSpec `ebpf:"trace_bind_exit"`
+	TraceCloseEnter    *ebpf.ProgramSpec `ebpf:"trace_close_enter"`
+	TraceConnectEnter  *ebpf.ProgramSpec `ebpf:"trace_connect_enter"`
+	TraceConnectExit   *ebpf.ProgramSpec `ebpf:"trace_connect_exit"`
 	TraceRecvfromEnter *ebpf.ProgramSpec `ebpf:"trace_recvfrom_enter"`
 	TraceRecvfromExit  *ebpf.ProgramSpec `ebpf:"trace_recvfrom_exit"`
 	TraceRecvmsgEnter  *ebpf.ProgramSpec `ebpf:"trace_recvmsg_enter"`
@@ -92,17 +119,19 @@ type bpfProgramSpecs struct {
 	TraceSendmsgExit   *ebpf.ProgramSpec `ebpf:"trace_sendmsg_exit"`
 	TraceSendtoEnter   *ebpf.ProgramSpec `ebpf:"trace_sendto_enter"`
 	TraceSendtoExit    *ebpf.ProgramSpec `ebpf:"trace_sendto_exit"`
-	TraceTcpEst        *ebpf.ProgramSpec `ebpf:"trace_tcp_est"`
 }
 
 // bpfMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
-	AddrRecvMap *ebpf.MapSpec `ebpf:"addrRecv_map"`
-	AddrSendMap *ebpf.MapSpec `ebpf:"addrSend_map"`
-	ConnInfoMap *ebpf.MapSpec `ebpf:"conn_info_map"`
-	TraceEvents *ebpf.MapSpec `ebpf:"trace_events"`
+	AddrBindMap  *ebpf.MapSpec `ebpf:"addrBind_map"`
+	AddrRecvMap  *ebpf.MapSpec `ebpf:"addrRecv_map"`
+	AddrSendMap  *ebpf.MapSpec `ebpf:"addrSend_map"`
+	ConnInfoMap  *ebpf.MapSpec `ebpf:"conn_info_map"`
+	ConnectFdMap *ebpf.MapSpec `ebpf:"connect_fd_map"`
+	FdStateMap   *ebpf.MapSpec `ebpf:"fd_state_map"`
+	TraceEvents  *ebpf.MapSpec `ebpf:"trace_events"`
 }
 
 // bpfVariableSpecs contains global variables before they are loaded into the kernel.
@@ -132,17 +161,23 @@ func (o *bpfObjects) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
-	AddrRecvMap *ebpf.Map `ebpf:"addrRecv_map"`
-	AddrSendMap *ebpf.Map `ebpf:"addrSend_map"`
-	ConnInfoMap *ebpf.Map `ebpf:"conn_info_map"`
-	TraceEvents *ebpf.Map `ebpf:"trace_events"`
+	AddrBindMap  *ebpf.Map `ebpf:"addrBind_map"`
+	AddrRecvMap  *ebpf.Map `ebpf:"addrRecv_map"`
+	AddrSendMap  *ebpf.Map `ebpf:"addrSend_map"`
+	ConnInfoMap  *ebpf.Map `ebpf:"conn_info_map"`
+	ConnectFdMap *ebpf.Map `ebpf:"connect_fd_map"`
+	FdStateMap   *ebpf.Map `ebpf:"fd_state_map"`
+	TraceEvents  *ebpf.Map `ebpf:"trace_events"`
 }
 
 func (m *bpfMaps) Close() error {
 	return _BpfClose(
+		m.AddrBindMap,
 		m.AddrRecvMap,
 		m.AddrSendMap,
 		m.ConnInfoMap,
+		m.ConnectFdMap,
+		m.FdStateMap,
 		m.TraceEvents,
 	)
 }
@@ -158,7 +193,15 @@ type bpfVariables struct {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfPrograms struct {
-	LookUp             *ebpf.Program `ebpf:"look_up"`
+	TraceAccept4Enter  *ebpf.Program `ebpf:"trace_accept4_enter"`
+	TraceAccept4Exit   *ebpf.Program `ebpf:"trace_accept4_exit"`
+	TraceAcceptEnter   *ebpf.Program `ebpf:"trace_accept_enter"`
+	TraceAcceptExit    *ebpf.Program `ebpf:"trace_accept_exit"`
+	TraceBindEnter     *ebpf.Program `ebpf:"trace_bind_enter"`
+	TraceBindExit      *ebpf.Program `ebpf:"trace_bind_exit"`
+	TraceCloseEnter    *ebpf.Program `ebpf:"trace_close_enter"`
+	TraceConnectEnter  *ebpf.Program `ebpf:"trace_connect_enter"`
+	TraceConnectExit   *ebpf.Program `ebpf:"trace_connect_exit"`
 	TraceRecvfromEnter *ebpf.Program `ebpf:"trace_recvfrom_enter"`
 	TraceRecvfromExit  *ebpf.Program `ebpf:"trace_recvfrom_exit"`
 	TraceRecvmsgEnter  *ebpf.Program `ebpf:"trace_recvmsg_enter"`
@@ -167,12 +210,19 @@ type bpfPrograms struct {
 	TraceSendmsgExit   *ebpf.Program `ebpf:"trace_sendmsg_exit"`
 	TraceSendtoEnter   *ebpf.Program `ebpf:"trace_sendto_enter"`
 	TraceSendtoExit    *ebpf.Program `ebpf:"trace_sendto_exit"`
-	TraceTcpEst        *ebpf.Program `ebpf:"trace_tcp_est"`
 }
 
 func (p *bpfPrograms) Close() error {
 	return _BpfClose(
-		p.LookUp,
+		p.TraceAccept4Enter,
+		p.TraceAccept4Exit,
+		p.TraceAcceptEnter,
+		p.TraceAcceptExit,
+		p.TraceBindEnter,
+		p.TraceBindExit,
+		p.TraceCloseEnter,
+		p.TraceConnectEnter,
+		p.TraceConnectExit,
 		p.TraceRecvfromEnter,
 		p.TraceRecvfromExit,
 		p.TraceRecvmsgEnter,
@@ -181,7 +231,6 @@ func (p *bpfPrograms) Close() error {
 		p.TraceSendmsgExit,
 		p.TraceSendtoEnter,
 		p.TraceSendtoExit,
-		p.TraceTcpEst,
 	)
 }
 

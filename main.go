@@ -2,6 +2,7 @@ package main
 
 import (
 	"bpfgo/pkg"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"log"
@@ -10,10 +11,10 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
-	"strconv"
-	"strings"
+	"path/filepath"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/cilium/ebpf/link"
@@ -23,59 +24,34 @@ import (
 
 var objs bpfObjects
 
-var eventChanSport = make(chan int, 1)
-var eventChanPID = make(chan int, 1)
-var mu sync.Mutex
-var lastSport, lastPID int
-var proto, srcHost, dstHost string
+const (
+	AF_INET  = 2
+	AF_INET6 = 10
+)
 
-var eventDataPool = sync.Pool{
-	New: func() interface{} {
-		return &EventData{}
-	},
+type PeerKey struct {
+	Family uint16
+	Port   uint16
+	IP     [16]byte // for IPv4: first 4 bytes used
 }
 
-type Lookup struct {
-	DstIP   net.IP
-	DstPort int
-	SrcIP   net.IP
-	SrcPort int
-	Proto   int
+type LookupInfo struct {
+	Family uint16
+	Proto  uint8
+
+	PeerIP   [16]byte
+	PeerPort uint16
+
+	LocalIP   [16]byte
+	LocalPort uint16
+
+	Seen time.Time
 }
 
-type Sendmsg struct {
-	DstIP   net.IP
-	DstPort int
-	Pid     uint32
-	Proto   int
-	Comm    string
-}
-
-type Recvmsg struct {
-	SrcIP   net.IP
-	SrcPort int
-	Pid     uint32
-	Proto   int
-	Comm    string
-}
-
-type EventData struct {
-	Lookup     Lookup
-	Sendmsg    Sendmsg
-	Recvmsg    Recvmsg
-	HasLookup  bool
-	HasSendmsg bool
-	HasRecvmsg bool
-}
-
-func getEventData() *EventData {
-	return eventDataPool.Get().(*EventData)
-}
-
-func putEventData(ed *EventData) {
-	*ed = EventData{}
-	eventDataPool.Put(ed)
-}
+var (
+	lookupMu     sync.Mutex
+	lookupByPeer = make(map[PeerKey]LookupInfo, 8192)
+)
 
 var (
 	resolveCache = make(map[string]string)
@@ -84,6 +60,12 @@ var (
 	commCache = make(map[[32]int8]string)
 	commMu    sync.RWMutex
 )
+
+func ip4FromBE(u uint32) net.IP {
+	var b [4]byte
+	binary.BigEndian.PutUint32(b[:], u)
+	return net.IP(b[:])
+}
 
 func cachedComm(c [32]int8) string {
 	commMu.RLock()
@@ -112,34 +94,104 @@ func resolveHost(ip net.IP) string {
 	cacheMu.RUnlock()
 
 	var host string
-
 	if ip.IsLoopback() {
-
 		host = "localhost"
-
-		return host
-	}
-
-	if ip.To4() != nil {
-		host = pkg.ResolveIP(ip)
 	} else {
-		var err error
-		host, err = pkg.ResolveIP_n(ip)
-		if err != nil {
-			host = "unknown"
+		if ip.To4() != nil {
+			host = pkg.ResolveIP(ip)
+		} else {
+			h, err := pkg.ResolveIP_n(ip)
+			if err != nil {
+				host = "unknown"
+			} else {
+				host = h
+			}
 		}
 	}
 
 	cacheMu.Lock()
 	resolveCache[key] = host
 	cacheMu.Unlock()
-
 	return host
+}
+
+func ip6FromArr(a [16]uint8) net.IP {
+	ip := make(net.IP, net.IPv6len)
+	copy(ip, a[:])
+	return ip
+}
+
+func protoStr(p uint8) string {
+	switch p {
+	case 6:
+		return "TCP"
+	case 17:
+		return "UDP"
+	default:
+		return fmt.Sprintf("P%d", p)
+	}
+}
+
+func saveLookupBothDirections(family uint16, proto uint8, srcIP [16]byte, srcPort uint16, dstIP [16]byte, dstPort uint16) {
+	now := time.Now()
+
+	// интерпретация #1: peer = src, local = dst
+	k1 := PeerKey{Family: family, Port: srcPort, IP: srcIP}
+	v1 := LookupInfo{
+		Family:    family,
+		Proto:     proto,
+		PeerIP:    srcIP,
+		PeerPort:  srcPort,
+		LocalIP:   dstIP,
+		LocalPort: dstPort,
+		Seen:      now,
+	}
+
+	// интерпретация #2: peer = dst, local = src (на случай, если local/remote перепутаны в BPF)
+	k2 := PeerKey{Family: family, Port: dstPort, IP: dstIP}
+	v2 := LookupInfo{
+		Family:    family,
+		Proto:     proto,
+		PeerIP:    dstIP,
+		PeerPort:  dstPort,
+		LocalIP:   srcIP,
+		LocalPort: srcPort,
+		Seen:      now,
+	}
+
+	lookupMu.Lock()
+	lookupByPeer[k1] = v1
+	lookupByPeer[k2] = v2
+	lookupMu.Unlock()
+}
+
+func takeLookup(family uint16, peerIP [16]byte, peerPort uint16) (LookupInfo, bool) {
+	k := PeerKey{Family: family, Port: peerPort, IP: peerIP}
+	lookupMu.Lock()
+	v, ok := lookupByPeer[k]
+	lookupMu.Unlock()
+	return v, ok
+}
+
+func cleanupLookups(ttl time.Duration) {
+	t := time.NewTicker(2 * time.Second)
+	defer t.Stop()
+
+	for range t.C {
+		cut := time.Now().Add(-ttl)
+		lookupMu.Lock()
+		for k, v := range lookupByPeer {
+			if v.Seen.Before(cut) {
+				delete(lookupByPeer, k)
+			}
+		}
+		lookupMu.Unlock()
+	}
 }
 
 func init() {
 	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatalf("failed to remove memory limit for process: %v", err)
+		log.Fatalf("failed to remove memory limit: %v", err)
 	}
 	if err := loadBpfObjects(&objs, nil); err != nil {
 		log.Fatalf("failed to load bpf objects: %v", err)
@@ -148,628 +200,270 @@ func init() {
 
 func main() {
 	go func() {
-		log.Println("Starting pprof HTTP server on :6060")
-		if err := http.ListenAndServe(":6060", nil); err != nil {
-			log.Fatalf("pprof ListenAndServe error: %v", err)
-		}
+		log.Println("pprof on :6060")
+		_ = http.ListenAndServe(":6060", nil)
 	}()
 
-	eventMap := make(map[int]*EventData)
-	eventMap1 := make(map[int]*EventData)
 	defer objs.Close()
+
+	go cleanupLookups(3 * time.Second)
 
 	netns, err := os.Open("/proc/self/ns/net")
 	if err != nil {
-		panic(err)
+		log.Fatalf("open netns: %v", err)
 	}
 	defer netns.Close()
 
-	fmt.Printf("Дескриптор нового namespace: %d\n", netns.Fd())
-	fmt.Printf("Go sizeof(traceInfo) = %d\n", unsafe.Sizeof(bpfTraceInfo{}))
+	fmt.Printf("netns fd=%d\n", netns.Fd())
+	fmt.Printf("sizeof(traceInfo)=%d\n", unsafe.Sizeof(bpfTraceInfo{}))
 
-	SmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_sendmsg: %s", err)
-	}
-	defer SmsgEnter.Close()
+	links := make([]link.Link, 0, 16)
+	defer func() {
+		for _, l := range links {
+			_ = l.Close()
+		}
+	}()
 
-	SmsgExit, err := link.Tracepoint("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit, nil)
+	BindEnter, err := link.Tracepoint("syscalls", "sys_enter_bind", objs.TraceBindEnter, nil)
 	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_sendmsg: %s", err)
+		log.Fatalf("opening tracepoint sys_enter_bind: %s", err)
 	}
-	defer SmsgExit.Close()
+	defer BindEnter.Close()
 
-	SEnter, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
+	BindExit, err := link.Tracepoint("syscalls", "sys_exit_bind", objs.TraceBindExit, nil)
 	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_sendto: %s", err)
+		log.Fatalf("opening tracepoint sys_exit_bind: %s", err)
 	}
-	defer SEnter.Close()
+	defer BindExit.Close()
 
-	SExit, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
+	// --- connect ---
+	ConnEnter, err := link.Tracepoint("syscalls", "sys_enter_connect", objs.TraceConnectEnter, nil)
 	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_sendto: %s", err)
+		log.Fatalf("opening tracepoint sys_enter_connect: %s", err)
 	}
-	defer SExit.Close()
+	defer ConnEnter.Close()
 
-	RmsgEnter, err := link.Tracepoint("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter, nil)
+	ConnExit, err := link.Tracepoint("syscalls", "sys_exit_connect", objs.TraceConnectExit, nil)
 	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_recvmsg: %s", err)
+		log.Fatalf("opening tracepoint sys_exit_connect: %s", err)
 	}
-	defer RmsgEnter.Close()
+	defer ConnExit.Close()
 
-	RmsgExit, err := link.Tracepoint("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit, nil)
+	// --- accept4 ---
+	Acc4Enter, err := link.Tracepoint("syscalls", "sys_enter_accept4", objs.TraceAccept4Enter, nil)
 	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_recvmsg: %s", err)
+		log.Fatalf("opening tracepoint sys_enter_accept4: %s", err)
 	}
-	defer RmsgExit.Close()
+	defer Acc4Enter.Close()
 
-	REnter, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
+	Acc4Exit, err := link.Tracepoint("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit, nil)
 	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_recvfrom: %s", err)
+		log.Fatalf("opening tracepoint sys_exit_accept4: %s", err)
 	}
-	defer REnter.Close()
+	defer Acc4Exit.Close()
 
-	RExit, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
+	// --- accept (если кто-то вызывает accept, а не accept4) ---
+	AccEnter, err := link.Tracepoint("syscalls", "sys_enter_accept", objs.TraceAcceptEnter, nil)
 	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_recvfrom: %s", err)
+		log.Fatalf("opening tracepoint sys_enter_accept: %s", err)
 	}
-	defer RExit.Close()
+	defer AccEnter.Close()
 
-	InetSock, err := link.Tracepoint("sock", "inet_sock_set_state", objs.TraceTcpEst, nil)
+	AccExit, err := link.Tracepoint("syscalls", "sys_exit_accept", objs.TraceAcceptExit, nil)
 	if err != nil {
-		log.Fatalf("opening tracepoint inet_sock_set_state: %s", err)
+		log.Fatalf("opening tracepoint sys_exit_accept: %s", err)
 	}
-	defer InetSock.Close()
+	defer AccExit.Close()
 
-	skLookupLink, err := link.AttachNetNs(int(netns.Fd()), objs.LookUp)
+	// --- close (чистим fd_state_map) ---
+	CloseEnter, err := link.Tracepoint("syscalls", "sys_enter_close", objs.TraceCloseEnter, nil)
 	if err != nil {
-		log.Fatalf("failed to attach sk_lookup program: %v", err)
+		log.Fatalf("opening tracepoint sys_enter_close: %s", err)
 	}
-	defer skLookupLink.Close()
+	defer CloseEnter.Close()
+
+	// --- Attach tracepoints correctly (two-value returns) ---
+	{
+		l, err := link.Tracepoint("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter, nil)
+		if err != nil {
+			log.Fatalf("attach sys_enter_sendmsg: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.Tracepoint("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit, nil)
+		if err != nil {
+			log.Fatalf("attach sys_exit_sendmsg: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
+		if err != nil {
+			log.Fatalf("attach sys_enter_sendto: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
+		if err != nil {
+			log.Fatalf("attach sys_exit_sendto: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.Tracepoint("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter, nil)
+		if err != nil {
+			log.Fatalf("attach sys_enter_recvmsg: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.Tracepoint("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit, nil)
+		if err != nil {
+			log.Fatalf("attach sys_exit_recvmsg: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
+		if err != nil {
+			log.Fatalf("attach sys_enter_recvfrom: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
+		if err != nil {
+			log.Fatalf("attach sys_exit_recvfrom: %v", err)
+		}
+		links = append(links, l)
+	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		const buffLen = 64 * 1024
+		const buffLen = 256 * 1024
 		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
 		if err != nil {
-			log.Fatalf("failed to create perf reader: %s", err)
+			log.Fatalf("perf.NewReader: %v", err)
 		}
 		defer rd.Close()
 
-		executableName := os.Args[0]
-		if len(executableName) > 2 {
-			executableName = executableName[2:]
-		}
-
-		const batchSize = 2
-		batch := make([]perf.Record, 0, batchSize)
+		selfName := filepath.Base(os.Args[0])
 
 		for {
-			batch = batch[:0]
-			for i := 0; i < batchSize; i++ {
-				record, err := rd.Read()
-				if err != nil {
-					if errors.Is(err, os.ErrDeadlineExceeded) {
-						break
-					}
-					log.Fatalf("error reading from perf reader: %v", err)
+			record, err := rd.Read()
+			if err != nil {
+				if errors.Is(err, perf.ErrClosed) {
+					return
 				}
-				batch = append(batch, record)
-				if len(batch) >= batchSize {
-					break
-				}
-			}
-			if len(batch) == 0 {
+				log.Printf("perf read error: %v", err)
 				continue
 			}
 
-			for _, record := range batch {
-				if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
-					log.Println("!!!!!!!!!!!!!!!!!!!! invalid event size !!!!!!!!!!!!!!!!!!!")
-					continue
-				}
-				event := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
+			if record.LostSamples != 0 {
+				log.Printf("LOST %d samples", record.LostSamples)
+				continue
+			}
 
-				srcIP := net.IPv4(
-					byte(event.SrcIP.S_addr),
-					byte(event.SrcIP.S_addr>>8),
-					byte(event.SrcIP.S_addr>>16),
-					byte(event.SrcIP.S_addr>>24),
-				)
+			if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
+				log.Printf("invalid event size: %d", len(record.RawSample))
+				continue
+			}
 
-				srcIP_r := net.IPv4(
-					byte(event.SrcIP.S_addr>>24),
-					byte(event.SrcIP.S_addr>>16),
-					byte(event.SrcIP.S_addr>>8),
-					byte(event.SrcIP.S_addr),
-				)
+			ev := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
+			comm := cachedComm(ev.Comm)
+			if comm == selfName {
+				continue
+			}
 
-				dstIP := net.IPv4(
-					byte(event.DstIP.S_addr),
-					byte(event.DstIP.S_addr>>8),
-					byte(event.DstIP.S_addr>>16),
-					byte(event.DstIP.S_addr>>24),
-				)
+			switch ev.Sysexit {
 
-				dstIP_r := net.IPv4(
-					byte(event.DstIP.S_addr>>24),
-					byte(event.DstIP.S_addr>>16),
-					byte(event.DstIP.S_addr>>8),
-					byte(event.DstIP.S_addr),
-				)
-
-				if cachedComm(event.Comm) == executableName {
-					continue
+			// sendto_exit
+			case 1:
+				if ev.Family == AF_INET {
+					dst := ip4FromBE(ev.DstIP.S_addr)
+					fmt.Printf("SENDTO  pid=%d comm=%s  %s dst=%s:%d\n",
+						ev.Pid, comm, protoStr(uint8(ev.Proto)),
+						dst.String(), ev.Dport)
+				} else if ev.Family == AF_INET6 {
+					dst := ip6FromArr(ev.DstIP6.In6U.U6Addr8)
+					fmt.Printf("SENDTO6 pid=%d comm=%s  %s dst=[%s]:%d\n",
+						ev.Pid, comm, protoStr(uint8(ev.Proto)),
+						dst.String(), ev.Dport)
 				}
 
-				if event.Sysexit == 1 {
-					if event.Family == 2 {
-						port := int(event.Dport)
-						data, exists := eventMap1[port]
-						if !exists {
-							data = getEventData()
-							eventMap1[port] = data
-						}
-						data.Sendmsg = Sendmsg{
-							DstIP:   dstIP,
-							DstPort: port,
-							Pid:     event.Pid,
-							Comm:    cachedComm(event.Comm),
-						}
-						data.HasSendmsg = true
+			// recvfrom_exit
+			case 2:
+				handleRecv("RECVFROM", ev, comm)
 
-						if data.HasLookup && data.HasRecvmsg {
-							if data.Lookup.Proto == 17 {
-								proto = "UDP"
-							}
-							if data.Lookup.DstIP.IsLoopback() {
-								dstHost = "localhost"
-							} else {
-								dstHost = resolveHost(data.Lookup.DstIP)
-							}
-							if data.Lookup.SrcIP.IsLoopback() {
-								srcHost = "localhost"
-							} else {
-								srcHost = resolveHost(data.Lookup.SrcIP)
-							}
-							fmt.Print("SENDTO PID=", data.Sendmsg.Pid, " NAME=", data.Sendmsg.Comm, " ", proto, "/",
-								dstHost, "[", data.Lookup.DstIP.String(), "]", ":", data.Lookup.DstPort, " -> ",
-								srcHost, "[", data.Lookup.SrcIP.String(), "]", ":", data.Lookup.SrcPort, "\n")
+			// recvmsg_exit
+			case 12:
+				handleRecv("RECVMSG", ev, comm)
 
-							fmt.Print("SENDTO PID=", data.Recvmsg.Pid, " NAME=", data.Recvmsg.Comm, " ", proto, "/",
-								dstHost, "[", data.Lookup.DstIP.String(), "]", ":", data.Lookup.DstPort, " <- ",
-								srcHost, "[", data.Lookup.SrcIP.String(), "]", ":", data.Lookup.SrcPort, "\n")
-
-							delete(eventMap1, port)
-							putEventData(data)
-						}
-					} else if event.Family == 10 {
-						port := event.Dport
-						pid := event.Pid
-
-						var ip6Buf = make(net.IP, net.IPv6len)
-						words := IPv6BytesToWords(event.DstIP6.In6U.U6Addr8)
-						for i := 0; i < 4; i++ {
-							ip6Buf[i*4+0] = byte(words[i])
-							ip6Buf[i*4+1] = byte(words[i] >> 8)
-							ip6Buf[i*4+2] = byte(words[i] >> 16)
-							ip6Buf[i*4+3] = byte(words[i] >> 24)
-						}
-						fmt.Print("SENDTO IPv6 PID=", pid, " IPv6=", ip6Buf.String(), ":", port, " NAME=", cachedComm(event.Comm), "\n")
-					}
+			// sendmsg_exit
+			case 11:
+				if ev.Family == AF_INET {
+					dst := ip4FromBE(ev.DstIP.S_addr)
+					fmt.Printf("SENDMSG  pid=%d comm=%s  %s dst=%s:%d\n",
+						ev.Pid, comm, protoStr(uint8(ev.Proto)),
+						dst.String(), ev.Dport)
+				} else if ev.Family == AF_INET6 {
+					dst := ip6FromArr(ev.DstIP6.In6U.U6Addr8)
+					fmt.Printf("SENDMSG6 pid=%d comm=%s  %s dst=[%s]:%d\n",
+						ev.Pid, comm, protoStr(uint8(ev.Proto)),
+						dst.String(), ev.Dport)
 				}
 
-				if event.Sysexit == 11 {
-					if event.Family == 2 {
-						port := int(event.Dport)
-						data, exists := eventMap[port]
-						if !exists {
-							data = getEventData()
-							eventMap[port] = data
-						}
-						data.Sendmsg = Sendmsg{
-							DstIP:   dstIP_r,
-							DstPort: port,
-							Pid:     event.Pid,
-							Comm:    cachedComm(event.Comm),
-						}
-						data.HasSendmsg = true
-
-						if data.HasLookup && data.HasRecvmsg {
-							if data.Lookup.Proto == 17 {
-								proto = "UDP"
-							}
-							fmt.Print("\n")
-							dstHost := resolveHost(dstIP_r)
-							srcHost := resolveHost(data.Lookup.SrcIP)
-
-							dstIPStr := data.Sendmsg.DstIP.String()
-							srcIPStr := data.Lookup.SrcIP.String()
-							dstPort := data.Sendmsg.DstPort
-							srcPort := data.Lookup.SrcPort
-
-							fmt.Printf("SENDMSG PID=%d NAME=%s   %s://%s[%s:%d]->%s[%s:%d]\n",
-								data.Sendmsg.Pid,
-								data.Sendmsg.Comm,
-								proto,
-								dstHost,
-								dstIPStr,
-								dstPort,
-								srcHost,
-								srcIPStr,
-								srcPort,
-							)
-
-							fmt.Printf("SENDMSG\tPID=%d  NAME=%s   %s://%s[%s:%d]<-%s[%s:%d]\n",
-								data.Recvmsg.Pid,
-								data.Sendmsg.Comm,
-								proto,
-								dstHost,
-								dstIPStr,
-								dstPort,
-								srcHost,
-								srcIPStr,
-								srcPort,
-							)
-
-							fmt.Print("\n")
-
-							delete(eventMap, port)
-							putEventData(data)
-						}
-					} else if event.Family == 10 {
-						port := event.Dport
-						pid := event.Pid
-
-						var ip6Buf = make(net.IP, net.IPv6len)
-						words := IPv6BytesToWords(event.DstIP6.In6U.U6Addr8)
-						for i := 0; i < 4; i++ {
-							ip6Buf[i*4+0] = byte(words[i])
-							ip6Buf[i*4+1] = byte(words[i] >> 8)
-							ip6Buf[i*4+2] = byte(words[i] >> 16)
-							ip6Buf[i*4+3] = byte(words[i] >> 24)
-						}
-						fmt.Print("SENDMSG IPv6 PID=", pid, " IPv6=", ip6Buf.String(), ":", port, " NAME=", cachedComm(event.Comm), "\n")
-					}
+			case 20:
+				if ev.Family == 2 {
+					ip := ip4FromBE(ev.DstIP.S_addr)
+					fmt.Printf("BIND OK pid=%d comm=%s  %s:%d\n",
+						ev.Pid, cachedComm(ev.Comm), ip.String(), ev.Dport)
+				} else if ev.Family == 10 {
+					// IPv6 печать как у тебя (через words/bytes)
+					fmt.Printf("BIND6 OK pid=%d comm=%s  port=%d\n",
+						ev.Pid, cachedComm(ev.Comm), ev.Dport)
 				}
 
-				if event.Sysexit == 2 {
-					if event.Family == 2 {
-						port := int(event.Sport)
-						data, exists := eventMap[port]
-						if !exists {
-							data = getEventData()
-							eventMap[port] = data
-						}
-						data.Recvmsg = Recvmsg{
-							SrcIP:   srcIP,
-							SrcPort: port,
-							Pid:     event.Pid,
-							Comm:    cachedComm(event.Comm),
-						}
-						data.HasRecvmsg = true
+			// sk_lookup
+			case 3:
+				if ev.Family == AF_INET {
+					var srcIP [16]byte
+					var dstIP [16]byte
+					binary.BigEndian.PutUint32(srcIP[:4], ev.SrcIP.S_addr)
+					binary.BigEndian.PutUint32(dstIP[:4], ev.DstIP.S_addr)
 
-						if data.HasLookup && data.HasSendmsg {
-							if data.Lookup.Proto == 17 {
-								proto = "UDP"
-							}
-							if data.Lookup.DstIP.IsLoopback() {
-								dstHost = "localhost"
-							} else {
-								dstHost = resolveHost(dstIP)
-							}
-							if data.Lookup.SrcIP.IsLoopback() {
-								srcHost = "localhost"
-							} else {
-								srcHost = resolveHost(srcIP)
-							}
-							fmt.Print("RECVFROM PID=", data.Sendmsg.Pid, " NAME=", data.Sendmsg.Comm, " ", proto, "/",
-								dstHost, "[", data.Lookup.DstIP.String(), "]", ":", data.Lookup.DstPort, " -> ",
-								srcHost, "[", data.Lookup.SrcIP.String(), "]", ":", data.Lookup.SrcPort, "\n")
+					saveLookupBothDirections(
+						uint16(ev.Family),
+						uint8(ev.Proto),
+						srcIP, uint16(ev.Sport),
+						dstIP, uint16(ev.Dport),
+					)
+				} else if ev.Family == AF_INET6 {
+					var srcIP [16]byte
+					var dstIP [16]byte
+					copy(srcIP[:], ev.SrcIP6.In6U.U6Addr8[:])
+					copy(dstIP[:], ev.DstIP6.In6U.U6Addr8[:])
 
-							fmt.Print("RECVFROM PID=", data.Recvmsg.Pid, " NAME=", data.Recvmsg.Comm, " ", proto, "/",
-								dstHost, "[", data.Lookup.DstIP.String(), "]", ":", data.Lookup.DstPort, " <- ",
-								srcHost, "[", data.Lookup.SrcIP.String(), "]", ":", data.Lookup.SrcPort, "\n")
-
-							delete(eventMap, port)
-							putEventData(data)
-						}
-					} else if event.Family == 10 {
-						port := event.Sport
-						pid := event.Pid
-
-						var ip6Buf = make(net.IP, net.IPv6len)
-						words := IPv6BytesToWords(event.SrcIP6.In6U.U6Addr8)
-						for i := 0; i < 4; i++ {
-							ip6Buf[i*4+0] = byte(words[i])
-							ip6Buf[i*4+1] = byte(words[i] >> 8)
-							ip6Buf[i*4+2] = byte(words[i] >> 16)
-							ip6Buf[i*4+3] = byte(words[i] >> 24)
-						}
-						fmt.Print("RECVFROM IPv6 PID=", pid, " IPv6=", ip6Buf.String(), ":", port, " NAME=", cachedComm(event.Comm), "\n")
-					}
+					saveLookupBothDirections(
+						uint16(ev.Family),
+						uint8(ev.Proto),
+						srcIP, uint16(ev.Sport),
+						dstIP, uint16(ev.Dport),
+					)
 				}
 
-				if event.Sysexit == 12 {
-					if event.Family == 2 {
-						port := int(event.Sport)
-						data, exists := eventMap[port]
-						if !exists {
-							data = getEventData()
-							eventMap[port] = data
-						}
-						data.Recvmsg = Recvmsg{
-							SrcIP:   srcIP_r,
-							SrcPort: port,
-							Pid:     event.Pid,
-							Comm:    cachedComm(event.Comm),
-						}
-						data.HasRecvmsg = true
-
-						if data.HasLookup && data.HasSendmsg {
-							if data.Lookup.Proto == 17 {
-								proto = "UDP"
-							}
-							fmt.Print("\n")
-							srcHost := resolveHost(srcIP_r)
-							lookupHost := resolveHost(data.Lookup.SrcIP)
-
-							srcIPStr := data.Recvmsg.SrcIP.String()
-							lookupIPStr := data.Lookup.SrcIP.String()
-							srcPort := data.Recvmsg.SrcPort
-							lookupPort := data.Lookup.SrcPort
-
-							fmt.Printf("RECVMSG PID=%d NAME=%s   %s://%s[%s:%d]->%s[%s:%d]\n",
-								data.Recvmsg.Pid,
-								data.Recvmsg.Comm,
-								proto,
-								srcHost,
-								srcIPStr,
-								srcPort,
-								lookupHost,
-								lookupIPStr,
-								lookupPort,
-							)
-
-							fmt.Printf("RECVMSG\tPID=%d  NAME=%s   %s://%s[%s:%d]<-%s[%s:%d]\n",
-								data.Sendmsg.Pid,
-								data.Recvmsg.Comm,
-								proto,
-								srcHost,
-								srcIPStr,
-								srcPort,
-								lookupHost,
-								lookupIPStr,
-								lookupPort,
-							)
-
-							fmt.Print("\n")
-							delete(eventMap, port)
-							putEventData(data)
-						}
-					} else if event.Family == 10 {
-						port := event.Sport
-						pid := event.Pid
-
-						var ip6Buf = make(net.IP, net.IPv6len)
-						words := IPv6BytesToWords(event.SrcIP6.In6U.U6Addr8)
-						for i := 0; i < 4; i++ {
-							ip6Buf[i*4+0] = byte(words[i])
-							ip6Buf[i*4+1] = byte(words[i] >> 8)
-							ip6Buf[i*4+2] = byte(words[i] >> 16)
-							ip6Buf[i*4+3] = byte(words[i] >> 24)
-						}
-						fmt.Print("RECVMSG IPv6 PID=", pid, " IPv6=", ip6Buf.String(), ":", port, " NAME=", cachedComm(event.Comm), "\n")
-					}
+			// inet_sock_set_state (опционально)
+			case 6:
+				if ev.Family == AF_INET && ev.State != 0 {
+					src := ip4FromBE(ev.SrcIP.S_addr)
+					dst := ip4FromBE(ev.DstIP.S_addr)
+					fmt.Printf("TCPSTATE pid=%d comm=%s state=%d %s:%d -> %s:%d\n",
+						ev.Pid, comm, ev.State, src.String(), ev.Sport, dst.String(), ev.Dport)
 				}
-
-				if event.Sysexit == 3 {
-					if event.Family == 2 {
-						port := int(event.Dport)
-						data, exists := eventMap[port]
-						if !exists {
-							data = getEventData()
-							eventMap[port] = data
-						}
-						data.Lookup = Lookup{
-							SrcIP:   srcIP,
-							SrcPort: int(event.Sport),
-							DstIP:   dstIP,
-							DstPort: int(event.Dport),
-							Proto:   int(event.Proto),
-						}
-						data.HasLookup = true
-
-						port1 := int(event.Sport)
-						data1, exists1 := eventMap1[port1]
-						if !exists1 {
-							data1 = data
-							eventMap1[port1] = data1
-						} else {
-							data1.Lookup = data.Lookup
-						}
-
-						if data.HasRecvmsg && data.HasSendmsg {
-							if data.Lookup.Proto == 17 {
-								proto = "UDP"
-							}
-							fmt.Print("\n")
-							if data.Lookup.DstIP.IsLoopback() {
-								dstHost = "localhost"
-							} else {
-								dstHost = resolveHost(data.Lookup.DstIP)
-							}
-							if data.Lookup.SrcIP.IsLoopback() {
-								srcHost = "localhost"
-							} else {
-								srcHost = resolveHost(data.Lookup.SrcIP)
-							}
-							fmt.Print("LOOKUP PID=", data.Sendmsg.Pid, " NAME=", data.Sendmsg.Comm, " ", proto, "/",
-								dstHost, "[", data.Lookup.DstIP.String(), "]", ":", data.Lookup.DstPort, "<-",
-								srcHost, "[", data.Lookup.SrcIP.String(), "]", ":", data.Lookup.SrcPort, "\n")
-							fmt.Print("LOOKUP PID=", data.Recvmsg.Pid, " NAME=", data.Recvmsg.Comm, " ", proto, "/",
-								dstHost, "[", data.Lookup.DstIP.String(), "]", ":", data.Lookup.DstPort, "->",
-								srcHost, "[", data.Lookup.SrcIP.String(), "]", ":", data.Lookup.SrcPort, "\n")
-							fmt.Print("\n")
-							delete(eventMap, port)
-							putEventData(data)
-						}
-					} else if event.Family == 10 {
-						var ip6Buf1 = make(net.IP, net.IPv6len)
-						words1 := IPv6BytesToWords(event.SrcIP6.In6U.U6Addr8)
-						for i := 0; i < 4; i++ {
-							ip6Buf1[i*4+0] = byte(words1[i])
-							ip6Buf1[i*4+1] = byte(words1[i] >> 8)
-							ip6Buf1[i*4+2] = byte(words1[i] >> 16)
-							ip6Buf1[i*4+3] = byte(words1[i] >> 24)
-						}
-						fmt.Print("LOOKUP SRC IPv6=", ip6Buf1.String(), "\n")
-
-						var ip6Buf2 = make(net.IP, net.IPv6len)
-						words2 := IPv6BytesToWords(event.DstIP6.In6U.U6Addr8)
-						for i := 0; i < 4; i++ {
-							ip6Buf2[i*4+0] = byte(words2[i])
-							ip6Buf2[i*4+1] = byte(words2[i] >> 8)
-							ip6Buf2[i*4+2] = byte(words2[i] >> 16)
-							ip6Buf2[i*4+3] = byte(words2[i] >> 24)
-						}
-						fmt.Print("LOOKUP DST IPv6=", ip6Buf2.String(), "\n")
-						fmt.Print("LOOKUP SPORT=", event.Sport, "  DPORT=", event.Dport, " PROТО=", event.Proto, "\n")
-					}
-				}
-
-				if event.Sysexit == 6 {
-					if event.Family == 10 {
-						sport := event.Sport
-						dport := event.Dport
-						pid := event.Pid
-
-						var ip6BufS = make(net.IP, net.IPv6len)
-						ws := IPv6BytesToWords(event.SrcIP6.In6U.U6Addr8)
-						for i := 0; i < 4; i++ {
-							ip6BufS[i*4+0] = byte(ws[i])
-							ip6BufS[i*4+1] = byte(ws[i] >> 8)
-							ip6BufS[i*4+2] = byte(ws[i] >> 16)
-							ip6BufS[i*4+3] = byte(ws[i] >> 24)
-						}
-						fmt.Print("TCP IPv6 PID=", pid, " IPv6=", ip6BufS.String(), ":", sport, " NAME=", cachedComm(event.Comm), "\n")
-
-						var ip6BufD = make(net.IP, net.IPv6len)
-						wd := IPv6BytesToWords(event.DstIP6.In6U.U6Addr8)
-						for i := 0; i < 4; i++ {
-							ip6BufD[i*4+0] = byte(wd[i])
-							ip6BufD[i*4+1] = byte(wd[i] >> 8)
-							ip6BufD[i*4+2] = byte(wd[i] >> 16)
-							ip6BufD[i*4+3] = byte(wd[i] >> 24)
-						}
-						fmt.Print("TCP IPv6 PID=", pid, " IPv6=", ip6BufD.String(), ":", dport, " NAME=", cachedComm(event.Comm), "\n")
-
-						fmt.Print("!!!!!TCP IPv6 !!!!!!PID=", event.Pid, "  NAME=", cachedComm(event.Comm), "\n")
-					}
-
-					if event.State == 1 {
-						mu.Lock()
-						select {
-						case eventChanSport <- int(event.Sport):
-						default:
-							eventChanSport <- int(event.Sport)
-							fmt.Print("State 1: заменен порт ", event.Sport, "\n")
-						}
-						mu.Unlock()
-
-						dstHost = resolveHost(dstIP)
-						srcHostResolved := resolveHost(srcIP)
-
-						var sb strings.Builder
-						sb.Grow(2 + len(srcHostResolved) + len(srcIP.String()) + 20)
-						sb.WriteString("//")
-						sb.WriteString(srcHostResolved)
-						sb.WriteByte('[')
-						sb.WriteString(srcIP.String())
-						sb.WriteString("]:")
-						sb.WriteString(strconv.Itoa(int(event.Sport)))
-						srcAddr := sb.String()
-
-						sb.Reset()
-						sb.Grow(2 + len(dstHost) + len(dstIP.String()) + 20)
-						sb.WriteString("//")
-						sb.WriteString(dstHost)
-						sb.WriteByte('[')
-						sb.WriteString(dstIP.String())
-						sb.WriteString("]:")
-						sb.WriteString(strconv.Itoa(int(event.Dport)))
-						dstAddr := sb.String()
-
-						if event.Proto == 6 {
-							proto = "TCP"
-						}
-
-						fmt.Print("\n")
-						fmt.Print("PID=", event.Pid, " ", proto, ":", srcAddr, " <- ", proto, ":", dstAddr, " \n")
-					}
-
-					if event.State == 2 {
-						mu.Lock()
-						select {
-						case eventChanPID <- int(event.Pid):
-						default:
-						}
-						mu.Unlock()
-					}
-
-					if event.State == 10 {
-						mu.Lock()
-						select {
-						case eventChanPID <- int(event.Pid):
-						default:
-						}
-						mu.Unlock()
-					}
-
-					select {
-					case lastSport = <-eventChanSport:
-						dstHost = resolveHost(dstIP)
-						srcHostResolved2 := resolveHost(srcIP)
-
-						var sb1 strings.Builder
-						sb1.Grow(2 + len(srcHostResolved2) + len(srcIP.String()) + 20)
-						sb1.WriteString("//")
-						sb1.WriteString(srcHostResolved2)
-						sb1.WriteByte('[')
-						sb1.WriteString(srcIP.String())
-						sb1.WriteString("]:")
-						sb1.WriteString(strconv.Itoa(int(lastSport)))
-						srcAddr := sb1.String()
-
-						sb1.Reset()
-						sb1.Grow(2 + len(dstHost) + len(dstIP.String()) + 20)
-						sb1.WriteString("//")
-						sb1.WriteString(dstHost)
-						sb1.WriteByte('[')
-						sb1.WriteString(dstIP.String())
-						sb1.WriteString("]:")
-						sb1.WriteString(strconv.Itoa(int(event.Dport)))
-						dstAddr := sb1.String()
-
-						select {
-						case lastPID = <-eventChanPID:
-						default:
-						}
-
-						if event.Proto == 6 {
-							proto = "TCP"
-						}
-
-						fmt.Print("PID=", lastPID, " ", proto, ":", srcAddr, " -> ", proto, ":", dstAddr, " \n")
-						fmt.Print("\n")
-
-					default:
-						fmt.Print("\n")
-					}
-				}
-
 			}
 		}
 	}()
@@ -779,13 +473,58 @@ func main() {
 	fmt.Println("Exiting...")
 }
 
-func IPv6BytesToWords(addr [16]uint8) [4]uint32 {
-	var words [4]uint32
-	for i := 0; i < 4; i++ {
-		words[i] = uint32(addr[i*4]) |
-			uint32(addr[i*4+1])<<8 |
-			uint32(addr[i*4+2])<<16 |
-			uint32(addr[i*4+3])<<24
+func handleRecv(tag string, ev bpfTraceInfo, comm string) {
+	if ev.Family == AF_INET {
+		peerIPBE := ev.SrcIP.S_addr
+		peer := ip4FromBE(peerIPBE)
+		peerPort := uint16(ev.Sport)
+
+		var peerKeyIP [16]byte
+		binary.BigEndian.PutUint32(peerKeyIP[:4], peerIPBE)
+
+		li, ok := takeLookup(uint16(AF_INET), peerKeyIP, peerPort)
+		if ok && time.Since(li.Seen) <= 3*time.Second {
+			local := net.IP(li.LocalIP[:4])
+			p := protoStr(li.Proto)
+
+			dstHost := resolveHost(local)
+			srcHost := resolveHost(peer)
+
+			fmt.Printf("%-7s pid=%d comm=%s  %s  %s[%s:%d] -> %s[%s:%d]\n",
+				tag, ev.Pid, comm, p,
+				srcHost, peer.String(), peerPort,
+				dstHost, local.String(), li.LocalPort)
+			return
+		}
+
+		fmt.Printf("%-7s pid=%d comm=%s  peer=%s:%d (no lookup)\n",
+			tag, ev.Pid, comm, peer.String(), peerPort)
+		return
 	}
-	return words
+
+	if ev.Family == AF_INET6 {
+		peer := ip6FromArr(ev.SrcIP6.In6U.U6Addr8)
+		peerPort := uint16(ev.Sport)
+
+		var peerKeyIP [16]byte
+		copy(peerKeyIP[:], ev.SrcIP6.In6U.U6Addr8[:])
+
+		li, ok := takeLookup(uint16(AF_INET6), peerKeyIP, peerPort)
+		if ok && time.Since(li.Seen) <= 3*time.Second {
+			local := net.IP(li.LocalIP[:16])
+			p := protoStr(li.Proto)
+
+			dstHost := resolveHost(local)
+			srcHost := resolveHost(peer)
+
+			fmt.Printf("%-7s pid=%d comm=%s  %s  %s[%s:%d] -> %s[%s:%d]\n",
+				tag, ev.Pid, comm, p,
+				srcHost, peer.String(), peerPort,
+				dstHost, local.String(), li.LocalPort)
+			return
+		}
+
+		fmt.Printf("%-7s pid=%d comm=%s  peer=[%s]:%d (no lookup)\n",
+			tag, ev.Pid, comm, peer.String(), peerPort)
+	}
 }

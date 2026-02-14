@@ -1,0 +1,45 @@
+// send_udp.c
+#define _GNU_SOURCE
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+#include <stdlib.h>   // atoi
+
+static pid_t gettid_linux(void) {
+    return (pid_t)syscall(SYS_gettid);
+}
+
+int main(int argc, char **argv) {
+    const char *ip = "127.0.0.1";
+    int port = 9999;
+    const char *msg = "hello";
+
+    if (argc > 1) ip = argv[1];
+    if (argc > 2) port = atoi(argv[2]);
+    if (argc > 3) msg = argv[3];
+
+    pid_t pid = getpid();
+    pid_t tid = gettid_linux();
+
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) { perror("socket"); return 1; }
+
+    struct sockaddr_in dst;
+    memset(&dst, 0, sizeof(dst));
+    dst.sin_family = AF_INET;
+    dst.sin_port = htons((uint16_t)port);
+    inet_pton(AF_INET, ip, &dst.sin_addr);
+
+    ssize_t n = sendto(fd, msg, strlen(msg), 0, (struct sockaddr*)&dst, sizeof(dst));
+    if (n < 0) { perror("sendto"); return 1; }
+
+    printf("[pid=%d tid=%d] sent %zd bytes to %s:%d\n",
+           (int)pid, (int)tid, n, ip, port);
+
+    close(fd);
+    return 0;
+}
