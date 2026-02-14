@@ -1222,3 +1222,10 @@ func main() {
 	fmt.Println("Exiting...")
 }
 
+
+
+TCP  CONNECT client=6326(nc)  127.0.0.1:47332 -> 127.0.0.1:1111  server=?
+TCP  CONNECT server=?  127.0.0.1:1111 -> 127.0.0.1:47332  client=6326(nc)
+------------------------------------------------------------
+TCP  ACCEPT  client=6326(nc)  127.0.0.1:47332 -> 127.0.0.1:1111  server=6267(nc)
+TCP  ACCEPT  server=6267(nc)  127.0.0.1:1111 -> 127.0.0.1:47332  client=6326(nc)
