@@ -653,25 +653,8 @@ sed -i 's/bpf_core_read_kernel/bpf_probe_read_kernel/g' /home/lev/bpfgo/trace.c
 
 
 
-lev@lev-VirtualBox:~/bpfgo$ git push origin ProcNet_monitor
-To https://github.com/Gazmasater/bpfgo.git
- ! [rejected]        ProcNet_monitor -> ProcNet_monitor (fetch first)
-error: failed to push some refs to 'https://github.com/Gazmasater/bpfgo.git'
-hint: Updates were rejected because the remote contains work that you do
-hint: not have locally. This is usually caused by another repository pushing
-hint: to the same ref. You may want to first integrate the remote changes
-hint: (e.g., 'git pull ...') before pushing again.
-hint: See the 'Note about fast-forwards' in 'git push --help' for details.
-lev@lev-VirtualBox:~/bpfgo$ git status
-On branch ProcNet_monitor
-Your branch is ahead of 'origin/ProcNet_monitor' by 1 commit.
-  (use "git push" to publish your local commits)
-
-nothing to commit, working tree clean
-lev@lev-VirtualBox:~/bpfgo$ 
-
-
-
-
+git fetch origin
+git pull --rebase origin ProcNet_monitor
+git push origin ProcNet_monitor
 
 
