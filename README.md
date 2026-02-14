@@ -662,4 +662,9 @@ conn_info.fd = (__u32)ctx->args[0];
 
 
 
+ev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
+[sudo] password for lev: 
+2026/02/14 02:32:19 failed to load bpf objects: field TraceAcceptExit: program trace_accept_exit: load program: invalid argument: Caller passes invalid args into func#1 ('trace_accept4_exit') (5 line(s) omitted)
+
+
 
