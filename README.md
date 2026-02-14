@@ -774,6 +774,15 @@ cleanup:
 
 
 
+Press Ctrl+C to exit
+TCP CONNECT  client=14769(nc)  1.0.0.127:1111 -> 1.0.0.127:45538  server=?
+TCP CONNECT  server=?  1.0.0.127:45538 -> 1.0.0.127:1111  client=14769(nc)
+------------------------------------------------------------
+TCP ACCEPT   client=14769(nc)  1.0.0.127:1111 -> 1.0.0.127:45538  server=14736(nc)
+TCP ACCEPT   server=14736(nc)  1.0.0.127:45538 -> 1.0.0.127:1111  client=14769(nc)
+
+
+
 
 
 
