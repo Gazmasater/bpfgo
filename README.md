@@ -662,12 +662,11 @@ git push origin ProcNet_monitor
 package main
 
 import (
-	"bpfgo/pkg"
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -689,11 +688,11 @@ const (
 	AF_INET  = 2
 	AF_INET6 = 10
 
-	IPPROTO_TCP = 6
-
 	EV_CONNECT = 3
 	EV_ACCEPT  = 4
 	EV_BINDOK  = 20
+
+	IPPROTO_TCP = 6
 )
 
 type Proc struct {
@@ -712,6 +711,8 @@ func (p Proc) String() string {
 	return fmt.Sprintf("%d(%s)", p.Pid, p.Comm)
 }
 
+/* ===== keys/caches ===== */
+
 type EndpKey struct {
 	Family uint16
 	Port   uint16
@@ -727,20 +728,21 @@ type ConnKey struct {
 }
 
 var (
+	sepLine = "------------------------------------------------------------"
+
 	commMu    sync.RWMutex
 	commCache = make(map[[32]int8]string)
 
 	listenMu sync.Mutex
-	listenBy = make(map[EndpKey]Proc, 4096) // (local ip,port)->server proc
+	listenBy = make(map[EndpKey]Proc, 4096)
 
-	connMu  sync.Mutex
-	connBy  = make(map[ConnKey]Proc, 16384) // (client<->server tuple)->client proc
-	sepLine = "------------------------------------------------------------"
+	connMu sync.Mutex
+	connBy = make(map[ConnKey]Proc, 16384)
 )
 
-/* ===== helpers: COMM ===== */
+/* ===== comm/proto ===== */
 
-func cachedComm(c [32]int8) string {
+func commString(c [32]int8) string {
 	commMu.RLock()
 	if s, ok := commCache[c]; ok {
 		commMu.RUnlock()
@@ -748,7 +750,13 @@ func cachedComm(c [32]int8) string {
 	}
 	commMu.RUnlock()
 
-	s := pkg.Int8ToString(c)
+	var b [32]byte
+	for i := 0; i < 32; i++ {
+		b[i] = byte(c[i])
+	}
+	b = bytes.TrimRight(b[:], "\x00")
+
+	s := string(b)
 
 	commMu.Lock()
 	commCache[c] = s
@@ -756,38 +764,46 @@ func cachedComm(c [32]int8) string {
 	return s
 }
 
-/* ===== helpers: IP decode (FIX for 1.0.0.127) =====
-Kernel stores __be32 bytes in memory as BE (7f 00 00 01),
-but when you unsafe-cast into Go uint32 on little-endian,
-you get 0x0100007f. Therefore: use LittleEndian.PutUint32
-to reconstruct original bytes.
+func protoStr(p uint8) string {
+	switch p {
+	case 6:
+		return "TCP"
+	case 17:
+		return "UDP"
+	default:
+		return fmt.Sprintf("P%d", p)
+	}
+}
+
+/* ===== IPv4 byte-order FIX =====
+BPF writes IPv4 as __be32; when Go unsafe-casts to uint32 on little-endian,
+the bytes appear reversed in number form. Rebuild bytes using LittleEndian.
 */
 
 func ip4BytesFromU32Net(x uint32) (b [4]byte) {
-	binary.LittleEndian.PutUint32(b[:], x) // <-- IMPORTANT
+	binary.LittleEndian.PutUint32(b[:], x)
 	return
-}
-
-func ip4FromU32Net(x uint32) net.IP {
-	b := ip4BytesFromU32Net(x)
-	return net.IP(b[:])
-}
-
-func ip6FromArr(a [16]uint8) net.IP {
-	ip := make(net.IP, net.IPv6len)
-	copy(ip, a[:])
-	return ip
 }
 
 func endpFromEvIPv4(ipU32 uint32, port uint16) (ipStr string, ipKey [16]byte, portU16 uint16) {
 	b := ip4BytesFromU32Net(ipU32)
 	copy(ipKey[:4], b[:])
-	return net.IP(b[:]).String(), ipKey, port
+	return fmt.Sprintf("%d.%d.%d.%d", b[0], b[1], b[2], b[3]), ipKey, port
 }
 
 func endpFromEvIPv6(ipArr [16]uint8, port uint16) (ipStr string, ipKey [16]byte, portU16 uint16) {
 	copy(ipKey[:], ipArr[:])
-	return net.IP(ipArr[:]).String(), ipKey, port
+	// минимально красиво (без net.IP stringify, чтобы без аллокаций)
+	return fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x",
+		uint16(ipArr[0])<<8|uint16(ipArr[1]),
+		uint16(ipArr[2])<<8|uint16(ipArr[3]),
+		uint16(ipArr[4])<<8|uint16(ipArr[5]),
+		uint16(ipArr[6])<<8|uint16(ipArr[7]),
+		uint16(ipArr[8])<<8|uint16(ipArr[9]),
+		uint16(ipArr[10])<<8|uint16(ipArr[11]),
+		uint16(ipArr[12])<<8|uint16(ipArr[13]),
+		uint16(ipArr[14])<<8|uint16(ipArr[15]),
+	), ipKey, port
 }
 
 func formatEndp(family uint16, ipStr string, port uint16) string {
@@ -807,7 +823,6 @@ func saveListen(ep EndpKey, p Proc) {
 }
 
 func lookupListen(family uint16, ip [16]byte, port uint16) (Proc, bool) {
-	// exact
 	k := EndpKey{Family: family, Port: port, IP: ip}
 	listenMu.Lock()
 	p, ok := listenBy[k]
@@ -815,8 +830,6 @@ func lookupListen(family uint16, ip [16]byte, port uint16) (Proc, bool) {
 	if ok {
 		return p, true
 	}
-
-	// wildcard fallback: 0.0.0.0 / ::
 	var zero [16]byte
 	k2 := EndpKey{Family: family, Port: port, IP: zero}
 	listenMu.Lock()
@@ -866,13 +879,13 @@ func cleanupTTL(ttl time.Duration) {
 
 /* ===== pretty print ===== */
 
-func printBlock(kind string, client Proc, server Proc, clientEp, serverEp string) {
+func printBlock(proto, kind string, client Proc, server Proc, clientEp, serverEp string) {
 	fmt.Println(sepLine)
-	fmt.Printf("TCP %-7s client=%s  %s -> %s  server=%s\n", kind, client.String(), clientEp, serverEp, server.String())
-	fmt.Printf("TCP %-7s server=%s  %s -> %s  client=%s\n", kind, server.String(), serverEp, clientEp, client.String())
+	fmt.Printf("%-4s %-7s client=%s  %s -> %s  server=%s\n",
+		proto, kind, client.String(), clientEp, serverEp, server.String())
+	fmt.Printf("%-4s %-7s server=%s  %s -> %s  client=%s\n",
+		proto, kind, server.String(), serverEp, clientEp, client.String())
 }
-
-/* ===== init/load ===== */
 
 func init() {
 	if err := rlimit.RemoveMemlock(); err != nil {
@@ -882,8 +895,6 @@ func init() {
 		log.Fatalf("failed to load bpf objects: %v", err)
 	}
 }
-
-/* ===== main ===== */
 
 func main() {
 	go func() {
@@ -903,82 +914,27 @@ func main() {
 		}
 	}()
 
-	// attach only what we need for TCP roles
-	mustAttach := func(group, name string, prog interface{}) {
-		p := prog.(*ebpf.Program) // not accessible here in snippet
-		_ = p
-	}
-
-	// bind
-	{
-		l, err := link.Tracepoint("syscalls", "sys_enter_bind", objs.TraceBindEnter, nil)
+	attach := func(cat, name string, prog *ebpf.Program) {
+		l, err := link.Tracepoint(cat, name, prog, nil)
 		if err != nil {
-			log.Fatalf("attach sys_enter_bind: %v", err)
-		}
-		links = append(links, l)
-	}
-	{
-		l, err := link.Tracepoint("syscalls", "sys_exit_bind", objs.TraceBindExit, nil)
-		if err != nil {
-			log.Fatalf("attach sys_exit_bind: %v", err)
+			log.Fatalf("attach %s/%s: %v", cat, name, err)
 		}
 		links = append(links, l)
 	}
 
-	// connect
-	{
-		l, err := link.Tracepoint("syscalls", "sys_enter_connect", objs.TraceConnectEnter, nil)
-		if err != nil {
-			log.Fatalf("attach sys_enter_connect: %v", err)
-		}
-		links = append(links, l)
-	}
-	{
-		l, err := link.Tracepoint("syscalls", "sys_exit_connect", objs.TraceConnectExit, nil)
-		if err != nil {
-			log.Fatalf("attach sys_exit_connect: %v", err)
-		}
-		links = append(links, l)
-	}
+	// bind/connect/accept/close
+	attach("syscalls", "sys_enter_bind", objs.TraceBindEnter)
+	attach("syscalls", "sys_exit_bind", objs.TraceBindExit)
 
-	// accept/accept4
-	{
-		l, err := link.Tracepoint("syscalls", "sys_enter_accept4", objs.TraceAccept4Enter, nil)
-		if err != nil {
-			log.Fatalf("attach sys_enter_accept4: %v", err)
-		}
-		links = append(links, l)
-	}
-	{
-		l, err := link.Tracepoint("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit, nil)
-		if err != nil {
-			log.Fatalf("attach sys_exit_accept4: %v", err)
-		}
-		links = append(links, l)
-	}
-	{
-		l, err := link.Tracepoint("syscalls", "sys_enter_accept", objs.TraceAcceptEnter, nil)
-		if err != nil {
-			log.Fatalf("attach sys_enter_accept: %v", err)
-		}
-		links = append(links, l)
-	}
-	{
-		l, err := link.Tracepoint("syscalls", "sys_exit_accept", objs.TraceAcceptExit, nil)
-		if err != nil {
-			log.Fatalf("attach sys_exit_accept: %v", err)
-		}
-		links = append(links, l)
-	}
+	attach("syscalls", "sys_enter_connect", objs.TraceConnectEnter)
+	attach("syscalls", "sys_exit_connect", objs.TraceConnectExit)
 
-	// close (чтобы ядро чистило fd_state_map — у тебя BPF уже делает)
-	{
-		l, err := link.Tracepoint("syscalls", "sys_enter_close", objs.TraceCloseEnter, nil)
-		if err != nil {
-			log.Fatalf("attach sys_enter_close: %v", err)
-		}
-		links = append(links, l)
-	}
+	attach("syscalls", "sys_enter_accept4", objs.TraceAccept4Enter)
+	attach("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit)
+	attach("syscalls", "sys_enter_accept", objs.TraceAcceptEnter)
+	attach("syscalls", "sys_exit_accept", objs.TraceAcceptExit)
+
+	attach("syscalls", "sys_enter_close", objs.TraceCloseEnter)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -1010,41 +966,39 @@ func main() {
 
 			ev := *(*bpfTraceInfo)(unsafe.Pointer(&rec.RawSample[0]))
 
-			// TCP only
+			// TCP only (как ты просил)
 			if uint8(ev.Proto) != IPPROTO_TCP {
 				continue
 			}
 
-			comm := cachedComm(ev.Comm)
+			comm := commString(ev.Comm)
 			if comm == selfName {
 				continue
 			}
 
+			proto := protoStr(uint8(ev.Proto))
+
 			switch ev.Sysexit {
+
 			case EV_BINDOK:
-				// bind event: pid/comm = server
 				server := Proc{Pid: ev.Pid, Comm: comm}
 
 				if ev.Family == AF_INET {
-					ipStr, ipKey, port := endpFromEvIPv4(ev.DstIP.S_addr, ev.Dport)
+					_, ipKey, port := endpFromEvIPv4(ev.DstIP.S_addr, ev.Dport)
 					ep := EndpKey{Family: uint16(ev.Family), Port: port, IP: ipKey}
 					saveListen(ep, server)
-					// также сохраним wildcard на этот порт (на случай bind 0.0.0.0)
 					var zero [16]byte
 					saveListen(EndpKey{Family: uint16(ev.Family), Port: port, IP: zero}, server)
-
-					_ = ipStr // можно печатать bind, если хочешь
 				} else if ev.Family == AF_INET6 {
-					ipStr, ipKey, port := endpFromEvIPv6(ev.DstIP6.In6U.U6Addr8, ev.Dport)
+					_, ipKey, port := endpFromEvIPv6(ev.DstIP6.In6U.U6Addr8, ev.Dport)
 					ep := EndpKey{Family: uint16(ev.Family), Port: port, IP: ipKey}
 					saveListen(ep, server)
 					var zero [16]byte
 					saveListen(EndpKey{Family: uint16(ev.Family), Port: port, IP: zero}, server)
-					_ = ipStr
 				}
 
 			case EV_CONNECT:
-				// connect event runs in CLIENT pid
+				// CONNECT приходит из client pid, tuple = local->remote
 				client := Proc{Pid: ev.Pid, Comm: comm}
 
 				if ev.Family == AF_INET {
@@ -1063,10 +1017,10 @@ func main() {
 
 					server, ok := lookupListen(uint16(ev.Family), sIPKey, sPort)
 					if !ok {
-						server = Proc{} // "?"
+						server = Proc{}
 					}
 
-					printBlock("CONNECT", client, server, clientEp, serverEp)
+					printBlock(proto, "CONNECT", client, server, clientEp, serverEp)
 
 				} else if ev.Family == AF_INET6 {
 					cIPStr, cIPKey, cPort := endpFromEvIPv6(ev.SrcIP6.In6U.U6Addr8, ev.Sport)
@@ -1087,14 +1041,13 @@ func main() {
 						server = Proc{}
 					}
 
-					printBlock("CONNECT", client, server, clientEp, serverEp)
+					printBlock(proto, "CONNECT", client, server, clientEp, serverEp)
 				}
 
 			case EV_ACCEPT:
-				// accept event runs in SERVER pid
+				// ACCEPT приходит из server pid, tuple = client->server (мы так в BPF сделали)
 				server := Proc{Pid: ev.Pid, Comm: comm}
 
-				// src=client, dst=server (как у тебя в BPF accept_exit_common)
 				if ev.Family == AF_INET {
 					cIPStr, cIPKey, cPort := endpFromEvIPv4(ev.SrcIP.S_addr, ev.Sport)
 					sIPStr, sIPKey, sPort := endpFromEvIPv4(ev.DstIP.S_addr, ev.Dport)
@@ -1102,7 +1055,7 @@ func main() {
 					clientEp := formatEndp(AF_INET, cIPStr, cPort)
 					serverEp := formatEndp(AF_INET, sIPStr, sPort)
 
-					// accept помогает “узнать” server pid для порта (на случай если bind не поймали)
+					// accept может заменить bind-роль (если bind не увидели)
 					saveListen(EndpKey{Family: uint16(ev.Family), Port: sPort, IP: sIPKey}, server)
 					var zero [16]byte
 					saveListen(EndpKey{Family: uint16(ev.Family), Port: sPort, IP: zero}, server)
@@ -1117,7 +1070,7 @@ func main() {
 						client = Proc{}
 					}
 
-					printBlock("ACCEPT", client, server, clientEp, serverEp)
+					printBlock(proto, "ACCEPT", client, server, clientEp, serverEp)
 
 				} else if ev.Family == AF_INET6 {
 					cIPStr, cIPKey, cPort := endpFromEvIPv6(ev.SrcIP6.In6U.U6Addr8, ev.Sport)
@@ -1140,7 +1093,7 @@ func main() {
 						client = Proc{}
 					}
 
-					printBlock("ACCEPT", client, server, clientEp, serverEp)
+					printBlock(proto, "ACCEPT", client, server, clientEp, serverEp)
 				}
 			}
 		}
@@ -1149,14 +1102,6 @@ func main() {
 	fmt.Println("Press Ctrl+C to exit")
 	<-stop
 	fmt.Println("Exiting...")
-}
-
-
-
-func printBlock(kind string, client Proc, server Proc, clientEp, serverEp string) {
-	fmt.Println(sepLine)
-	fmt.Printf("TCP %-7s client=%s  %s -> %s  server=%s\n", kind, client.String(), clientEp, serverEp, server.String())
-	fmt.Printf("TCP %-7s server=%s  %s -> %s  client=%s\n", kind, server.String(), serverEp, clientEp, client.String())
 }
 
 
