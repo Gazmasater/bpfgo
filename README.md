@@ -658,41 +658,34 @@ git pull --rebase origin ProcNet_monitor
 git push origin ProcNet_monitor
 
 
-conn_info.fd = (__u32)ctx->args[0];
-
-
 
 SEC("tracepoint/syscalls/sys_enter_sendto")
-int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx) {
-    __u64 id = bpf_get_current_pid_tgid();
-    __u32 tgid=id>>32;
-    struct conn_info_t conn_info = {};
-    
+int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
 
-    conn_info.pid = tgid;
-    conn_info.fd = (__u32)ctx->args[0];
+    struct conn_info_t ci = {};
+    ci.pid = tgid;
+    ci.fd  = (__u32)ctx->args[0];
+    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
 
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-
-    bpf_map_update_elem(&conn_info_map, &id, &conn_info, BPF_ANY);
-
-__u64 uaddr = (__u64)ctx->args[4];   // dest sockaddr*
-
-if (uaddr)
-    bpf_map_update_elem(&addrSend_map, &id, &uaddr, BPF_ANY);
+    __u64 uaddr = (__u64)ctx->args[4]; // dest sockaddr*
+    if (uaddr)
+        bpf_map_update_elem(&addrSend_map, &id, &uaddr, BPF_ANY);
 
     return 0;
 }
 
-
 SEC("tracepoint/syscalls/sys_exit_sendto")
 int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx)
 {
-    __u64 id = bpf_get_current_pid_tgid();
+    __u64 id   = bpf_get_current_pid_tgid();
     __u32 tgid = id >> 32;
 
-    __s64 ret = ctx->ret;
-    if (ret <= 0)
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
         goto cleanup;
 
     struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
@@ -704,15 +697,17 @@ int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx)
     info.sysexit = 1;
     info.pid     = ci->pid;
 
-    // 1) базово: src/dst из connect/accept4 (fd_state_map)
-    (void)fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1);
+    // 1) попробуем полный tuple из fd_state_map (если connect/accept уже был)
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, /*is_send=*/1) < 0) {
+        // 2) fallback: хотя бы локальная сторона (src) из сокета
+        (void)fill_local_from_fd(&info, (int)ci->fd);
+    }
 
-    // 2) если sendto дал dest — переопределим dst
+    // 3) override dst из sendto sockaddr (если есть)
     __u64 *uaddrp = bpf_map_lookup_elem(&addrSend_map, &id);
     if (uaddrp && *uaddrp)
-        (void)fill_from_sockaddr(&info, (void *)*uaddrp, 1);
+        (void)fill_from_sockaddr(&info, (void *)*uaddrp, /*is_dst=*/1);
 
-    // если вообще ничего не заполнилось — не шлём
     if (info.family == 0)
         goto cleanup;
 
@@ -724,42 +719,35 @@ cleanup:
     return 0;
 }
 
-
+/* ================== recvfrom ================== */
 
 SEC("tracepoint/syscalls/sys_enter_recvfrom")
-int trace_recvfrom_enter(struct trace_event_raw_sys_enter *ctx) {
-   
-    __u64 id = bpf_get_current_pid_tgid();
-    __u32 tgid=id>>32;
+int trace_recvfrom_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
 
-    struct conn_info_t conn_info = {};
+    struct conn_info_t ci = {};
+    ci.pid = tgid;
+    ci.fd  = (__u32)ctx->args[0];
+    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
 
-    conn_info.pid = tgid;
-    conn_info.fd = (__u32)ctx->args[0];
-
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-
-    bpf_map_update_elem(&conn_info_map, &id, &conn_info, BPF_ANY);
-
-    if (!ctx->args[4]) return 0;
-
-
-__u64 uaddr = (__u64)ctx->args[4];   // src sockaddr* (kernel заполнит на exit)
-if (uaddr)
-    bpf_map_update_elem(&addrRecv_map, &id, &uaddr, BPF_ANY);
+    __u64 uaddr = (__u64)ctx->args[4]; // src sockaddr* (kernel fills it)
+    if (uaddr)
+        bpf_map_update_elem(&addrRecv_map, &id, &uaddr, BPF_ANY);
 
     return 0;
 }
 
-
 SEC("tracepoint/syscalls/sys_exit_recvfrom")
 int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx)
 {
-    __u64 id = bpf_get_current_pid_tgid();
+    __u64 id   = bpf_get_current_pid_tgid();
     __u32 tgid = id >> 32;
 
-    __s64 ret = ctx->ret;
-    if (ret <= 0)
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
         goto cleanup;
 
     struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
@@ -771,13 +759,16 @@ int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx)
     info.sysexit = 2;
     info.pid     = ci->pid;
 
-    // 1) базово: src/dst из fd_state_map
-    (void)fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0);
+    // 1) полный tuple из fd_state_map (если есть)
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, /*is_send=*/0) < 0) {
+        // 2) fallback: хотя бы локальная сторона (dst) из сокета
+        (void)fill_local_as_dst_from_fd(&info, (int)ci->fd);
+    }
 
-    // 2) если recvfrom вернул src в uaddr — переопределим src
+    // 3) override src из recvfrom sockaddr (если есть)
     __u64 *uaddrp = bpf_map_lookup_elem(&addrRecv_map, &id);
     if (uaddrp && *uaddrp)
-        (void)fill_from_sockaddr(&info, (void *)*uaddrp, 0);
+        (void)fill_from_sockaddr(&info, (void *)*uaddrp, /*is_dst=*/0);
 
     if (info.family == 0)
         goto cleanup;
@@ -790,28 +781,21 @@ cleanup:
     return 0;
 }
 
-struct user_msghdr_head {
-    void *msg_name;
-    int   msg_namelen;
-};
-
-
+/* ================== sendmsg ================== */
 
 SEC("tracepoint/syscalls/sys_enter_sendmsg")
 int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx)
 {
-    __u64 id = bpf_get_current_pid_tgid();
+    __u64 id   = bpf_get_current_pid_tgid();
     __u32 tgid = id >> 32;
 
-    struct conn_info_t conn_info = {};
-    conn_info.pid = tgid;
-    conn_info.fd = (__u32)ctx->args[0];
+    struct conn_info_t ci = {};
+    ci.pid = tgid;
+    ci.fd  = (__u32)ctx->args[0];
+    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
 
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-
-    bpf_map_update_elem(&conn_info_map, &id, &conn_info, BPF_ANY);
-
-    __u64 msg_u = (__u64)ctx->args[1]; // struct msghdr * (user)
+    __u64 msg_u = (__u64)ctx->args[1]; // user pointer
     if (msg_u)
         bpf_map_update_elem(&addrSend_map, &id, &msg_u, BPF_ANY);
 
@@ -821,11 +805,11 @@ int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx)
 SEC("tracepoint/syscalls/sys_exit_sendmsg")
 int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
 {
-    __u64 id = bpf_get_current_pid_tgid();
+    __u64 id   = bpf_get_current_pid_tgid();
     __u32 tgid = id >> 32;
 
-    __s64 ret = ctx->ret;
-    if (ret <= 0)
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
         goto cleanup;
 
     struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
@@ -835,18 +819,21 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
     struct trace_info info = {};
     __builtin_memcpy(info.comm, ci->comm, sizeof(info.comm));
     info.sysexit = 11;
-    info.pid = ci->pid;
+    info.pid     = ci->pid;
 
-    // базово: tuple из fd_state_map (TCP/connected UDP)
-    (void)fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1);
+    // 1) полный tuple из fd_state_map (если есть)
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, /*is_send=*/1) < 0) {
+        // 2) fallback: локальная сторона (src) из сокета
+        (void)fill_local_from_fd(&info, (int)ci->fd);
+    }
 
-    // override dst, если msg_name != NULL (unconnected UDP sendmsg)
+    // 3) override dst из user_msghdr.msg_name (если указан)
     __u64 *msgp = bpf_map_lookup_elem(&addrSend_map, &id);
     if (msgp && *msgp) {
         struct user_msghdr_head h = {};
         if (bpf_probe_read_user(&h, sizeof(h), (void *)*msgp) == 0) {
             if (h.msg_name)
-                (void)fill_from_sockaddr(&info, h.msg_name, 1);
+                (void)fill_from_sockaddr(&info, h.msg_name, /*is_dst=*/1);
         }
     }
 
@@ -861,21 +848,21 @@ cleanup:
     return 0;
 }
 
+/* ================== recvmsg ================== */
+
 SEC("tracepoint/syscalls/sys_enter_recvmsg")
 int trace_recvmsg_enter(struct trace_event_raw_sys_enter *ctx)
 {
-    __u64 id = bpf_get_current_pid_tgid();
+    __u64 id   = bpf_get_current_pid_tgid();
     __u32 tgid = id >> 32;
 
-    struct conn_info_t conn_info = {};
-    conn_info.pid = tgid;
-    conn_info.fd = (__u32)ctx->args[0];
+    struct conn_info_t ci = {};
+    ci.pid = tgid;
+    ci.fd  = (__u32)ctx->args[0];
+    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
 
-    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
-
-    bpf_map_update_elem(&conn_info_map, &id, &conn_info, BPF_ANY);
-
-    __u64 msg_u = (__u64)ctx->args[1]; // struct msghdr * (user)
+    __u64 msg_u = (__u64)ctx->args[1]; // user pointer
     if (msg_u)
         bpf_map_update_elem(&addrRecv_map, &id, &msg_u, BPF_ANY);
 
@@ -885,11 +872,11 @@ int trace_recvmsg_enter(struct trace_event_raw_sys_enter *ctx)
 SEC("tracepoint/syscalls/sys_exit_recvmsg")
 int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx)
 {
-    __u64 id = bpf_get_current_pid_tgid();
+    __u64 id   = bpf_get_current_pid_tgid();
     __u32 tgid = id >> 32;
 
-    __s64 ret = ctx->ret;
-    if (ret <= 0)
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
         goto cleanup;
 
     struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
@@ -899,16 +886,21 @@ int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx)
     struct trace_info info = {};
     __builtin_memcpy(info.comm, ci->comm, sizeof(info.comm));
     info.sysexit = 12;
-    info.pid = ci->pid;
+    info.pid     = ci->pid;
 
-    (void)fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0);
+    // 1) полный tuple из fd_state_map (если есть)
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, /*is_send=*/0) < 0) {
+        // 2) fallback: локальная сторона (dst) из сокета
+        (void)fill_local_as_dst_from_fd(&info, (int)ci->fd);
+    }
 
+    // 3) override src из user_msghdr.msg_name (если указан)
     __u64 *msgp = bpf_map_lookup_elem(&addrRecv_map, &id);
     if (msgp && *msgp) {
         struct user_msghdr_head h = {};
         if (bpf_probe_read_user(&h, sizeof(h), (void *)*msgp) == 0) {
             if (h.msg_name)
-                (void)fill_from_sockaddr(&info, h.msg_name, 0);
+                (void)fill_from_sockaddr(&info, h.msg_name, /*is_dst=*/0);
         }
     }
 
@@ -928,6 +920,9 @@ cleanup:
 
 
 
-recvmsg_exit (аналогично, только src и is_send=0)
+
+
+
+
 
 
