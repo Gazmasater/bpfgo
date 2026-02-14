@@ -659,127 +659,498 @@ git push origin ProcNet_monitor
 
 
 
-TCP ACCEPT   client=?  1.0.0.127:1111 -> 1.0.0.127:45134  server=13318(nc)
-TCP ACCEPT   server=13318(nc)  1.0.0.127:45134 -> 1.0.0.127:1111  client=?
+package main
 
+import (
+	"bpfgo/pkg"
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"log"
+	"net"
+	"net/http"
+	_ "net/http/pprof"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"sync"
+	"syscall"
+	"time"
+	"unsafe"
 
-#define EINPROGRESS 115
-#define EALREADY    114
+	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/perf"
+	"github.com/cilium/ebpf/rlimit"
+)
 
+var objs bpfObjects
 
+const (
+	AF_INET  = 2
+	AF_INET6 = 10
 
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 16384);
-    __type(key, __u64);   // pid_tgid
-    __type(value, __u64); // user pointer to sockaddr
-} addrConnect_map SEC(".maps");
+	IPPROTO_TCP = 6
 
+	EV_CONNECT = 3
+	EV_ACCEPT  = 4
+	EV_BINDOK  = 20
+)
 
-
-
-SEC("tracepoint/syscalls/sys_enter_connect")
-int trace_connect_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    struct conn_info_t ci = {};
-    ci.pid = tgid;
-    ci.fd  = (__u32)ctx->args[0];
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
-
-    struct inflight_fd_t in = {};
-    in.fd = (int)ctx->args[0];
-    bpf_map_update_elem(&connect_fd_map, &id, &in, BPF_ANY);
-
-    // sockaddr* аргумент connect(fd, sockaddr*, addrlen)
-    __u64 uaddr = (__u64)ctx->args[1];
-    if (uaddr)
-        bpf_map_update_elem(&addrConnect_map, &id, &uaddr, BPF_ANY);
-
-    return 0;
+type Proc struct {
+	Pid  uint32
+	Comm string
+	Seen time.Time
 }
 
-
-
-SEC("tracepoint/syscalls/sys_exit_connect")
-int trace_connect_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0)
-        goto cleanup;
-
-    // allow non-blocking connect
-    if (ret < 0 && ret != -EINPROGRESS && ret != -EALREADY)
-        goto cleanup;
-
-    struct inflight_fd_t *in = bpf_map_lookup_elem(&connect_fd_map, &id);
-    if (!in)
-        goto cleanup;
-
-    struct fd_state_t st = {};
-    if (fill_fd_state(in->fd, &st) < 0)
-        goto cleanup;
-
-    struct fd_key_t k = { .tgid = tgid, .fd = in->fd };
-    bpf_map_update_elem(&fd_state_map, &k, &st, BPF_ANY);
-
-    struct conn_info_t *conn = bpf_map_lookup_elem(&conn_info_map, &id);
-
-    struct trace_info info = {};
-    info.sysexit = 3;          // CONNECT
-    info.pid     = tgid;
-    info.proto   = st.proto;
-    info.family  = st.family;
-    info.sport   = st.lport;
-    info.dport   = st.rport;
-
-    // 0 = ok, 1 = in-progress
-    info.state   = (ret < 0) ? 1 : 0;
-
-    if (conn)
-        __builtin_memcpy(info.comm, conn->comm, sizeof(info.comm));
-    else
-        bpf_get_current_comm(info.comm, sizeof(info.comm));
-
-    // базово из sock
-    if (st.family == AF_INET) {
-        info.srcIP.s_addr = st.lip;
-        info.dstIP.s_addr = st.rip;
-    } else if (st.family == AF_INET6) {
-        __builtin_memcpy(&info.srcIP6, &st.lip6, sizeof(info.srcIP6));
-        __builtin_memcpy(&info.dstIP6, &st.rip6, sizeof(info.dstIP6));
-    } else {
-        goto cleanup;
-    }
-
-    // override dst из connect(sockaddr*), если есть
-    __u64 *uaddrp = bpf_map_lookup_elem(&addrConnect_map, &id);
-    if (uaddrp && *uaddrp)
-        (void)fill_from_sockaddr(&info, (void *)*uaddrp, /*is_dst=*/1);
-
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-cleanup:
-    bpf_map_delete_elem(&addrConnect_map, &id);
-    bpf_map_delete_elem(&connect_fd_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
+func (p Proc) String() string {
+	if p.Pid == 0 {
+		return "?"
+	}
+	if p.Comm == "" {
+		return fmt.Sprintf("%d(?)", p.Pid)
+	}
+	return fmt.Sprintf("%d(%s)", p.Pid, p.Comm)
 }
 
+type EndpKey struct {
+	Family uint16
+	Port   uint16
+	IP     [16]byte
+}
 
+type ConnKey struct {
+	Family     uint16
+	ClientIP   [16]byte
+	ClientPort uint16
+	ServerIP   [16]byte
+	ServerPort uint16
+}
 
-Press Ctrl+C to exit
-TCP CONNECT  client=14769(nc)  1.0.0.127:1111 -> 1.0.0.127:45538  server=?
-TCP CONNECT  server=?  1.0.0.127:45538 -> 1.0.0.127:1111  client=14769(nc)
-------------------------------------------------------------
-TCP ACCEPT   client=14769(nc)  1.0.0.127:1111 -> 1.0.0.127:45538  server=14736(nc)
-TCP ACCEPT   server=14736(nc)  1.0.0.127:45538 -> 1.0.0.127:1111  client=14769(nc)
+var (
+	commMu    sync.RWMutex
+	commCache = make(map[[32]int8]string)
+
+	listenMu sync.Mutex
+	listenBy = make(map[EndpKey]Proc, 4096) // (local ip,port)->server proc
+
+	connMu  sync.Mutex
+	connBy  = make(map[ConnKey]Proc, 16384) // (client<->server tuple)->client proc
+	sepLine = "------------------------------------------------------------"
+)
+
+/* ===== helpers: COMM ===== */
+
+func cachedComm(c [32]int8) string {
+	commMu.RLock()
+	if s, ok := commCache[c]; ok {
+		commMu.RUnlock()
+		return s
+	}
+	commMu.RUnlock()
+
+	s := pkg.Int8ToString(c)
+
+	commMu.Lock()
+	commCache[c] = s
+	commMu.Unlock()
+	return s
+}
+
+/* ===== helpers: IP decode (FIX for 1.0.0.127) =====
+Kernel stores __be32 bytes in memory as BE (7f 00 00 01),
+but when you unsafe-cast into Go uint32 on little-endian,
+you get 0x0100007f. Therefore: use LittleEndian.PutUint32
+to reconstruct original bytes.
+*/
+
+func ip4BytesFromU32Net(x uint32) (b [4]byte) {
+	binary.LittleEndian.PutUint32(b[:], x) // <-- IMPORTANT
+	return
+}
+
+func ip4FromU32Net(x uint32) net.IP {
+	b := ip4BytesFromU32Net(x)
+	return net.IP(b[:])
+}
+
+func ip6FromArr(a [16]uint8) net.IP {
+	ip := make(net.IP, net.IPv6len)
+	copy(ip, a[:])
+	return ip
+}
+
+func endpFromEvIPv4(ipU32 uint32, port uint16) (ipStr string, ipKey [16]byte, portU16 uint16) {
+	b := ip4BytesFromU32Net(ipU32)
+	copy(ipKey[:4], b[:])
+	return net.IP(b[:]).String(), ipKey, port
+}
+
+func endpFromEvIPv6(ipArr [16]uint8, port uint16) (ipStr string, ipKey [16]byte, portU16 uint16) {
+	copy(ipKey[:], ipArr[:])
+	return net.IP(ipArr[:]).String(), ipKey, port
+}
+
+func formatEndp(family uint16, ipStr string, port uint16) string {
+	if family == AF_INET6 {
+		return fmt.Sprintf("[%s]:%d", ipStr, port)
+	}
+	return fmt.Sprintf("%s:%d", ipStr, port)
+}
+
+/* ===== caches ===== */
+
+func saveListen(ep EndpKey, p Proc) {
+	p.Seen = time.Now()
+	listenMu.Lock()
+	listenBy[ep] = p
+	listenMu.Unlock()
+}
+
+func lookupListen(family uint16, ip [16]byte, port uint16) (Proc, bool) {
+	// exact
+	k := EndpKey{Family: family, Port: port, IP: ip}
+	listenMu.Lock()
+	p, ok := listenBy[k]
+	listenMu.Unlock()
+	if ok {
+		return p, true
+	}
+
+	// wildcard fallback: 0.0.0.0 / ::
+	var zero [16]byte
+	k2 := EndpKey{Family: family, Port: port, IP: zero}
+	listenMu.Lock()
+	p2, ok2 := listenBy[k2]
+	listenMu.Unlock()
+	return p2, ok2
+}
+
+func saveConnectTuple(key ConnKey, client Proc) {
+	client.Seen = time.Now()
+	connMu.Lock()
+	connBy[key] = client
+	connMu.Unlock()
+}
+
+func lookupConnectTuple(key ConnKey) (Proc, bool) {
+	connMu.Lock()
+	p, ok := connBy[key]
+	connMu.Unlock()
+	return p, ok
+}
+
+func cleanupTTL(ttl time.Duration) {
+	t := time.NewTicker(2 * time.Second)
+	defer t.Stop()
+
+	for range t.C {
+		cut := time.Now().Add(-ttl)
+
+		listenMu.Lock()
+		for k, v := range listenBy {
+			if v.Seen.Before(cut) {
+				delete(listenBy, k)
+			}
+		}
+		listenMu.Unlock()
+
+		connMu.Lock()
+		for k, v := range connBy {
+			if v.Seen.Before(cut) {
+				delete(connBy, k)
+			}
+		}
+		connMu.Unlock()
+	}
+}
+
+/* ===== pretty print ===== */
+
+func printBlock(kind string, client Proc, server Proc, clientEp, serverEp string) {
+	fmt.Println(sepLine)
+	fmt.Printf("TCP %-7s client=%s  %s -> %s  server=%s\n", kind, client.String(), clientEp, serverEp, server.String())
+	fmt.Printf("TCP %-7s server=%s  %s -> %s  client=%s\n", kind, server.String(), serverEp, clientEp, client.String())
+}
+
+/* ===== init/load ===== */
+
+func init() {
+	if err := rlimit.RemoveMemlock(); err != nil {
+		log.Fatalf("failed to remove memlock: %v", err)
+	}
+	if err := loadBpfObjects(&objs, nil); err != nil {
+		log.Fatalf("failed to load bpf objects: %v", err)
+	}
+}
+
+/* ===== main ===== */
+
+func main() {
+	go func() {
+		log.Println("pprof on :6060")
+		_ = http.ListenAndServe(":6060", nil)
+	}()
+
+	defer objs.Close()
+	go cleanupTTL(5 * time.Second)
+
+	selfName := filepath.Base(os.Args[0])
+
+	links := make([]link.Link, 0, 16)
+	defer func() {
+		for _, l := range links {
+			_ = l.Close()
+		}
+	}()
+
+	// attach only what we need for TCP roles
+	mustAttach := func(group, name string, prog interface{}) {
+		p := prog.(*ebpf.Program) // not accessible here in snippet
+		_ = p
+	}
+
+	// bind
+	{
+		l, err := link.Tracepoint("syscalls", "sys_enter_bind", objs.TraceBindEnter, nil)
+		if err != nil {
+			log.Fatalf("attach sys_enter_bind: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.Tracepoint("syscalls", "sys_exit_bind", objs.TraceBindExit, nil)
+		if err != nil {
+			log.Fatalf("attach sys_exit_bind: %v", err)
+		}
+		links = append(links, l)
+	}
+
+	// connect
+	{
+		l, err := link.Tracepoint("syscalls", "sys_enter_connect", objs.TraceConnectEnter, nil)
+		if err != nil {
+			log.Fatalf("attach sys_enter_connect: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.Tracepoint("syscalls", "sys_exit_connect", objs.TraceConnectExit, nil)
+		if err != nil {
+			log.Fatalf("attach sys_exit_connect: %v", err)
+		}
+		links = append(links, l)
+	}
+
+	// accept/accept4
+	{
+		l, err := link.Tracepoint("syscalls", "sys_enter_accept4", objs.TraceAccept4Enter, nil)
+		if err != nil {
+			log.Fatalf("attach sys_enter_accept4: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.Tracepoint("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit, nil)
+		if err != nil {
+			log.Fatalf("attach sys_exit_accept4: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.Tracepoint("syscalls", "sys_enter_accept", objs.TraceAcceptEnter, nil)
+		if err != nil {
+			log.Fatalf("attach sys_enter_accept: %v", err)
+		}
+		links = append(links, l)
+	}
+	{
+		l, err := link.Tracepoint("syscalls", "sys_exit_accept", objs.TraceAcceptExit, nil)
+		if err != nil {
+			log.Fatalf("attach sys_exit_accept: %v", err)
+		}
+		links = append(links, l)
+	}
+
+	// close (чтобы ядро чистило fd_state_map — у тебя BPF уже делает)
+	{
+		l, err := link.Tracepoint("syscalls", "sys_enter_close", objs.TraceCloseEnter, nil)
+		if err != nil {
+			log.Fatalf("attach sys_enter_close: %v", err)
+		}
+		links = append(links, l)
+	}
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		const buffLen = 256 * 1024
+		rd, err := perf.NewReader(objs.TraceEvents, buffLen)
+		if err != nil {
+			log.Fatalf("perf.NewReader: %v", err)
+		}
+		defer rd.Close()
+
+		for {
+			rec, err := rd.Read()
+			if err != nil {
+				if errors.Is(err, perf.ErrClosed) {
+					return
+				}
+				log.Printf("perf read error: %v", err)
+				continue
+			}
+			if rec.LostSamples != 0 {
+				log.Printf("LOST %d samples", rec.LostSamples)
+				continue
+			}
+			if len(rec.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
+				continue
+			}
+
+			ev := *(*bpfTraceInfo)(unsafe.Pointer(&rec.RawSample[0]))
+
+			// TCP only
+			if uint8(ev.Proto) != IPPROTO_TCP {
+				continue
+			}
+
+			comm := cachedComm(ev.Comm)
+			if comm == selfName {
+				continue
+			}
+
+			switch ev.Sysexit {
+			case EV_BINDOK:
+				// bind event: pid/comm = server
+				server := Proc{Pid: ev.Pid, Comm: comm}
+
+				if ev.Family == AF_INET {
+					ipStr, ipKey, port := endpFromEvIPv4(ev.DstIP.S_addr, ev.Dport)
+					ep := EndpKey{Family: uint16(ev.Family), Port: port, IP: ipKey}
+					saveListen(ep, server)
+					// также сохраним wildcard на этот порт (на случай bind 0.0.0.0)
+					var zero [16]byte
+					saveListen(EndpKey{Family: uint16(ev.Family), Port: port, IP: zero}, server)
+
+					_ = ipStr // можно печатать bind, если хочешь
+				} else if ev.Family == AF_INET6 {
+					ipStr, ipKey, port := endpFromEvIPv6(ev.DstIP6.In6U.U6Addr8, ev.Dport)
+					ep := EndpKey{Family: uint16(ev.Family), Port: port, IP: ipKey}
+					saveListen(ep, server)
+					var zero [16]byte
+					saveListen(EndpKey{Family: uint16(ev.Family), Port: port, IP: zero}, server)
+					_ = ipStr
+				}
+
+			case EV_CONNECT:
+				// connect event runs in CLIENT pid
+				client := Proc{Pid: ev.Pid, Comm: comm}
+
+				if ev.Family == AF_INET {
+					cIPStr, cIPKey, cPort := endpFromEvIPv4(ev.SrcIP.S_addr, ev.Sport)
+					sIPStr, sIPKey, sPort := endpFromEvIPv4(ev.DstIP.S_addr, ev.Dport)
+
+					clientEp := formatEndp(AF_INET, cIPStr, cPort)
+					serverEp := formatEndp(AF_INET, sIPStr, sPort)
+
+					key := ConnKey{
+						Family:     uint16(ev.Family),
+						ClientIP:   cIPKey, ClientPort: cPort,
+						ServerIP:   sIPKey, ServerPort: sPort,
+					}
+					saveConnectTuple(key, client)
+
+					server, ok := lookupListen(uint16(ev.Family), sIPKey, sPort)
+					if !ok {
+						server = Proc{} // "?"
+					}
+
+					printBlock("CONNECT", client, server, clientEp, serverEp)
+
+				} else if ev.Family == AF_INET6 {
+					cIPStr, cIPKey, cPort := endpFromEvIPv6(ev.SrcIP6.In6U.U6Addr8, ev.Sport)
+					sIPStr, sIPKey, sPort := endpFromEvIPv6(ev.DstIP6.In6U.U6Addr8, ev.Dport)
+
+					clientEp := formatEndp(AF_INET6, cIPStr, cPort)
+					serverEp := formatEndp(AF_INET6, sIPStr, sPort)
+
+					key := ConnKey{
+						Family:     uint16(ev.Family),
+						ClientIP:   cIPKey, ClientPort: cPort,
+						ServerIP:   sIPKey, ServerPort: sPort,
+					}
+					saveConnectTuple(key, client)
+
+					server, ok := lookupListen(uint16(ev.Family), sIPKey, sPort)
+					if !ok {
+						server = Proc{}
+					}
+
+					printBlock("CONNECT", client, server, clientEp, serverEp)
+				}
+
+			case EV_ACCEPT:
+				// accept event runs in SERVER pid
+				server := Proc{Pid: ev.Pid, Comm: comm}
+
+				// src=client, dst=server (как у тебя в BPF accept_exit_common)
+				if ev.Family == AF_INET {
+					cIPStr, cIPKey, cPort := endpFromEvIPv4(ev.SrcIP.S_addr, ev.Sport)
+					sIPStr, sIPKey, sPort := endpFromEvIPv4(ev.DstIP.S_addr, ev.Dport)
+
+					clientEp := formatEndp(AF_INET, cIPStr, cPort)
+					serverEp := formatEndp(AF_INET, sIPStr, sPort)
+
+					// accept помогает “узнать” server pid для порта (на случай если bind не поймали)
+					saveListen(EndpKey{Family: uint16(ev.Family), Port: sPort, IP: sIPKey}, server)
+					var zero [16]byte
+					saveListen(EndpKey{Family: uint16(ev.Family), Port: sPort, IP: zero}, server)
+
+					key := ConnKey{
+						Family:     uint16(ev.Family),
+						ClientIP:   cIPKey, ClientPort: cPort,
+						ServerIP:   sIPKey, ServerPort: sPort,
+					}
+					client, ok := lookupConnectTuple(key)
+					if !ok {
+						client = Proc{}
+					}
+
+					printBlock("ACCEPT", client, server, clientEp, serverEp)
+
+				} else if ev.Family == AF_INET6 {
+					cIPStr, cIPKey, cPort := endpFromEvIPv6(ev.SrcIP6.In6U.U6Addr8, ev.Sport)
+					sIPStr, sIPKey, sPort := endpFromEvIPv6(ev.DstIP6.In6U.U6Addr8, ev.Dport)
+
+					clientEp := formatEndp(AF_INET6, cIPStr, cPort)
+					serverEp := formatEndp(AF_INET6, sIPStr, sPort)
+
+					saveListen(EndpKey{Family: uint16(ev.Family), Port: sPort, IP: sIPKey}, server)
+					var zero [16]byte
+					saveListen(EndpKey{Family: uint16(ev.Family), Port: sPort, IP: zero}, server)
+
+					key := ConnKey{
+						Family:     uint16(ev.Family),
+						ClientIP:   cIPKey, ClientPort: cPort,
+						ServerIP:   sIPKey, ServerPort: sPort,
+					}
+					client, ok := lookupConnectTuple(key)
+					if !ok {
+						client = Proc{}
+					}
+
+					printBlock("ACCEPT", client, server, clientEp, serverEp)
+				}
+			}
+		}
+	}()
+
+	fmt.Println("Press Ctrl+C to exit")
+	<-stop
+	fmt.Println("Exiting...")
+}
+
 
 
 
