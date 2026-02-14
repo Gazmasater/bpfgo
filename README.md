@@ -662,69 +662,29 @@ conn_info.fd = (__u32)ctx->args[0];
 
 
 
-static __always_inline int fill_from_fd_state_map(struct trace_info *info, __u32 tgid, int fd, int is_send)
-{
-    struct fd_key_t k = { .tgid = tgid, .fd = fd };
-    struct fd_state_t *st = bpf_map_lookup_elem(&fd_state_map, &k);
-    if (!st)
-        return -1;
+SEC("tracepoint/syscalls/sys_enter_sendto")
+int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx) {
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid=id>>32;
+    struct conn_info_t conn_info = {};
+    
 
-    info->proto  = st->proto;
-    info->family = st->family;
+    conn_info.pid = tgid;
+    conn_info.fd = (__u32)ctx->args[0];
 
-    if (st->family == AF_INET) {
-        if (is_send) { // local -> remote
-            info->srcIP.s_addr = st->lip;
-            info->dstIP.s_addr = st->rip;
-            info->sport = st->lport;
-            info->dport = st->rport;
-        } else {       // remote -> local
-            info->srcIP.s_addr = st->rip;
-            info->dstIP.s_addr = st->lip;
-            info->sport = st->rport;
-            info->dport = st->lport;
-        }
-        return 0;
-    }
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
 
-    if (st->family == AF_INET6) {
-        if (is_send) {
-            __builtin_memcpy(&info->srcIP6, &st->lip6, sizeof(info->srcIP6));
-            __builtin_memcpy(&info->dstIP6, &st->rip6, sizeof(info->dstIP6));
-            info->sport = st->lport;
-            info->dport = st->rport;
-        } else {
-            __builtin_memcpy(&info->srcIP6, &st->rip6, sizeof(info->srcIP6));
-            __builtin_memcpy(&info->dstIP6, &st->lip6, sizeof(info->dstIP6));
-            info->sport = st->rport;
-            info->dport = st->lport;
-        }
-        return 0;
-    }
-
-    return -1;
-}
-
-
-
-
-2) sendto_enter/recvfrom_enter: клади в мапу u64, не &addr указателя
-
-sendto_enter:
+    bpf_map_update_elem(&conn_info_map, &id, &conn_info, BPF_ANY);
 
 __u64 uaddr = (__u64)ctx->args[4];   // dest sockaddr*
+
 if (uaddr)
     bpf_map_update_elem(&addrSend_map, &id, &uaddr, BPF_ANY);
 
+    return 0;
+}
 
-recvfrom_enter:
 
-__u64 uaddr = (__u64)ctx->args[4];   // src sockaddr* (kernel заполнит на exit)
-if (uaddr)
-    bpf_map_update_elem(&addrRecv_map, &id, &uaddr, BPF_ANY);
-
-3) sendto_exit/recvfrom_exit: всегда делай fallback из fd_state_map, addr — только override
-sendto_exit (замени целиком)
 SEC("tracepoint/syscalls/sys_exit_sendto")
 int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx)
 {
@@ -764,7 +724,34 @@ cleanup:
     return 0;
 }
 
-recvfrom_exit (замени целиком; и УБЕРИ ntohl)
+
+
+SEC("tracepoint/syscalls/sys_enter_recvfrom")
+int trace_recvfrom_enter(struct trace_event_raw_sys_enter *ctx) {
+   
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid=id>>32;
+
+    struct conn_info_t conn_info = {};
+
+    conn_info.pid = tgid;
+    conn_info.fd = (__u32)ctx->args[0];
+
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
+    bpf_map_update_elem(&conn_info_map, &id, &conn_info, BPF_ANY);
+
+    if (!ctx->args[4]) return 0;
+
+
+__u64 uaddr = (__u64)ctx->args[4];   // src sockaddr* (kernel заполнит на exit)
+if (uaddr)
+    bpf_map_update_elem(&addrRecv_map, &id, &uaddr, BPF_ANY);
+
+    return 0;
+}
+
+
 SEC("tracepoint/syscalls/sys_exit_recvfrom")
 int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx)
 {
@@ -803,16 +790,34 @@ cleanup:
     return 0;
 }
 
-4) sendmsg/recvmsg: не msghdr, а первые поля user_msghdr, и НЕ падать при msg_name==NULL
-
-Добавь маленький “хедер”:
-
 struct user_msghdr_head {
     void *msg_name;
     int   msg_namelen;
 };
 
-sendmsg_exit (замени)
+
+
+SEC("tracepoint/syscalls/sys_enter_sendmsg")
+int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    struct conn_info_t conn_info = {};
+    conn_info.pid = tgid;
+    conn_info.fd = (__u32)ctx->args[0];
+
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
+    bpf_map_update_elem(&conn_info_map, &id, &conn_info, BPF_ANY);
+
+    __u64 msg_u = (__u64)ctx->args[1]; // struct msghdr * (user)
+    if (msg_u)
+        bpf_map_update_elem(&addrSend_map, &id, &msg_u, BPF_ANY);
+
+    return 0;
+}
+
 SEC("tracepoint/syscalls/sys_exit_sendmsg")
 int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
 {
@@ -856,7 +861,27 @@ cleanup:
     return 0;
 }
 
-recvmsg_exit (аналогично, только src и is_send=0)
+SEC("tracepoint/syscalls/sys_enter_recvmsg")
+int trace_recvmsg_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    struct conn_info_t conn_info = {};
+    conn_info.pid = tgid;
+    conn_info.fd = (__u32)ctx->args[0];
+
+    bpf_get_current_comm(&conn_info.comm, sizeof(conn_info.comm));
+
+    bpf_map_update_elem(&conn_info_map, &id, &conn_info, BPF_ANY);
+
+    __u64 msg_u = (__u64)ctx->args[1]; // struct msghdr * (user)
+    if (msg_u)
+        bpf_map_update_elem(&addrRecv_map, &id, &msg_u, BPF_ANY);
+
+    return 0;
+}
+
 SEC("tracepoint/syscalls/sys_exit_recvmsg")
 int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx)
 {
@@ -897,5 +922,12 @@ cleanup:
     bpf_map_delete_elem(&conn_info_map, &id);
     return 0;
 }
+
+
+
+
+
+
+recvmsg_exit (аналогично, только src и is_send=0)
 
 
