@@ -659,33 +659,11 @@ git push origin ProcNet_monitor
 
 
 
-func commString(c [32]int8) string {
-	commMu.RLock()
-	if s, ok := commCache[c]; ok {
-		commMu.RUnlock()
-		return s
-	}
-	commMu.RUnlock()
-
-	var b [32]byte
-	for i := 0; i < 32; i++ {
-		b[i] = byte(c[i])
-	}
-
-	// найти первый '\0'
-	n := bytes.IndexByte(b[:], 0)
-	if n < 0 {
-		n = len(b)
-	}
-
-	s := string(b[:n])
-
-	commMu.Lock()
-	commCache[c] = s
-	commMu.Unlock()
-	return s
-}
-
+TCP ACCEPT  client=?  127.0.0.1:35252 -> 127.0.0.1:1111  server=26303(nc)
+TCP ACCEPT  server=26303(nc)  127.0.0.1:1111 -> 127.0.0.1:35252  client=?
+------------------------------------------------------------
+TCP CONNECT client=26347(nc)  127.0.0.1:35252 -> 127.0.0.1:1111  server=26303(nc)
+TCP CONNECT server=26303(nc)  127.0.0.1:1111 -> 127.0.0.1:35252  client=26347(nc)
 
 
 
