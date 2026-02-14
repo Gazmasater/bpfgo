@@ -688,3 +688,7 @@ func commString(c [32]int8) string {
 
 
 
+
+curl --http2 -v https://www.google.com/
+
+
