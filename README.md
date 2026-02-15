@@ -1291,3 +1291,7 @@ func main() {
 }
 
 
+UDP SENDMSG src=513(systemd-resolve) 127.0.0.53:53 -> 127.0.0.1:58085  dst=4439(DNS Res~ver #25)
+UDP RECVFROM src=513(systemd-resolve) 127.0.0.53:53 -> 127.0.0.1:58085  dst=4439(DNS Res~ver #25)
+
+
