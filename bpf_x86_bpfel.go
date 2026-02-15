@@ -13,17 +13,9 @@ import (
 )
 
 type bpfConnInfoT struct {
-	Pid     uint32
-	SrcIp   uint32
-	DstIp   uint32
-	Addrlen uint32
-	Fd      uint32
-	Sport   uint32
-	Dport   uint16
-	Family  uint16
-	Proto   uint8
-	Comm    [64]int8
-	_       [3]byte
+	Pid  uint32
+	Fd   uint32
+	Comm [64]int8
 }
 
 type bpfFdKeyT struct {
@@ -125,13 +117,14 @@ type bpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
-	AddrBindMap  *ebpf.MapSpec `ebpf:"addrBind_map"`
-	AddrRecvMap  *ebpf.MapSpec `ebpf:"addrRecv_map"`
-	AddrSendMap  *ebpf.MapSpec `ebpf:"addrSend_map"`
-	ConnInfoMap  *ebpf.MapSpec `ebpf:"conn_info_map"`
-	ConnectFdMap *ebpf.MapSpec `ebpf:"connect_fd_map"`
-	FdStateMap   *ebpf.MapSpec `ebpf:"fd_state_map"`
-	TraceEvents  *ebpf.MapSpec `ebpf:"trace_events"`
+	AddrBindMap    *ebpf.MapSpec `ebpf:"addrBind_map"`
+	AddrConnectMap *ebpf.MapSpec `ebpf:"addrConnect_map"`
+	AddrRecvMap    *ebpf.MapSpec `ebpf:"addrRecv_map"`
+	AddrSendMap    *ebpf.MapSpec `ebpf:"addrSend_map"`
+	ConnInfoMap    *ebpf.MapSpec `ebpf:"conn_info_map"`
+	ConnectFdMap   *ebpf.MapSpec `ebpf:"connect_fd_map"`
+	FdStateMap     *ebpf.MapSpec `ebpf:"fd_state_map"`
+	TraceEvents    *ebpf.MapSpec `ebpf:"trace_events"`
 }
 
 // bpfVariableSpecs contains global variables before they are loaded into the kernel.
@@ -161,18 +154,20 @@ func (o *bpfObjects) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
-	AddrBindMap  *ebpf.Map `ebpf:"addrBind_map"`
-	AddrRecvMap  *ebpf.Map `ebpf:"addrRecv_map"`
-	AddrSendMap  *ebpf.Map `ebpf:"addrSend_map"`
-	ConnInfoMap  *ebpf.Map `ebpf:"conn_info_map"`
-	ConnectFdMap *ebpf.Map `ebpf:"connect_fd_map"`
-	FdStateMap   *ebpf.Map `ebpf:"fd_state_map"`
-	TraceEvents  *ebpf.Map `ebpf:"trace_events"`
+	AddrBindMap    *ebpf.Map `ebpf:"addrBind_map"`
+	AddrConnectMap *ebpf.Map `ebpf:"addrConnect_map"`
+	AddrRecvMap    *ebpf.Map `ebpf:"addrRecv_map"`
+	AddrSendMap    *ebpf.Map `ebpf:"addrSend_map"`
+	ConnInfoMap    *ebpf.Map `ebpf:"conn_info_map"`
+	ConnectFdMap   *ebpf.Map `ebpf:"connect_fd_map"`
+	FdStateMap     *ebpf.Map `ebpf:"fd_state_map"`
+	TraceEvents    *ebpf.Map `ebpf:"trace_events"`
 }
 
 func (m *bpfMaps) Close() error {
 	return _BpfClose(
 		m.AddrBindMap,
+		m.AddrConnectMap,
 		m.AddrRecvMap,
 		m.AddrSendMap,
 		m.ConnInfoMap,

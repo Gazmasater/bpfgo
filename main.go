@@ -1,12 +1,11 @@
 package main
 
 import (
-	"bpfgo/pkg"
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -17,6 +16,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/perf"
 	"github.com/cilium/ebpf/rlimit"
@@ -27,47 +27,62 @@ var objs bpfObjects
 const (
 	AF_INET  = 2
 	AF_INET6 = 10
+
+	EV_CONNECT = 3
+	EV_ACCEPT  = 4
+	EV_BINDOK  = 20
+
+	IPPROTO_TCP = 6
 )
 
-type PeerKey struct {
-	Family uint16
-	Port   uint16
-	IP     [16]byte // for IPv4: first 4 bytes used
-}
-
-type LookupInfo struct {
-	Family uint16
-	Proto  uint8
-
-	PeerIP   [16]byte
-	PeerPort uint16
-
-	LocalIP   [16]byte
-	LocalPort uint16
-
+type Proc struct {
+	Pid  uint32
+	Comm string
 	Seen time.Time
 }
 
-var (
-	lookupMu     sync.Mutex
-	lookupByPeer = make(map[PeerKey]LookupInfo, 8192)
-)
-
-var (
-	resolveCache = make(map[string]string)
-	cacheMu      sync.RWMutex
-
-	commCache = make(map[[32]int8]string)
-	commMu    sync.RWMutex
-)
-
-func ip4FromBE(u uint32) net.IP {
-	var b [4]byte
-	binary.BigEndian.PutUint32(b[:], u)
-	return net.IP(b[:])
+func (p Proc) String() string {
+	if p.Pid == 0 {
+		return "?"
+	}
+	if p.Comm == "" {
+		return fmt.Sprintf("%d(?)", p.Pid)
+	}
+	return fmt.Sprintf("%d(%s)", p.Pid, p.Comm)
 }
 
-func cachedComm(c [32]int8) string {
+/* ===== keys/caches ===== */
+
+type EndpKey struct {
+	Family uint16
+	Port   uint16
+	IP     [16]byte
+}
+
+type ConnKey struct {
+	Family     uint16
+	ClientIP   [16]byte
+	ClientPort uint16
+	ServerIP   [16]byte
+	ServerPort uint16
+}
+
+var (
+	sepLine = "------------------------------------------------------------"
+
+	commMu    sync.RWMutex
+	commCache = make(map[[32]int8]string)
+
+	listenMu sync.Mutex
+	listenBy = make(map[EndpKey]Proc, 4096)
+
+	connMu sync.Mutex
+	connBy = make(map[ConnKey]Proc, 16384)
+)
+
+/* ===== comm/proto ===== */
+
+func commString(c [32]int8) string {
 	commMu.RLock()
 	if s, ok := commCache[c]; ok {
 		commMu.RUnlock()
@@ -75,50 +90,23 @@ func cachedComm(c [32]int8) string {
 	}
 	commMu.RUnlock()
 
-	s := pkg.Int8ToString(c)
+	var b [32]byte
+	for i := 0; i < 32; i++ {
+		b[i] = byte(c[i])
+	}
+
+	// найти первый '\0'
+	n := bytes.IndexByte(b[:], 0)
+	if n < 0 {
+		n = len(b)
+	}
+
+	s := string(b[:n])
 
 	commMu.Lock()
 	commCache[c] = s
 	commMu.Unlock()
 	return s
-}
-
-func resolveHost(ip net.IP) string {
-	key := ip.String()
-
-	cacheMu.RLock()
-	if host, ok := resolveCache[key]; ok {
-		cacheMu.RUnlock()
-		return host
-	}
-	cacheMu.RUnlock()
-
-	var host string
-	if ip.IsLoopback() {
-		host = "localhost"
-	} else {
-		if ip.To4() != nil {
-			host = pkg.ResolveIP(ip)
-		} else {
-			h, err := pkg.ResolveIP_n(ip)
-			if err != nil {
-				host = "unknown"
-			} else {
-				host = h
-			}
-		}
-	}
-
-	cacheMu.Lock()
-	resolveCache[key] = host
-	cacheMu.Unlock()
-	return host
-}
-
-func ip6FromArr(a [16]uint8) net.IP {
-	ip := make(net.IP, net.IPv6len)
-	copy(ip, a[:])
-	return ip
 }
 
 func protoStr(p uint8) string {
@@ -132,66 +120,121 @@ func protoStr(p uint8) string {
 	}
 }
 
-func saveLookupBothDirections(family uint16, proto uint8, srcIP [16]byte, srcPort uint16, dstIP [16]byte, dstPort uint16) {
-	now := time.Now()
+/* ===== IPv4 byte-order FIX =====
+BPF writes IPv4 as __be32; when Go unsafe-casts to uint32 on little-endian,
+the bytes appear reversed in number form. Rebuild bytes using LittleEndian.
+*/
 
-	// интерпретация #1: peer = src, local = dst
-	k1 := PeerKey{Family: family, Port: srcPort, IP: srcIP}
-	v1 := LookupInfo{
-		Family:    family,
-		Proto:     proto,
-		PeerIP:    srcIP,
-		PeerPort:  srcPort,
-		LocalIP:   dstIP,
-		LocalPort: dstPort,
-		Seen:      now,
-	}
-
-	// интерпретация #2: peer = dst, local = src (на случай, если local/remote перепутаны в BPF)
-	k2 := PeerKey{Family: family, Port: dstPort, IP: dstIP}
-	v2 := LookupInfo{
-		Family:    family,
-		Proto:     proto,
-		PeerIP:    dstIP,
-		PeerPort:  dstPort,
-		LocalIP:   srcIP,
-		LocalPort: srcPort,
-		Seen:      now,
-	}
-
-	lookupMu.Lock()
-	lookupByPeer[k1] = v1
-	lookupByPeer[k2] = v2
-	lookupMu.Unlock()
+func ip4BytesFromU32Net(x uint32) (b [4]byte) {
+	binary.LittleEndian.PutUint32(b[:], x)
+	return
 }
 
-func takeLookup(family uint16, peerIP [16]byte, peerPort uint16) (LookupInfo, bool) {
-	k := PeerKey{Family: family, Port: peerPort, IP: peerIP}
-	lookupMu.Lock()
-	v, ok := lookupByPeer[k]
-	lookupMu.Unlock()
-	return v, ok
+func endpFromEvIPv4(ipU32 uint32, port uint16) (ipStr string, ipKey [16]byte, portU16 uint16) {
+	b := ip4BytesFromU32Net(ipU32)
+	copy(ipKey[:4], b[:])
+	return fmt.Sprintf("%d.%d.%d.%d", b[0], b[1], b[2], b[3]), ipKey, port
 }
 
-func cleanupLookups(ttl time.Duration) {
+func endpFromEvIPv6(ipArr [16]uint8, port uint16) (ipStr string, ipKey [16]byte, portU16 uint16) {
+	copy(ipKey[:], ipArr[:])
+	// минимально красиво (без net.IP stringify, чтобы без аллокаций)
+	return fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x",
+		uint16(ipArr[0])<<8|uint16(ipArr[1]),
+		uint16(ipArr[2])<<8|uint16(ipArr[3]),
+		uint16(ipArr[4])<<8|uint16(ipArr[5]),
+		uint16(ipArr[6])<<8|uint16(ipArr[7]),
+		uint16(ipArr[8])<<8|uint16(ipArr[9]),
+		uint16(ipArr[10])<<8|uint16(ipArr[11]),
+		uint16(ipArr[12])<<8|uint16(ipArr[13]),
+		uint16(ipArr[14])<<8|uint16(ipArr[15]),
+	), ipKey, port
+}
+
+func formatEndp(family uint16, ipStr string, port uint16) string {
+	if family == AF_INET6 {
+		return fmt.Sprintf("[%s]:%d", ipStr, port)
+	}
+	return fmt.Sprintf("%s:%d", ipStr, port)
+}
+
+/* ===== caches ===== */
+
+func saveListen(ep EndpKey, p Proc) {
+	p.Seen = time.Now()
+	listenMu.Lock()
+	listenBy[ep] = p
+	listenMu.Unlock()
+}
+
+func lookupListen(family uint16, ip [16]byte, port uint16) (Proc, bool) {
+	k := EndpKey{Family: family, Port: port, IP: ip}
+	listenMu.Lock()
+	p, ok := listenBy[k]
+	listenMu.Unlock()
+	if ok {
+		return p, true
+	}
+	var zero [16]byte
+	k2 := EndpKey{Family: family, Port: port, IP: zero}
+	listenMu.Lock()
+	p2, ok2 := listenBy[k2]
+	listenMu.Unlock()
+	return p2, ok2
+}
+
+func saveConnectTuple(key ConnKey, client Proc) {
+	client.Seen = time.Now()
+	connMu.Lock()
+	connBy[key] = client
+	connMu.Unlock()
+}
+
+func lookupConnectTuple(key ConnKey) (Proc, bool) {
+	connMu.Lock()
+	p, ok := connBy[key]
+	connMu.Unlock()
+	return p, ok
+}
+
+func cleanupTTL(ttl time.Duration) {
 	t := time.NewTicker(2 * time.Second)
 	defer t.Stop()
 
 	for range t.C {
 		cut := time.Now().Add(-ttl)
-		lookupMu.Lock()
-		for k, v := range lookupByPeer {
+
+		listenMu.Lock()
+		for k, v := range listenBy {
 			if v.Seen.Before(cut) {
-				delete(lookupByPeer, k)
+				delete(listenBy, k)
 			}
 		}
-		lookupMu.Unlock()
+		listenMu.Unlock()
+
+		connMu.Lock()
+		for k, v := range connBy {
+			if v.Seen.Before(cut) {
+				delete(connBy, k)
+			}
+		}
+		connMu.Unlock()
 	}
+}
+
+/* ===== pretty print ===== */
+
+func printBlock(proto, kind string, client Proc, server Proc, clientEp, serverEp string) {
+	fmt.Println(sepLine)
+	fmt.Printf("%-4s %-7s client=%s  %s -> %s  server=%s\n",
+		proto, kind, client.String(), clientEp, serverEp, server.String())
+	fmt.Printf("%-4s %-7s server=%s  %s -> %s  client=%s\n",
+		proto, kind, server.String(), serverEp, clientEp, client.String())
 }
 
 func init() {
 	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatalf("failed to remove memory limit: %v", err)
+		log.Fatalf("failed to remove memlock: %v", err)
 	}
 	if err := loadBpfObjects(&objs, nil); err != nil {
 		log.Fatalf("failed to load bpf objects: %v", err)
@@ -205,17 +248,9 @@ func main() {
 	}()
 
 	defer objs.Close()
+	go cleanupTTL(5 * time.Second)
 
-	go cleanupLookups(3 * time.Second)
-
-	netns, err := os.Open("/proc/self/ns/net")
-	if err != nil {
-		log.Fatalf("open netns: %v", err)
-	}
-	defer netns.Close()
-
-	fmt.Printf("netns fd=%d\n", netns.Fd())
-	fmt.Printf("sizeof(traceInfo)=%d\n", unsafe.Sizeof(bpfTraceInfo{}))
+	selfName := filepath.Base(os.Args[0])
 
 	links := make([]link.Link, 0, 16)
 	defer func() {
@@ -224,121 +259,27 @@ func main() {
 		}
 	}()
 
-	BindEnter, err := link.Tracepoint("syscalls", "sys_enter_bind", objs.TraceBindEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_bind: %s", err)
-	}
-	defer BindEnter.Close()
-
-	BindExit, err := link.Tracepoint("syscalls", "sys_exit_bind", objs.TraceBindExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_bind: %s", err)
-	}
-	defer BindExit.Close()
-
-	// --- connect ---
-	ConnEnter, err := link.Tracepoint("syscalls", "sys_enter_connect", objs.TraceConnectEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_connect: %s", err)
-	}
-	defer ConnEnter.Close()
-
-	ConnExit, err := link.Tracepoint("syscalls", "sys_exit_connect", objs.TraceConnectExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_connect: %s", err)
-	}
-	defer ConnExit.Close()
-
-	// --- accept4 ---
-	Acc4Enter, err := link.Tracepoint("syscalls", "sys_enter_accept4", objs.TraceAccept4Enter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_accept4: %s", err)
-	}
-	defer Acc4Enter.Close()
-
-	Acc4Exit, err := link.Tracepoint("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_accept4: %s", err)
-	}
-	defer Acc4Exit.Close()
-
-	// --- accept (если кто-то вызывает accept, а не accept4) ---
-	AccEnter, err := link.Tracepoint("syscalls", "sys_enter_accept", objs.TraceAcceptEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_accept: %s", err)
-	}
-	defer AccEnter.Close()
-
-	AccExit, err := link.Tracepoint("syscalls", "sys_exit_accept", objs.TraceAcceptExit, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_exit_accept: %s", err)
-	}
-	defer AccExit.Close()
-
-	// --- close (чистим fd_state_map) ---
-	CloseEnter, err := link.Tracepoint("syscalls", "sys_enter_close", objs.TraceCloseEnter, nil)
-	if err != nil {
-		log.Fatalf("opening tracepoint sys_enter_close: %s", err)
-	}
-	defer CloseEnter.Close()
-
-	// --- Attach tracepoints correctly (two-value returns) ---
-	{
-		l, err := link.Tracepoint("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter, nil)
+	attach := func(cat, name string, prog *ebpf.Program) {
+		l, err := link.Tracepoint(cat, name, prog, nil)
 		if err != nil {
-			log.Fatalf("attach sys_enter_sendmsg: %v", err)
+			log.Fatalf("attach %s/%s: %v", cat, name, err)
 		}
 		links = append(links, l)
 	}
-	{
-		l, err := link.Tracepoint("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit, nil)
-		if err != nil {
-			log.Fatalf("attach sys_exit_sendmsg: %v", err)
-		}
-		links = append(links, l)
-	}
-	{
-		l, err := link.Tracepoint("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter, nil)
-		if err != nil {
-			log.Fatalf("attach sys_enter_sendto: %v", err)
-		}
-		links = append(links, l)
-	}
-	{
-		l, err := link.Tracepoint("syscalls", "sys_exit_sendto", objs.TraceSendtoExit, nil)
-		if err != nil {
-			log.Fatalf("attach sys_exit_sendto: %v", err)
-		}
-		links = append(links, l)
-	}
-	{
-		l, err := link.Tracepoint("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter, nil)
-		if err != nil {
-			log.Fatalf("attach sys_enter_recvmsg: %v", err)
-		}
-		links = append(links, l)
-	}
-	{
-		l, err := link.Tracepoint("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit, nil)
-		if err != nil {
-			log.Fatalf("attach sys_exit_recvmsg: %v", err)
-		}
-		links = append(links, l)
-	}
-	{
-		l, err := link.Tracepoint("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter, nil)
-		if err != nil {
-			log.Fatalf("attach sys_enter_recvfrom: %v", err)
-		}
-		links = append(links, l)
-	}
-	{
-		l, err := link.Tracepoint("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit, nil)
-		if err != nil {
-			log.Fatalf("attach sys_exit_recvfrom: %v", err)
-		}
-		links = append(links, l)
-	}
+
+	// bind/connect/accept/close
+	attach("syscalls", "sys_enter_bind", objs.TraceBindEnter)
+	attach("syscalls", "sys_exit_bind", objs.TraceBindExit)
+
+	attach("syscalls", "sys_enter_connect", objs.TraceConnectEnter)
+	attach("syscalls", "sys_exit_connect", objs.TraceConnectExit)
+
+	attach("syscalls", "sys_enter_accept4", objs.TraceAccept4Enter)
+	attach("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit)
+	attach("syscalls", "sys_enter_accept", objs.TraceAcceptEnter)
+	attach("syscalls", "sys_exit_accept", objs.TraceAcceptExit)
+
+	attach("syscalls", "sys_enter_close", objs.TraceCloseEnter)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -351,10 +292,8 @@ func main() {
 		}
 		defer rd.Close()
 
-		selfName := filepath.Base(os.Args[0])
-
 		for {
-			record, err := rd.Read()
+			rec, err := rd.Read()
 			if err != nil {
 				if errors.Is(err, perf.ErrClosed) {
 					return
@@ -362,107 +301,144 @@ func main() {
 				log.Printf("perf read error: %v", err)
 				continue
 			}
-
-			if record.LostSamples != 0 {
-				log.Printf("LOST %d samples", record.LostSamples)
+			if rec.LostSamples != 0 {
+				log.Printf("LOST %d samples", rec.LostSamples)
+				continue
+			}
+			if len(rec.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
 				continue
 			}
 
-			if len(record.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
-				log.Printf("invalid event size: %d", len(record.RawSample))
+			ev := *(*bpfTraceInfo)(unsafe.Pointer(&rec.RawSample[0]))
+
+			// TCP only (как ты просил)
+			if uint8(ev.Proto) != IPPROTO_TCP {
 				continue
 			}
 
-			ev := *(*bpfTraceInfo)(unsafe.Pointer(&record.RawSample[0]))
-			comm := cachedComm(ev.Comm)
+			comm := commString(ev.Comm)
 			if comm == selfName {
 				continue
 			}
 
+			proto := protoStr(uint8(ev.Proto))
+
 			switch ev.Sysexit {
 
-			// sendto_exit
-			case 1:
+			case EV_BINDOK:
+				server := Proc{Pid: ev.Pid, Comm: comm}
+
 				if ev.Family == AF_INET {
-					dst := ip4FromBE(ev.DstIP.S_addr)
-					fmt.Printf("SENDTO  pid=%d comm=%s  %s dst=%s:%d\n",
-						ev.Pid, comm, protoStr(uint8(ev.Proto)),
-						dst.String(), ev.Dport)
+					_, ipKey, port := endpFromEvIPv4(ev.DstIP.S_addr, ev.Dport)
+					ep := EndpKey{Family: uint16(ev.Family), Port: port, IP: ipKey}
+					saveListen(ep, server)
+					var zero [16]byte
+					saveListen(EndpKey{Family: uint16(ev.Family), Port: port, IP: zero}, server)
 				} else if ev.Family == AF_INET6 {
-					dst := ip6FromArr(ev.DstIP6.In6U.U6Addr8)
-					fmt.Printf("SENDTO6 pid=%d comm=%s  %s dst=[%s]:%d\n",
-						ev.Pid, comm, protoStr(uint8(ev.Proto)),
-						dst.String(), ev.Dport)
+					_, ipKey, port := endpFromEvIPv6(ev.DstIP6.In6U.U6Addr8, ev.Dport)
+					ep := EndpKey{Family: uint16(ev.Family), Port: port, IP: ipKey}
+					saveListen(ep, server)
+					var zero [16]byte
+					saveListen(EndpKey{Family: uint16(ev.Family), Port: port, IP: zero}, server)
 				}
 
-			// recvfrom_exit
-			case 2:
-				handleRecv("RECVFROM", ev, comm)
+			case EV_CONNECT:
+				// CONNECT приходит из client pid, tuple = local->remote
+				client := Proc{Pid: ev.Pid, Comm: comm}
 
-			// recvmsg_exit
-			case 12:
-				handleRecv("RECVMSG", ev, comm)
-
-			// sendmsg_exit
-			case 11:
 				if ev.Family == AF_INET {
-					dst := ip4FromBE(ev.DstIP.S_addr)
-					fmt.Printf("SENDMSG  pid=%d comm=%s  %s dst=%s:%d\n",
-						ev.Pid, comm, protoStr(uint8(ev.Proto)),
-						dst.String(), ev.Dport)
+					cIPStr, cIPKey, cPort := endpFromEvIPv4(ev.SrcIP.S_addr, ev.Sport)
+					sIPStr, sIPKey, sPort := endpFromEvIPv4(ev.DstIP.S_addr, ev.Dport)
+
+					clientEp := formatEndp(AF_INET, cIPStr, cPort)
+					serverEp := formatEndp(AF_INET, sIPStr, sPort)
+
+					key := ConnKey{
+						Family:   uint16(ev.Family),
+						ClientIP: cIPKey, ClientPort: cPort,
+						ServerIP: sIPKey, ServerPort: sPort,
+					}
+					saveConnectTuple(key, client)
+
+					server, ok := lookupListen(uint16(ev.Family), sIPKey, sPort)
+					if !ok {
+						server = Proc{}
+					}
+
+					printBlock(proto, "CONNECT", client, server, clientEp, serverEp)
+
 				} else if ev.Family == AF_INET6 {
-					dst := ip6FromArr(ev.DstIP6.In6U.U6Addr8)
-					fmt.Printf("SENDMSG6 pid=%d comm=%s  %s dst=[%s]:%d\n",
-						ev.Pid, comm, protoStr(uint8(ev.Proto)),
-						dst.String(), ev.Dport)
+					cIPStr, cIPKey, cPort := endpFromEvIPv6(ev.SrcIP6.In6U.U6Addr8, ev.Sport)
+					sIPStr, sIPKey, sPort := endpFromEvIPv6(ev.DstIP6.In6U.U6Addr8, ev.Dport)
+
+					clientEp := formatEndp(AF_INET6, cIPStr, cPort)
+					serverEp := formatEndp(AF_INET6, sIPStr, sPort)
+
+					key := ConnKey{
+						Family:   uint16(ev.Family),
+						ClientIP: cIPKey, ClientPort: cPort,
+						ServerIP: sIPKey, ServerPort: sPort,
+					}
+					saveConnectTuple(key, client)
+
+					server, ok := lookupListen(uint16(ev.Family), sIPKey, sPort)
+					if !ok {
+						server = Proc{}
+					}
+
+					printBlock(proto, "CONNECT", client, server, clientEp, serverEp)
 				}
 
-			case 20:
-				if ev.Family == 2 {
-					ip := ip4FromBE(ev.DstIP.S_addr)
-					fmt.Printf("BIND OK pid=%d comm=%s  %s:%d\n",
-						ev.Pid, cachedComm(ev.Comm), ip.String(), ev.Dport)
-				} else if ev.Family == 10 {
-					// IPv6 печать как у тебя (через words/bytes)
-					fmt.Printf("BIND6 OK pid=%d comm=%s  port=%d\n",
-						ev.Pid, cachedComm(ev.Comm), ev.Dport)
-				}
+			case EV_ACCEPT:
+				// ACCEPT приходит из server pid, tuple = client->server (мы так в BPF сделали)
+				server := Proc{Pid: ev.Pid, Comm: comm}
 
-			// sk_lookup
-			case 3:
 				if ev.Family == AF_INET {
-					var srcIP [16]byte
-					var dstIP [16]byte
-					binary.BigEndian.PutUint32(srcIP[:4], ev.SrcIP.S_addr)
-					binary.BigEndian.PutUint32(dstIP[:4], ev.DstIP.S_addr)
+					cIPStr, cIPKey, cPort := endpFromEvIPv4(ev.SrcIP.S_addr, ev.Sport)
+					sIPStr, sIPKey, sPort := endpFromEvIPv4(ev.DstIP.S_addr, ev.Dport)
 
-					saveLookupBothDirections(
-						uint16(ev.Family),
-						uint8(ev.Proto),
-						srcIP, uint16(ev.Sport),
-						dstIP, uint16(ev.Dport),
-					)
+					clientEp := formatEndp(AF_INET, cIPStr, cPort)
+					serverEp := formatEndp(AF_INET, sIPStr, sPort)
+
+					// accept может заменить bind-роль (если bind не увидели)
+					saveListen(EndpKey{Family: uint16(ev.Family), Port: sPort, IP: sIPKey}, server)
+					var zero [16]byte
+					saveListen(EndpKey{Family: uint16(ev.Family), Port: sPort, IP: zero}, server)
+
+					key := ConnKey{
+						Family:   uint16(ev.Family),
+						ClientIP: cIPKey, ClientPort: cPort,
+						ServerIP: sIPKey, ServerPort: sPort,
+					}
+					client, ok := lookupConnectTuple(key)
+					if !ok {
+						client = Proc{}
+					}
+
+					printBlock(proto, "ACCEPT", client, server, clientEp, serverEp)
+
 				} else if ev.Family == AF_INET6 {
-					var srcIP [16]byte
-					var dstIP [16]byte
-					copy(srcIP[:], ev.SrcIP6.In6U.U6Addr8[:])
-					copy(dstIP[:], ev.DstIP6.In6U.U6Addr8[:])
+					cIPStr, cIPKey, cPort := endpFromEvIPv6(ev.SrcIP6.In6U.U6Addr8, ev.Sport)
+					sIPStr, sIPKey, sPort := endpFromEvIPv6(ev.DstIP6.In6U.U6Addr8, ev.Dport)
 
-					saveLookupBothDirections(
-						uint16(ev.Family),
-						uint8(ev.Proto),
-						srcIP, uint16(ev.Sport),
-						dstIP, uint16(ev.Dport),
-					)
-				}
+					clientEp := formatEndp(AF_INET6, cIPStr, cPort)
+					serverEp := formatEndp(AF_INET6, sIPStr, sPort)
 
-			// inet_sock_set_state (опционально)
-			case 6:
-				if ev.Family == AF_INET && ev.State != 0 {
-					src := ip4FromBE(ev.SrcIP.S_addr)
-					dst := ip4FromBE(ev.DstIP.S_addr)
-					fmt.Printf("TCPSTATE pid=%d comm=%s state=%d %s:%d -> %s:%d\n",
-						ev.Pid, comm, ev.State, src.String(), ev.Sport, dst.String(), ev.Dport)
+					saveListen(EndpKey{Family: uint16(ev.Family), Port: sPort, IP: sIPKey}, server)
+					var zero [16]byte
+					saveListen(EndpKey{Family: uint16(ev.Family), Port: sPort, IP: zero}, server)
+
+					key := ConnKey{
+						Family:   uint16(ev.Family),
+						ClientIP: cIPKey, ClientPort: cPort,
+						ServerIP: sIPKey, ServerPort: sPort,
+					}
+					client, ok := lookupConnectTuple(key)
+					if !ok {
+						client = Proc{}
+					}
+
+					printBlock(proto, "ACCEPT", client, server, clientEp, serverEp)
 				}
 			}
 		}
@@ -471,60 +447,4 @@ func main() {
 	fmt.Println("Press Ctrl+C to exit")
 	<-stop
 	fmt.Println("Exiting...")
-}
-
-func handleRecv(tag string, ev bpfTraceInfo, comm string) {
-	if ev.Family == AF_INET {
-		peerIPBE := ev.SrcIP.S_addr
-		peer := ip4FromBE(peerIPBE)
-		peerPort := uint16(ev.Sport)
-
-		var peerKeyIP [16]byte
-		binary.BigEndian.PutUint32(peerKeyIP[:4], peerIPBE)
-
-		li, ok := takeLookup(uint16(AF_INET), peerKeyIP, peerPort)
-		if ok && time.Since(li.Seen) <= 3*time.Second {
-			local := net.IP(li.LocalIP[:4])
-			p := protoStr(li.Proto)
-
-			dstHost := resolveHost(local)
-			srcHost := resolveHost(peer)
-
-			fmt.Printf("%-7s pid=%d comm=%s  %s  %s[%s:%d] -> %s[%s:%d]\n",
-				tag, ev.Pid, comm, p,
-				srcHost, peer.String(), peerPort,
-				dstHost, local.String(), li.LocalPort)
-			return
-		}
-
-		fmt.Printf("%-7s pid=%d comm=%s  peer=%s:%d (no lookup)\n",
-			tag, ev.Pid, comm, peer.String(), peerPort)
-		return
-	}
-
-	if ev.Family == AF_INET6 {
-		peer := ip6FromArr(ev.SrcIP6.In6U.U6Addr8)
-		peerPort := uint16(ev.Sport)
-
-		var peerKeyIP [16]byte
-		copy(peerKeyIP[:], ev.SrcIP6.In6U.U6Addr8[:])
-
-		li, ok := takeLookup(uint16(AF_INET6), peerKeyIP, peerPort)
-		if ok && time.Since(li.Seen) <= 3*time.Second {
-			local := net.IP(li.LocalIP[:16])
-			p := protoStr(li.Proto)
-
-			dstHost := resolveHost(local)
-			srcHost := resolveHost(peer)
-
-			fmt.Printf("%-7s pid=%d comm=%s  %s  %s[%s:%d] -> %s[%s:%d]\n",
-				tag, ev.Pid, comm, p,
-				srcHost, peer.String(), peerPort,
-				dstHost, local.String(), li.LocalPort)
-			return
-		}
-
-		fmt.Printf("%-7s pid=%d comm=%s  peer=[%s]:%d (no lookup)\n",
-			tag, ev.Pid, comm, peer.String(), peerPort)
-	}
 }
