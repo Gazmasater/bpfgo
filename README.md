@@ -1584,5 +1584,6 @@ cleanup:
 }
 
 
+typedef struct trace_info trace_info;
 
 const volatile trace_info * __trace_info_btf_anchor __attribute__((unused));
