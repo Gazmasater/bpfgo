@@ -1585,3 +1585,5 @@ cleanup:
 
 
 
+lev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+Error: collect C types: type name trace_info: not found
