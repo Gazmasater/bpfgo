@@ -1309,3 +1309,9 @@ func main() {
 }
 
 
+
+DP SENDTO  src=13691(udp_client)  *:37340 -> 127.0.0.1:9999  dst=?
+UDP RECVFROM src=13691(udp_client)  127.0.0.1:37340 -> *:9999  dst=13674(udp_server)
+UDP SENDTO  src=13674(udp_server)  *:9999 -> 127.0.0.1:37340  dst=13691(udp_client)
+UDP RECVFROM src=13674(udp_server)  127.0.0.1:9999 -> *:37340  dst=13691(udp_client)
+
