@@ -657,7 +657,9 @@ git fetch origin
 git pull --rebase origin ProcNet_monitor
 git push origin ProcNet_monitor
 
-
+3) Как компилировать (gcc)
+gcc -O2 -Wall -Wextra -o udp_server udp_server.c
+gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
@@ -693,22 +695,14 @@ const (
 	AF_INET6 = 10
 
 	IPPROTO_TCP = 6
+	IPPROTO_UDP = 17
 
-	// sysexit codes from BPF
 	EV_SENDTO   = 1
 	EV_RECVFROM = 2
 	EV_CONNECT  = 3
 	EV_ACCEPT   = 4
 	EV_BINDOK   = 20
 )
-
-const (
-	sepLine           = "------------------------------------------------------------"
-	connectFlushAfter = 350 * time.Millisecond // печать CONNECT если ACCEPT не пришёл (внешний хост)
-	ttlCleanup        = 5 * time.Second
-)
-
-/* ===================== Proc ===================== */
 
 type Proc struct {
 	Pid  uint32
@@ -726,7 +720,7 @@ func (p Proc) String() string {
 	return fmt.Sprintf("%d(%s)", p.Pid, p.Comm)
 }
 
-/* ===================== keys ===================== */
+/* ===== keys/caches ===== */
 
 type EndpKey struct {
 	Family uint16
@@ -742,53 +736,28 @@ type ConnKey struct {
 	ServerPort uint16
 }
 
-type FlowKey struct {
-	Family uint16
-	Proto  uint8
-	SrcIP  [16]byte
-	SrcPort uint16
-	DstIP  [16]byte
-	DstPort uint16
+type PendingConnect struct {
+	Client   Proc
+	ClientEp string
+	ServerEp string
+	Seen     time.Time
 }
 
-/* ===================== caches ===================== */
-
 var (
-	// comm cache
 	commMu    sync.RWMutex
 	commCache = make(map[[32]int8]string)
 
-	// listenBy: (local ip,port)->server proc (from bind/accept)
 	listenMu sync.Mutex
 	listenBy = make(map[EndpKey]Proc, 4096)
 
-	// pending connects: ждём ACCEPT чтобы красиво печатать
-	pendMu   sync.Mutex
-	pendConn = make(map[ConnKey]PendingConnect, 16384)
+	connMu sync.Mutex
+	connBy = make(map[ConnKey]Proc, 16384)
 
-	// last sendto by tuple: чтобы на recvfrom угадывать src pid (локальный loopback)
-	flowMu  sync.Mutex
-	lastSend = make(map[FlowKey]FlowRec, 32768)
+	pendMu sync.Mutex
+	pendBy = make(map[ConnKey]PendingConnect, 16384)
 )
 
-type PendingConnect struct {
-	Client    Proc
-	ClientEp  string
-	ServerEp  string
-	ServerIP  [16]byte
-	ServerPort uint16
-	Proto     uint8
-	Seen      time.Time
-}
-
-type FlowRec struct {
-	SrcProc Proc
-	SrcEp   string
-	DstEp   string
-	Seen    time.Time
-}
-
-/* ===================== comm / proto ===================== */
+/* ===== comm/proto ===== */
 
 func commString(c [32]int8) string {
 	commMu.RLock()
@@ -802,6 +771,7 @@ func commString(c [32]int8) string {
 	for i := 0; i < 32; i++ {
 		b[i] = byte(c[i])
 	}
+
 	n := bytes.IndexByte(b[:], 0)
 	if n < 0 {
 		n = len(b)
@@ -816,21 +786,19 @@ func commString(c [32]int8) string {
 
 func protoStr(p uint8) string {
 	switch p {
-	case 6:
+	case IPPROTO_TCP:
 		return "TCP"
-	case 17:
+	case IPPROTO_UDP:
 		return "UDP"
 	default:
 		return fmt.Sprintf("P%d", p)
 	}
 }
 
-/* ===================== IPv4 byte-order FIX ===================== */
+/* ===== IPv4 byte-order FIX (1.0.0.127 -> 127.0.0.1) ===== */
 
 func ip4BytesFromU32Net(x uint32) (b [4]byte) {
-	// IMPORTANT: ev.SrcIP.S_addr / ev.DstIP.S_addr попадают в Go как uint32,
-	// и на little-endian выглядит "перевёрнуто".
-	// Восстанавливаем исходные байты через LittleEndian.
+	// IMPORTANT: unsafe-cast gives reversed numeric on little-endian, so restore bytes via LittleEndian.
 	binary.LittleEndian.PutUint32(b[:], x)
 	return
 }
@@ -862,7 +830,7 @@ func formatEndp(family uint16, ipStr string, port uint16) string {
 	return fmt.Sprintf("%s:%d", ipStr, port)
 }
 
-/* ===================== listen cache ===================== */
+/* ===== caches ===== */
 
 func saveListen(ep EndpKey, p Proc) {
 	p.Seen = time.Now()
@@ -872,7 +840,6 @@ func saveListen(ep EndpKey, p Proc) {
 }
 
 func lookupListen(family uint16, ip [16]byte, port uint16) (Proc, bool) {
-	// exact
 	k := EndpKey{Family: family, Port: port, IP: ip}
 	listenMu.Lock()
 	p, ok := listenBy[k]
@@ -880,7 +847,7 @@ func lookupListen(family uint16, ip [16]byte, port uint16) (Proc, bool) {
 	if ok {
 		return p, true
 	}
-	// wildcard fallback 0.0.0.0 / ::
+	// wildcard fallback (0.0.0.0 / ::)
 	var zero [16]byte
 	k2 := EndpKey{Family: family, Port: port, IP: zero}
 	listenMu.Lock()
@@ -889,71 +856,44 @@ func lookupListen(family uint16, ip [16]byte, port uint16) (Proc, bool) {
 	return p2, ok2
 }
 
-/* ===================== pending connect ===================== */
+func saveConn(key ConnKey, client Proc) {
+	client.Seen = time.Now()
+	connMu.Lock()
+	connBy[key] = client
+	connMu.Unlock()
+}
 
-func savePendingConnect(key ConnKey, pc PendingConnect) {
+func lookupConn(key ConnKey) (Proc, bool) {
+	connMu.Lock()
+	p, ok := connBy[key]
+	connMu.Unlock()
+	return p, ok
+}
+
+func savePending(key ConnKey, pc PendingConnect) {
+	pc.Seen = time.Now()
 	pendMu.Lock()
-	pendConn[key] = pc
+	pendBy[key] = pc
 	pendMu.Unlock()
 }
 
-func takePendingConnect(key ConnKey) (PendingConnect, bool) {
+func takePending(key ConnKey) (PendingConnect, bool) {
 	pendMu.Lock()
-	pc, ok := pendConn[key]
+	v, ok := pendBy[key]
 	if ok {
-		delete(pendConn, key)
+		delete(pendBy, key)
 	}
 	pendMu.Unlock()
-	return pc, ok
+	return v, ok
 }
 
-/* ===================== flow send/recv ===================== */
-
-func saveLastSend(key FlowKey, fr FlowRec) {
-	fr.Seen = time.Now()
-	flowMu.Lock()
-	lastSend[key] = fr
-	flowMu.Unlock()
-}
-
-func lookupLastSend(key FlowKey) (FlowRec, bool) {
-	flowMu.Lock()
-	fr, ok := lastSend[key]
-	flowMu.Unlock()
-	return fr, ok
-}
-
-/* ===================== printing ===================== */
-
-func printTCPHandshake(proto string, client Proc, server Proc, clientEp, serverEp string) {
-	fmt.Println(sepLine)
-	fmt.Printf("%-4s CONNECT client=%s  %s -> %s  server=%s\n",
-		proto, client.String(), clientEp, serverEp, server.String())
-	fmt.Printf("%-4s ACCEPT  server=%s  %s -> %s  client=%s\n",
-		proto, server.String(), serverEp, clientEp, client.String())
-}
-
-func printTCPConnectOnly(proto string, client Proc, server Proc, clientEp, serverEp string) {
-	fmt.Println(sepLine)
-	fmt.Printf("%-4s CONNECT client=%s  %s -> %s  server=%s\n",
-		proto, client.String(), clientEp, serverEp, server.String())
-}
-
-func printFlow(proto, kind string, src Proc, dst Proc, srcEp, dstEp string) {
-	fmt.Printf("%-4s %-7s src=%-18s %s -> %s  dst=%s\n",
-		proto, kind, src.String(), srcEp, dstEp, dst.String())
-}
-
-/* ===================== cleanup ===================== */
-
-func cleanupLoop(ttl time.Duration) {
-	t := time.NewTicker(200 * time.Millisecond)
+func cleanupTTL(ttl time.Duration) {
+	t := time.NewTicker(1 * time.Second)
 	defer t.Stop()
 
 	for range t.C {
 		cut := time.Now().Add(-ttl)
 
-		// listenBy ttl
 		listenMu.Lock()
 		for k, v := range listenBy {
 			if v.Seen.Before(cut) {
@@ -962,46 +902,45 @@ func cleanupLoop(ttl time.Duration) {
 		}
 		listenMu.Unlock()
 
-		// lastSend ttl
-		flowMu.Lock()
-		for k, v := range lastSend {
+		connMu.Lock()
+		for k, v := range connBy {
 			if v.Seen.Before(cut) {
-				delete(lastSend, k)
+				delete(connBy, k)
 			}
 		}
-		flowMu.Unlock()
+		connMu.Unlock()
 
-		// pending connect flush
-		now := time.Now()
-		var toFlush []struct {
-			Key ConnKey
-			PC  PendingConnect
-		}
-
+		// если CONNECT так и не получил ACCEPT (удалённый сервер) — печатаем CONNECT с server=?
 		pendMu.Lock()
-		for k, pc := range pendConn {
-			if now.Sub(pc.Seen) >= connectFlushAfter {
-				toFlush = append(toFlush, struct {
-					Key ConnKey
-					PC  PendingConnect
-				}{k, pc})
-				delete(pendConn, k)
+		for k, v := range pendBy {
+			if v.Seen.Before(cut) {
+				fmt.Printf("TCP CONNECT client=%s  %s -> %s  server=?\n",
+					v.Client.String(), v.ClientEp, v.ServerEp)
+				delete(pendBy, k)
 			}
 		}
 		pendMu.Unlock()
-
-		for _, item := range toFlush {
-			pc := item.PC
-			server, ok := lookupListen(item.Key.Family, pc.ServerIP, pc.ServerPort)
-			if !ok {
-				server = Proc{}
-			}
-			printTCPConnectOnly(protoStr(pc.Proto), pc.Client, server, pc.ClientEp, pc.ServerEp)
-		}
 	}
 }
 
-/* ===================== init/load ===================== */
+/* ===== prints ===== */
+
+func printTCPConnect(client Proc, clientEp, serverEp string, server Proc) {
+	fmt.Printf("TCP CONNECT client=%s  %s -> %s  server=%s\n",
+		client.String(), clientEp, serverEp, server.String())
+}
+
+func printTCPAccept(server Proc, serverEp, clientEp string, client Proc) {
+	fmt.Printf("TCP ACCEPT  server=%s  %s -> %s  client=%s\n",
+		server.String(), serverEp, clientEp, client.String())
+}
+
+func printUDP(kind string, p Proc, srcEp, dstEp string) {
+	// kind = SENDTO / RECVFROM
+	fmt.Printf("UDP %-7s pid=%s  %s -> %s\n", kind, p.String(), srcEp, dstEp)
+}
+
+/* ===== init/load ===== */
 
 func init() {
 	if err := rlimit.RemoveMemlock(); err != nil {
@@ -1012,8 +951,6 @@ func init() {
 	}
 }
 
-/* ===================== main ===================== */
-
 func main() {
 	go func() {
 		log.Println("pprof on :6060")
@@ -1021,7 +958,7 @@ func main() {
 	}()
 
 	defer objs.Close()
-	go cleanupLoop(ttlCleanup)
+	go cleanupTTL(2 * time.Second)
 
 	selfName := filepath.Base(os.Args[0])
 
@@ -1040,7 +977,7 @@ func main() {
 		links = append(links, l)
 	}
 
-	// TCP roles (bind/connect/accept) + cleanup fd_state_map in BPF
+	// TCP roles
 	attach("syscalls", "sys_enter_bind", objs.TraceBindEnter)
 	attach("syscalls", "sys_exit_bind", objs.TraceBindExit)
 
@@ -1054,7 +991,7 @@ func main() {
 
 	attach("syscalls", "sys_enter_close", objs.TraceCloseEnter)
 
-	// Datagram flow (sendto/recvfrom)
+	// UDP flow
 	attach("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter)
 	attach("syscalls", "sys_exit_sendto", objs.TraceSendtoExit)
 	attach("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter)
@@ -1089,232 +1026,110 @@ func main() {
 			}
 
 			ev := *(*bpfTraceInfo)(unsafe.Pointer(&rec.RawSample[0]))
-
 			comm := commString(ev.Comm)
 			if comm == selfName {
 				continue
 			}
 
-			p := uint8(ev.Proto)
-			proto := protoStr(p)
+			p := Proc{Pid: ev.Pid, Comm: comm}
+
+			// endpoints
+			var srcEp, dstEp string
+			var srcIPKey, dstIPKey [16]byte
+			var sport, dport uint16
+
+			if ev.Family == AF_INET {
+				sIP, sKey, sP := endpFromEvIPv4(ev.SrcIP.S_addr, ev.Sport)
+				dIP, dKey, dP := endpFromEvIPv4(ev.DstIP.S_addr, ev.Dport)
+				srcEp = formatEndp(AF_INET, sIP, sP)
+				dstEp = formatEndp(AF_INET, dIP, dP)
+				srcIPKey, dstIPKey = sKey, dKey
+				sport, dport = sP, dP
+			} else if ev.Family == AF_INET6 {
+				sIP, sKey, sP := endpFromEvIPv6(ev.SrcIP6.In6U.U6Addr8, ev.Sport)
+				dIP, dKey, dP := endpFromEvIPv6(ev.DstIP6.In6U.U6Addr8, ev.Dport)
+				srcEp = formatEndp(AF_INET6, sIP, sP)
+				dstEp = formatEndp(AF_INET6, dIP, dP)
+				srcIPKey, dstIPKey = sKey, dKey
+				sport, dport = sP, dP
+			} else {
+				continue
+			}
 
 			switch ev.Sysexit {
 
-			/* ---------- BIND (для listenBy) ---------- */
 			case EV_BINDOK:
-				// В твоём BPF bind_exit proto может быть 0.
-				// Но proc + (ip,port) нам нужны для локального "server pid".
-				server := Proc{Pid: ev.Pid, Comm: comm}
+				// bind: сохраняем "кто слушает порт"
+				saveListen(EndpKey{Family: uint16(ev.Family), Port: dport, IP: dstIPKey}, p)
+				var zero [16]byte
+				saveListen(EndpKey{Family: uint16(ev.Family), Port: dport, IP: zero}, p)
 
-				if ev.Family == AF_INET {
-					_, ipKey, port := endpFromEvIPv4(ev.DstIP.S_addr, ev.Dport)
-					saveListen(EndpKey{Family: uint16(ev.Family), Port: port, IP: ipKey}, server)
-					var zero [16]byte
-					saveListen(EndpKey{Family: uint16(ev.Family), Port: port, IP: zero}, server)
-				} else if ev.Family == AF_INET6 {
-					_, ipKey, port := endpFromEvIPv6(ev.DstIP6.In6U.U6Addr8, ev.Dport)
-					saveListen(EndpKey{Family: uint16(ev.Family), Port: port, IP: ipKey}, server)
-					var zero [16]byte
-					saveListen(EndpKey{Family: uint16(ev.Family), Port: port, IP: zero}, server)
-				}
-
-			/* ---------- TCP CONNECT (не печатаем сразу) ---------- */
 			case EV_CONNECT:
-				// connect может быть и UDP, но для "рукопожатия" нам нужен TCP
-				// (для UDP connect смысла мало). Но мы всё равно сохраним и напечатаем как CONNECT-only.
-				client := Proc{Pid: ev.Pid, Comm: comm, Seen: time.Now()}
+				// CONNECT (TCP): src=client, dst=server
+				if uint8(ev.Proto) != IPPROTO_TCP {
+					continue
+				}
+				key := ConnKey{
+					Family:     uint16(ev.Family),
+					ClientIP:   srcIPKey, ClientPort: sport,
+					ServerIP:   dstIPKey, ServerPort: dport,
+				}
+				saveConn(key, p)
 
-				if ev.Family == AF_INET {
-					cIPStr, cIPKey, cPort := endpFromEvIPv4(ev.SrcIP.S_addr, ev.Sport)
-					sIPStr, sIPKey, sPort := endpFromEvIPv4(ev.DstIP.S_addr, ev.Dport)
-
-					clientEp := formatEndp(AF_INET, cIPStr, cPort)
-					serverEp := formatEndp(AF_INET, sIPStr, sPort)
-
-					key := ConnKey{
-						Family:     uint16(ev.Family),
-						ClientIP:   cIPKey,
-						ClientPort: cPort,
-						ServerIP:   sIPKey,
-						ServerPort: sPort,
-					}
-
-					savePendingConnect(key, PendingConnect{
-						Client:     client,
-						ClientEp:   clientEp,
-						ServerEp:   serverEp,
-						ServerIP:   sIPKey,
-						ServerPort: sPort,
-						Proto:      p,
-						Seen:       time.Now(),
-					})
-
-				} else if ev.Family == AF_INET6 {
-					cIPStr, cIPKey, cPort := endpFromEvIPv6(ev.SrcIP6.In6U.U6Addr8, ev.Sport)
-					sIPStr, sIPKey, sPort := endpFromEvIPv6(ev.DstIP6.In6U.U6Addr8, ev.Dport)
-
-					clientEp := formatEndp(AF_INET6, cIPStr, cPort)
-					serverEp := formatEndp(AF_INET6, sIPStr, sPort)
-
-					key := ConnKey{
-						Family:     uint16(ev.Family),
-						ClientIP:   cIPKey,
-						ClientPort: cPort,
-						ServerIP:   sIPKey,
-						ServerPort: sPort,
-					}
-
-					savePendingConnect(key, PendingConnect{
-						Client:     client,
-						ClientEp:   clientEp,
-						ServerEp:   serverEp,
-						ServerIP:   sIPKey,
-						ServerPort: sPort,
-						Proto:      p,
-						Seen:       time.Now(),
+				// если сервер уже известен по bind — печатаем сразу
+				if server, ok := lookupListen(uint16(ev.Family), dstIPKey, dport); ok {
+					printTCPConnect(p, srcEp, dstEp, server)
+				} else {
+					// иначе ждём ACCEPT; если не дождёмся — cleanupTTL напечатает server=?
+					savePending(key, PendingConnect{
+						Client:   p,
+						ClientEp: srcEp,
+						ServerEp: dstEp,
 					})
 				}
 
-			/* ---------- TCP ACCEPT (печатаем CONNECT+ACCEPT вместе) ---------- */
 			case EV_ACCEPT:
-				// accept по твоему BPF: src=client, dst=server
-				server := Proc{Pid: ev.Pid, Comm: comm}
+				// ACCEPT (TCP): событие в server pid, tuple src=client dst=server
+				if uint8(ev.Proto) != IPPROTO_TCP {
+					continue
+				}
+				server := p
 
-				if ev.Family == AF_INET {
-					cIPStr, cIPKey, cPort := endpFromEvIPv4(ev.SrcIP.S_addr, ev.Sport)
-					sIPStr, sIPKey, sPort := endpFromEvIPv4(ev.DstIP.S_addr, ev.Dport)
+				// на всякий — зафиксируем server для порта (если bind не поймали)
+				saveListen(EndpKey{Family: uint16(ev.Family), Port: dport, IP: dstIPKey}, server)
+				var zero [16]byte
+				saveListen(EndpKey{Family: uint16(ev.Family), Port: dport, IP: zero}, server)
 
-					clientEp := formatEndp(AF_INET, cIPStr, cPort)
-					serverEp := formatEndp(AF_INET, sIPStr, sPort)
-
-					// обновим listenBy по факту accept (если bind не поймали)
-					saveListen(EndpKey{Family: uint16(ev.Family), Port: sPort, IP: sIPKey}, server)
-					var zero [16]byte
-					saveListen(EndpKey{Family: uint16(ev.Family), Port: sPort, IP: zero}, server)
-
-					key := ConnKey{
-						Family:     uint16(ev.Family),
-						ClientIP:   cIPKey,
-						ClientPort: cPort,
-						ServerIP:   sIPKey,
-						ServerPort: sPort,
-					}
-
-					pc, ok := takePendingConnect(key)
-					if ok {
-						// нормальный кейс: печатаем как ты хочешь
-						printTCPHandshake(protoStr(pc.Proto), pc.Client, server, pc.ClientEp, pc.ServerEp)
-					} else {
-						// accept без connect (редко): печатаем только accept-часть
-						fmt.Println(sepLine)
-						fmt.Printf("%-4s ACCEPT  server=%s  %s -> %s  client=%s\n",
-							proto, server.String(), serverEp, clientEp, Proc{}.String())
-					}
-
-				} else if ev.Family == AF_INET6 {
-					cIPStr, cIPKey, cPort := endpFromEvIPv6(ev.SrcIP6.In6U.U6Addr8, ev.Sport)
-					sIPStr, sIPKey, sPort := endpFromEvIPv6(ev.DstIP6.In6U.U6Addr8, ev.Dport)
-
-					clientEp := formatEndp(AF_INET6, cIPStr, cPort)
-					serverEp := formatEndp(AF_INET6, sIPStr, sPort)
-
-					saveListen(EndpKey{Family: uint16(ev.Family), Port: sPort, IP: sIPKey}, server)
-					var zero [16]byte
-					saveListen(EndpKey{Family: uint16(ev.Family), Port: sPort, IP: zero}, server)
-
-					key := ConnKey{
-						Family:     uint16(ev.Family),
-						ClientIP:   cIPKey,
-						ClientPort: cPort,
-						ServerIP:   sIPKey,
-						ServerPort: sPort,
-					}
-
-					pc, ok := takePendingConnect(key)
-					if ok {
-						printTCPHandshake(protoStr(pc.Proto), pc.Client, server, pc.ClientEp, pc.ServerEp)
-					} else {
-						fmt.Println(sepLine)
-						fmt.Printf("%-4s ACCEPT  server=%s  %s -> %s  client=%s\n",
-							proto, server.String(), serverEp, clientEp, Proc{}.String())
-					}
+				key := ConnKey{
+					Family:     uint16(ev.Family),
+					ClientIP:   srcIPKey, ClientPort: sport,
+					ServerIP:   dstIPKey, ServerPort: dport,
 				}
 
-			/* ---------- SENDTO (flow) ---------- */
+				// если CONNECT был отложен — печатаем CONNECT уже с pid сервера
+				if pc, ok := takePending(key); ok {
+					printTCPConnect(pc.Client, pc.ClientEp, pc.ServerEp, server)
+					printTCPAccept(server, pc.ServerEp, pc.ClientEp, pc.Client)
+					continue
+				}
+
+				// иначе CONNECT мог быть напечатан уже (bind известен)
+				client, ok := lookupConn(key)
+				if !ok {
+					client = Proc{}
+				}
+				printTCPAccept(server, dstEp, srcEp, client)
+
 			case EV_SENDTO:
-				src := Proc{Pid: ev.Pid, Comm: comm}
-
-				if ev.Family == AF_INET {
-					sIPStr, sIPKey, sPort := endpFromEvIPv4(ev.SrcIP.S_addr, ev.Sport)
-					dIPStr, dIPKey, dPort := endpFromEvIPv4(ev.DstIP.S_addr, ev.Dport)
-
-					srcEp := formatEndp(AF_INET, sIPStr, sPort)
-					dstEp := formatEndp(AF_INET, dIPStr, dPort)
-
-					// dst proc (если локальный сервер на этой машине)
-					dstProc, ok := lookupListen(uint16(ev.Family), dIPKey, dPort)
-					if !ok {
-						dstProc = Proc{}
-					}
-
-					printFlow(proto, "SENDTO", src, dstProc, srcEp, dstEp)
-
-					fk := FlowKey{Family: uint16(ev.Family), Proto: p, SrcIP: sIPKey, SrcPort: sPort, DstIP: dIPKey, DstPort: dPort}
-					saveLastSend(fk, FlowRec{SrcProc: src, SrcEp: srcEp, DstEp: dstEp})
-
-				} else if ev.Family == AF_INET6 {
-					sIPStr, sIPKey, sPort := endpFromEvIPv6(ev.SrcIP6.In6U.U6Addr8, ev.Sport)
-					dIPStr, dIPKey, dPort := endpFromEvIPv6(ev.DstIP6.In6U.U6Addr8, ev.Dport)
-
-					srcEp := formatEndp(AF_INET6, sIPStr, sPort)
-					dstEp := formatEndp(AF_INET6, dIPStr, dPort)
-
-					dstProc, ok := lookupListen(uint16(ev.Family), dIPKey, dPort)
-					if !ok {
-						dstProc = Proc{}
-					}
-
-					printFlow(proto, "SENDTO", src, dstProc, srcEp, dstEp)
-
-					fk := FlowKey{Family: uint16(ev.Family), Proto: p, SrcIP: sIPKey, SrcPort: sPort, DstIP: dIPKey, DstPort: dPort}
-					saveLastSend(fk, FlowRec{SrcProc: src, SrcEp: srcEp, DstEp: dstEp})
+				// UDP sendto (и вообще sendto)
+				if uint8(ev.Proto) == IPPROTO_UDP {
+					printUDP("SENDTO", p, srcEp, dstEp)
 				}
 
-			/* ---------- RECVFROM (flow) ---------- */
 			case EV_RECVFROM:
-				// recvfrom выполняется в процессе-получателе => это dst proc
-				dst := Proc{Pid: ev.Pid, Comm: comm}
-
-				if ev.Family == AF_INET {
-					sIPStr, sIPKey, sPort := endpFromEvIPv4(ev.SrcIP.S_addr, ev.Sport)
-					dIPStr, dIPKey, dPort := endpFromEvIPv4(ev.DstIP.S_addr, ev.Dport)
-
-					srcEp := formatEndp(AF_INET, sIPStr, sPort)
-					dstEp := formatEndp(AF_INET, dIPStr, dPort)
-
-					// Попробуем угадать src pid: ищем последний SENDTO с таким же tuple src->dst
-					srcProc := Proc{}
-					fk := FlowKey{Family: uint16(ev.Family), Proto: p, SrcIP: sIPKey, SrcPort: sPort, DstIP: dIPKey, DstPort: dPort}
-					if fr, ok := lookupLastSend(fk); ok && time.Since(fr.Seen) <= ttlCleanup {
-						srcProc = fr.SrcProc
-					}
-
-					printFlow(proto, "RECVFROM", srcProc, dst, srcEp, dstEp)
-
-				} else if ev.Family == AF_INET6 {
-					sIPStr, sIPKey, sPort := endpFromEvIPv6(ev.SrcIP6.In6U.U6Addr8, ev.Sport)
-					dIPStr, dIPKey, dPort := endpFromEvIPv6(ev.DstIP6.In6U.U6Addr8, ev.Dport)
-
-					srcEp := formatEndp(AF_INET6, sIPStr, sPort)
-					dstEp := formatEndp(AF_INET6, dIPStr, dPort)
-
-					srcProc := Proc{}
-					fk := FlowKey{Family: uint16(ev.Family), Proto: p, SrcIP: sIPKey, SrcPort: sPort, DstIP: dIPKey, DstPort: dPort}
-					if fr, ok := lookupLastSend(fk); ok && time.Since(fr.Seen) <= ttlCleanup {
-						srcProc = fr.SrcProc
-					}
-
-					printFlow(proto, "RECVFROM", srcProc, dst, srcEp, dstEp)
+				// UDP recvfrom
+				if uint8(ev.Proto) == IPPROTO_UDP {
+					printUDP("RECVFROM", p, srcEp, dstEp)
 				}
 			}
 		}
@@ -1324,179 +1139,5 @@ func main() {
 	<-stop
 	fmt.Println("Exiting...")
 }
-
-
-
-
-
-
-1) UDP сервер (recvfrom + sendto) — udp_server.c
-// udp_server.c
-#define _GNU_SOURCE
-#include <arpa/inet.h>
-#include <errno.h>
-#include <netdb.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
-static void die(const char *msg) {
-    perror(msg);
-    _exit(1);
-}
-
-int main(int argc, char **argv) {
-    const char *host = (argc >= 2) ? argv[1] : "0.0.0.0";
-    const char *port = (argc >= 3) ? argv[2] : "9999";
-
-    struct addrinfo hints;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family   = AF_UNSPEC;     // IPv4/IPv6
-    hints.ai_socktype = SOCK_DGRAM;    // UDP
-    hints.ai_flags    = AI_PASSIVE;    // for bind
-
-    struct addrinfo *res = NULL;
-    int rc = getaddrinfo(host, port, &hints, &res);
-    if (rc != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rc));
-        return 1;
-    }
-
-    int fd = -1;
-    struct addrinfo *it;
-    for (it = res; it; it = it->ai_next) {
-        fd = socket(it->ai_family, it->ai_socktype, it->ai_protocol);
-        if (fd < 0) continue;
-
-        int one = 1;
-        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
-
-        if (bind(fd, it->ai_addr, it->ai_addrlen) == 0) {
-            break; // OK
-        }
-        close(fd);
-        fd = -1;
-    }
-
-    freeaddrinfo(res);
-    if (fd < 0) die("bind/socket");
-
-    printf("UDP server listening on %s:%s\n", host, port);
-
-    for (;;) {
-        char buf[2048];
-        struct sockaddr_storage peer;
-        socklen_t peerlen = sizeof(peer);
-
-        ssize_t n = recvfrom(fd, buf, sizeof(buf) - 1, 0,
-                             (struct sockaddr *)&peer, &peerlen);
-        if (n < 0) {
-            if (errno == EINTR) continue;
-            die("recvfrom");
-        }
-        buf[n] = 0;
-
-        char ip[INET6_ADDRSTRLEN];
-        unsigned short p = 0;
-
-        if (peer.ss_family == AF_INET) {
-            struct sockaddr_in *sa = (struct sockaddr_in *)&peer;
-            inet_ntop(AF_INET, &sa->sin_addr, ip, sizeof(ip));
-            p = ntohs(sa->sin_port);
-        } else if (peer.ss_family == AF_INET6) {
-            struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)&peer;
-            inet_ntop(AF_INET6, &sa6->sin6_addr, ip, sizeof(ip));
-            p = ntohs(sa6->sin6_port);
-        } else {
-            strcpy(ip, "?");
-        }
-
-        printf("recvfrom %s:%u  bytes=%zd  data='%s'\n", ip, p, n, buf);
-
-        // echo back
-        ssize_t s = sendto(fd, buf, (size_t)n, 0,
-                           (struct sockaddr *)&peer, peerlen);
-        if (s < 0) die("sendto");
-    }
-}
-
-2) UDP клиент (sendto + recvfrom) — udp_client.c
-// udp_client.c
-#define _GNU_SOURCE
-#include <arpa/inet.h>
-#include <errno.h>
-#include <netdb.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <unistd.h>
-
-static void die(const char *msg) {
-    perror(msg);
-    _exit(1);
-}
-
-int main(int argc, char **argv) {
-    if (argc < 3) {
-        fprintf(stderr, "Usage: %s <host> <port> [message]\n", argv[0]);
-        return 1;
-    }
-    const char *host = argv[1];
-    const char *port = argv[2];
-    const char *msg  = (argc >= 4) ? argv[3] : "ping";
-
-    struct addrinfo hints;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family   = AF_UNSPEC;
-    hints.ai_socktype = SOCK_DGRAM;
-
-    struct addrinfo *res = NULL;
-    int rc = getaddrinfo(host, port, &hints, &res);
-    if (rc != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rc));
-        return 1;
-    }
-
-    int fd = -1;
-    struct addrinfo *it;
-    for (it = res; it; it = it->ai_next) {
-        fd = socket(it->ai_family, it->ai_socktype, it->ai_protocol);
-        if (fd >= 0) break;
-    }
-    if (fd < 0) die("socket");
-
-    // timeout on recvfrom
-    struct timeval tv;
-    tv.tv_sec = 1;
-    tv.tv_usec = 0;
-    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-
-    // sendto (UDP)
-    ssize_t s = sendto(fd, msg, strlen(msg), 0, it->ai_addr, it->ai_addrlen);
-    if (s < 0) die("sendto");
-    printf("sent %zd bytes to %s:%s\n", s, host, port);
-
-    // recvfrom
-    char buf[2048];
-    struct sockaddr_storage peer;
-    socklen_t peerlen = sizeof(peer);
-
-    ssize_t n = recvfrom(fd, buf, sizeof(buf) - 1, 0,
-                         (struct sockaddr *)&peer, &peerlen);
-    if (n < 0) die("recvfrom");
-
-    buf[n] = 0;
-    printf("recv %zd bytes: '%s'\n", n, buf);
-
-    close(fd);
-    freeaddrinfo(res);
-    return 0;
-}
-
-3) Как компилировать (gcc)
-gcc -O2 -Wall -Wextra -o udp_server udp_server.c
-gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
