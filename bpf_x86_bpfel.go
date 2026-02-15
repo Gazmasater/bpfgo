@@ -12,6 +12,17 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type bpfAddrPtrlenT struct {
+	Addr uint64
+	Len  uint32
+	Pad  uint32
+}
+
+type bpfAddrRecvMetaT struct {
+	Addr uint64
+	Lenp uint64
+}
+
 type bpfConnInfoT struct {
 	Pid  uint32
 	Fd   uint32

@@ -103,19 +103,33 @@ struct {
     __type(value, __u64); // user pointer
 } addrBind_map SEC(".maps");
 
+
+struct addr_ptrlen_t {
+    __u64 addr;   // user sockaddr*
+    __u32 len;    // sockaddr len
+    __u32 _pad;
+};
+
+struct addr_recv_meta_t {
+    __u64 addr;   // user sockaddr* (kernel fills)
+    __u64 lenp;   // user socklen_t*  (kernel fills)
+};
+
+
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 1024);
-    __type(key, __u64);   // pid_tgid
-    __type(value, __u64); // user pointer
+    __type(key, __u64);                 // pid_tgid
+    __type(value, struct addr_ptrlen_t);
 } addrSend_map SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 1024);
-    __type(key, __u64);   // pid_tgid
-    __type(value, __u64); // user pointer
+    __type(key, __u64);                 // pid_tgid
+    __type(value, struct addr_recv_meta_t);
 } addrRecv_map SEC(".maps");
+
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
@@ -340,6 +354,71 @@ static __always_inline void fill_local_dst_from_fd(struct trace_info *info, int 
         __builtin_memcpy(&info->dstIP6, &st.lip6, sizeof(info->dstIP6));
         info->dport = st.lport;
     }
+}
+
+
+static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
+                                                   const void *uaddr,
+                                                   __u32 addrlen,
+                                                   int is_dst)
+{
+    __u16 family = 0;
+
+    if (!uaddr || addrlen < sizeof(__u16))
+        return -1;
+
+    if (bpf_probe_read_user(&family, sizeof(family), uaddr) < 0)
+        return -1;
+
+    if (family == AF_INET) {
+        if (addrlen < sizeof(struct sockaddr_in))
+            return -1;
+
+        struct sockaddr_in sa = {};
+        if (bpf_probe_read_user(&sa, sizeof(sa), uaddr) < 0)
+            return -1;
+
+        __u16 port = bpf_ntohs(sa.sin_port);
+        if (port == 0)
+            return -1;
+
+        info->family = AF_INET;
+
+        if (is_dst) {
+            info->dport = port;
+            info->dstIP.s_addr = sa.sin_addr.s_addr; // keep network order
+        } else {
+            info->sport = port;
+            info->srcIP.s_addr = sa.sin_addr.s_addr; // keep network order
+        }
+        return 0;
+    }
+
+    if (family == AF_INET6) {
+        if (addrlen < sizeof(struct sockaddr_in6))
+            return -1;
+
+        struct sockaddr_in6 sa6 = {};
+        if (bpf_probe_read_user(&sa6, sizeof(sa6), uaddr) < 0)
+            return -1;
+
+        __u16 port = bpf_ntohs(sa6.sin6_port);
+        if (port == 0)
+            return -1;
+
+        info->family = AF_INET6;
+
+        if (is_dst) {
+            info->dport = port;
+            __builtin_memcpy(&info->dstIP6, &sa6.sin6_addr, sizeof(info->dstIP6));
+        } else {
+            info->sport = port;
+            __builtin_memcpy(&info->srcIP6, &sa6.sin6_addr, sizeof(info->srcIP6));
+        }
+        return 0;
+    }
+
+    return -1;
 }
 
 /* ====== connect ====== */
@@ -612,9 +691,16 @@ int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx)
     bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
     bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
 
-    __u64 uaddr = (__u64)ctx->args[4]; // dest sockaddr*
-    if (uaddr)
-        bpf_map_update_elem(&addrSend_map, &id, &uaddr, BPF_ANY);
+    // sendto(fd, buf, len, flags, dest_addr, addrlen)
+    __u64 uaddr   = (__u64)ctx->args[4];
+    __u32 addrlen = (__u32)ctx->args[5];
+
+    if (uaddr && addrlen >= sizeof(__u16)) {
+        struct addr_ptrlen_t v = {};
+        v.addr = uaddr;
+        v.len  = addrlen;
+        bpf_map_update_elem(&addrSend_map, &id, &v, BPF_ANY);
+    }
 
     return 0;
 }
@@ -642,10 +728,10 @@ int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, /*is_send=*/1) < 0)
         fill_local_src_from_fd(&info, (int)ci->fd);
 
-    // override dst from sendto sockaddr
-    __u64 *uaddrp = bpf_map_lookup_elem(&addrSend_map, &id);
-    if (uaddrp && *uaddrp)
-        (void)fill_from_sockaddr(&info, (void *)*uaddrp, /*is_dst=*/1);
+    // override dst from sendto sockaddr WITH length check
+    struct addr_ptrlen_t *ap = bpf_map_lookup_elem(&addrSend_map, &id);
+    if (ap && ap->addr && ap->len)
+        (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, /*is_dst=*/1);
 
     if (info.family == 0)
         goto cleanup;
@@ -672,9 +758,17 @@ int trace_recvfrom_enter(struct trace_event_raw_sys_enter *ctx)
     bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
     bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
 
-    __u64 uaddr = (__u64)ctx->args[4]; // src sockaddr* (kernel fills it)
-    if (uaddr)
-        bpf_map_update_elem(&addrRecv_map, &id, &uaddr, BPF_ANY);
+    // recvfrom(fd, buf, len, flags, src_addr, addrlenp)
+    __u64 uaddr  = (__u64)ctx->args[4];
+    __u64 lenp_u = (__u64)ctx->args[5];
+
+    // важно хранить ОБА: куда писать sockaddr и куда писать длину
+    if (uaddr && lenp_u) {
+        struct addr_recv_meta_t m = {};
+        m.addr = uaddr;
+        m.lenp = lenp_u;
+        bpf_map_update_elem(&addrRecv_map, &id, &m, BPF_ANY);
+    }
 
     return 0;
 }
@@ -702,10 +796,17 @@ int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, /*is_send=*/0) < 0)
         fill_local_dst_from_fd(&info, (int)ci->fd);
 
-    // override src from recvfrom sockaddr
-    __u64 *uaddrp = bpf_map_lookup_elem(&addrRecv_map, &id);
-    if (uaddrp && *uaddrp)
-        (void)fill_from_sockaddr(&info, (void *)*uaddrp, /*is_dst=*/0);
+    // override src from recvfrom sockaddr, but ONLY if kernel wrote len
+    struct addr_recv_meta_t *m = bpf_map_lookup_elem(&addrRecv_map, &id);
+    if (m && m->addr && m->lenp) {
+        __u32 addrlen = 0;
+        // socklen_t обычно 4 байта
+        if (bpf_probe_read_user(&addrlen, sizeof(addrlen), (void *)m->lenp) == 0) {
+            if (addrlen >= sizeof(__u16)) {
+                (void)fill_from_sockaddr_user(&info, (void *)m->addr, addrlen, /*is_dst=*/0);
+            }
+        }
+    }
 
     if (info.family == 0)
         goto cleanup;
@@ -717,7 +818,6 @@ cleanup:
     bpf_map_delete_elem(&conn_info_map, &id);
     return 0;
 }
-
 /* ====== sendmsg ====== */
 
 SEC("tracepoint/syscalls/sys_enter_sendmsg")
