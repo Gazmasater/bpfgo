@@ -1321,11 +1321,7 @@ func main() {
 
 
 
-UDP RECVFROM pid=16364(udp_server)  src=16394(udp_client)  127.0.0.1:42459 -> *:9999  dst=16364(udp_server)
+UDP SENDMSG pid=513(systemd-resolve)  src=513(systemd-resolve)  127.0.0.53:53 -> 127.0.0.1:57431  dst=18152(curl)
+UDP RECVFROM pid=18152(curl)  src=513(systemd-resolve)  127.0.0.53:53 -> 127.0.0.1:57431  dst=18152(curl)
 
-UDP RECVFROM pid=16394(udp_client)  src=16364(udp_server)  127.0.0.1:9999 -> *:42459  dst=16394(udp_client)
-
-UDP SENDTO  pid=16364(udp_server)  src=16364(udp_server)  *:9999 -> 127.0.0.1:42459  dst=16394(udp_client)
-
-UDP SENDTO  pid=16394(udp_client)  src=16394(udp_client)  *:42459 -> 127.0.0.1:9999  dst=16364(udp_server)
-
+TCP CONNECT client=18152(curl)  10.0.2.15:43960 -> 172.217.20.142:80  server=?
