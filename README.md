@@ -1319,3 +1319,13 @@ func main() {
 	fmt.Println("Exiting...")
 }
 
+
+
+UDP RECVFROM pid=16364(udp_server)  src=16394(udp_client)  127.0.0.1:42459 -> *:9999  dst=16364(udp_server)
+
+UDP RECVFROM pid=16394(udp_client)  src=16364(udp_server)  127.0.0.1:9999 -> *:42459  dst=16394(udp_client)
+
+UDP SENDTO  pid=16364(udp_server)  src=16364(udp_server)  *:9999 -> 127.0.0.1:42459  dst=16394(udp_client)
+
+UDP SENDTO  pid=16394(udp_client)  src=16394(udp_client)  *:42459 -> 127.0.0.1:9999  dst=16364(udp_server)
+
