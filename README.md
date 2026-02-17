@@ -2112,3 +2112,8 @@ func main() {
 	fmt.Println("Exiting...")
 }
 
+
+
+
+UDP SENDTO  pid=8845(send_udp)  src=8845(send_udp)  *:38943 -> 127.0.0.1:9999  dst=?
+UDP RECVMSG pid=8807(recvmsg_test)  src=8845(send_udp)  127.0.0.1:38943 -> *:9999  dst=8807(recvmsg_test)
