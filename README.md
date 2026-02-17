@@ -2230,3 +2230,104 @@ func main() {
 	<-stop
 	fmt.Println("Exiting...")
 }
+
+
+
+
+[{
+	"resource": "/home/lev/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "ev.SrcIp4 undefined (type bpfTraceInfo has no field or method SrcIp4)",
+	"source": "compiler",
+	"startLineNumber": 474,
+	"startColumn": 40,
+	"endLineNumber": 474,
+	"endColumn": 46,
+	"modelVersionId": 6,
+	"origin": "extHost1"
+}]
+
+
+[{
+	"resource": "/home/lev/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "ev.DstIp4 undefined (type bpfTraceInfo has no field or method DstIp4)",
+	"source": "compiler",
+	"startLineNumber": 475,
+	"startColumn": 40,
+	"endLineNumber": 475,
+	"endColumn": 46,
+	"modelVersionId": 6,
+	"origin": "extHost1"
+}]
+
+
+[{
+	"resource": "/home/lev/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "ev.SrcIp6 undefined (type bpfTraceInfo has no field or method SrcIp6, but does have field SrcIP6)",
+	"source": "compiler",
+	"startLineNumber": 481,
+	"startColumn": 40,
+	"endLineNumber": 481,
+	"endColumn": 46,
+	"modelVersionId": 6,
+	"origin": "extHost1"
+}]
+
+[{
+	"resource": "/home/lev/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "ev.DstIp6 undefined (type bpfTraceInfo has no field or method DstIp6, but does have field DstIP6)",
+	"source": "compiler",
+	"startLineNumber": 482,
+	"startColumn": 40,
+	"endLineNumber": 482,
+	"endColumn": 46,
+	"modelVersionId": 6,
+	"origin": "extHost1"
+}]
