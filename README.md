@@ -665,16 +665,179 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-ev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
-2026/02/18 01:02:45.376782 bpfgo start: debug=true tracePort=9999
-2026/02/18 01:02:45.377075 [DBG] snapshotPorts: starting (self=19563 bpfgo)
-2026/02/18 01:02:45.377495 pprof on :6060
-2026/02/18 01:02:45.420657 [DBG] snapshotPorts: inode2proc: procs_scanned=257 procs_skipped=0 unique_inodes=979
-2026/02/18 01:02:45.421288 [DBG] snapshotPorts: udp owners loaded: udp=0 udp6=0
-2026/02/18 01:02:45.423337 [DBG] snapshotPorts: tcp listeners loaded: tcp=0 tcp6=0
-2026/02/18 01:02:45.423831 [DBG] snapshotPorts: TRACE_PORT=9999 ownerAny NOT FOUND
+func parseProcNetInodes(path string, wantState string) []inodePort {
+	f, err := os.Open(path)
+	if err != nil {
+		dbg("open %s: %v", path, err)
+		return nil
+	}
+	defer f.Close()
 
+	sc := bufio.NewScanner(f)
 
+	if !sc.Scan() {
+		dbg("%s: empty file", path)
+		return nil
+	}
+	hdr := strings.Fields(strings.TrimSpace(sc.Text()))
+
+	col := func(name string) int {
+		for i, v := range hdr {
+			if v == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	iLocal := col("local_address")
+	iState := col("st")
+	iInode := col("inode")
+	if iLocal < 0 || iInode < 0 {
+		dbg("%s: header=%v", path, hdr)
+		dbg("%s: header missing columns (local_address/inode)", path)
+		return nil
+	}
+
+	maxNeed := iLocal
+	if iState > maxNeed {
+		maxNeed = iState
+	}
+	if iInode > maxNeed {
+		maxNeed = iInode
+	}
+
+	var out []inodePort
+	lines := 0
+	for sc.Scan() {
+		lines++
+		fields := strings.Fields(strings.TrimSpace(sc.Text()))
+		if len(fields) <= maxNeed {
+			continue
+		}
+
+		local := fields[iLocal]
+		state := ""
+		if iState >= 0 {
+			state = fields[iState]
+		}
+		if wantState != "" && state != wantState {
+			continue
+		}
+
+		parts := strings.Split(local, ":")
+		if len(parts) != 2 {
+			continue
+		}
+		port64, err := strconv.ParseUint(parts[1], 16, 16)
+		if err != nil || port64 == 0 {
+			continue
+		}
+
+		inodeStr := fields[iInode]
+		inode, err := strconv.ParseUint(inodeStr, 10, 64)
+		if err != nil || inode == 0 {
+			continue
+		}
+
+		out = append(out, inodePort{Inode: inode, Port: uint16(port64)})
+	}
+
+	dbg("%s: scanned_lines=%d parsed_entries=%d", path, lines, len(out))
+	if len(out) > 0 {
+		n := len(out)
+		if n > 3 {
+			n = 3
+		}
+		for i := 0; i < n; i++ {
+			dbg("%s: sample[%d] inode=%d port=%d", path, i, out[i].Inode, out[i].Port)
+		}
+	}
+	return out
+}
+
+func snapshotPorts(selfName string) {
+	selfPID := uint32(os.Getpid())
+	dbg("snapshotPorts: starting (self=%d %s)", selfPID, selfName)
+
+	inode2proc, scanned, skipped := buildInodeToProc(selfPID, selfName)
+	dbg("snapshotPorts: inode2proc: procs_scanned=%d procs_skipped=%d unique_inodes=%d",
+		scanned, skipped, len(inode2proc))
+
+	// UDP
+	udp4 := parseProcNetInodes("/proc/net/udp", "")
+	udp6 := parseProcNetInodes("/proc/net/udp6", "")
+	dbg("snapshotPorts: /proc entries udp=%d udp6=%d", len(udp4), len(udp6))
+
+	matchUDP4 := 0
+	for _, it := range udp4 {
+		if p, ok := inode2proc[it.Inode]; ok {
+			savePortOwnerSrc(AF_INET, it.Port, p, "proc/udp")
+			matchUDP4++
+		}
+	}
+	matchUDP6 := 0
+	for _, it := range udp6 {
+		if p, ok := inode2proc[it.Inode]; ok {
+			savePortOwnerSrc(AF_INET6, it.Port, p, "proc/udp6")
+			matchUDP6++
+		}
+	}
+	dbg("snapshotPorts: udp inode matches: udp=%d/%d udp6=%d/%d",
+		matchUDP4, len(udp4), matchUDP6, len(udp6))
+
+	// TCP LISTEN
+	var zero [16]byte
+	tcp4 := parseProcNetInodes("/proc/net/tcp", "0A")
+	tcp6 := parseProcNetInodes("/proc/net/tcp6", "0A")
+	dbg("snapshotPorts: /proc entries tcp_listen=%d tcp6_listen=%d", len(tcp4), len(tcp6))
+
+	matchTCP4 := 0
+	for _, it := range tcp4 {
+		if p, ok := inode2proc[it.Inode]; ok {
+			saveListen(EndpKey{Family: AF_INET, Port: it.Port, IP: zero}, p)
+			matchTCP4++
+		}
+	}
+	matchTCP6 := 0
+	for _, it := range tcp6 {
+		if p, ok := inode2proc[it.Inode]; ok {
+			saveListen(EndpKey{Family: AF_INET6, Port: it.Port, IP: zero}, p)
+			matchTCP6++
+		}
+	}
+	dbg("snapshotPorts: tcp listen inode matches: tcp=%d/%d tcp6=%d/%d",
+		matchTCP4, len(tcp4), matchTCP6, len(tcp6))
+
+	// TRACE_PORT deep debug
+	if tracePort != 0 {
+		dbg("snapshotPorts: TRACE_PORT=%d deep-check", tracePort)
+		foundInProc := 0
+		for _, it := range udp4 {
+			if it.Port == tracePort {
+				foundInProc++
+				_, ok := inode2proc[it.Inode]
+				dbg("TRACE_PORT udp4: inode=%d in_inode2proc=%v", it.Inode, ok)
+			}
+		}
+		for _, it := range udp6 {
+			if it.Port == tracePort {
+				foundInProc++
+				_, ok := inode2proc[it.Inode]
+				dbg("TRACE_PORT udp6: inode=%d in_inode2proc=%v", it.Inode, ok)
+			}
+		}
+		if foundInProc == 0 {
+			dbg("TRACE_PORT=%d not present in /proc/net/udp*", tracePort)
+		}
+
+		if p, ok := lookupPortOwnerAny(tracePort); ok {
+			dbg("snapshotPorts: TRACE_PORT=%d ownerAny=%s", tracePort, p.String())
+		} else {
+			dbg("snapshotPorts: TRACE_PORT=%d ownerAny NOT FOUND", tracePort)
+		}
+	}
+}
 
 
 
