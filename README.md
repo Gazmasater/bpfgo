@@ -1598,8 +1598,6 @@ cleanup:
 
 
 
-
-
 package main
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf ./trace.c -- -I.
