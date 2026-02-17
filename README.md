@@ -887,3 +887,29 @@ func main() {
 	fmt.Println("Exiting...")
 }
 
+
+
+[{
+	"resource": "/home/lev/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#2",
+	"code": {
+		"value": "default",
+		"target": {
+			"$mid": 1,
+			"path": "/docs/checks/",
+			"scheme": "https",
+			"authority": "staticcheck.dev",
+			"fragment": "QF1003"
+		}
+	},
+	"severity": 2,
+	"message": "could use tagged switch on ev.Family",
+	"source": "QF1003",
+	"startLineNumber": 433,
+	"startColumn": 4,
+	"endLineNumber": 433,
+	"endColumn": 27,
+	"modelVersionId": 8,
+	"origin": "extHost1"
+}]
+
