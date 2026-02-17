@@ -889,27 +889,7 @@ func main() {
 
 
 
-[{
-	"resource": "/home/lev/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#2",
-	"code": {
-		"value": "default",
-		"target": {
-			"$mid": 1,
-			"path": "/docs/checks/",
-			"scheme": "https",
-			"authority": "staticcheck.dev",
-			"fragment": "QF1003"
-		}
-	},
-	"severity": 2,
-	"message": "could use tagged switch on ev.Family",
-	"source": "QF1003",
-	"startLineNumber": 433,
-	"startColumn": 4,
-	"endLineNumber": 433,
-	"endColumn": 27,
-	"modelVersionId": 8,
-	"origin": "extHost1"
-}]
-
+lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
+[sudo] password for lev: 
+2026/02/17 18:51:32 failed to load bpf objects: field TraceAccept4Exit: program trace_accept4_exit: load program: invalid argument: unknown func bpf_get_socket_cookie#46 (270 line(s) omitted)
+lev@lev-VirtualBox:~/bpfgo$ 
