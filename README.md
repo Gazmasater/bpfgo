@@ -832,7 +832,38 @@ udp   UNCONN 0      0               [::]:5353          [::]:*
 tcp   LISTEN 0      128        127.0.0.1:631        0.0.0.0:*                                           
 tcp   LISTEN 0      4096   127.0.0.53%lo:53         0.0.0.0:*                                           
 tcp   LISTEN 0      128            [::1]:631           [::]:*                                           
-tcp   LISTEN 0      4096               *:6060             *:*                                           
+tcp   LISTEN 0      4096               *:6060             *:*          
+
+
+
+lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
+2026/02/18 01:33:41.482670 bpfgo start: debug=true tracePort=9999
+2026/02/18 01:33:41.489892 [DBG] snapshotPorts: starting (self=21854 bpfgo)
+2026/02/18 01:33:41.490106 pprof on :6060
+2026/02/18 01:33:41.516398 [DBG] snapshotPorts: inode2proc: procs_scanned=257 procs_skipped=0 unique_inodes=979
+2026/02/18 01:33:41.516524 [DBG] /proc/net/udp: scanned_lines=5 parsed_entries=5
+2026/02/18 01:33:41.516572 [DBG] /proc/net/udp: sample[0] inode=7355 port=42204
+2026/02/18 01:33:41.516582 [DBG] /proc/net/udp: sample[1] inode=7353 port=5353
+2026/02/18 01:33:41.516588 [DBG] /proc/net/udp: sample[2] inode=63526 port=9999
+2026/02/18 01:33:41.516593 [DBG] /proc/net/udp: sample[3] inode=7056 port=53
+2026/02/18 01:33:41.516598 [DBG] /proc/net/udp: sample[4] inode=8441 port=68
+2026/02/18 01:33:41.516682 [DBG] /proc/net/udp6: scanned_lines=2 parsed_entries=2
+2026/02/18 01:33:41.516693 [DBG] /proc/net/udp6: sample[0] inode=7356 port=52175
+2026/02/18 01:33:41.516698 [DBG] /proc/net/udp6: sample[1] inode=7354 port=5353
+2026/02/18 01:33:41.516710 [DBG] snapshotPorts: /proc entries udp=5 udp6=2
+2026/02/18 01:33:41.516723 [DBG] UDP owner learned (proc/udp): port=9999 family=AF_INET proc=14721(recvmsg_test)
+2026/02/18 01:33:41.516734 [DBG] snapshotPorts: udp inode matches: udp=5/5 udp6=2/2
+2026/02/18 01:33:41.516951 [DBG] /proc/net/tcp: scanned_lines=10 parsed_entries=2
+2026/02/18 01:33:41.516963 [DBG] /proc/net/tcp: sample[0] inode=51585 port=631
+2026/02/18 01:33:41.516968 [DBG] /proc/net/tcp: sample[1] inode=7057 port=53
+2026/02/18 01:33:41.517328 [DBG] /proc/net/tcp6: scanned_lines=2 parsed_entries=2
+2026/02/18 01:33:41.517342 [DBG] /proc/net/tcp6: sample[0] inode=51584 port=631
+2026/02/18 01:33:41.517348 [DBG] /proc/net/tcp6: sample[1] inode=82189 port=6060
+2026/02/18 01:33:41.517361 [DBG] snapshotPorts: /proc entries tcp_listen=2 tcp6_listen=2
+2026/02/18 01:33:41.517371 [DBG] snapshotPorts: tcp listen inode matches: tcp=2/2 tcp6=1/2
+2026/02/18 01:33:41.517386 [DBG] snapshotPorts: TRACE_PORT=9999 deep-check
+2026/02/18 01:33:41.517392 [DBG] TRACE_PORT udp4: inode=63526 in_inode2proc=true
+2026/02/18 01:33:41.517400 [DBG] snapshotPorts: TRACE_PORT=9999 ownerAny=14721(recvmsg_test)
 
 
 
