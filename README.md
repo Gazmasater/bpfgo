@@ -2206,13 +2206,7 @@ func main() {
 
 
 
-static __always_inline __u64 read_sock_cookie(struct sock *sk)
-{
-    __u64 cookie = 0;
-    if (!sk)
-        return 0;
-
-    // skc_cookie может быть u64 или atomic64_t — читаем первые 8 байт в __u64
-    BPF_CORE_READ_INTO(&cookie, sk, __sk_common.skc_cookie);
-    return cookie;
-}
+ev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
+[sudo] password for lev: 
+2026/02/17 20:31:57 failed to load bpf objects: field TraceAccept4Exit: program trace_accept4_exit: load program: invalid argument: unknown func bpf_get_socket_cookie#46 (270 line(s) omitted)
+lev@lev-VirtualBox:~/bpfgo$ 
