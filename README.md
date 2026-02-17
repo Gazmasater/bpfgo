@@ -672,6 +672,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -711,19 +712,43 @@ const (
 )
 
 /* =========================
- * Debug config
+ * ВШИТЫЕ НАСТРОЙКИ (без env)
+ * ========================= */
+
+const (
+	DefaultDebug     = true
+	DefaultTracePort = 9999          // поставь 0 если хочешь логировать всё
+	DefaultTTL       = 2 * time.Second
+	DefaultPPROFAddr = ":6060"
+)
+
+/* =========================
+ * flags (не обязательны)
  * ========================= */
 
 var (
-	debug    = os.Getenv("BPFGO_DEBUG") != ""
-	tracePort uint16
+	flagDebug     bool
+	flagTracePort int
 )
 
-func initDebug() {
-	if s := os.Getenv("BPFGO_TRACE_PORT"); s != "" {
-		if v, err := strconv.Atoi(s); err == nil && v > 0 && v < 65536 {
-			tracePort = uint16(v)
-		}
+var (
+	debug     = DefaultDebug
+	tracePort = uint16(DefaultTracePort)
+)
+
+func init() {
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+	log.SetOutput(os.Stdout)
+
+	// флаги с дефолтами из констант
+	flag.BoolVar(&flagDebug, "debug", DefaultDebug, "enable debug logs")
+	flag.IntVar(&flagTracePort, "trace-port", DefaultTracePort, "focus debug logs on this port (e.g. 9999)")
+
+	if err := rlimit.RemoveMemlock(); err != nil {
+		log.Fatalf("failed to remove memlock: %v", err)
+	}
+	if err := loadBpfObjects(&objs, nil); err != nil {
+		log.Fatalf("failed to load bpf objects: %v", err)
 	}
 }
 
@@ -817,32 +842,25 @@ type UDPDedupKey struct {
  * ========================= */
 
 var (
-	// comm cache
 	commMu    sync.RWMutex
 	commCache = make(map[[32]int8]string, 4096)
 
-	// TCP bind/listen
 	listenMu sync.Mutex
 	listenBy = make(map[EndpKey]Proc, 4096)
 
-	// TCP connects
 	connMu sync.Mutex
 	connBy = make(map[ConnKey]Proc, 16384)
 
-	// pending connects until accept
 	pendMu sync.Mutex
 	pendBy = make(map[ConnKey]PendingConnect, 16384)
 
-	// UDP owners (family+port) + (port-only for loopback/dualstack)
 	udpPortMu    sync.Mutex
 	udpPortOwner = make(map[PortKey]Proc, 65536)
 	udpPortAny   = make(map[uint16]Proc, 65536)
 
-	// pending UDP sends for loopback by port only
 	udpPendMu     sync.Mutex
 	udpPendByPort = make(map[uint16][]PendingUDPSend, 4096)
 
-	// dedup recvfrom/recvmsg, sendto/sendmsg
 	udpDedupMu sync.Mutex
 	udpDedup   = make(map[UDPDedupKey]time.Time, 65536)
 )
@@ -880,7 +898,6 @@ func commString(c [32]int8) string {
  * ========================= */
 
 func ip4BytesFromU32Net(x uint32) (b [4]byte) {
-	// ядро пишет __be32, а Go читает uint32 на little-endian → восстанавливаем исходные байты
 	binary.LittleEndian.PutUint32(b[:], x)
 	return
 }
@@ -895,7 +912,6 @@ func isZero16(a [16]byte) bool {
 }
 
 func isV4Mapped(ip [16]byte) (v4 [4]byte, ok bool) {
-	// ::ffff:a.b.c.d  =>  00..00 ff ff a b c d
 	for i := 0; i < 10; i++ {
 		if ip[i] != 0 {
 			return v4, false
@@ -911,7 +927,6 @@ func isV4Mapped(ip [16]byte) (v4 [4]byte, ok bool) {
 func isLoopback4(ip [16]byte) bool { return ip[0] == 127 }
 
 func isLoopback6(ip [16]byte) bool {
-	// pure ::1
 	pure := true
 	for i := 0; i < 15; i++ {
 		if ip[i] != 0 {
@@ -922,7 +937,6 @@ func isLoopback6(ip [16]byte) bool {
 	if pure && ip[15] == 1 {
 		return true
 	}
-	// or ::ffff:127.x.x.x
 	v4, ok := isV4Mapped(ip)
 	return ok && v4[0] == 127
 }
@@ -937,16 +951,6 @@ func isLoopback(family uint16, ip [16]byte) bool {
 	return false
 }
 
-func loopbackKey(family uint16) (ipStr string, ipKey [16]byte) {
-	if family == AF_INET {
-		ipKey[0] = 127
-		ipKey[3] = 1
-		return "127.0.0.1", ipKey
-	}
-	ipKey[15] = 1
-	return "::1", ipKey
-}
-
 func endpFromEvIPv4(ipU32 uint32, port uint16) (ipStr string, ipKey [16]byte, portU16 uint16) {
 	b := ip4BytesFromU32Net(ipU32)
 	copy(ipKey[:4], b[:])
@@ -956,7 +960,6 @@ func endpFromEvIPv4(ipU32 uint32, port uint16) (ipStr string, ipKey [16]byte, po
 func endpFromEvIPv6(ipArr [16]uint8, port uint16) (ipStr string, ipKey [16]byte, portU16 uint16) {
 	copy(ipKey[:], ipArr[:])
 
-	// если это ::ffff:127.0.0.1 — печатаем как IPv4, чтобы было читаемо
 	if v4, ok := isV4Mapped(ipKey); ok {
 		return fmt.Sprintf("%d.%d.%d.%d", v4[0], v4[1], v4[2], v4[3]), ipKey, port
 	}
@@ -977,7 +980,6 @@ func formatEndp(family uint16, ipStr string, ipKey [16]byte, port uint16) string
 	if isZero16(ipKey) {
 		return fmt.Sprintf("*:%d", port)
 	}
-	// если это v4-mapped — печатаем как IPv4
 	if family == AF_INET6 {
 		if v4, ok := isV4Mapped(ipKey); ok {
 			return fmt.Sprintf("%d.%d.%d.%d:%d", v4[0], v4[1], v4[2], v4[3], port)
@@ -1006,7 +1008,6 @@ func lookupListen(family uint16, ip [16]byte, port uint16) (Proc, bool) {
 	if ok {
 		return p, true
 	}
-	// wildcard (0.0.0.0 / ::)
 	var zero [16]byte
 	k2 := EndpKey{Family: family, Port: port, IP: zero}
 	listenMu.Lock()
@@ -1059,7 +1060,7 @@ func savePortOwnerSrc(family uint16, port uint16, p Proc, src string) {
 
 	udpPortMu.Lock()
 	udpPortOwner[PortKey{family, port}] = p
-	udpPortAny[port] = p // склейка IPv4/IPv6 для loopback
+	udpPortAny[port] = p // склейка ipv4/ipv6 для loopback
 	udpPortMu.Unlock()
 
 	if debug && (tracePort == 0 || tracePort == port) {
@@ -1068,8 +1069,6 @@ func savePortOwnerSrc(family uint16, port uint16, p Proc, src string) {
 
 	flushPendingUDPSend(port, p)
 }
-
-func savePortOwner(family uint16, port uint16, p Proc) { savePortOwnerSrc(family, port, p, "event") }
 
 func lookupPortOwnerAny(port uint16) (Proc, bool) {
 	udpPortMu.Lock()
@@ -1100,7 +1099,6 @@ func flushPendingUDPSend(port uint16, dstProc Proc) {
 	if !ok || len(list) == 0 {
 		return
 	}
-
 	if debug && (tracePort == 0 || tracePort == port) {
 		dbg("UDP pending flush: port=%d n=%d dst=%s", port, len(list), dstProc.String())
 	}
@@ -1158,35 +1156,6 @@ func cleanupTTL(ttl time.Duration) {
 	for range t.C {
 		cut := time.Now().Add(-ttl)
 
-		listenMu.Lock()
-		for k, v := range listenBy {
-			if v.Seen.Before(cut) {
-				delete(listenBy, k)
-			}
-		}
-		listenMu.Unlock()
-
-		connMu.Lock()
-		for k, v := range connBy {
-			if v.Seen.Before(cut) {
-				delete(connBy, k)
-			}
-		}
-		connMu.Unlock()
-
-		udpPortMu.Lock()
-		for k, v := range udpPortOwner {
-			if v.Seen.Before(cut) {
-				delete(udpPortOwner, k)
-			}
-		}
-		for port, v := range udpPortAny {
-			if v.Seen.Before(cut) {
-				delete(udpPortAny, port)
-			}
-		}
-		udpPortMu.Unlock()
-
 		pendMu.Lock()
 		for k, v := range pendBy {
 			if v.Seen.Before(cut) {
@@ -1197,13 +1166,14 @@ func cleanupTTL(ttl time.Duration) {
 		}
 		pendMu.Unlock()
 
-		// UDP pending by port
 		udpPendMu.Lock()
 		for port, list := range udpPendByPort {
 			j := 0
 			for _, it := range list {
 				if it.Seen.Before(cut) {
-					// timeout: всё-таки печатаем dst=?
+					if debug && (tracePort == 0 || tracePort == port) {
+						dbg("UDP pending timeout: port=%d label=%s pid=%s %s -> %s", port, it.Label, it.Pid.String(), it.SrcEp, it.DstEp)
+					}
 					printUDP(it.Label, it.Pid, it.Pid, Proc{}, it.SrcEp, it.DstEp)
 					continue
 				}
@@ -1221,7 +1191,7 @@ func cleanupTTL(ttl time.Duration) {
 }
 
 /* =========================
- * B) /proc snapshot
+ * /proc snapshot (owners)
  * ========================= */
 
 type inodePort struct {
@@ -1242,13 +1212,13 @@ func readFirstLine(path string) string {
 	return ""
 }
 
-func buildInodeToProc(selfPID uint32, selfName string) map[uint64]Proc {
+func buildInodeToProc(selfPID uint32, selfName string) (map[uint64]Proc, int, int) {
 	out := make(map[uint64]Proc, 200000)
 
 	ents, err := os.ReadDir("/proc")
 	if err != nil {
 		dbg("cannot read /proc: %v", err)
-		return out
+		return out, 0, 0
 	}
 
 	scanned := 0
@@ -1303,11 +1273,9 @@ func buildInodeToProc(selfPID uint32, selfName string) map[uint64]Proc {
 		}
 	}
 
-	dbg("inode snapshot: procs_scanned=%d procs_skipped=%d unique_inodes=%d", scanned, skipped, len(out))
-	return out
+	return out, scanned, skipped
 }
 
-// Robust parser: uses header columns (local_address, st, inode)
 func parseProcNetInodes(path string, wantState string) []inodePort {
 	f, err := os.Open(path)
 	if err != nil {
@@ -1389,13 +1357,12 @@ func snapshotPorts(selfName string) {
 	selfPID := uint32(os.Getpid())
 	dbg("snapshotPorts: starting (self=%d %s)", selfPID, selfName)
 
-	inode2proc := buildInodeToProc(selfPID, selfName)
+	inode2proc, scanned, skipped := buildInodeToProc(selfPID, selfName)
+	dbg("snapshotPorts: inode2proc: procs_scanned=%d procs_skipped=%d unique_inodes=%d", scanned, skipped, len(inode2proc))
 	if len(inode2proc) == 0 {
-		dbg("snapshotPorts: inode2proc empty")
 		return
 	}
 
-	// UDP owners
 	nUDP4, nUDP6 := 0, 0
 	for _, it := range parseProcNetInodes("/proc/net/udp", "") {
 		if p, ok := inode2proc[it.Inode]; ok {
@@ -1411,7 +1378,7 @@ func snapshotPorts(selfName string) {
 	}
 	dbg("snapshotPorts: udp owners loaded: udp=%d udp6=%d", nUDP4, nUDP6)
 
-	// TCP listeners (state 0A = LISTEN)
+	// tcp listen state=0A
 	var zero [16]byte
 	nTCP4, nTCP6 := 0, 0
 	for _, it := range parseProcNetInodes("/proc/net/tcp", "0A") {
@@ -1438,36 +1405,31 @@ func snapshotPorts(selfName string) {
 }
 
 /* =========================
- * init/load
- * ========================= */
-
-func init() {
-	initDebug()
-
-	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatalf("failed to remove memlock: %v", err)
-	}
-	if err := loadBpfObjects(&objs, nil); err != nil {
-		log.Fatalf("failed to load bpf objects: %v", err)
-	}
-}
-
-/* =========================
  * main
  * ========================= */
 
 func main() {
+	flag.Parse()
+
+	// применяем флаги (env нет вообще)
+	debug = flagDebug
+	if flagTracePort >= 0 && flagTracePort <= 65535 {
+		tracePort = uint16(flagTracePort)
+	}
+
+	log.Printf("bpfgo start: debug=%v tracePort=%d", debug, tracePort)
+
 	go func() {
-		log.Println("pprof on :6060")
-		_ = http.ListenAndServe(":6060", nil)
+		log.Printf("pprof on %s", DefaultPPROFAddr)
+		_ = http.ListenAndServe(DefaultPPROFAddr, nil)
 	}()
 
 	defer objs.Close()
-	go cleanupTTL(2 * time.Second)
+	go cleanupTTL(DefaultTTL)
 
 	selfName := filepath.Base(os.Args[0])
 
-	// ✅ snapshot ДО attach — покрывает "server запущен раньше bpfgo"
+	// ВАЖНО: snapshot ДО attach — чтобы резолвить сервер/udp-owner, запущенный до bpfgo
 	snapshotPorts(selfName)
 
 	var links []link.Link
@@ -1576,7 +1538,6 @@ func main() {
 			switch ev.Sysexit {
 
 			case EV_BINDOK:
-				// bind OK: сохраняем TCP listen (и дополнительно UDP owner по порту — полезно)
 				saveListen(EndpKey{Family: fam, Port: dport, IP: dstIPKey}, p)
 				var zero [16]byte
 				saveListen(EndpKey{Family: fam, Port: dport, IP: zero}, p)
@@ -1589,23 +1550,13 @@ func main() {
 				if proto != IPPROTO_TCP {
 					continue
 				}
-				key := ConnKey{
-					Family:     fam,
-					ClientIP:   srcIPKey,
-					ClientPort: sport,
-					ServerIP:   dstIPKey,
-					ServerPort: dport,
-				}
+				key := ConnKey{Family: fam, ClientIP: srcIPKey, ClientPort: sport, ServerIP: dstIPKey, ServerPort: dport}
 				saveConn(key, p)
 
 				if server, ok := lookupListen(fam, dstIPKey, dport); ok {
 					printTCPConnect(p, srcEp, dstEp, server)
 				} else {
-					savePendingConn(key, PendingConnect{
-						Client:   p,
-						ClientEp: srcEp,
-						ServerEp: dstEp,
-					})
+					savePendingConn(key, PendingConnect{Client: p, ClientEp: srcEp, ServerEp: dstEp})
 				}
 
 			case EV_ACCEPT:
@@ -1613,18 +1564,11 @@ func main() {
 					continue
 				}
 				server := p
-
-				saveListen(EndpKey{Family: fam, Port: dport, IP: dstIPKey}, server)
 				var zero [16]byte
+				saveListen(EndpKey{Family: fam, Port: dport, IP: dstIPKey}, server)
 				saveListen(EndpKey{Family: fam, Port: dport, IP: zero}, server)
 
-				key := ConnKey{
-					Family:     fam,
-					ClientIP:   srcIPKey,
-					ClientPort: sport,
-					ServerIP:   dstIPKey,
-					ServerPort: dport,
-				}
+				key := ConnKey{Family: fam, ClientIP: srcIPKey, ClientPort: sport, ServerIP: dstIPKey, ServerPort: dport}
 
 				if pc, ok := takePendingConn(key); ok {
 					printTCPConnect(pc.Client, pc.ClientEp, pc.ServerEp, server)
@@ -1647,35 +1591,17 @@ func main() {
 					label = "SENDMSG"
 				}
 
-				// cosmetic: dst loopback + src "*": подставим loopback
-				if isLoopback(fam, dstIPKey) && isZero16(srcIPKey) {
-					lbStr, lbKey := loopbackKey(fam)
-					srcIPKey = lbKey
-					srcEp = formatEndp(fam, lbStr, lbKey, sport)
-				}
-
-				// learn: исходящий ephemeral порт
 				if sport != 0 {
 					savePortOwnerSrc(fam, sport, p, "send-learn")
 				}
 
-				// dedup sendto/sendmsg
-				dk := UDPDedupKey{
-					Dir:    1,
-					Family: fam,
-					Pid:    p.Pid,
-					Sport:  sport,
-					Dport:  dport,
-					SrcIP:  srcIPKey,
-					DstIP:  dstIPKey,
-				}
+				dk := UDPDedupKey{Dir: 1, Family: fam, Pid: p.Pid, Sport: sport, Dport: dport, SrcIP: srcIPKey, DstIP: dstIPKey}
 				if udpSeenRecently(dk, 2*time.Millisecond) {
 					continue
 				}
 
 				isLB := isLoopback(fam, dstIPKey)
 
-				// dst proc:
 				dstProc, ok := lookupListen(fam, dstIPKey, dport)
 				if !ok && isLB {
 					dstProc, ok = lookupPortOwnerAny(dport)
@@ -1686,14 +1612,8 @@ func main() {
 						label, famStr(fam), isLB, p.String(), srcEp, dstEp, ok)
 				}
 
-				// loopback + dst неизвестен => pending (не печатаем dst=?)
 				if !ok && isLB {
-					savePendingUDPSend(dport, PendingUDPSend{
-						Label: label,
-						Pid:   p,
-						SrcEp: srcEp,
-						DstEp: dstEp,
-					})
+					savePendingUDPSend(dport, PendingUDPSend{Label: label, Pid: p, SrcEp: srcEp, DstEp: dstEp})
 					continue
 				}
 
@@ -1708,35 +1628,22 @@ func main() {
 					label = "RECVMSG"
 				}
 
-				// ✅ ключ: всегда учим владельца локального порта
 				if dport != 0 {
 					savePortOwnerSrc(fam, dport, p, "recv-learn")
 				}
 
-				// если msg_name не заполнен — src неизвестен; owner уже сохранили
 				if sport == 0 || isZero16(srcIPKey) {
 					if debug && (tracePort == 0 || tracePort == dport) {
-						dbg("UDP %s: src unknown (sport=%d, srcIP=zero), learned owner for dport=%d",
-							label, sport, dport)
+						dbg("UDP %s: src unknown, learned owner dport=%d pid=%s", label, dport, p.String())
 					}
 					continue
 				}
 
-				// dedup recvfrom/recvmsg
-				dk := UDPDedupKey{
-					Dir:    2,
-					Family: fam,
-					Pid:    p.Pid,
-					Sport:  sport,
-					Dport:  dport,
-					SrcIP:  srcIPKey,
-					DstIP:  dstIPKey,
-				}
+				dk := UDPDedupKey{Dir: 2, Family: fam, Pid: p.Pid, Sport: sport, Dport: dport, SrcIP: srcIPKey, DstIP: dstIPKey}
 				if udpSeenRecently(dk, 2*time.Millisecond) {
 					continue
 				}
 
-				// src proc meaningful mostly for loopback
 				srcProc := Proc{}
 				if isLoopback(fam, srcIPKey) {
 					srcProc, _ = lookupPortOwnerAny(sport)
@@ -1752,18 +1659,6 @@ func main() {
 	fmt.Println("Exiting...")
 }
 
-/* =========================
- * eBPF init/load
- * ========================= */
-
-func init() {
-	// NOTE: this init() is already defined above; keep only one in your file.
-	// If your project has another init() (generated), merge these lines there.
-}
-
-
-
-BPFGO_DEBUG=1 BPFGO_TRACE_PORT=9999 sudo ./bpfgo
 
 
 
