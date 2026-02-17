@@ -2204,14 +2204,15 @@ func main() {
 
 
 
-home/lev/bpfgo/trace.c:197:16: error: returning 'typeof ((sk)->__sk_common.skc_cookie)' (aka 'atomic64_t') from a function with incompatible result type '__u64' (aka 'unsigned long long')
-        return BPF_CORE_READ(sk, __sk_common.skc_cookie);
-               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/usr/include/bpf/bpf_core_read.h:402:36: note: expanded from macro 'BPF_CORE_READ'
-#define BPF_CORE_READ(src, a, ...) ({                                       \
-                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-1 error generated.
-Error: compile: exit status 1
-exit status 1
-main.go:3: running "go": exit status 1
-lev@lev-VirtualBox:~/bpfgo$ 
+
+
+static __always_inline __u64 read_sock_cookie(struct sock *sk)
+{
+    __u64 cookie = 0;
+    if (!sk)
+        return 0;
+
+    // skc_cookie может быть u64 или atomic64_t — читаем первые 8 байт в __u64
+    BPF_CORE_READ_INTO(&cookie, sk, __sk_common.skc_cookie);
+    return cookie;
+}
