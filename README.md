@@ -675,52 +675,32 @@ func parseProcNetInodes(path string, wantState string) []inodePort {
 
 	sc := bufio.NewScanner(f)
 
+	// header
 	if !sc.Scan() {
 		dbg("%s: empty file", path)
 		return nil
 	}
-	hdr := strings.Fields(strings.TrimSpace(sc.Text()))
-
-	col := func(name string) int {
-		for i, v := range hdr {
-			if v == name {
-				return i
-			}
-		}
-		return -1
-	}
-
-	iLocal := col("local_address")
-	iState := col("st")
-	iInode := col("inode")
-	if iLocal < 0 || iInode < 0 {
-		dbg("%s: header=%v", path, hdr)
-		dbg("%s: header missing columns (local_address/inode)", path)
-		return nil
-	}
-
-	maxNeed := iLocal
-	if iState > maxNeed {
-		maxNeed = iState
-	}
-	if iInode > maxNeed {
-		maxNeed = iInode
-	}
 
 	var out []inodePort
 	lines := 0
+
 	for sc.Scan() {
 		lines++
-		fields := strings.Fields(strings.TrimSpace(sc.Text()))
-		if len(fields) <= maxNeed {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" {
 			continue
 		}
 
-		local := fields[iLocal]
-		state := ""
-		if iState >= 0 {
-			state = fields[iState]
+		fields := strings.Fields(line)
+
+		// proc format: sl local_address rem_address st tx_queue:rx_queue tr:tm->when retrnsmt uid timeout inode ...
+		// so we need at least up to inode index 9
+		if len(fields) < 10 {
+			continue
 		}
+
+		local := fields[1]
+		state := fields[3]
 		if wantState != "" && state != wantState {
 			continue
 		}
@@ -729,13 +709,13 @@ func parseProcNetInodes(path string, wantState string) []inodePort {
 		if len(parts) != 2 {
 			continue
 		}
+
 		port64, err := strconv.ParseUint(parts[1], 16, 16)
 		if err != nil || port64 == 0 {
 			continue
 		}
 
-		inodeStr := fields[iInode]
-		inode, err := strconv.ParseUint(inodeStr, 10, 64)
+		inode, err := strconv.ParseUint(fields[9], 10, 64)
 		if err != nil || inode == 0 {
 			continue
 		}
@@ -746,15 +726,17 @@ func parseProcNetInodes(path string, wantState string) []inodePort {
 	dbg("%s: scanned_lines=%d parsed_entries=%d", path, lines, len(out))
 	if len(out) > 0 {
 		n := len(out)
-		if n > 3 {
-			n = 3
+		if n > 5 {
+			n = 5
 		}
 		for i := 0; i < n; i++ {
 			dbg("%s: sample[%d] inode=%d port=%d", path, i, out[i].Inode, out[i].Port)
 		}
 	}
+
 	return out
 }
+
 
 func snapshotPorts(selfName string) {
 	selfPID := uint32(os.Getpid())
@@ -841,36 +823,5 @@ func snapshotPorts(selfName string) {
 
 
 
-lev@lev-VirtualBox:~/bpfgo$ ss -tulpn
-Netid State  Recv-Q Send-Q Local Address:Port  Peer Address:PortProcess                                 
-udp   UNCONN 0      0            0.0.0.0:42204      0.0.0.0:*                                           
-udp   UNCONN 0      0            0.0.0.0:5353       0.0.0.0:*                                           
-udp   UNCONN 0      0            0.0.0.0:9999       0.0.0.0:*    users:(("recvmsg_test",pid=14721,fd=3))
-udp   UNCONN 0      0      127.0.0.53%lo:53         0.0.0.0:*                                           
-udp   UNCONN 0      0               [::]:52175         [::]:*                                           
-udp   UNCONN 0      0               [::]:5353          [::]:*                                           
-tcp   LISTEN 0      128        127.0.0.1:631        0.0.0.0:*                                           
-tcp   LISTEN 0      4096   127.0.0.53%lo:53         0.0.0.0:*                                           
-tcp   LISTEN 0      128            [::1]:631           [::]:*                                           
-lev@lev-VirtualBox:~/bpfgo$ 
-
-
-lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
-2026/02/18 01:13:07.639808 bpfgo start: debug=true tracePort=9999
-2026/02/18 01:13:07.639961 [DBG] snapshotPorts: starting (self=20018 bpfgo)
-2026/02/18 01:13:07.641507 pprof on :6060
-2026/02/18 01:13:07.674728 [DBG] snapshotPorts: inode2proc: procs_scanned=255 procs_skipped=0 unique_inodes=977
-2026/02/18 01:13:07.675019 [DBG] /proc/net/udp: scanned_lines=5 parsed_entries=0
-2026/02/18 01:13:07.675122 [DBG] /proc/net/udp6: scanned_lines=2 parsed_entries=0
-2026/02/18 01:13:07.675133 [DBG] snapshotPorts: /proc entries udp=0 udp6=0
-2026/02/18 01:13:07.675140 [DBG] snapshotPorts: udp inode matches: udp=0/0 udp6=0/0
-2026/02/18 01:13:07.675329 [DBG] /proc/net/tcp: scanned_lines=7 parsed_entries=0
-2026/02/18 01:13:07.675560 [DBG] /proc/net/tcp6: scanned_lines=2 parsed_entries=0
-2026/02/18 01:13:07.675615 [DBG] snapshotPorts: /proc entries tcp_listen=0 tcp6_listen=0
-2026/02/18 01:13:07.675622 [DBG] snapshotPorts: tcp listen inode matches: tcp=0/0 tcp6=0/0
-2026/02/18 01:13:07.675624 [DBG] snapshotPorts: TRACE_PORT=9999 deep-check
-2026/02/18 01:13:07.675628 [DBG] TRACE_PORT=9999 not present in /proc/net/udp*
-2026/02/18 01:13:07.675632 [DBG] snapshotPorts: TRACE_PORT=9999 ownerAny NOT FOUND
-Press Ctrl+C to exit
 
 
