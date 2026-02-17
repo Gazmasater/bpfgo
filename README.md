@@ -706,13 +706,12 @@ const (
 	EV_CONNECT  = 3
 	EV_ACCEPT   = 4
 	EV_BINDOK   = 20
-
-	EV_SENDMSG = 11
-	EV_RECVMSG = 12
+	EV_SENDMSG  = 11
+	EV_RECVMSG  = 12
 )
 
 /* =========================
- * Proc + formatting
+ * Proc
  * ========================= */
 
 type Proc struct {
@@ -769,7 +768,6 @@ type PendingUDPSend struct {
 	Seen  time.Time
 }
 
-// Нормализованный ключ для дедупа (recvfrom/recvmsg и sendto/sendmsg)
 type UDPDedupKey struct {
 	Dir    uint8 // 1=SEND,2=RECV
 	Family uint16
@@ -797,25 +795,28 @@ var (
 	connMu sync.Mutex
 	connBy = make(map[ConnKey]Proc, 16384)
 
-	// pending connect until accept (or TTL prints server=?)
+	// pending connect until accept
 	pendMu sync.Mutex
 	pendBy = make(map[ConnKey]PendingConnect, 16384)
 
-	// UDP port owner: (family,port)->Proc   (B snapshot + runtime learn)
+	// UDP port owner:
+	//   owner[(family,port)] - как было
+	//   ownerAny[port]       - ВАЖНО: для loopback склейка IPv4(127.0.0.1) и IPv6(::1)
 	udpPortMu    sync.Mutex
 	udpPortOwner = make(map[PortKey]Proc, 65536)
+	udpPortAny   = make(map[uint16]Proc, 65536)
 
-	// A: pending UDP SENDs to loopback until dst owner known
-	udpPendMu sync.Mutex
-	udpPendBy = make(map[PortKey][]PendingUDPSend, 4096)
+	// pending UDP SEND для loopback только по порту (без family)
+	udpPendMu     sync.Mutex
+	udpPendByPort = make(map[uint16][]PendingUDPSend, 4096)
 
-	// dedup for UDP prints
+	// dedup для UDP (чтобы RECVFROM+RECVMSG не дублировались)
 	udpDedupMu sync.Mutex
 	udpDedup   = make(map[UDPDedupKey]time.Time, 65536)
 )
 
 /* =========================
- * Helpers: comm
+ * comm helpers
  * ========================= */
 
 func commString(c [32]int8) string {
@@ -843,11 +844,11 @@ func commString(c [32]int8) string {
 }
 
 /* =========================
- * Helpers: ip formatting
+ * IP helpers
  * ========================= */
 
 func ip4BytesFromU32Net(x uint32) (b [4]byte) {
-	// x приходит как big-endian bytes, а uint32 читается little-endian → восстановим байты через LittleEndian.
+	// восстанавливаем исходные байты IPv4 адреса
 	binary.LittleEndian.PutUint32(b[:], x)
 	return
 }
@@ -989,36 +990,37 @@ func takePendingConn(key ConnKey) (PendingConnect, bool) {
 
 func savePortOwner(family uint16, port uint16, p Proc) {
 	p.Seen = time.Now()
+
 	udpPortMu.Lock()
 	udpPortOwner[PortKey{family, port}] = p
+	udpPortAny[port] = p // ✅ склейка IPv4/IPv6 для loopback
 	udpPortMu.Unlock()
 
-	flushPendingUDPSend(family, port, p)
+	flushPendingUDPSend(port, p)
 }
 
-func lookupPortOwner(family uint16, port uint16) (Proc, bool) {
+func lookupPortOwnerAny(port uint16) (Proc, bool) {
 	udpPortMu.Lock()
-	p, ok := udpPortOwner[PortKey{family, port}]
+	p, ok := udpPortAny[port]
 	udpPortMu.Unlock()
 	return p, ok
 }
 
-func savePendingUDPSend(family uint16, dport uint16, it PendingUDPSend) {
+func savePendingUDPSend(port uint16, it PendingUDPSend) {
 	it.Seen = time.Now()
-	k := PortKey{Family: family, Port: dport}
 	udpPendMu.Lock()
-	udpPendBy[k] = append(udpPendBy[k], it)
+	udpPendByPort[port] = append(udpPendByPort[port], it)
 	udpPendMu.Unlock()
 }
 
-func flushPendingUDPSend(family uint16, dport uint16, dstProc Proc) {
-	k := PortKey{Family: family, Port: dport}
+func flushPendingUDPSend(port uint16, dstProc Proc) {
 	udpPendMu.Lock()
-	list, ok := udpPendBy[k]
+	list, ok := udpPendByPort[port]
 	if ok {
-		delete(udpPendBy, k)
+		delete(udpPendByPort, port)
 	}
 	udpPendMu.Unlock()
+
 	if !ok || len(list) == 0 {
 		return
 	}
@@ -1097,6 +1099,11 @@ func cleanupTTL(ttl time.Duration) {
 				delete(udpPortOwner, k)
 			}
 		}
+		for port, v := range udpPortAny {
+			if v.Seen.Before(cut) {
+				delete(udpPortAny, port)
+			}
+		}
 		udpPortMu.Unlock()
 
 		pendMu.Lock()
@@ -1109,12 +1116,12 @@ func cleanupTTL(ttl time.Duration) {
 		}
 		pendMu.Unlock()
 
+		// UDP pending by port
 		udpPendMu.Lock()
-		for k, list := range udpPendBy {
+		for port, list := range udpPendByPort {
 			j := 0
 			for _, it := range list {
 				if it.Seen.Before(cut) {
-					// timeout: так и не узнали владельца порта
 					printUDP(it.Label, it.Pid, it.Pid, Proc{}, it.SrcEp, it.DstEp)
 					continue
 				}
@@ -1122,9 +1129,9 @@ func cleanupTTL(ttl time.Duration) {
 				j++
 			}
 			if j == 0 {
-				delete(udpPendBy, k)
+				delete(udpPendByPort, port)
 			} else {
-				udpPendBy[k] = list[:j]
+				udpPendByPort[port] = list[:j]
 			}
 		}
 		udpPendMu.Unlock()
@@ -1189,7 +1196,6 @@ func buildInodeToProc(selfPID uint32, selfName string) map[uint64]Proc {
 		}
 
 		p := Proc{Pid: up, Comm: comm}
-
 		for _, fd := range fds {
 			target, err := os.Readlink(filepath.Join(fdDir, fd.Name()))
 			if err != nil {
@@ -1349,7 +1355,7 @@ func main() {
 
 	selfName := filepath.Base(os.Args[0])
 
-	// ===== B) snapshot BEFORE attaching (server may already run) =====
+	// ✅ ВАЖНО: snapshot ДО attach — покрывает "server запущен раньше bpfgo"
 	snapshotPorts(selfName)
 
 	var links []link.Link
@@ -1367,7 +1373,7 @@ func main() {
 		links = append(links, l)
 	}
 
-	// TCP roles
+	// TCP
 	attach("syscalls", "sys_enter_bind", objs.TraceBindEnter)
 	attach("syscalls", "sys_exit_bind", objs.TraceBindExit)
 
@@ -1381,7 +1387,7 @@ func main() {
 
 	attach("syscalls", "sys_enter_close", objs.TraceCloseEnter)
 
-	// UDP flow
+	// UDP
 	attach("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter)
 	attach("syscalls", "sys_exit_sendto", objs.TraceSendtoExit)
 	attach("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter)
@@ -1458,11 +1464,10 @@ func main() {
 			switch ev.Sysexit {
 
 			case EV_BINDOK:
-				// bind: "кто слушает порт" (TCP) + помогает UDP
+				// bind: сохраняем "кто слушает порт" (TCP) + помогает UDP
 				saveListen(EndpKey{Family: fam, Port: dport, IP: dstIPKey}, p)
 				var zero [16]byte
 				saveListen(EndpKey{Family: fam, Port: dport, IP: zero}, p)
-
 				savePortOwner(fam, dport, p)
 
 			case EV_CONNECT:
@@ -1527,7 +1532,7 @@ func main() {
 					label = "SENDMSG"
 				}
 
-				// cosmetic: если dst=loopback, а src ip "*", показываем loopback вместо "*"
+				// cosmetic: если dst loopback, а src ip "*", показываем loopback вместо "*"
 				if isLoopback(fam, dstIPKey) && isZero16(srcIPKey) {
 					lbStr, lbKey := loopbackKey(fam)
 					srcIPKey = lbKey
@@ -1539,7 +1544,7 @@ func main() {
 					savePortOwner(fam, sport, p)
 				}
 
-				// dedup (sendto/sendmsg)
+				// dedup sendto/sendmsg
 				dk := UDPDedupKey{
 					Dir:    1,
 					Family: fam,
@@ -1553,15 +1558,15 @@ func main() {
 					continue
 				}
 
-				// resolve dst proc: only meaningful for local destinations
+				// dst proc: для loopback — ТОЛЬКО по порту (без family)
 				dstProc, ok := lookupListen(fam, dstIPKey, dport)
 				if !ok && isLoopback(fam, dstIPKey) {
-					dstProc, ok = lookupPortOwner(fam, dport)
+					dstProc, ok = lookupPortOwnerAny(dport) // ✅ склейка 127.0.0.1 / ::1
 				}
 
-				// A) defer loopback send if dst unknown
+				// A) если loopback и dst неизвестен — откладываем (не печатаем dst=?)
 				if !ok && isLoopback(fam, dstIPKey) {
-					savePendingUDPSend(fam, dport, PendingUDPSend{
+					savePendingUDPSend(dport, PendingUDPSend{
 						Label: label,
 						Pid:   p,
 						SrcEp: srcEp,
@@ -1581,18 +1586,17 @@ func main() {
 					label = "RECVMSG"
 				}
 
-				// ✅ КЛЮЧЕВО: всегда учим владельца локального порта (dport = local)
-				// даже если recvmsg не вернул src (msg_name == NULL)
+				// ✅ КЛЮЧ: всегда учим владельца локального порта (даже если src неизвестен)
 				if dport != 0 {
-					savePortOwner(fam, dport, p)
+					savePortOwner(fam, dport, p) // flushPending(dport) происходит внутри
 				}
 
-				// Если src неизвестен/нулевой — не печатаем, но owner уже сохранили.
+				// если recvmsg не вернул msg_name → src пустой, печатать нечего, но owner уже сохранили
 				if sport == 0 || isZero16(srcIPKey) {
 					continue
 				}
 
-				// dedup (recvfrom/recvmsg)
+				// dedup recvfrom/recvmsg
 				dk := UDPDedupKey{
 					Dir:    2,
 					Family: fam,
@@ -1606,10 +1610,10 @@ func main() {
 					continue
 				}
 
-				// resolve src proc only for loopback
+				// src proc only meaningful for loopback
 				srcProc := Proc{}
 				if isLoopback(fam, srcIPKey) {
-					srcProc, _ = lookupPortOwner(fam, sport)
+					srcProc, _ = lookupPortOwnerAny(sport)
 				}
 
 				printUDP(label, p, srcProc, p, srcEp, dstEp)
@@ -1621,6 +1625,10 @@ func main() {
 	<-stop
 	fmt.Println("Exiting...")
 }
+
+
+
+
 
 
 
