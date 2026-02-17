@@ -668,6 +668,7 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"errors"
@@ -678,6 +679,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -755,36 +758,51 @@ type PortKey struct {
 }
 
 type PendingUDPSend struct {
-	Kind  string // SENDTO/SENDMSG
-	Pid   Proc   // pid=...
+	Kind  string // "SEND"
+	Pid   Proc
 	SrcEp string
 	DstEp string
 	Seen  time.Time
+}
+
+// dedup key for udp events (normalize sendto/sendmsg -> SEND, recvfrom/recvmsg -> RECV)
+type UDPDedupKey struct {
+	Kind   uint8 // 1=SEND,2=RECV
+	Family uint16
+	Pid    uint32
+	Sport  uint16
+	Dport  uint16
+	SrcIP  [16]byte
+	DstIP  [16]byte
 }
 
 var (
 	commMu    sync.RWMutex
 	commCache = make(map[[32]int8]string, 4096)
 
-	// bind(): who owns (ip,port) listener
+	// TCP listen (bind)
 	listenMu sync.Mutex
 	listenBy = make(map[EndpKey]Proc, 4096)
 
-	// tcp connect tuples
+	// TCP connect cache
 	connMu sync.Mutex
 	connBy = make(map[ConnKey]Proc, 16384)
 
-	// pending tcp connect until accept
+	// pending connect until accept (or TTL prints server=?)
 	pendMu sync.Mutex
 	pendBy = make(map[ConnKey]PendingConnect, 16384)
 
-	// udp: owner of local port (loopback stitching)
+	// UDP port owner (B: snapshot + runtime learn on recv)
 	udpPortMu    sync.Mutex
 	udpPortOwner = make(map[PortKey]Proc, 65536)
 
-	// udp: pending SENDs to (family,dport) until dst owner known
+	// A: pending UDP sends until we learn dst owner
 	udpPendMu sync.Mutex
 	udpPendBy = make(map[PortKey][]PendingUDPSend, 4096)
+
+	// dedup RECVFROM/RECVMSG + SENDTO/SENDMSG
+	udpDedupMu sync.Mutex
+	udpDedup   = make(map[UDPDedupKey]time.Time, 65536)
 )
 
 /* ===== comm cache ===== */
@@ -813,10 +831,11 @@ func commString(c [32]int8) string {
 	return s
 }
 
-/* ===== IPv4 byte-order FIX (1.0.0.127 -> 127.0.0.1) ===== */
+/* ===== IPv4 byte-order FIX ===== */
 
 func ip4BytesFromU32Net(x uint32) (b [4]byte) {
-	// important for little-endian userspace representation
+	// IMPORTANT: eBPF carries IPv4 in "network order" (big-endian bytes),
+	// but Go uint32 is read on little-endian machine, so restore bytes via LittleEndian.
 	binary.LittleEndian.PutUint32(b[:], x)
 	return
 }
@@ -860,15 +879,10 @@ func formatEndp(family uint16, ipStr string, ipKey [16]byte, port uint16) string
 	return fmt.Sprintf("%s:%d", ipStr, port)
 }
 
-/* ===== loopback checks (for UDP stitching) ===== */
+/* ===== loopback checks ===== */
 
-func isLoopback4(ip [16]byte) bool {
-	// 127.x.x.x
-	return ip[0] == 127
-}
-
+func isLoopback4(ip [16]byte) bool { return ip[0] == 127 }
 func isLoopback6(ip [16]byte) bool {
-	// ::1
 	for i := 0; i < 15; i++ {
 		if ip[i] != 0 {
 			return false
@@ -876,16 +890,24 @@ func isLoopback6(ip [16]byte) bool {
 	}
 	return ip[15] == 1
 }
-
 func isLoopback(family uint16, ip [16]byte) bool {
-	switch family {
-	case AF_INET:
+	if family == AF_INET {
 		return isLoopback4(ip)
-	case AF_INET6:
-		return isLoopback6(ip)
-	default:
-		return false
 	}
+	if family == AF_INET6 {
+		return isLoopback6(ip)
+	}
+	return false
+}
+
+func loopbackKey(family uint16) (ipStr string, ipKey [16]byte) {
+	if family == AF_INET {
+		ipKey[0] = 127
+		ipKey[3] = 1
+		return "127.0.0.1", ipKey
+	}
+	ipKey[15] = 1
+	return "::1", ipKey
 }
 
 /* ===== TCP listen cache ===== */
@@ -899,22 +921,17 @@ func saveListen(ep EndpKey, p Proc) {
 
 func lookupListen(family uint16, ip [16]byte, port uint16) (Proc, bool) {
 	k := EndpKey{Family: family, Port: port, IP: ip}
-
 	listenMu.Lock()
 	p, ok := listenBy[k]
 	listenMu.Unlock()
 	if ok {
 		return p, true
 	}
-
-	// wildcard fallback (0.0.0.0 / ::)
 	var zero [16]byte
 	k2 := EndpKey{Family: family, Port: port, IP: zero}
-
 	listenMu.Lock()
 	p2, ok2 := listenBy[k2]
 	listenMu.Unlock()
-
 	return p2, ok2
 }
 
@@ -951,7 +968,7 @@ func takePending(key ConnKey) (PendingConnect, bool) {
 	return v, ok
 }
 
-/* ===== UDP port owner + pending SEND flush ===== */
+/* ===== UDP owner + pending SEND flush (A) ===== */
 
 func savePendingUDPSend(family, dport uint16, p PendingUDPSend) {
 	k := PortKey{Family: family, Port: dport}
@@ -963,18 +980,15 @@ func savePendingUDPSend(family, dport uint16, p PendingUDPSend) {
 
 func flushPendingUDPSend(family, dport uint16, dstProc Proc) {
 	k := PortKey{Family: family, Port: dport}
-
 	udpPendMu.Lock()
 	list, ok := udpPendBy[k]
 	if ok {
 		delete(udpPendBy, k)
 	}
 	udpPendMu.Unlock()
-
 	if !ok || len(list) == 0 {
 		return
 	}
-
 	for _, it := range list {
 		printUDP(it.Kind, it.Pid, it.Pid, dstProc, it.SrcEp, it.DstEp)
 	}
@@ -986,7 +1000,7 @@ func savePortOwner(family uint16, port uint16, p Proc) {
 	udpPortOwner[PortKey{family, port}] = p
 	udpPortMu.Unlock()
 
-	// ✅ once owner known -> flush pending sends to this port
+	// A: once owner known -> flush pending sends to this port
 	flushPendingUDPSend(family, port, p)
 }
 
@@ -995,6 +1009,49 @@ func lookupPortOwner(family uint16, port uint16) (Proc, bool) {
 	p, ok := udpPortOwner[PortKey{family, port}]
 	udpPortMu.Unlock()
 	return p, ok
+}
+
+/* ===== UDP dedup ===== */
+
+func udpSeenRecently(k UDPDedupKey, window time.Duration) bool {
+	now := time.Now()
+	udpDedupMu.Lock()
+	defer udpDedupMu.Unlock()
+
+	// light cleanup
+	if len(udpDedup) > 200000 {
+		cut := now.Add(-2 * time.Second)
+		for kk, ts := range udpDedup {
+			if ts.Before(cut) {
+				delete(udpDedup, kk)
+			}
+		}
+	}
+
+	if ts, ok := udpDedup[k]; ok {
+		if now.Sub(ts) <= window {
+			return true
+		}
+	}
+	udpDedup[k] = now
+	return false
+}
+
+/* ===== prints ===== */
+
+func printTCPConnect(client Proc, clientEp, serverEp string, server Proc) {
+	fmt.Printf("TCP CONNECT client=%s  %s -> %s  server=%s\n",
+		client.String(), clientEp, serverEp, server.String())
+}
+
+func printTCPAccept(server Proc, serverEp, clientEp string, client Proc) {
+	fmt.Printf("TCP ACCEPT  server=%s  %s -> %s  client=%s\n",
+		server.String(), serverEp, clientEp, client.String())
+}
+
+func printUDP(kind string, pid Proc, srcProc Proc, dstProc Proc, srcEp, dstEp string) {
+	fmt.Printf("UDP %-5s pid=%s  src=%s  %s -> %s  dst=%s\n",
+		kind, pid.String(), srcProc.String(), srcEp, dstEp, dstProc.String())
 }
 
 /* ===== cleanup TTL ===== */
@@ -1030,7 +1087,6 @@ func cleanupTTL(ttl time.Duration) {
 		}
 		udpPortMu.Unlock()
 
-		// pending TCP connect -> server=? after ttl
 		pendMu.Lock()
 		for k, v := range pendBy {
 			if v.Seen.Before(cut) {
@@ -1041,12 +1097,12 @@ func cleanupTTL(ttl time.Duration) {
 		}
 		pendMu.Unlock()
 
-		// pending UDP sends -> dst=? after ttl (если так и не узнали владельца порта)
 		udpPendMu.Lock()
 		for k, list := range udpPendBy {
 			j := 0
 			for _, it := range list {
 				if it.Seen.Before(cut) {
+					// timeout: still unknown dst
 					printUDP(it.Kind, it.Pid, it.Pid, Proc{}, it.SrcEp, it.DstEp)
 					continue
 				}
@@ -1063,21 +1119,168 @@ func cleanupTTL(ttl time.Duration) {
 	}
 }
 
-/* ===== prints ===== */
+/* ===== B) /proc snapshot ===== */
 
-func printTCPConnect(client Proc, clientEp, serverEp string, server Proc) {
-	fmt.Printf("TCP CONNECT client=%s  %s -> %s  server=%s\n",
-		client.String(), clientEp, serverEp, server.String())
+type inodePort struct {
+	Inode uint64
+	Port  uint16
 }
 
-func printTCPAccept(server Proc, serverEp, clientEp string, client Proc) {
-	fmt.Printf("TCP ACCEPT  server=%s  %s -> %s  client=%s\n",
-		server.String(), serverEp, clientEp, client.String())
+func readFirstLine(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	if sc.Scan() {
+		return strings.TrimSpace(sc.Text())
+	}
+	return ""
 }
 
-func printUDP(kind string, pid Proc, srcProc Proc, dstProc Proc, srcEp, dstEp string) {
-	fmt.Printf("UDP %-7s pid=%s  src=%s  %s -> %s  dst=%s\n",
-		kind, pid.String(), srcProc.String(), srcEp, dstEp, dstProc.String())
+func buildInodeToProc(selfPID uint32, selfName string) map[uint64]Proc {
+	out := make(map[uint64]Proc, 200000)
+
+	ents, err := os.ReadDir("/proc")
+	if err != nil {
+		return out
+	}
+
+	for _, e := range ents {
+		if !e.IsDir() {
+			continue
+		}
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil || pid <= 0 {
+			continue
+		}
+		up := uint32(pid)
+		if up == selfPID {
+			continue
+		}
+
+		comm := readFirstLine(filepath.Join("/proc", e.Name(), "comm"))
+		if comm == "" {
+			comm = "?"
+		}
+		if comm == selfName {
+			continue
+		}
+
+		fdDir := filepath.Join("/proc", e.Name(), "fd")
+		fds, err := os.ReadDir(fdDir)
+		if err != nil {
+			continue
+		}
+
+		p := Proc{Pid: up, Comm: comm}
+
+		for _, fd := range fds {
+			target, err := os.Readlink(filepath.Join(fdDir, fd.Name()))
+			if err != nil {
+				continue
+			}
+			// socket:[12345]
+			if !strings.HasPrefix(target, "socket:[") || !strings.HasSuffix(target, "]") {
+				continue
+			}
+			num := strings.TrimSuffix(strings.TrimPrefix(target, "socket:["), "]")
+			inode, err := strconv.ParseUint(num, 10, 64)
+			if err != nil || inode == 0 {
+				continue
+			}
+			// first wins (if reuseport etc. — останется кто встретился первым)
+			if _, ok := out[inode]; !ok {
+				out[inode] = p
+			}
+		}
+	}
+
+	return out
+}
+
+func parseProcNetInodes(path string, wantState string) []inodePort {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
+	var out []inodePort
+	sc := bufio.NewScanner(f)
+	first := true
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" {
+			continue
+		}
+		if first {
+			first = false
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 10 {
+			continue
+		}
+		// fields: sl local_address rem_address st tx_queue:rx_queue tr:tm->when retrnsmt uid timeout inode ...
+		local := fields[1]
+		state := fields[3]
+		if wantState != "" && state != wantState {
+			continue
+		}
+		inodeStr := fields[9]
+
+		// local "HEXIP:HEXPORT"
+		parts := strings.Split(local, ":")
+		if len(parts) != 2 {
+			continue
+		}
+		port64, err := strconv.ParseUint(parts[1], 16, 16)
+		if err != nil || port64 == 0 {
+			continue
+		}
+		inode, err := strconv.ParseUint(inodeStr, 10, 64)
+		if err != nil || inode == 0 {
+			continue
+		}
+		out = append(out, inodePort{Inode: inode, Port: uint16(port64)})
+	}
+	return out
+}
+
+func snapshotPorts(selfName string) {
+	selfPID := uint32(os.Getpid())
+
+	inode2proc := buildInodeToProc(selfPID, selfName)
+	if len(inode2proc) == 0 {
+		return
+	}
+
+	// UDP / UDP6
+	for _, it := range parseProcNetInodes("/proc/net/udp", "") {
+		if p, ok := inode2proc[it.Inode]; ok {
+			savePortOwner(AF_INET, it.Port, p)
+		}
+	}
+	for _, it := range parseProcNetInodes("/proc/net/udp6", "") {
+		if p, ok := inode2proc[it.Inode]; ok {
+			savePortOwner(AF_INET6, it.Port, p)
+		}
+	}
+
+	// TCP listeners (state 0A = LISTEN)
+	var zero [16]byte
+	for _, it := range parseProcNetInodes("/proc/net/tcp", "0A") {
+		if p, ok := inode2proc[it.Inode]; ok {
+			saveListen(EndpKey{Family: AF_INET, Port: it.Port, IP: zero}, p)
+		}
+	}
+	for _, it := range parseProcNetInodes("/proc/net/tcp6", "0A") {
+		if p, ok := inode2proc[it.Inode]; ok {
+			saveListen(EndpKey{Family: AF_INET6, Port: it.Port, IP: zero}, p)
+		}
+	}
 }
 
 /* ===== init/load ===== */
@@ -1104,6 +1307,10 @@ func main() {
 
 	selfName := filepath.Base(os.Args[0])
 
+	// ===== B) snapshot before attach/read =====
+	// заполняем udpPortOwner + tcp listenBy даже если сервисы уже запущены
+	snapshotPorts(selfName)
+
 	var links []link.Link
 	defer func() {
 		for _, l := range links {
@@ -1119,7 +1326,6 @@ func main() {
 		links = append(links, l)
 	}
 
-	// TCP roles
 	attach("syscalls", "sys_enter_bind", objs.TraceBindEnter)
 	attach("syscalls", "sys_exit_bind", objs.TraceBindExit)
 
@@ -1133,13 +1339,12 @@ func main() {
 
 	attach("syscalls", "sys_enter_close", objs.TraceCloseEnter)
 
-	// UDP flow (sendto/recvfrom)
+	// UDP (both variants)
 	attach("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter)
 	attach("syscalls", "sys_exit_sendto", objs.TraceSendtoExit)
 	attach("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter)
 	attach("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit)
 
-	// msg variants (sendmsg/recvmsg)
 	attach("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter)
 	attach("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit)
 	attach("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter)
@@ -1182,7 +1387,6 @@ func main() {
 			p := Proc{Pid: ev.Pid, Comm: comm}
 			fam := uint16(ev.Family)
 
-			// endpoints
 			var (
 				srcEp, dstEp       string
 				srcIPKey, dstIPKey [16]byte
@@ -1192,17 +1396,17 @@ func main() {
 			if ev.Family == AF_INET {
 				sIP, sKey, sP := endpFromEvIPv4(ev.SrcIP.S_addr, ev.Sport)
 				dIP, dKey, dP := endpFromEvIPv4(ev.DstIP.S_addr, ev.Dport)
-				srcEp = formatEndp(AF_INET, sIP, sKey, sP)
-				dstEp = formatEndp(AF_INET, dIP, dKey, dP)
 				srcIPKey, dstIPKey = sKey, dKey
 				sport, dport = sP, dP
+				srcEp = formatEndp(AF_INET, sIP, sKey, sP)
+				dstEp = formatEndp(AF_INET, dIP, dKey, dP)
 			} else if ev.Family == AF_INET6 {
 				sIP, sKey, sP := endpFromEvIPv6(ev.SrcIP6.In6U.U6Addr8, ev.Sport)
 				dIP, dKey, dP := endpFromEvIPv6(ev.DstIP6.In6U.U6Addr8, ev.Dport)
-				srcEp = formatEndp(AF_INET6, sIP, sKey, sP)
-				dstEp = formatEndp(AF_INET6, dIP, dKey, dP)
 				srcIPKey, dstIPKey = sKey, dKey
 				sport, dport = sP, dP
+				srcEp = formatEndp(AF_INET6, sIP, sKey, sP)
+				dstEp = formatEndp(AF_INET6, dIP, dKey, dP)
 			} else {
 				continue
 			}
@@ -1210,19 +1414,15 @@ func main() {
 			switch ev.Sysexit {
 
 			case EV_BINDOK:
-				// bind: сохраняем "кто владеет портом" (и для TCP listen, и для UDP порт-owner)
+				// TCP bind (and helps UDP too)
 				saveListen(EndpKey{Family: fam, Port: dport, IP: dstIPKey}, p)
 				var zero [16]byte
 				saveListen(EndpKey{Family: fam, Port: dport, IP: zero}, p)
 
-				// ✅ важно для UDP: если bind пойман — dst известен сразу
+				// also helps UDP dst resolution
 				savePortOwner(fam, dport, p)
 
-				// если были отложенные SEND на этот порт — печатаем
-				flushPendingUDPSend(fam, dport, p)
-
 			case EV_CONNECT:
-				// TCP CONNECT: src=client, dst=server
 				if uint8(ev.Proto) != IPPROTO_TCP {
 					continue
 				}
@@ -1235,11 +1435,9 @@ func main() {
 				}
 				saveConn(key, p)
 
-				// если сервер уже известен по bind — печатаем сразу
 				if server, ok := lookupListen(fam, dstIPKey, dport); ok {
 					printTCPConnect(p, srcEp, dstEp, server)
 				} else {
-					// иначе ждём ACCEPT; если не дождёмся — cleanupTTL напечатает server=?
 					savePending(key, PendingConnect{
 						Client:   p,
 						ClientEp: srcEp,
@@ -1248,13 +1446,11 @@ func main() {
 				}
 
 			case EV_ACCEPT:
-				// TCP ACCEPT: событие в server pid, tuple src=client dst=server
 				if uint8(ev.Proto) != IPPROTO_TCP {
 					continue
 				}
 				server := p
 
-				// зафиксируем server для порта (если bind не поймали)
 				saveListen(EndpKey{Family: fam, Port: dport, IP: dstIPKey}, server)
 				var zero [16]byte
 				saveListen(EndpKey{Family: fam, Port: dport, IP: zero}, server)
@@ -1267,14 +1463,12 @@ func main() {
 					ServerPort: dport,
 				}
 
-				// если CONNECT был отложен — печатаем CONNECT уже с pid сервера
 				if pc, ok := takePending(key); ok {
 					printTCPConnect(pc.Client, pc.ClientEp, pc.ServerEp, server)
 					printTCPAccept(server, pc.ServerEp, pc.ClientEp, pc.Client)
 					continue
 				}
 
-				// иначе CONNECT мог быть напечатан уже (bind известен)
 				client, ok := lookupConn(key)
 				if !ok {
 					client = Proc{}
@@ -1282,27 +1476,45 @@ func main() {
 				printTCPAccept(server, dstEp, srcEp, client)
 
 			case EV_SENDTO, EV_SENDMSG:
-				// UDP send
 				if uint8(ev.Proto) != IPPROTO_UDP {
 					continue
 				}
 
-				// владельцем локального порта sport является текущий процесс
+				// normalize kind for dedup/print
+				kind := uint8(1) // SEND
+				dk := UDPDedupKey{
+					Kind:   kind,
+					Family: fam,
+					Pid:    p.Pid,
+					Sport:  sport,
+					Dport:  dport,
+					SrcIP:  srcIPKey,
+					DstIP:  dstIPKey,
+				}
+				if udpSeenRecently(dk, 2*time.Millisecond) {
+					continue
+				}
+
+				// learn src port owner
 				savePortOwner(fam, sport, p)
 
-				// пытаемся найти dst процесс
+				// find dst owner
 				dstProc, ok := lookupListen(fam, dstIPKey, dport)
 				if !ok && isLoopback(fam, dstIPKey) {
 					dstProc, ok = lookupPortOwner(fam, dport)
 				}
+
+				// cosmetic: if dst is loopback and src ip is *, show 127.0.0.1/::1
+				if isLoopback(fam, dstIPKey) && isZero16(srcIPKey) {
+					lbStr, lbKey := loopbackKey(fam)
+					srcIPKey = lbKey
+					srcEp = formatEndp(fam, lbStr, lbKey, sport)
+				}
+
+				// ===== A) defer loopback SEND if dst unknown =====
 				if !ok && isLoopback(fam, dstIPKey) {
-					// ✅ если loopback и dst ещё неизвестен — ОТЛОЖИМ, чтобы не печатать dst=?
-					kind := "SENDTO"
-					if ev.Sysexit == EV_SENDMSG {
-						kind = "SENDMSG"
-					}
 					savePendingUDPSend(fam, dport, PendingUDPSend{
-						Kind:  kind,
+						Kind:  "SEND",
 						Pid:   p,
 						SrcEp: srcEp,
 						DstEp: dstEp,
@@ -1310,33 +1522,42 @@ func main() {
 					continue
 				}
 
-				kind := "SENDTO"
-				if ev.Sysexit == EV_SENDMSG {
-					kind = "SENDMSG"
-				}
-				printUDP(kind, p, p, dstProc, srcEp, dstEp)
+				printUDP("SEND", p, p, dstProc, srcEp, dstEp)
 
 			case EV_RECVFROM, EV_RECVMSG:
-				// UDP recv
 				if uint8(ev.Proto) != IPPROTO_UDP {
 					continue
 				}
 
-				// владельцем локального порта dport является текущий процесс
-				// и это автоматически flush-нет pending SEND на этот dport
+				// drop garbage recv without source addr (avoids "*:0 -> 127.0.0.53:53")
+				if sport == 0 || isZero16(srcIPKey) {
+					continue
+				}
+
+				kind := uint8(2) // RECV
+				dk := UDPDedupKey{
+					Kind:   kind,
+					Family: fam,
+					Pid:    p.Pid,
+					Sport:  sport,
+					Dport:  dport,
+					SrcIP:  srcIPKey,
+					DstIP:  dstIPKey,
+				}
+				if udpSeenRecently(dk, 2*time.Millisecond) {
+					continue
+				}
+
+				// dst port belongs to receiver
 				savePortOwner(fam, dport, p)
 
-				// src процесс (для loopback) узнаём по sport
+				// src pid only if local loopback
 				srcProc := Proc{}
 				if isLoopback(fam, srcIPKey) {
 					srcProc, _ = lookupPortOwner(fam, sport)
 				}
 
-				kind := "RECVFROM"
-				if ev.Sysexit == EV_RECVMSG {
-					kind = "RECVMSG"
-				}
-				printUDP(kind, p, srcProc, p, srcEp, dstEp)
+				printUDP("RECV", p, srcProc, p, srcEp, dstEp)
 			}
 		}
 	}()
@@ -1347,37 +1568,4 @@ func main() {
 }
 
 
-
-
-UDP RECVFROM pid=553(systemd-resolve)  src=?  10.0.2.3:53 -> 10.0.2.15:54590  dst=553(systemd-resolve)
-UDP RECVMSG pid=553(systemd-resolve)  src=?  10.0.2.3:53 -> 10.0.2.15:54590  dst=553(systemd-resolve)
-TCP CONNECT client=749(NetworkManager)  10.0.2.15:60094 -> 185.125.190.49:80  server=?
-UDP SENDTO  pid=10754(send_udp)  src=10754(send_udp)  *:37228 -> 127.0.0.1:9999  dst=10701(recvmsg_test)
-UDP RECVMSG pid=10701(recvmsg_test)  src=10754(send_udp)  127.0.0.1:37228 -> *:9999  dst=10701(recvmsg_test)
-UDP SENDTO  pid=2900(Chrome_ChildIOT)  src=2900(Chrome_ChildIOT)  127.0.0.1:19586 -> 127.0.0.53:53  dst=553(systemd-resolve)
-UDP SENDTO  pid=2900(Chrome_ChildIOT)  src=2900(Chrome_ChildIOT)  127.0.0.1:58858 -> 127.0.0.53:53  dst=553(systemd-resolve)
-UDP RECVFROM pid=553(systemd-resolve)  src=?  *:0 -> 127.0.0.53:53  dst=553(systemd-resolve)
-UDP RECVMSG pid=553(systemd-resolve)  src=2900(Chrome_ChildIOT)  127.0.0.1:19586 -> 127.0.0.53:53  dst=553(systemd-resolve)
-UDP RECVFROM pid=553(systemd-resolve)  src=?  *:0 -> 127.0.0.53:53  dst=553(systemd-resolve)
-UDP RECVMSG pid=553(systemd-resolve)  src=2900(Chrome_ChildIOT)  127.0.0.1:58858 -> 127.0.0.53:53  dst=553(systemd-resolve)
-UDP SENDTO  pid=2900(Chrome_ChildIOT)  src=2900(Chrome_ChildIOT)  127.0.0.1:51415 -> 127.0.0.53:53  dst=553(systemd-resolve)
-UDP RECVFROM pid=553(systemd-resolve)  src=?  *:0 -> 127.0.0.53:53  dst=553(systemd-resolve)
-UDP RECVMSG pid=553(systemd-resolve)  src=2900(Chrome_ChildIOT)  127.0.0.1:51415 -> 127.0.0.53:53  dst=553(systemd-resolve)
-UDP RECVFROM pid=553(systemd-resolve)  src=?  10.0.2.3:53 -> 10.0.2.15:48191  dst=553(systemd-resolve)
-UDP RECVMSG pid=553(systemd-resolve)  src=?  10.0.2.3:53 -> 10.0.2.15:48191  dst=553(systemd-resolve)
-UDP SENDMSG pid=553(systemd-resolve)  src=553(systemd-resolve)  127.0.0.53:53 -> 127.0.0.1:51415  dst=2900(Chrome_ChildIOT)
-UDP RECVMSG pid=2900(Chrome_ChildIOT)  src=553(systemd-resolve)  127.0.0.53:53 -> 127.0.0.1:51415  dst=2900(Chrome_ChildIOT)
-UDP RECVFROM pid=553(systemd-resolve)  src=?  10.0.2.3:53 -> 10.0.2.15:56910  dst=553(systemd-resolve)
-UDP RECVMSG pid=553(systemd-resolve)  src=?  10.0.2.3:53 -> 10.0.2.15:56910  dst=553(systemd-resolve)
-UDP SENDMSG pid=553(systemd-resolve)  src=553(systemd-resolve)  127.0.0.53:53 -> 127.0.0.1:58858  dst=2900(Chrome_ChildIOT)
-UDP RECVMSG pid=2900(Chrome_ChildIOT)  src=553(systemd-resolve)  127.0.0.53:53 -> 127.0.0.1:58858  dst=2900(Chrome_ChildIOT)
-UDP RECVFROM pid=553(systemd-resolve)  src=?  10.0.2.3:53 -> 10.0.2.15:46969  dst=553(systemd-resolve)
-UDP RECVMSG pid=553(systemd-resolve)  src=?  10.0.2.3:53 -> 10.0.2.15:46969  dst=553(systemd-resolve)
-UDP RECVFROM pid=553(systemd-resolve)  src=?  10.0.2.3:53 -> 10.0.2.15:33255  dst=553(systemd-resolve)
-UDP RECVMSG pid=553(systemd-resolve)  src=?  10.0.2.3:53 -> 10.0.2.15:33255  dst=553(systemd-resolve)
-UDP SENDMSG pid=553(systemd-resolve)  src=553(systemd-resolve)  127.0.0.53:53 -> 127.0.0.1:19586  dst=2900(Chrome_ChildIOT)
-TCP CONNECT client=2900(Chrome_ChildIOT)  [fd00:0:0:0:ffc:548:435e:4ea1]:0 -> [2603:1061:14:32:0:0:0:1]:443  server=?
-TCP CONNECT client=2900(Chrome_ChildIOT)  10.0.2.15:39836 -> 13.107.226.44:443  server=?
-UDP SENDTO  pid=2900(Chrome_ChildIOT)  src=2900(Chrome_ChildIOT)  127.0.0.1:11918 -> 127.0.0.53:53  dst=553(systemd-resolve)
-UDP SENDTO  pid=2900(Chrome_ChildIOT)  src=2900(Chrome_ChildIOT)  127.0.0.1:53415 -> 127.0.0.53:53  dst=553(systemd-resolve)
 
