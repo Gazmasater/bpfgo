@@ -1351,5 +1351,113 @@ func main() {
 
 
 
+lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
+[sudo] password for lev: 
+2026/02/18 01:54:24.537134 bpfgo start: debug=true tracePort=9999 perfMB=4 print=false sample=1000 matchOnly=true snapshotEvery=0s
+2026/02/18 01:54:24.748694 [DBG] snapshotPorts: starting (self=23930 bpfgo)
+2026/02/18 01:54:24.751021 pprof on :6060
+2026/02/18 01:54:24.766985 [DBG] snapshotPorts: inode2proc: procs_scanned=256 procs_skipped=1 unique_inodes=978
+2026/02/18 01:54:24.767192 [DBG] /proc/net/udp: scanned_lines=5 parsed_entries=5
+2026/02/18 01:54:24.767236 [DBG] /proc/net/udp6: scanned_lines=2 parsed_entries=2
+2026/02/18 01:54:24.767258 [DBG] UDP owner learned (proc/udp): port=9999 proc=14721(recvmsg_test) inode=63526
+2026/02/18 01:54:24.767266 [DBG] snapshotPorts: TRACE_PORT=9999 ownerAny=14721(recvmsg_test)
+2026/02/18 01:54:24.789668 Press Ctrl+C to exit
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=0 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=0 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=0 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=0 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=0 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=0 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=1 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=0 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=0 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=0 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=0 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=0 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=0 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=0 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=0 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=2474 eps_match=2474 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=2470 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=1120 eps_match=1120 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=3590 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=1066 eps_match=1062 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=4652 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=1740 eps_match=1740 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=6392 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=3452 eps_match=3409 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=9801 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=4321 eps_match=4321 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=14122 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=5060 eps_match=5056 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=19178 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=4852 eps_match=4852 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=24030 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=24030 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=4377 eps_match=4376 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=28406 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=4313 eps_match=4313 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=3 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=0 udp_recv=0 udp_sendmsg=0 udp_recvmsg=32719 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
 
 
+
+ev@lev-VirtualBox:~/bpfgo/test$ go run .
+[flood] pps=1770228 total=1770228
+[flood] pps=2139529 total=3909757
+[flood] pps=597596 total=4507353
+[flood] pps=1270783 total=5778136
+[flood] pps=276870 total=6055006
+[flood] pps=321702 total=6376708
+[flood] pps=322992 total=6699700
+[flood] pps=1450873 total=8150573
+[flood] pps=334730 total=8485303
+[flood] pps=714768 total=9200071
+[done] total=9200075
