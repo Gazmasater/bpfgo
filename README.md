@@ -711,6 +711,40 @@ const (
 )
 
 /* =========================
+ * Debug config
+ * ========================= */
+
+var (
+	debug    = os.Getenv("BPFGO_DEBUG") != ""
+	tracePort uint16
+)
+
+func initDebug() {
+	if s := os.Getenv("BPFGO_TRACE_PORT"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil && v > 0 && v < 65536 {
+			tracePort = uint16(v)
+		}
+	}
+}
+
+func dbg(format string, args ...any) {
+	if debug {
+		log.Printf("[DBG] "+format, args...)
+	}
+}
+
+func famStr(f uint16) string {
+	switch f {
+	case AF_INET:
+		return "AF_INET"
+	case AF_INET6:
+		return "AF_INET6"
+	default:
+		return fmt.Sprintf("AF_%d", f)
+	}
+}
+
+/* =========================
  * Proc
  * ========================= */
 
@@ -787,30 +821,28 @@ var (
 	commMu    sync.RWMutex
 	commCache = make(map[[32]int8]string, 4096)
 
-	// TCP listen by bind()
+	// TCP bind/listen
 	listenMu sync.Mutex
 	listenBy = make(map[EndpKey]Proc, 4096)
 
-	// TCP connect cache
+	// TCP connects
 	connMu sync.Mutex
 	connBy = make(map[ConnKey]Proc, 16384)
 
-	// pending connect until accept
+	// pending connects until accept
 	pendMu sync.Mutex
 	pendBy = make(map[ConnKey]PendingConnect, 16384)
 
-	// UDP port owner:
-	//   owner[(family,port)] - как было
-	//   ownerAny[port]       - ВАЖНО: для loopback склейка IPv4(127.0.0.1) и IPv6(::1)
+	// UDP owners (family+port) + (port-only for loopback/dualstack)
 	udpPortMu    sync.Mutex
 	udpPortOwner = make(map[PortKey]Proc, 65536)
 	udpPortAny   = make(map[uint16]Proc, 65536)
 
-	// pending UDP SEND для loopback только по порту (без family)
+	// pending UDP sends for loopback by port only
 	udpPendMu     sync.Mutex
 	udpPendByPort = make(map[uint16][]PendingUDPSend, 4096)
 
-	// dedup для UDP (чтобы RECVFROM+RECVMSG не дублировались)
+	// dedup recvfrom/recvmsg, sendto/sendmsg
 	udpDedupMu sync.Mutex
 	udpDedup   = make(map[UDPDedupKey]time.Time, 65536)
 )
@@ -848,7 +880,7 @@ func commString(c [32]int8) string {
  * ========================= */
 
 func ip4BytesFromU32Net(x uint32) (b [4]byte) {
-	// восстанавливаем исходные байты IPv4 адреса
+	// ядро пишет __be32, а Go читает uint32 на little-endian → восстанавливаем исходные байты
 	binary.LittleEndian.PutUint32(b[:], x)
 	return
 }
@@ -862,15 +894,39 @@ func isZero16(a [16]byte) bool {
 	return true
 }
 
-func isLoopback4(ip [16]byte) bool { return ip[0] == 127 }
-func isLoopback6(ip [16]byte) bool {
-	for i := 0; i < 15; i++ {
+func isV4Mapped(ip [16]byte) (v4 [4]byte, ok bool) {
+	// ::ffff:a.b.c.d  =>  00..00 ff ff a b c d
+	for i := 0; i < 10; i++ {
 		if ip[i] != 0 {
-			return false
+			return v4, false
 		}
 	}
-	return ip[15] == 1
+	if ip[10] != 0xff || ip[11] != 0xff {
+		return v4, false
+	}
+	copy(v4[:], ip[12:16])
+	return v4, true
 }
+
+func isLoopback4(ip [16]byte) bool { return ip[0] == 127 }
+
+func isLoopback6(ip [16]byte) bool {
+	// pure ::1
+	pure := true
+	for i := 0; i < 15; i++ {
+		if ip[i] != 0 {
+			pure = false
+			break
+		}
+	}
+	if pure && ip[15] == 1 {
+		return true
+	}
+	// or ::ffff:127.x.x.x
+	v4, ok := isV4Mapped(ip)
+	return ok && v4[0] == 127
+}
+
 func isLoopback(family uint16, ip [16]byte) bool {
 	if family == AF_INET {
 		return isLoopback4(ip)
@@ -899,6 +955,12 @@ func endpFromEvIPv4(ipU32 uint32, port uint16) (ipStr string, ipKey [16]byte, po
 
 func endpFromEvIPv6(ipArr [16]uint8, port uint16) (ipStr string, ipKey [16]byte, portU16 uint16) {
 	copy(ipKey[:], ipArr[:])
+
+	// если это ::ffff:127.0.0.1 — печатаем как IPv4, чтобы было читаемо
+	if v4, ok := isV4Mapped(ipKey); ok {
+		return fmt.Sprintf("%d.%d.%d.%d", v4[0], v4[1], v4[2], v4[3]), ipKey, port
+	}
+
 	return fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x",
 		uint16(ipArr[0])<<8|uint16(ipArr[1]),
 		uint16(ipArr[2])<<8|uint16(ipArr[3]),
@@ -915,7 +977,11 @@ func formatEndp(family uint16, ipStr string, ipKey [16]byte, port uint16) string
 	if isZero16(ipKey) {
 		return fmt.Sprintf("*:%d", port)
 	}
+	// если это v4-mapped — печатаем как IPv4
 	if family == AF_INET6 {
+		if v4, ok := isV4Mapped(ipKey); ok {
+			return fmt.Sprintf("%d.%d.%d.%d:%d", v4[0], v4[1], v4[2], v4[3], port)
+		}
 		return fmt.Sprintf("[%s]:%d", ipStr, port)
 	}
 	return fmt.Sprintf("%s:%d", ipStr, port)
@@ -985,19 +1051,25 @@ func takePendingConn(key ConnKey) (PendingConnect, bool) {
 }
 
 /* =========================
- * UDP owner + pending (A)
+ * UDP owner + pending
  * ========================= */
 
-func savePortOwner(family uint16, port uint16, p Proc) {
+func savePortOwnerSrc(family uint16, port uint16, p Proc, src string) {
 	p.Seen = time.Now()
 
 	udpPortMu.Lock()
 	udpPortOwner[PortKey{family, port}] = p
-	udpPortAny[port] = p // ✅ склейка IPv4/IPv6 для loopback
+	udpPortAny[port] = p // склейка IPv4/IPv6 для loopback
 	udpPortMu.Unlock()
+
+	if debug && (tracePort == 0 || tracePort == port) {
+		dbg("UDP owner learned (%s): port=%d family=%s proc=%s", src, port, famStr(family), p.String())
+	}
 
 	flushPendingUDPSend(port, p)
 }
+
+func savePortOwner(family uint16, port uint16, p Proc) { savePortOwnerSrc(family, port, p, "event") }
 
 func lookupPortOwnerAny(port uint16) (Proc, bool) {
 	udpPortMu.Lock()
@@ -1011,6 +1083,10 @@ func savePendingUDPSend(port uint16, it PendingUDPSend) {
 	udpPendMu.Lock()
 	udpPendByPort[port] = append(udpPendByPort[port], it)
 	udpPendMu.Unlock()
+
+	if debug && (tracePort == 0 || tracePort == port) {
+		dbg("UDP pending add: port=%d label=%s pid=%s %s -> %s", port, it.Label, it.Pid.String(), it.SrcEp, it.DstEp)
+	}
 }
 
 func flushPendingUDPSend(port uint16, dstProc Proc) {
@@ -1024,6 +1100,11 @@ func flushPendingUDPSend(port uint16, dstProc Proc) {
 	if !ok || len(list) == 0 {
 		return
 	}
+
+	if debug && (tracePort == 0 || tracePort == port) {
+		dbg("UDP pending flush: port=%d n=%d dst=%s", port, len(list), dstProc.String())
+	}
+
 	for _, it := range list {
 		printUDP(it.Label, it.Pid, it.Pid, dstProc, it.SrcEp, it.DstEp)
 	}
@@ -1122,6 +1203,7 @@ func cleanupTTL(ttl time.Duration) {
 			j := 0
 			for _, it := range list {
 				if it.Seen.Before(cut) {
+					// timeout: всё-таки печатаем dst=?
 					printUDP(it.Label, it.Pid, it.Pid, Proc{}, it.SrcEp, it.DstEp)
 					continue
 				}
@@ -1165,8 +1247,12 @@ func buildInodeToProc(selfPID uint32, selfName string) map[uint64]Proc {
 
 	ents, err := os.ReadDir("/proc")
 	if err != nil {
+		dbg("cannot read /proc: %v", err)
 		return out
 	}
+
+	scanned := 0
+	skipped := 0
 
 	for _, e := range ents {
 		if !e.IsDir() {
@@ -1192,9 +1278,11 @@ func buildInodeToProc(selfPID uint32, selfName string) map[uint64]Proc {
 		fdDir := filepath.Join("/proc", e.Name(), "fd")
 		fds, err := os.ReadDir(fdDir)
 		if err != nil {
+			skipped++
 			continue
 		}
 
+		scanned++
 		p := Proc{Pid: up, Comm: comm}
 		for _, fd := range fds {
 			target, err := os.Readlink(filepath.Join(fdDir, fd.Name()))
@@ -1215,13 +1303,15 @@ func buildInodeToProc(selfPID uint32, selfName string) map[uint64]Proc {
 		}
 	}
 
+	dbg("inode snapshot: procs_scanned=%d procs_skipped=%d unique_inodes=%d", scanned, skipped, len(out))
 	return out
 }
 
-// Robust parser: uses header to find columns (local_address, st, inode)
+// Robust parser: uses header columns (local_address, st, inode)
 func parseProcNetInodes(path string, wantState string) []inodePort {
 	f, err := os.Open(path)
 	if err != nil {
+		dbg("open %s: %v", path, err)
 		return nil
 	}
 	defer f.Close()
@@ -1246,6 +1336,7 @@ func parseProcNetInodes(path string, wantState string) []inodePort {
 	iState := col("st")
 	iInode := col("inode")
 	if iLocal < 0 || iInode < 0 {
+		dbg("%s: header missing columns (local_address/inode)", path)
 		return nil
 	}
 
@@ -1296,33 +1387,52 @@ func parseProcNetInodes(path string, wantState string) []inodePort {
 
 func snapshotPorts(selfName string) {
 	selfPID := uint32(os.Getpid())
+	dbg("snapshotPorts: starting (self=%d %s)", selfPID, selfName)
+
 	inode2proc := buildInodeToProc(selfPID, selfName)
 	if len(inode2proc) == 0 {
+		dbg("snapshotPorts: inode2proc empty")
 		return
 	}
 
 	// UDP owners
+	nUDP4, nUDP6 := 0, 0
 	for _, it := range parseProcNetInodes("/proc/net/udp", "") {
 		if p, ok := inode2proc[it.Inode]; ok {
-			savePortOwner(AF_INET, it.Port, p)
+			savePortOwnerSrc(AF_INET, it.Port, p, "proc/udp")
+			nUDP4++
 		}
 	}
 	for _, it := range parseProcNetInodes("/proc/net/udp6", "") {
 		if p, ok := inode2proc[it.Inode]; ok {
-			savePortOwner(AF_INET6, it.Port, p)
+			savePortOwnerSrc(AF_INET6, it.Port, p, "proc/udp6")
+			nUDP6++
 		}
 	}
+	dbg("snapshotPorts: udp owners loaded: udp=%d udp6=%d", nUDP4, nUDP6)
 
 	// TCP listeners (state 0A = LISTEN)
 	var zero [16]byte
+	nTCP4, nTCP6 := 0, 0
 	for _, it := range parseProcNetInodes("/proc/net/tcp", "0A") {
 		if p, ok := inode2proc[it.Inode]; ok {
 			saveListen(EndpKey{Family: AF_INET, Port: it.Port, IP: zero}, p)
+			nTCP4++
 		}
 	}
 	for _, it := range parseProcNetInodes("/proc/net/tcp6", "0A") {
 		if p, ok := inode2proc[it.Inode]; ok {
 			saveListen(EndpKey{Family: AF_INET6, Port: it.Port, IP: zero}, p)
+			nTCP6++
+		}
+	}
+	dbg("snapshotPorts: tcp listeners loaded: tcp=%d tcp6=%d", nTCP4, nTCP6)
+
+	if tracePort != 0 {
+		if p, ok := lookupPortOwnerAny(tracePort); ok {
+			dbg("snapshotPorts: TRACE_PORT=%d ownerAny=%s", tracePort, p.String())
+		} else {
+			dbg("snapshotPorts: TRACE_PORT=%d ownerAny NOT FOUND", tracePort)
 		}
 	}
 }
@@ -1332,6 +1442,8 @@ func snapshotPorts(selfName string) {
  * ========================= */
 
 func init() {
+	initDebug()
+
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.Fatalf("failed to remove memlock: %v", err)
 	}
@@ -1355,7 +1467,7 @@ func main() {
 
 	selfName := filepath.Base(os.Args[0])
 
-	// ✅ ВАЖНО: snapshot ДО attach — покрывает "server запущен раньше bpfgo"
+	// ✅ snapshot ДО attach — покрывает "server запущен раньше bpfgo"
 	snapshotPorts(selfName)
 
 	var links []link.Link
@@ -1464,11 +1576,14 @@ func main() {
 			switch ev.Sysexit {
 
 			case EV_BINDOK:
-				// bind: сохраняем "кто слушает порт" (TCP) + помогает UDP
+				// bind OK: сохраняем TCP listen (и дополнительно UDP owner по порту — полезно)
 				saveListen(EndpKey{Family: fam, Port: dport, IP: dstIPKey}, p)
 				var zero [16]byte
 				saveListen(EndpKey{Family: fam, Port: dport, IP: zero}, p)
-				savePortOwner(fam, dport, p)
+
+				if dport != 0 {
+					savePortOwnerSrc(fam, dport, p, "bindok")
+				}
 
 			case EV_CONNECT:
 				if proto != IPPROTO_TCP {
@@ -1532,16 +1647,16 @@ func main() {
 					label = "SENDMSG"
 				}
 
-				// cosmetic: если dst loopback, а src ip "*", показываем loopback вместо "*"
+				// cosmetic: dst loopback + src "*": подставим loopback
 				if isLoopback(fam, dstIPKey) && isZero16(srcIPKey) {
 					lbStr, lbKey := loopbackKey(fam)
 					srcIPKey = lbKey
 					srcEp = formatEndp(fam, lbStr, lbKey, sport)
 				}
 
-				// learn: исходящий порт принадлежит этому pid
+				// learn: исходящий ephemeral порт
 				if sport != 0 {
-					savePortOwner(fam, sport, p)
+					savePortOwnerSrc(fam, sport, p, "send-learn")
 				}
 
 				// dedup sendto/sendmsg
@@ -1558,14 +1673,21 @@ func main() {
 					continue
 				}
 
-				// dst proc: для loopback — ТОЛЬКО по порту (без family)
+				isLB := isLoopback(fam, dstIPKey)
+
+				// dst proc:
 				dstProc, ok := lookupListen(fam, dstIPKey, dport)
-				if !ok && isLoopback(fam, dstIPKey) {
-					dstProc, ok = lookupPortOwnerAny(dport) // ✅ склейка 127.0.0.1 / ::1
+				if !ok && isLB {
+					dstProc, ok = lookupPortOwnerAny(dport)
 				}
 
-				// A) если loopback и dst неизвестен — откладываем (не печатаем dst=?)
-				if !ok && isLoopback(fam, dstIPKey) {
+				if debug && (tracePort == 0 || tracePort == dport || tracePort == sport) {
+					dbg("UDP %s: fam=%s loopback=%v pid=%s %s -> %s ownerKnown=%v",
+						label, famStr(fam), isLB, p.String(), srcEp, dstEp, ok)
+				}
+
+				// loopback + dst неизвестен => pending (не печатаем dst=?)
+				if !ok && isLB {
 					savePendingUDPSend(dport, PendingUDPSend{
 						Label: label,
 						Pid:   p,
@@ -1586,13 +1708,17 @@ func main() {
 					label = "RECVMSG"
 				}
 
-				// ✅ КЛЮЧ: всегда учим владельца локального порта (даже если src неизвестен)
+				// ✅ ключ: всегда учим владельца локального порта
 				if dport != 0 {
-					savePortOwner(fam, dport, p) // flushPending(dport) происходит внутри
+					savePortOwnerSrc(fam, dport, p, "recv-learn")
 				}
 
-				// если recvmsg не вернул msg_name → src пустой, печатать нечего, но owner уже сохранили
+				// если msg_name не заполнен — src неизвестен; owner уже сохранили
 				if sport == 0 || isZero16(srcIPKey) {
+					if debug && (tracePort == 0 || tracePort == dport) {
+						dbg("UDP %s: src unknown (sport=%d, srcIP=zero), learned owner for dport=%d",
+							label, sport, dport)
+					}
 					continue
 				}
 
@@ -1610,7 +1736,7 @@ func main() {
 					continue
 				}
 
-				// src proc only meaningful for loopback
+				// src proc meaningful mostly for loopback
 				srcProc := Proc{}
 				if isLoopback(fam, srcIPKey) {
 					srcProc, _ = lookupPortOwnerAny(sport)
@@ -1625,6 +1751,19 @@ func main() {
 	<-stop
 	fmt.Println("Exiting...")
 }
+
+/* =========================
+ * eBPF init/load
+ * ========================= */
+
+func init() {
+	// NOTE: this init() is already defined above; keep only one in your file.
+	// If your project has another init() (generated), merge these lines there.
+}
+
+
+
+BPFGO_DEBUG=1 BPFGO_TRACE_PORT=9999 sudo ./bpfgo
 
 
 
