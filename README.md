@@ -2114,3 +2114,11 @@ func main() {
 	fmt.Println("Exiting...")
 }
 
+
+
+UDP SENDTO  pid=5925(udp_client)  src=5925(udp_client)  *:33789 -> 127.0.0.1:9999  dst=?
+UDP RECVFROM pid=5806(udp_server)  src=?  127.0.0.1:33789 -> *:9999  dst=5806(udp_server)
+UDP SENDTO  pid=5806(udp_server)  src=5806(udp_server)  *:9999 -> 127.0.0.1:33789  dst=?
+UDP RECVFROM pid=5925(udp_client)  src=?  127.0.0.1:9999 -> *:33789  dst=5925(udp_client)
+^CExiting...
+
