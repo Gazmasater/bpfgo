@@ -1349,9 +1349,35 @@ func main() {
 
 
 
-lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
-2026/02/17 23:40:35 pprof on :6060
-Press Ctrl+C to exit
-UDP SENDTO  pid=10455(send_udp)  src=10455(send_udp)  *:35469 -> 127.0.0.1:9999  dst=?
-UDP SENDTO  pid=10519(send_udp)  src=10519(send_udp)  *:46684 -> 127.0.0.1:9999  dst=9629(recvmsg_test)
-UDP RECVMSG pid=9629(recvmsg_test)  src=10519(send_udp)  127.0.0.1:46684 -> *:9999  dst=9629(recvmsg_test)
+UDP RECVFROM pid=553(systemd-resolve)  src=?  10.0.2.3:53 -> 10.0.2.15:54590  dst=553(systemd-resolve)
+UDP RECVMSG pid=553(systemd-resolve)  src=?  10.0.2.3:53 -> 10.0.2.15:54590  dst=553(systemd-resolve)
+TCP CONNECT client=749(NetworkManager)  10.0.2.15:60094 -> 185.125.190.49:80  server=?
+UDP SENDTO  pid=10754(send_udp)  src=10754(send_udp)  *:37228 -> 127.0.0.1:9999  dst=10701(recvmsg_test)
+UDP RECVMSG pid=10701(recvmsg_test)  src=10754(send_udp)  127.0.0.1:37228 -> *:9999  dst=10701(recvmsg_test)
+UDP SENDTO  pid=2900(Chrome_ChildIOT)  src=2900(Chrome_ChildIOT)  127.0.0.1:19586 -> 127.0.0.53:53  dst=553(systemd-resolve)
+UDP SENDTO  pid=2900(Chrome_ChildIOT)  src=2900(Chrome_ChildIOT)  127.0.0.1:58858 -> 127.0.0.53:53  dst=553(systemd-resolve)
+UDP RECVFROM pid=553(systemd-resolve)  src=?  *:0 -> 127.0.0.53:53  dst=553(systemd-resolve)
+UDP RECVMSG pid=553(systemd-resolve)  src=2900(Chrome_ChildIOT)  127.0.0.1:19586 -> 127.0.0.53:53  dst=553(systemd-resolve)
+UDP RECVFROM pid=553(systemd-resolve)  src=?  *:0 -> 127.0.0.53:53  dst=553(systemd-resolve)
+UDP RECVMSG pid=553(systemd-resolve)  src=2900(Chrome_ChildIOT)  127.0.0.1:58858 -> 127.0.0.53:53  dst=553(systemd-resolve)
+UDP SENDTO  pid=2900(Chrome_ChildIOT)  src=2900(Chrome_ChildIOT)  127.0.0.1:51415 -> 127.0.0.53:53  dst=553(systemd-resolve)
+UDP RECVFROM pid=553(systemd-resolve)  src=?  *:0 -> 127.0.0.53:53  dst=553(systemd-resolve)
+UDP RECVMSG pid=553(systemd-resolve)  src=2900(Chrome_ChildIOT)  127.0.0.1:51415 -> 127.0.0.53:53  dst=553(systemd-resolve)
+UDP RECVFROM pid=553(systemd-resolve)  src=?  10.0.2.3:53 -> 10.0.2.15:48191  dst=553(systemd-resolve)
+UDP RECVMSG pid=553(systemd-resolve)  src=?  10.0.2.3:53 -> 10.0.2.15:48191  dst=553(systemd-resolve)
+UDP SENDMSG pid=553(systemd-resolve)  src=553(systemd-resolve)  127.0.0.53:53 -> 127.0.0.1:51415  dst=2900(Chrome_ChildIOT)
+UDP RECVMSG pid=2900(Chrome_ChildIOT)  src=553(systemd-resolve)  127.0.0.53:53 -> 127.0.0.1:51415  dst=2900(Chrome_ChildIOT)
+UDP RECVFROM pid=553(systemd-resolve)  src=?  10.0.2.3:53 -> 10.0.2.15:56910  dst=553(systemd-resolve)
+UDP RECVMSG pid=553(systemd-resolve)  src=?  10.0.2.3:53 -> 10.0.2.15:56910  dst=553(systemd-resolve)
+UDP SENDMSG pid=553(systemd-resolve)  src=553(systemd-resolve)  127.0.0.53:53 -> 127.0.0.1:58858  dst=2900(Chrome_ChildIOT)
+UDP RECVMSG pid=2900(Chrome_ChildIOT)  src=553(systemd-resolve)  127.0.0.53:53 -> 127.0.0.1:58858  dst=2900(Chrome_ChildIOT)
+UDP RECVFROM pid=553(systemd-resolve)  src=?  10.0.2.3:53 -> 10.0.2.15:46969  dst=553(systemd-resolve)
+UDP RECVMSG pid=553(systemd-resolve)  src=?  10.0.2.3:53 -> 10.0.2.15:46969  dst=553(systemd-resolve)
+UDP RECVFROM pid=553(systemd-resolve)  src=?  10.0.2.3:53 -> 10.0.2.15:33255  dst=553(systemd-resolve)
+UDP RECVMSG pid=553(systemd-resolve)  src=?  10.0.2.3:53 -> 10.0.2.15:33255  dst=553(systemd-resolve)
+UDP SENDMSG pid=553(systemd-resolve)  src=553(systemd-resolve)  127.0.0.53:53 -> 127.0.0.1:19586  dst=2900(Chrome_ChildIOT)
+TCP CONNECT client=2900(Chrome_ChildIOT)  [fd00:0:0:0:ffc:548:435e:4ea1]:0 -> [2603:1061:14:32:0:0:0:1]:443  server=?
+TCP CONNECT client=2900(Chrome_ChildIOT)  10.0.2.15:39836 -> 13.107.226.44:443  server=?
+UDP SENDTO  pid=2900(Chrome_ChildIOT)  src=2900(Chrome_ChildIOT)  127.0.0.1:11918 -> 127.0.0.53:53  dst=553(systemd-resolve)
+UDP SENDTO  pid=2900(Chrome_ChildIOT)  src=2900(Chrome_ChildIOT)  127.0.0.1:53415 -> 127.0.0.53:53  dst=553(systemd-resolve)
+
