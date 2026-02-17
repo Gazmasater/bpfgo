@@ -2189,3 +2189,106 @@ func main() {
 	<-stop
 	fmt.Println("Exiting...")
 }
+
+
+
+
+
+[{
+	"resource": "/home/lev/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#2",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "info.TsNs undefined (type *bpfTraceInfo has no field or method TsNs)",
+	"source": "compiler",
+	"startLineNumber": 319,
+	"startColumn": 8,
+	"endLineNumber": 319,
+	"endColumn": 12,
+	"modelVersionId": 4,
+	"origin": "extHost1"
+}]
+
+[{
+	"resource": "/home/lev/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#2",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "info.SockCookie undefined (type *bpfTraceInfo has no field or method SockCookie)",
+	"source": "compiler",
+	"startLineNumber": 319,
+	"startColumn": 19,
+	"endLineNumber": 319,
+	"endColumn": 29,
+	"modelVersionId": 4,
+	"origin": "extHost1"
+}]
+
+[{
+	"resource": "/home/lev/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#2",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "info.Bytes undefined (type *bpfTraceInfo has no field or method Bytes)",
+	"source": "compiler",
+	"startLineNumber": 329,
+	"startColumn": 25,
+	"endLineNumber": 329,
+	"endColumn": 30,
+	"modelVersionId": 4,
+	"origin": "extHost1"
+}]
+
+[{
+	"resource": "/home/lev/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#2",
+	"code": {
+		"value": "UnusedVar",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UnusedVar"
+		}
+	},
+	"severity": 8,
+	"message": "declared and not used: isRecv",
+	"source": "compiler",
+	"startLineNumber": 522,
+	"startColumn": 5,
+	"endLineNumber": 522,
+	"endColumn": 11,
+	"modelVersionId": 4,
+	"tags": [
+		1
+	],
+	"origin": "extHost1"
+}]
