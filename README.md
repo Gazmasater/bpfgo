@@ -1345,3 +1345,13 @@ func main() {
 	<-stop
 	fmt.Println("Exiting...")
 }
+
+
+
+
+lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
+2026/02/17 23:40:35 pprof on :6060
+Press Ctrl+C to exit
+UDP SENDTO  pid=10455(send_udp)  src=10455(send_udp)  *:35469 -> 127.0.0.1:9999  dst=?
+UDP SENDTO  pid=10519(send_udp)  src=10519(send_udp)  *:46684 -> 127.0.0.1:9999  dst=9629(recvmsg_test)
+UDP RECVMSG pid=9629(recvmsg_test)  src=10519(send_udp)  127.0.0.1:46684 -> *:9999  dst=9629(recvmsg_test)
