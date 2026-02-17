@@ -1612,6 +1612,38 @@ cleanup:
 
 
 
+[{
+	"resource": "/home/lev/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "70",
+	"severity": 8,
+	"message": "incomplete type \"struct sockaddr_storage\" is not allowed",
+	"source": "C/C++",
+	"startLineNumber": 479,
+	"startColumn": 70,
+	"endLineNumber": 479,
+	"endColumn": 76,
+	"modelVersionId": 4,
+	"origin": "extHost1"
+}]
+
+[{
+	"resource": "/home/lev/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "70",
+	"severity": 8,
+	"message": "incomplete type \"struct sockaddr_storage\" is not allowed",
+	"source": "C/C++",
+	"startLineNumber": 641,
+	"startColumn": 66,
+	"endLineNumber": 641,
+	"endColumn": 72,
+	"modelVersionId": 4,
+	"origin": "extHost1"
+}]
+
+
+
 
 package main
 
