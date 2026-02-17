@@ -841,3 +841,36 @@ func snapshotPorts(selfName string) {
 
 
 
+lev@lev-VirtualBox:~/bpfgo$ ss -tulpn
+Netid State  Recv-Q Send-Q Local Address:Port  Peer Address:PortProcess                                 
+udp   UNCONN 0      0            0.0.0.0:42204      0.0.0.0:*                                           
+udp   UNCONN 0      0            0.0.0.0:5353       0.0.0.0:*                                           
+udp   UNCONN 0      0            0.0.0.0:9999       0.0.0.0:*    users:(("recvmsg_test",pid=14721,fd=3))
+udp   UNCONN 0      0      127.0.0.53%lo:53         0.0.0.0:*                                           
+udp   UNCONN 0      0               [::]:52175         [::]:*                                           
+udp   UNCONN 0      0               [::]:5353          [::]:*                                           
+tcp   LISTEN 0      128        127.0.0.1:631        0.0.0.0:*                                           
+tcp   LISTEN 0      4096   127.0.0.53%lo:53         0.0.0.0:*                                           
+tcp   LISTEN 0      128            [::1]:631           [::]:*                                           
+lev@lev-VirtualBox:~/bpfgo$ 
+
+
+lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
+2026/02/18 01:13:07.639808 bpfgo start: debug=true tracePort=9999
+2026/02/18 01:13:07.639961 [DBG] snapshotPorts: starting (self=20018 bpfgo)
+2026/02/18 01:13:07.641507 pprof on :6060
+2026/02/18 01:13:07.674728 [DBG] snapshotPorts: inode2proc: procs_scanned=255 procs_skipped=0 unique_inodes=977
+2026/02/18 01:13:07.675019 [DBG] /proc/net/udp: scanned_lines=5 parsed_entries=0
+2026/02/18 01:13:07.675122 [DBG] /proc/net/udp6: scanned_lines=2 parsed_entries=0
+2026/02/18 01:13:07.675133 [DBG] snapshotPorts: /proc entries udp=0 udp6=0
+2026/02/18 01:13:07.675140 [DBG] snapshotPorts: udp inode matches: udp=0/0 udp6=0/0
+2026/02/18 01:13:07.675329 [DBG] /proc/net/tcp: scanned_lines=7 parsed_entries=0
+2026/02/18 01:13:07.675560 [DBG] /proc/net/tcp6: scanned_lines=2 parsed_entries=0
+2026/02/18 01:13:07.675615 [DBG] snapshotPorts: /proc entries tcp_listen=0 tcp6_listen=0
+2026/02/18 01:13:07.675622 [DBG] snapshotPorts: tcp listen inode matches: tcp=0/0 tcp6=0/0
+2026/02/18 01:13:07.675624 [DBG] snapshotPorts: TRACE_PORT=9999 deep-check
+2026/02/18 01:13:07.675628 [DBG] TRACE_PORT=9999 not present in /proc/net/udp*
+2026/02/18 01:13:07.675632 [DBG] snapshotPorts: TRACE_PORT=9999 ownerAny NOT FOUND
+Press Ctrl+C to exit
+
+
