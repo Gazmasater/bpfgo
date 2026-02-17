@@ -1568,4 +1568,10 @@ func main() {
 }
 
 
+lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
+2026/02/18 00:09:53 pprof on :6060
+Press Ctrl+C to exit
+UDP SEND  pid=13179(send_udp)  src=13179(send_udp)  127.0.0.1:36573 -> 127.0.0.1:9999  dst=?
+
+
 
