@@ -666,8 +666,9 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-ev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
-/home/lev/bpfgo/trace.c:525:11: warning: incompatible pointer to integer conversion initializing '__u64' (aka 'unsigned long long') with an expression of type 'typeof ((ctx)->skaddr)' (aka 'const void *') [-Wint-conversion]
-    __u64 skaddr = BPF_CORE_READ(ctx, skaddr);
-          ^        ~~~~~~~~~~~~~~~~~~~~~~~~~~
-1 warning generated.
+const void *skaddr = BPF_CORE_READ(ctx, skaddr);
+if (!skaddr)
+    return 0;
+
+// дальше используешь skaddr как pointer:
+bpf_probe_read_user(&sa, sizeof(sa), skaddr);
