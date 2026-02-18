@@ -663,15 +663,29 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
+struct trace_info {
+    // IPv4
+    struct in_addr  srcIP;
+    struct in_addr  dstIP;
 
-TCP SENDTO  pid=3770(Socket Thread)  src=3770(Socket Thread)  10.0.2.15:33640 -> *:0  dst=?
-TCP RECVFROM pid=3770(Socket Thread)  src=?  *:0 -> 10.0.2.15:33640  dst=3770(Socket Thread)
-TCP RECVFROM pid=3770(Socket Thread)  src=?  *:0 -> 10.0.2.15:33640  dst=3770(Socket Thread)
-TCP RECVFROM pid=3770(Socket Thread)  src=?  *:0 -> 10.0.2.15:52076  dst=3770(Socket Thread)
-TCP RECVFROM pid=3770(Socket Thread)  src=?  *:0 -> 10.0.2.15:52076  dst=3770(Socket Thread)
-TCP SENDTO  pid=3770(Socket Thread)  src=3770(Socket Thread)  10.0.2.15:52076 -> *:0  dst=?
-TCP SENDTO  pid=3770(Socket Thread)  src=3770(Socket Thread)  10.0.2.15:60814 -> *:0  dst=?
-TCP SENDTO  pid=3770(Socket Thread)  src=3770(Socket Thread)  10.0.2.15:60814 -> *:0  dst=?
-TCP SENDTO  pid=3770(Socket Thread)  src=3770(Socket Thread)  10.0.2.15:42036 -> *:0  dst=?
-TCP SENDTO  pid=3770(Socket Thread)  src=3770(Socket Thread)  10.0.2.15:42036 -> *:0  dst=?
-TCP SENDTO  pid=3770(Socket Thread)  src=3770(Socket Thread)  10.0.2.15:49110 -> *:0  dst=?
+    // IPv6
+    struct in6_addr srcIP6;
+    struct in6_addr dstIP6;
+
+    __u32 pid;
+    __u32 proto;
+
+    __u32 fd;      // NEW
+    __s32 _pad0;   // align ret to 8 bytes
+    __s64 ret;     // NEW (sys_exit return)
+
+    __u16 sport;
+    __u16 dport;
+    __u16 family;
+
+    __u8  sysexit; // event code
+    __u8  state;
+
+    char  comm[32];
+};
+
