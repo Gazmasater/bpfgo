@@ -1896,20 +1896,32 @@ cleanup:
 
 
 
-[{
-	"resource": "/home/lev/bpfgo/trace.c",
-	"owner": "C/C++: IntelliSense",
-	"code": "833",
-	"severity": 8,
-	"message": "pointer or reference to incomplete type \"struct trace_event_raw_net_dev_queue\" is not allowed",
-	"source": "C/C++",
-	"startLineNumber": 531,
-	"startColumn": 25,
-	"endLineNumber": 531,
-	"endColumn": 38,
-	"modelVersionId": 3,
-	"origin": "extHost1"
-}]
+// net:net_dev_queue tracepoint ctx (minimal)
+// common_* всегда первые 8 байт, дальше поля как в tracepoint format
+struct tp_net_dev_queue_ctx {
+    __u16 common_type;
+    __u8  common_flags;
+    __u8  common_preempt_count;
+    __s32 common_pid;
+
+    const void *skbaddr;   // offset обычно 8
+    __u32 len;             // дальше
+    __u32 name_loc;        // __data_loc char[] name (может быть, просто чтобы выровнять)
+};
+
+
+
+SEC("tracepoint/net/net_dev_queue")
+int trace_net_dev_queue(struct tp_net_dev_queue_ctx *ctx)
+{
+    const struct sk_buff *skb = (const struct sk_buff *)(unsigned long)ctx->skbaddr;
+    if (!skb)
+        return 0;
+
+    // ... твоя логика с skb ...
+    return 0;
+}
+
 
 
 
