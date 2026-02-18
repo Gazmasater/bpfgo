@@ -663,44 +663,15 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-#include <net/inet_sock.h> // часто не нужно с vmlinux.h, но если ругнётся — добавь
 
-static __always_inline int fill_fd_state(int fd, struct fd_state_t *st)
-{
-    struct sock *sk = sock_from_fd(fd);
-    if (!sk)
-        return -1;
-
-    st->family = BPF_CORE_READ(sk, __sk_common.skc_family);
-    st->proto  = BPF_CORE_READ(sk, sk_protocol);
-
-    st->lport  = BPF_CORE_READ(sk, __sk_common.skc_num);
-
-    __u16 dport_be = BPF_CORE_READ(sk, __sk_common.skc_dport);
-    st->rport = bpf_ntohs(dport_be);
-
-    if (st->family == AF_INET) {
-        // ✅ “реальный” исходящий IPv4 (после route/connect)
-        __u32 saddr = BPF_CORE_READ((struct inet_sock *)sk, inet_saddr);
-        // fallback: то, что было (bind/rcv addr)
-        if (saddr == 0)
-            saddr = BPF_CORE_READ(sk, __sk_common.skc_rcv_saddr);
-
-        st->lip = saddr;
-
-        // remote как было
-        st->rip = BPF_CORE_READ(sk, __sk_common.skc_daddr);
-        return 0;
-    }
-
-    if (st->family == AF_INET6) {
-        if (BPF_CORE_READ_INTO(&st->lip6, sk, __sk_common.skc_v6_rcv_saddr) < 0)
-            return -1;
-        if (BPF_CORE_READ_INTO(&st->rip6, sk, __sk_common.skc_v6_daddr) < 0)
-            return -1;
-        return 0;
-    }
-
-    return -1;
-}
-
+TCP SENDTO  pid=3770(Socket Thread)  src=3770(Socket Thread)  10.0.2.15:33640 -> *:0  dst=?
+TCP RECVFROM pid=3770(Socket Thread)  src=?  *:0 -> 10.0.2.15:33640  dst=3770(Socket Thread)
+TCP RECVFROM pid=3770(Socket Thread)  src=?  *:0 -> 10.0.2.15:33640  dst=3770(Socket Thread)
+TCP RECVFROM pid=3770(Socket Thread)  src=?  *:0 -> 10.0.2.15:52076  dst=3770(Socket Thread)
+TCP RECVFROM pid=3770(Socket Thread)  src=?  *:0 -> 10.0.2.15:52076  dst=3770(Socket Thread)
+TCP SENDTO  pid=3770(Socket Thread)  src=3770(Socket Thread)  10.0.2.15:52076 -> *:0  dst=?
+TCP SENDTO  pid=3770(Socket Thread)  src=3770(Socket Thread)  10.0.2.15:60814 -> *:0  dst=?
+TCP SENDTO  pid=3770(Socket Thread)  src=3770(Socket Thread)  10.0.2.15:60814 -> *:0  dst=?
+TCP SENDTO  pid=3770(Socket Thread)  src=3770(Socket Thread)  10.0.2.15:42036 -> *:0  dst=?
+TCP SENDTO  pid=3770(Socket Thread)  src=3770(Socket Thread)  10.0.2.15:42036 -> *:0  dst=?
+TCP SENDTO  pid=3770(Socket Thread)  src=3770(Socket Thread)  10.0.2.15:49110 -> *:0  dst=?
