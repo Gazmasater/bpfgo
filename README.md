@@ -669,7 +669,11 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 SEC("tracepoint/sock/inet_sock_set_state")
 int trace_inet_sock_set_state(struct trace_event_raw_inet_sock_set_state *ctx)
 {
-    __u64 skaddr = BPF_CORE_READ(ctx, skaddr);
+    const void *skp = BPF_CORE_READ(ctx, skaddr);
+    if (!skp)
+        return 0;
+
+    __u64 skaddr = (__u64)(unsigned long)skp;  // ✅ key for maps, no warning
     __u32 newstate = BPF_CORE_READ(ctx, newstate);
 
     struct sk_owner_t *own = bpf_map_lookup_elem(&sk_owner_map, &skaddr);
@@ -680,7 +684,7 @@ int trace_inet_sock_set_state(struct trace_event_raw_inet_sock_set_state *ctx)
     if (newstate != TCP_SYN_SENT && newstate != TCP_ESTABLISHED && newstate != TCP_CLOSE)
         return 0;
 
-    struct sock *sk = (struct sock *)skaddr;
+    struct sock *sk = (struct sock *)skp;
 
     // update fd_state_map from sock (most accurate)
     struct fd_state_t st = {};
@@ -704,9 +708,9 @@ int trace_inet_sock_set_state(struct trace_event_raw_inet_sock_set_state *ctx)
     info.sysexit = EV_CONNECT;
     info.state   = (__u8)newstate;
 
-    info.pid   = own->pid;
-    info.fd    = own->fd;
-    info.ret   = own->conn_ret;
+    info.pid = own->pid;
+    info.fd  = own->fd;
+    info.ret = own->conn_ret;
 
     __builtin_memcpy(info.comm, own->comm, sizeof(info.comm));
 
@@ -727,4 +731,6 @@ int trace_inet_sock_set_state(struct trace_event_raw_inet_sock_set_state *ctx)
 
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
     return 0;
+}
+
 }
