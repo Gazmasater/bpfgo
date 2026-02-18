@@ -1624,4 +1624,21 @@ func main() {
 
 
 
-P58 RECVMSG pid=749(NetworkManager)  src=?  *:0 -> *:58  dst=749(NetworkManager)
+UDP SENDMSG pid=3537(Socket Thread)  src=3537(Socket Thread)  *:54059 -> 74.125.205.198:443  dst=?
+UDP SENDMSG pid=3537(Socket Thread)  src=3537(Socket Thread)  *:54059 -> 74.125.205.198:443  dst=?
+UDP SENDMSG pid=3537(Socket Thread)  src=3537(Socket Thread)  *:54059 -> 74.125.205.198:443  dst=?
+UDP SENDMSG pid=3537(Socket Thread)  src=3537(Socket Thread)  *:53766 -> 173.194.73.119:443  dst=?
+UDP SENDMSG pid=3537(Socket Thread)  src=3537(Socket Thread)  *:54059 -> 74.125.205.198:443  dst=?
+UDP SENDMSG pid=3537(Socket Thread)  src=3537(Socket Thread)  *:54059 -> 74.125.205.198:443  dst=?
+UDP SENDMSG pid=3537(Socket Thread)  src=3537(Socket Thread)  *:54059 -> 74.125.205.198:443  dst=?
+UDP SENDMSG pid=3537(Socket Thread)  src=3537(Socket Thread)  *:54059 -> 74.125.205.198:443  dst=?
+UDP SENDMSG pid=3537(Socket Thread)  src=3537(Socket Thread)  *:53766 -> 173.194.73.119:443  dst=?
+UDP SENDMSG pid=3537(Socket Thread)  src=3537(Socket Thread)  *:54059 -> 74.125.205.198:443  dst=?
+UDP SENDMSG pid=3537(Socket Thread)  src=3537(Socket Thread)  *:54059 -> 74.125.205.198:443  dst=?
+UDP SENDMSG pid=3537(Socket Thread)  src=3537(Socket Thread)  *:54059 -> 74.125.205.198:443  dst=?
+UDP SENDMSG pid=3537(Socket Thread)  src=3537(Socket Thread)  *:54059 -> 74.125.205.198:443  dst=?
+UDP SENDMSG pid=3537(Socket Thread)  src=3537(Socket Thread)  *:54059 -> 74.125.205.198:443  dst=?
+UDP SENDMSG pid=3537(Socket Thread)  src=3537(Socket Thread)  *:54059 -> 74.125.205.198:443  dst=?
+UDP SENDMSG pid=3537(Socket Thread)  src=3537(Socket Thread)  *:54059 -> 74.125.205.198:443  dst=?
+UDP SENDMSG pid=3537(Socket Thread)  src=3537(Socket Thread)  *:54059 -> 74.125.205.198:443  dst=?
+UDP SENDMSG pid=3537(Socket Thread)  src=3537(Socket Thread)  *:54059 -> 74.125.205.198:443  dst=?
