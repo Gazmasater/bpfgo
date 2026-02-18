@@ -1582,3 +1582,18 @@ cleanup:
 }
 
 
+[{
+	"resource": "/home/lev/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "136",
+	"severity": 8,
+	"message": "struct \"inet_sock\" has no field \"inet_daddr\"",
+	"source": "C/C++",
+	"startLineNumber": 319,
+	"startColumn": 28,
+	"endLineNumber": 319,
+	"endColumn": 41,
+	"modelVersionId": 13,
+	"origin": "extHost1"
+}]
+
