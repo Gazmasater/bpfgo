@@ -1703,5 +1703,5 @@ func main() {
 }
 
 
-ICMPv6 RECVMSG pid=749(NetworkManager)  * -> *
-
+TCP RECVFROM pid=3537(Socket Thread)  src=?  74.125.205.198:443 -> 10.0.2.15:52302  dst=3537(Socket Thread)
+TCP RECVFROM pid=3537(Socket Thread)  src=?  74.125.205.198:443 -> 10.0.2.15:52302  dst=3537(Socket Thread)
