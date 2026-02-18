@@ -2603,3 +2603,12 @@ func main() {
 	}
 }
 
+
+
+UDP SENDMSG pid=3770(Socket Thread) fd=126 ret=39  src=3770(Socket Thread)  *:45721 -> 74.125.205.198:443  dst=?
+UDP SENDMSG pid=3770(Socket Thread) fd=170 ret=1252  src=3770(Socket Thread)  *:36093 -> 173.194.221.149:443  dst=?
+UDP SENDMSG pid=3770(Socket Thread) fd=170 ret=131  src=3770(Socket Thread)  *:36093 -> 173.194.221.149:443  dst=?
+UDP SENDMSG pid=3770(Socket Thread) fd=170 ret=81  src=3770(Socket Thread)  *:36093 -> 173.194.221.149:443  dst=?
+UDP SENDMSG pid=3770(Socket Thread) fd=170 ret=320  src=3770(Socket Thread)  *:36093 -> 173.194.221.149:443  dst=?
+UDP SENDMSG pid=3770(Socket Thread) fd=126 ret=35  src=3770(Socket Thread)  *:45721 -> 74.125.205.198:443  dst=?
+UDP SENDMSG pid=3770(Socket Thread) fd=170 ret=36  src=3770(Socket Thread)  *:36093 -> 173.194.221.149:443  dst=?
