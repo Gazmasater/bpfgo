@@ -663,137 +663,132 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-SEC("tracepoint/syscalls/sys_enter_sendto")
-int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
+Тут нужно 2 правки в BPF:
 
-    struct conn_info_t ci = {};
-    ci.pid = tgid;
-    ci.fd  = (__u32)ctx->args[0];
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+Обновлять fd_state_map на каждом успешном send/recv (или хотя бы когда dport/sport==0), чтобы для TCP подтягивался peer (skc_daddr/skc_dport). Сейчас ты читаешь fd_state_map, но если он пустой/устарел — получаешь *:0.
 
-    __u64 uaddr   = (__u64)ctx->args[4];
-    __u32 addrlen = (__u32)ctx->args[5];
-    if (uaddr && addrlen >= sizeof(__u16)) {
-        struct addr_ptrlen_t v = {.addr = uaddr, .len = addrlen};
-        bpf_map_update_elem(&addrSend_map, &id, &v, BPF_ANY);
-    }
+Разрешить port==0 в fill_from_sockaddr_user(), иначе для ICMP/ICMPv6 sendto() всегда с sin_port=0, и ты теряешь IP назначения (получается * -> *).
 
-    return 0;
+Ниже — точечный патч.
+
+1) FIX: разрешаем port==0, но IP/Family заполняем
+
+Заменяешь внутри fill_from_sockaddr_user() вот эти куски:
+
+Было (IPv4/IPv6)
+__u16 port = bpf_ntohs(sa.sin_port);
+if (port == 0)
+    return -1;
+...
+info->dport = port;
+info->dstIP.s_addr = sa.sin_addr.s_addr;
+
+Стало (IPv4)
+__u16 port = bpf_ntohs(sa.sin_port);
+
+info->family = AF_INET;
+
+if (is_dst) {
+    info->dport = port; // может быть 0 (ICMP)
+    info->dstIP.s_addr = sa.sin_addr.s_addr;
+} else {
+    info->sport = port; // может быть 0 (редко, но ок)
+    info->srcIP.s_addr = sa.sin_addr.s_addr;
+}
+return 0;
+
+Стало (IPv6)
+__u16 port = bpf_ntohs(sa6.sin6_port);
+
+info->family = AF_INET6;
+
+if (is_dst) {
+    info->dport = port; // может быть 0 (ICMPv6)
+    __builtin_memcpy(&info->dstIP6, &sa6.sin6_addr, sizeof(info->dstIP6));
+} else {
+    info->sport = port;
+    __builtin_memcpy(&info->srcIP6, &sa6.sin6_addr, sizeof(info->srcIP6));
+}
+return 0;
+
+
+👉 Это сразу починит ICMP/ICMPv6 srcIP -> dstIP (у тебя перестанет быть * -> *).
+
+2) FIX: refresh fd_state_map в sendto/recvfrom exit
+
+Суть: после успешного syscall (ret>0) делаем fill_fd_state(fd,&st) и update map, а потом уже берём src/dst из fd_state_map.
+
+trace_sendto_exit — вставка
+
+Прямо после info.fd/info.ret добавь:
+
+int fd = (int)ci->fd;
+
+/* refresh fd_state_map for this fd (important for TCP peer daddr/dport) */
+struct fd_state_t st = {};
+if (fill_fd_state(fd, &st) == 0) {
+    struct fd_key_t k = { .tgid = tgid, .fd = fd };
+    bpf_map_update_elem(&fd_state_map, &k, &st, BPF_ANY);
 }
 
-SEC("tracepoint/syscalls/sys_exit_sendto")
-int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
 
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0)
-        goto cleanup;
-    if (ret <= 0)
-        goto cleanup;
+И дальше оставляешь твою логику, но лучше чуть поменять порядок:
 
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci)
-        goto cleanup;
+/* now read from map (fresh) */
+if (fill_from_fd_state_map(&info, tgid, fd, 1) < 0)
+    fill_local_src_from_fd(&info, fd);
 
-    struct trace_info info = {};
-    __builtin_memcpy(info.comm, ci->comm, sizeof(info.comm));
-    info.sysexit = EV_SENDTO;
-    info.pid     = ci->pid;
 
-    info.fd  = ci->fd;
-    info.ret = ret;
+Полный кусок в контексте:
 
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
-        fill_local_src_from_fd(&info, (int)ci->fd);
+info.fd  = ci->fd;
+info.ret = ret;
 
-    struct addr_ptrlen_t *ap = bpf_map_lookup_elem(&addrSend_map, &id);
-    if (ap && ap->addr && ap->len)
-        (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 1);
+int fd = (int)ci->fd;
 
-    if (info.family == 0)
-        goto cleanup;
-
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-cleanup:
-    bpf_map_delete_elem(&addrSend_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
+/* refresh */
+struct fd_state_t st = {};
+if (fill_fd_state(fd, &st) == 0) {
+    struct fd_key_t k = { .tgid = tgid, .fd = fd };
+    bpf_map_update_elem(&fd_state_map, &k, &st, BPF_ANY);
 }
 
-/* ====== recvfrom ====== */
+/* use fresh map */
+if (fill_from_fd_state_map(&info, tgid, fd, 1) < 0)
+    fill_local_src_from_fd(&info, fd);
 
-SEC("tracepoint/syscalls/sys_enter_recvfrom")
-int trace_recvfrom_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
 
-    struct conn_info_t ci = {};
-    ci.pid = tgid;
-    ci.fd  = (__u32)ctx->args[0];
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+Почему так важно: для TCP sendto() чаще всего без sockaddr, и единственный источник peer — это skc_daddr/skc_dport. Если fd_state_map не обновлять — легко получить dst=* dport=0.
 
-    __u64 uaddr  = (__u64)ctx->args[4];
-    __u64 lenp_u = (__u64)ctx->args[5];
-    if (uaddr && lenp_u) {
-        struct addr_recv_meta_t m = {.addr = uaddr, .lenp = lenp_u};
-        bpf_map_update_elem(&addrRecv_map, &id, &m, BPF_ANY);
-    }
+trace_recvfrom_exit — аналогично
 
-    return 0;
+После info.fd/info.ret:
+
+int fd = (int)ci->fd;
+
+/* refresh */
+struct fd_state_t st = {};
+if (fill_fd_state(fd, &st) == 0) {
+    struct fd_key_t k = { .tgid = tgid, .fd = fd };
+    bpf_map_update_elem(&fd_state_map, &k, &st, BPF_ANY);
 }
 
-SEC("tracepoint/syscalls/sys_exit_recvfrom")
-int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
+/* use fresh map */
+if (fill_from_fd_state_map(&info, tgid, fd, 0) < 0)
+    fill_local_dst_from_fd(&info, fd);
 
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0)
-        goto cleanup;
-    if (ret <= 0)
-        goto cleanup;
+Важный userspace фикс (чтобы не было 10.0.2.15:0 на RECV)
 
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci)
-        goto cleanup;
+Ты раньше хотел “реальный исходящий IP вместо *”. Делай это только на SEND, иначе на RECV ты подменяешь “неизвестный src” на свой IP и остаётся port=0.
 
-    struct trace_info info = {};
-    __builtin_memcpy(info.comm, ci->comm, sizeof(info.comm));
-    info.sysexit = EV_RECVFROM;
-    info.pid     = ci->pid;
+Условие: if (isSend && src==* && dst!=*) { route... }
 
-    info.fd  = ci->fd;
-    info.ret = ret;
+Что получится после этих правок
 
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
-        fill_local_dst_from_fd(&info, (int)ci->fd);
+TCP SENDTO/RECVFROM перестанут массово печатать *:0 (peer подтянется из сокета).
 
-    struct addr_recv_meta_t *m = bpf_map_lookup_elem(&addrRecv_map, &id);
-    if (m && m->addr && m->lenp) {
-        __u32 addrlen = 0;
-        if (bpf_probe_read_user(&addrlen, sizeof(addrlen), (void *)m->lenp) == 0) {
-            if (addrlen >= sizeof(__u16))
-                (void)fill_from_sockaddr_user(&info, (void *)m->addr, addrlen, 0);
-        }
-    }
+ICMP/ICMPv6 перестанут быть * -> * — IP назначения будет читаться из sockaddr даже при port=0.
 
-    if (info.family == 0)
-        goto cleanup;
+“порт 0” останется только там, где он реально нормален (например connect до назначения ephemeral порта, или raw/неподключённые сокеты).
 
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-cleanup:
-    bpf_map_delete_elem(&addrRecv_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
+Если хочешь — скинь ещё sendmsg/recvmsg exit (у тебя там тот же паттерн) — туда точно так же надо вставить refresh fd_state_map, и тогда QUIC/UDP443 у Chrome будет ещё чище.
