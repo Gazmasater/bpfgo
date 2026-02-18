@@ -730,8 +730,8 @@ var (
 	flgSample        = flag.Uint64("sample", 1, "print every Nth matched event (>=1)")
 	flgMatchOnly     = flag.Bool("matchOnly", false, "if tracePort>0, only count/print events where sport/dport==tracePort")
 
-	flgStats    = flag.Duration("stats", 0, "print stats every interval (0=off)")
-	flgPprof    = flag.Bool("pprof", true, "enable pprof")
+	flgStats     = flag.Duration("stats", 0, "print stats every interval (0=off)")
+	flgPprof     = flag.Bool("pprof", true, "enable pprof")
 	flgPprofAddr = flag.String("pprofAddr", ":6060", "pprof listen addr")
 )
 
@@ -795,7 +795,7 @@ var (
 	pendMu sync.Mutex
 	pendBy = make(map[ConnKey]PendingConnect, 16384)
 
-	udpMu    sync.Mutex
+	udpMu     sync.Mutex
 	udpByPort = make(map[uint16]Proc, 65536) // dynamic: sport->proc (learned from SEND*), also server port after first send
 
 	udpOwnerAny atomic.Value // map[uint16]Proc from /proc snapshot (listeners/owners by local port)
@@ -1441,10 +1441,10 @@ func main() {
 
 		// endpoints + keys
 		var (
-			srcEp, dstEp         string
-			srcIPKey, dstIPKey   [16]byte
-			sport, dport         uint16
-			family               uint16
+			srcEp, dstEp       string
+			srcIPKey, dstIPKey [16]byte
+			sport, dport       uint16
+			family             uint16
 		)
 
 		family = uint16(ev.Family)
@@ -1620,8 +1620,4 @@ func main() {
 		}
 	}
 }
-
-
-
-TCP SENDTO  pid=2900(Chrome_ChildIOT)  src=2900(Chrome_ChildIOT)  10.0.2.15:47606 -> 150.171.109.53:443  dst=?
 
