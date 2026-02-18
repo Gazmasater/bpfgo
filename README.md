@@ -1703,5 +1703,4 @@ func main() {
 }
 
 
-TCP RECVFROM pid=3537(Socket Thread)  src=?  74.125.205.198:443 -> 10.0.2.15:52302  dst=3537(Socket Thread)
-TCP RECVFROM pid=3537(Socket Thread)  src=?  74.125.205.198:443 -> 10.0.2.15:52302  dst=3537(Socket Thread)
+TCP CONNECT client=749(NetworkManager)  [fd00:0:0:0:ffc:548:435e:4ea1]:0 -> [2620:2d:4000:1:0:0:0:22]:80  server=?
