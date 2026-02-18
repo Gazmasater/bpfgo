@@ -1385,3 +1385,14 @@ func main() {
 	}
 }
 
+
+
+
+
+p_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=1 udp_recv=0 udp_sendmsg=0 udp_recvmsg=0 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=1 udp_recv=0 udp_sendmsg=0 udp_recvmsg=0 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=1 udp_recv=0 udp_sendmsg=0 udp_recvmsg=0 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=1 udp_recv=0 udp_sendmsg=0 udp_recvmsg=0 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=1 udp_recv=0 udp_sendmsg=0 udp_recvmsg=0 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
+[STAT] eps_all=0 eps_match=0 lost=0 (+0) udp_send=1 udp_recv=0 udp_sendmsg=0 udp_recvmsg=0 tcp_conn=0 tcp_acc=0 tracePort=9999 owner=14721(recvmsg_test)
