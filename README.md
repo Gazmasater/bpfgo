@@ -663,43 +663,16 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-static __always_inline int fill_fd_state(int fd, struct fd_state_t *st)
-{
-    struct sock *sk = sock_from_fd(fd);
-    if (!sk)
-        return -1;
-
-    st->family = BPF_CORE_READ(sk, __sk_common.skc_family);
-    st->proto  = BPF_CORE_READ(sk, sk_protocol);
-
-    st->lport  = BPF_CORE_READ(sk, __sk_common.skc_num);
-
-    __u16 dport_be = BPF_CORE_READ(sk, __sk_common.skc_dport);
-    st->rport = bpf_ntohs(dport_be);
-
-    if (st->family == AF_INET) {
-        __u32 rcv = BPF_CORE_READ(sk, __sk_common.skc_rcv_saddr);
-        __u32 dst = BPF_CORE_READ(sk, __sk_common.skc_daddr);
-
-        // inet_saddr обычно есть; inet_daddr у тебя нет — и не нужен
-        struct inet_sock *inet = (struct inet_sock *)sk;
-        __u32 saddr = BPF_CORE_READ(inet, inet_saddr);
-
-        st->lip = rcv ? rcv : saddr;  // пытаемся показать “реальный” local ip
-        st->rip = dst;                // remote ip из sock_common
-        return 0;
-    }
-
-    if (st->family == AF_INET6) {
-        if (BPF_CORE_READ_INTO(&st->lip6, sk, __sk_common.skc_v6_rcv_saddr) < 0)
-            return -1;
-        if (BPF_CORE_READ_INTO(&st->rip6, sk, __sk_common.skc_v6_daddr) < 0)
-            return -1;
-        return 0;
-    }
-
-    return -1;
-}
-
+TCP CONNECT client=751(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:cd6:31dc:2e97:939d]:0 -> [2620:2d:4000:1:0:0:0:22]:80  server=?
+TCP CONNECT client=751(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:cd6:31dc:2e97:939d]:0 -> [2620:2d:4000:1:0:0:0:2b]:80  server=?
+TCP CONNECT client=751(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:cd6:31dc:2e97:939d]:0 -> [2620:2d:4002:1:0:0:0:196]:80  server=?
+TCP CONNECT client=751(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:cd6:31dc:2e97:939d]:0 -> [2620:2d:4000:1:0:0:0:96]:80  server=?
+TCP CONNECT client=751(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:cd6:31dc:2e97:939d]:0 -> [2620:2d:4000:1:0:0:0:97]:80  server=?
+TCP CONNECT client=751(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:cd6:31dc:2e97:939d]:0 -> [2001:67c:1562:0:0:0:0:23]:80  server=?
+TCP CONNECT client=751(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:cd6:31dc:2e97:939d]:51510 -> [2620:2d:4000:1:0:0:0:23]:80  server=?
+TCP CONNECT client=751(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:cd6:31dc:2e97:939d]:0 -> [2620:2d:4002:1:0:0:0:198]:80  server=?
+TCP CONNECT client=751(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:cd6:31dc:2e97:939d]:0 -> [2620:2d:4000:1:0:0:0:2a]:80  server=?
+TCP CONNECT client=751(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:cd6:31dc:2e97:939d]:0 -> [2001:67c:1562:0:0:0:0:24]:80  server=?
+TCP CONNECT client=751(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:cd6:31dc:2e97:939d]:0 -> [2620:2d:4000:1:0:0:0:98]:80  server=?
 
 
