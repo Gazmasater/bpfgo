@@ -664,73 +664,37 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-
-
-SEC("tracepoint/sock/inet_sock_set_state")
-int trace_inet_sock_set_state(struct trace_event_raw_inet_sock_set_state *ctx)
+SEC("tracepoint/syscalls/sys_exit_connect")
+int trace_connect_exit(struct trace_event_raw_sys_exit *ctx)
 {
-    const void *skp = BPF_CORE_READ(ctx, skaddr);
-    if (!skp)
-        return 0;
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
 
-    __u64 skaddr = (__u64)(unsigned long)skp;  // ✅ key for maps, no warning
-    __u32 newstate = BPF_CORE_READ(ctx, newstate);
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0)
+        goto cleanup;
 
-    struct sk_owner_t *own = bpf_map_lookup_elem(&sk_owner_map, &skaddr);
-    if (!own)
-        return 0;
+    if (ret < 0 && ret != -EINPROGRESS && ret != -EALREADY)
+        goto cleanup;
 
-    // when SYN_SENT happens, local port is already chosen -> this is our "CONNECT" event
-    if (newstate != TCP_SYN_SENT && newstate != TCP_ESTABLISHED && newstate != TCP_CLOSE)
-        return 0;
+    struct inflight_fd_t *in = bpf_map_lookup_elem(&connect_fd_map, &id);
+    if (!in)
+        goto cleanup;
 
-    struct sock *sk = (struct sock *)skp;
-
-    // update fd_state_map from sock (most accurate)
+    // best-effort state snapshot
     struct fd_state_t st = {};
-    if (fill_fd_state_from_sock(sk, &st) < 0)
-        return 0;
-
-    struct fd_key_t fk = { .tgid = own->pid, .fd = (__s32)own->fd };
-    bpf_map_update_elem(&fd_state_map, &fk, &st, BPF_ANY);
-
-    // delete owner on CLOSE (cleanup)
-    if (newstate == TCP_CLOSE) {
-        bpf_map_delete_elem(&sk_owner_map, &skaddr);
-        return 0;
+    if (fill_fd_state(in->fd, &st) == 0) {
+        struct fd_key_t k = { .tgid = tgid, .fd = in->fd };
+        bpf_map_update_elem(&fd_state_map, &k, &st, BPF_ANY);
     }
 
-    // emit ONLY for SYN_SENT (so no duplicates)
-    if (newstate != TCP_SYN_SENT)
-        return 0;
+    // bind skaddr -> owner for inet_sock_set_state
+    remember_owner_for_fd(tgid, in->fd, ret);
 
-    struct trace_info info = {};
-    info.sysexit = EV_CONNECT;
-    info.state   = (__u8)newstate;
-
-    info.pid = own->pid;
-    info.fd  = own->fd;
-    info.ret = own->conn_ret;
-
-    __builtin_memcpy(info.comm, own->comm, sizeof(info.comm));
-
-    info.proto  = st.proto;
-    info.family = st.family;
-    info.sport  = st.lport;
-    info.dport  = st.rport;
-
-    if (st.family == AF_INET) {
-        info.srcIP.s_addr = st.lip;
-        info.dstIP.s_addr = st.rip;
-    } else if (st.family == AF_INET6) {
-        __builtin_memcpy(&info.srcIP6, &st.lip6, sizeof(info.srcIP6));
-        __builtin_memcpy(&info.dstIP6, &st.rip6, sizeof(info.dstIP6));
-    } else {
-        return 0;
-    }
-
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+cleanup:
+    bpf_map_delete_elem(&addrConnect_map, &id);
+    bpf_map_delete_elem(&connect_fd_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
     return 0;
 }
 
-}
