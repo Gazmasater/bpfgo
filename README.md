@@ -2638,3 +2638,27 @@ func main() {
 
 
 
+
+[{
+	"resource": "/home/lev/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"code": {
+		"value": "UnusedVar",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UnusedVar"
+		}
+	},
+	"severity": 8,
+	"message": "declared and not used: c",
+	"source": "compiler",
+	"startLineNumber": 940,
+	"startColumn": 10,
+	"endLineNumber": 940,
+	"endColumn": 11,
+	"modelVersionId": 14,
+	"origin": "extHost1"
+}]
