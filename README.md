@@ -792,3 +792,110 @@ ICMP/ICMPv6 перестанут быть * -> * — IP назначения б�
 “порт 0” останется только там, где он реально нормален (например connect до назначения ephemeral порта, или raw/неподключённые сокеты).
 
 Если хочешь — скинь ещё sendmsg/recvmsg exit (у тебя там тот же паттерн) — туда точно так же надо вставить refresh fd_state_map, и тогда QUIC/UDP443 у Chrome будет ещё чище.
+
+
+
+
+static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
+                                                   const void *uaddr,
+                                                   __u32 addrlen,
+                                                   int is_dst)
+{
+    __u16 family = 0;
+
+    if (!uaddr || addrlen < sizeof(__u16))
+        return -1;
+
+    if (bpf_probe_read_user(&family, sizeof(family), uaddr) < 0)
+        return -1;
+
+    if (family == AF_INET) {
+        if (addrlen < sizeof(struct sockaddr_in))
+            return -1;
+
+        struct sockaddr_in sa = {};
+        if (bpf_probe_read_user(&sa, sizeof(sa), uaddr) < 0)
+            return -1;
+
+        __u16 port = bpf_ntohs(sa.sin_port);
+
+        info->family = AF_INET;
+        if (is_dst) {
+            info->dstIP.s_addr = sa.sin_addr.s_addr; // net order
+            if (port) info->dport = port;
+        } else {
+            info->srcIP.s_addr = sa.sin_addr.s_addr; // net order
+            if (port) info->sport = port;
+        }
+        return 0;
+    }
+
+    if (family == AF_INET6) {
+        if (addrlen < sizeof(struct sockaddr_in6))
+            return -1;
+
+        struct sockaddr_in6 sa6 = {};
+        if (bpf_probe_read_user(&sa6, sizeof(sa6), uaddr) < 0)
+            return -1;
+
+        __u16 port = bpf_ntohs(sa6.sin6_port);
+
+        info->family = AF_INET6;
+        if (is_dst) {
+            __builtin_memcpy(&info->dstIP6, &sa6.sin6_addr, sizeof(info->dstIP6));
+            if (port) info->dport = port;
+        } else {
+            __builtin_memcpy(&info->srcIP6, &sa6.sin6_addr, sizeof(info->srcIP6));
+            if (port) info->sport = port;
+        }
+        return 0;
+    }
+
+    return -1;
+}
+
+
+
+static __always_inline int fill_from_fd_state_map(struct trace_info *info, __u32 tgid, int fd, int is_send)
+{
+    struct fd_key_t k = { .tgid = tgid, .fd = fd };
+    struct fd_state_t *st = bpf_map_lookup_elem(&fd_state_map, &k);
+    if (!st)
+        return -1;
+
+    info->proto  = st->proto;
+    info->family = st->family;
+
+    if (st->family == AF_INET) {
+        if (is_send) {
+            info->srcIP.s_addr = st->lip;
+            info->dstIP.s_addr = st->rip;
+            info->sport = st->lport;
+            info->dport = st->rport;
+        } else {
+            info->srcIP.s_addr = st->rip;
+            info->dstIP.s_addr = st->lip;
+            info->sport = st->rport;
+            info->dport = st->lport;
+        }
+        return 0;
+    }
+
+    if (st->family == AF_INET6) {
+        if (is_send) {
+            __builtin_memcpy(&info->srcIP6, &st->lip6, sizeof(info->srcIP6));
+            __builtin_memcpy(&info->dstIP6, &st->rip6, sizeof(info->dstIP6));
+            info->sport = st->lport;
+            info->dport = st->rport;
+        } else {
+            __builtin_memcpy(&info->srcIP6, &st->rip6, sizeof(info->srcIP6));
+            __builtin_memcpy(&info->dstIP6, &st->lip6, sizeof(info->dstIP6));
+            info->sport = st->rport;
+            info->dport = st->lport;
+        }
+        return 0;
+    }
+
+    return -1;
+}
+
