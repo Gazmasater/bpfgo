@@ -1896,6 +1896,22 @@ cleanup:
 
 
 
+[{
+	"resource": "/home/lev/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "833",
+	"severity": 8,
+	"message": "pointer or reference to incomplete type \"struct trace_event_raw_net_dev_queue\" is not allowed",
+	"source": "C/C++",
+	"startLineNumber": 531,
+	"startColumn": 25,
+	"endLineNumber": 531,
+	"endColumn": 38,
+	"modelVersionId": 3,
+	"origin": "extHost1"
+}]
+
+
 
 package main
 
