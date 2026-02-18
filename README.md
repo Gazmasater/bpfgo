@@ -666,9 +666,65 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-const void *skaddr = BPF_CORE_READ(ctx, skaddr);
-if (!skaddr)
-    return 0;
+SEC("tracepoint/sock/inet_sock_set_state")
+int trace_inet_sock_set_state(struct trace_event_raw_inet_sock_set_state *ctx)
+{
+    __u64 skaddr = BPF_CORE_READ(ctx, skaddr);
+    __u32 newstate = BPF_CORE_READ(ctx, newstate);
 
-// дальше используешь skaddr как pointer:
-bpf_probe_read_user(&sa, sizeof(sa), skaddr);
+    struct sk_owner_t *own = bpf_map_lookup_elem(&sk_owner_map, &skaddr);
+    if (!own)
+        return 0;
+
+    // when SYN_SENT happens, local port is already chosen -> this is our "CONNECT" event
+    if (newstate != TCP_SYN_SENT && newstate != TCP_ESTABLISHED && newstate != TCP_CLOSE)
+        return 0;
+
+    struct sock *sk = (struct sock *)skaddr;
+
+    // update fd_state_map from sock (most accurate)
+    struct fd_state_t st = {};
+    if (fill_fd_state_from_sock(sk, &st) < 0)
+        return 0;
+
+    struct fd_key_t fk = { .tgid = own->pid, .fd = (__s32)own->fd };
+    bpf_map_update_elem(&fd_state_map, &fk, &st, BPF_ANY);
+
+    // delete owner on CLOSE (cleanup)
+    if (newstate == TCP_CLOSE) {
+        bpf_map_delete_elem(&sk_owner_map, &skaddr);
+        return 0;
+    }
+
+    // emit ONLY for SYN_SENT (so no duplicates)
+    if (newstate != TCP_SYN_SENT)
+        return 0;
+
+    struct trace_info info = {};
+    info.sysexit = EV_CONNECT;
+    info.state   = (__u8)newstate;
+
+    info.pid   = own->pid;
+    info.fd    = own->fd;
+    info.ret   = own->conn_ret;
+
+    __builtin_memcpy(info.comm, own->comm, sizeof(info.comm));
+
+    info.proto  = st.proto;
+    info.family = st.family;
+    info.sport  = st.lport;
+    info.dport  = st.rport;
+
+    if (st.family == AF_INET) {
+        info.srcIP.s_addr = st.lip;
+        info.dstIP.s_addr = st.rip;
+    } else if (st.family == AF_INET6) {
+        __builtin_memcpy(&info.srcIP6, &st.lip6, sizeof(info.srcIP6));
+        __builtin_memcpy(&info.dstIP6, &st.rip6, sizeof(info.dstIP6));
+    } else {
+        return 0;
+    }
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    return 0;
+}
