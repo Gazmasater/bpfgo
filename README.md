@@ -667,6 +667,16 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 strace -f -e sendto,sendmsg ping -c1 8.8.8.8
 
 
+lev@lev-VirtualBox:~/bpfgo$ strace -f -e sendto,sendmsg ping -c1 8.8.8.8
+PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.
+sendto(3, "\10\0\226R\0\0\0\1]\26\225i\0\0\0\0\256Y\2\0\0\0\0\0\20\21\22\23\24\25\26\27"..., 64, 0, {sa_family=AF_INET, sin_port=htons(0), sin_addr=inet_addr("8.8.8.8")}, 16) = 64
+64 bytes from 8.8.8.8: icmp_seq=1 ttl=255 time=2.91 ms
+
+--- 8.8.8.8 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 2.913/2.913/2.913/0.000 ms
++++ exited with 0 +++
+
 
 
 
