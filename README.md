@@ -1703,4 +1703,12 @@ func main() {
 }
 
 
-TCP CONNECT client=749(NetworkManager)  [fd00:0:0:0:ffc:548:435e:4ea1]:0 -> [2620:2d:4000:1:0:0:0:22]:80  server=?
+
+
+
+0  server=?
+TCP CONNECT client=749(NetworkManager)  [fd00:0:0:0:ffc:548:435e:4ea1]:51290 -> [2620:2d:4000:1:0:0:0:98]:80  server=?
+TCP CONNECT client=749(NetworkManager)  [fd00:0:0:0:ffc:548:435e:4ea1]:0 -> [2620:2d:4000:1:0:0:0:96]:80  server=?
+TCP CONNECT client=749(NetworkManager)  [fd00:0:0:0:ffc:548:435e:4ea1]:0 -> [2620:2d:4000:1:0:0:0:97]:80  server=?
+TCP CONNECT client=749(NetworkManager)  [fd00:0:0:0:ffc:548:435e:4ea1]:0 -> [2620:2d:4002:1:0:0:0:197]:80  server=?
+TCP CONNECT client=749(NetworkManager)  [fd00:0:0:0:ffc:548:435e:4ea1]:53890 -> [2620:2d:4000:1:0:0:0:2b]:80  server=?
