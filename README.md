@@ -666,13 +666,8 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-key2 := ConnKey{Family: family, ClientIP: dstIPKey, ClientPort: dport, ServerIP: srcIPKey, ServerPort: sport}
-if _, ok2 := lookupConn(key2); ok2 {
-    // then "src" is server; resolve server by listen(sport)
-    if s, okS := lookupListen(family, srcIPKey, sport); okS {
-        srcOwner, ok = s, true
-    }
-}
-
-
-
+ev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+/home/lev/bpfgo/trace.c:525:11: warning: incompatible pointer to integer conversion initializing '__u64' (aka 'unsigned long long') with an expression of type 'typeof ((ctx)->skaddr)' (aka 'const void *') [-Wint-conversion]
+    __u64 skaddr = BPF_CORE_READ(ctx, skaddr);
+          ^        ~~~~~~~~~~~~~~~~~~~~~~~~~~
+1 warning generated.
