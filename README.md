@@ -1623,4 +1623,9 @@ func main() {
 
 
 
+SENDTO  pid=3537(Socket Thread)  src=3537(Socket Thread)  10.0.2.15:47866 -> *:0  dst=?
+TCP RECVFROM pid=3537(Socket Thread)  src=?  *:0 -> 10.0.2.15:47866  dst=3537(Socket Thread)
+
+
+
 
