@@ -1623,9 +1623,5 @@ func main() {
 
 
 
-SENDTO  pid=3537(Socket Thread)  src=3537(Socket Thread)  10.0.2.15:47866 -> *:0  dst=?
-TCP RECVFROM pid=3537(Socket Thread)  src=?  *:0 -> 10.0.2.15:47866  dst=3537(Socket Thread)
-
-
-
+TCP SENDTO  pid=2900(Chrome_ChildIOT)  src=2900(Chrome_ChildIOT)  10.0.2.15:47606 -> 150.171.109.53:443  dst=?
 
