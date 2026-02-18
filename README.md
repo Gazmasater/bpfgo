@@ -1857,3 +1857,12 @@ func main() {
 }
 
 
+
+TCP RECVFROM pid=3770(Socket Thread) fd=78 ret=5  src=?  10.0.2.15:0 -> 10.0.2.15:44684  dst=3770(Socket Thread)
+TCP RECVFROM pid=3770(Socket Thread) fd=78 ret=21  src=?  10.0.2.15:0 -> 10.0.2.15:44684  dst=3770(Socket Thread)
+TCP SENDTO  pid=3770(Socket Thread) fd=78 ret=30  src=3770(Socket Thread)  10.0.2.15:44684 -> *:0  dst=?
+TCP SENDTO  pid=3770(Socket Thread) fd=130 ret=39  src=3770(Socket Thread)  10.0.2.15:35744 -> *:0  dst=?
+TCP RECVFROM pid=3770(Socket Thread) fd=130 ret=5  src=?  10.0.2.15:0 -> 10.0.2.15:35744  dst=3770(Socket Thread)
+TCP RECVFROM pid=3770(Socket Thread) fd=130 ret=34  src=?  10.0.2.15:0 -> 10.0.2.15:35744  dst=3770(Socket Thread)
+
+
