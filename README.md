@@ -665,15 +665,923 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-// main.go — bpfgo userspace
-//
-// ✅ Протокол берём из ev.Proto (TCP/UDP/ICMP/ICMPv6/…)
-// ✅ Для ICMP/ICMPv6 печатаем ТОЛЬКО: srcIP -> dstIP (без портов, без *:0, без *:58)
-// ✅ Для UDP пытаемся резолвить dst pid (для локальных/loopback) через:
-//    1) динамику по портам (learned from SEND*/RECV*),
-//    2) snapshot /proc/net/udp* + /proc/<pid>/fd (чтобы работало даже если сервер запущен ДО bpfgo),
-//    3) bind-cache (BINDOK)
-// ✅ TCP connect/accept печатаем отдельно (как раньше)
+//go:build ignore
+#include "vmlinux.h"
+
+#include "bpf/bpf_tracing.h"
+#include "bpf/bpf_endian.h"
+#include "bpf/bpf_core_read.h"
+#include <bpf/bpf_helpers.h>
+
+#define AF_INET  2
+#define AF_INET6 10
+
+#define EINPROGRESS 115
+#define EALREADY    114
+
+#define EV_SENDTO    1
+#define EV_RECVFROM  2
+#define EV_CONNECT   3
+#define EV_ACCEPT    4
+#define EV_BINDOK   20
+#define EV_SENDMSG  11
+#define EV_RECVMSG  12
+
+/* ====== types ====== */
+
+struct conn_info_t {
+    __u32 pid;
+    __u32 fd;            // syscall fd (enter arg0)
+    char  comm[64];
+};
+
+struct fd_key_t {
+    __u32 tgid;
+    __s32 fd;
+};
+
+struct fd_state_t {
+    __u16 family;
+    __u8  proto;
+
+    __u16 lport;   // local
+    __u16 rport;   // remote
+
+    __u32 lip;     // local IPv4 (network order)
+    __u32 rip;     // remote IPv4 (network order)
+
+    struct in6_addr lip6;
+    struct in6_addr rip6;
+};
+
+struct inflight_fd_t {
+    __s32 fd;
+};
+
+/* ✅ EVENT: добавили fd + ret */
+struct trace_info {
+    // IPv4
+    struct in_addr  srcIP;
+    struct in_addr  dstIP;
+
+    // IPv6
+    struct in6_addr srcIP6;
+    struct in6_addr dstIP6;
+
+    __u32 pid;
+    __u32 proto;
+
+    __u32 fd;      // NEW
+    __s32 _pad0;   // align ret to 8 bytes
+    __s64 ret;     // NEW (sys_exit return)
+
+    __u16 sport;
+    __u16 dport;
+    __u16 family;
+
+    __u8  sysexit; // event code
+    __u8  state;
+
+    char  comm[32];
+};
+
+const struct trace_info *unused __attribute__((unused));
+
+/* user msghdr head (enough for msg_name + msg_namelen) */
+struct user_msghdr_head {
+    void *msg_name;     // 8 bytes on amd64
+    __u32 msg_namelen;  // 4 bytes
+    __u32 _pad;         // align
+};
+
+struct addr_ptrlen_t {
+    __u64 addr;   // user sockaddr*
+    __u32 len;    // sockaddr len
+    __u32 _pad;
+};
+
+struct addr_recv_meta_t {
+    __u64 addr;   // user sockaddr* (kernel fills)
+    __u64 lenp;   // user socklen_t*  (kernel fills)
+};
+
+/* ====== maps ====== */
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 65536);
+    __type(key, struct fd_key_t);
+    __type(value, struct fd_state_t);
+} fd_state_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 16384);
+    __type(key, __u64);   // pid_tgid
+    __type(value, struct inflight_fd_t);
+} connect_fd_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 16384);
+    __type(key, __u64);                 // pid_tgid
+    __type(value, struct addr_ptrlen_t);
+} addrConnect_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 16384);
+    __type(key, __u64);                 // pid_tgid
+    __type(value, struct addr_ptrlen_t);
+} addrBind_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 16384);
+    __type(key, __u64);                 // pid_tgid
+    __type(value, struct addr_ptrlen_t);
+} addrSend_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 16384);
+    __type(key, __u64);                 // pid_tgid
+    __type(value, struct addr_recv_meta_t);
+} addrRecv_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 16384);
+    __type(key, __u64);    // pid_tgid
+    __type(value, __u64);  // user msghdr*
+} msgSend_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 16384);
+    __type(key, __u64);    // pid_tgid
+    __type(value, __u64);  // user msghdr*
+} msgRecv_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 16384);
+    __type(key, __u64); // pid_tgid
+    __type(value, struct conn_info_t);
+} conn_info_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+    __uint(max_entries, 128);
+} trace_events SEC(".maps");
+
+char LICENSE[] SEC("license") = "Dual BSD/GPL";
+
+/* ====== helpers ====== */
+
+static __always_inline int read_sys_exit_ret(struct trace_event_raw_sys_exit *ctx, __s64 *ret)
+{
+    if (BPF_CORE_READ_INTO(ret, ctx, ret) < 0)
+        return -1;
+    return 0;
+}
+
+static __always_inline int read_msghdr_head(__u64 msg_u, struct user_msghdr_head *h)
+{
+    if (!msg_u)
+        return -1;
+    if (bpf_probe_read_user(h, sizeof(*h), (void *)msg_u) < 0)
+        return -1;
+    return 0;
+}
+
+/* ✅ FIX: НЕ отбрасываем port==0 (ICMP/ICMPv6 ping именно так и ходит) */
+static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
+                                                   const void *uaddr,
+                                                   __u32 addrlen,
+                                                   int is_dst)
+{
+    __u16 family = 0;
+
+    if (!uaddr || addrlen < sizeof(__u16))
+        return -1;
+
+    if (bpf_probe_read_user(&family, sizeof(family), uaddr) < 0)
+        return -1;
+
+    if (family == AF_INET) {
+        if (addrlen < sizeof(struct sockaddr_in))
+            return -1;
+
+        struct sockaddr_in sa = {};
+        if (bpf_probe_read_user(&sa, sizeof(sa), uaddr) < 0)
+            return -1;
+
+        __u16 port = bpf_ntohs(sa.sin_port);
+
+        info->family = AF_INET;
+        if (is_dst) {
+            info->dstIP.s_addr = sa.sin_addr.s_addr; // net order
+            if (port) info->dport = port;
+        } else {
+            info->srcIP.s_addr = sa.sin_addr.s_addr; // net order
+            if (port) info->sport = port;
+        }
+        return 0;
+    }
+
+    if (family == AF_INET6) {
+        if (addrlen < sizeof(struct sockaddr_in6))
+            return -1;
+
+        struct sockaddr_in6 sa6 = {};
+        if (bpf_probe_read_user(&sa6, sizeof(sa6), uaddr) < 0)
+            return -1;
+
+        __u16 port = bpf_ntohs(sa6.sin6_port);
+
+        info->family = AF_INET6;
+        if (is_dst) {
+            __builtin_memcpy(&info->dstIP6, &sa6.sin6_addr, sizeof(info->dstIP6));
+            if (port) info->dport = port;
+        } else {
+            __builtin_memcpy(&info->srcIP6, &sa6.sin6_addr, sizeof(info->srcIP6));
+            if (port) info->sport = port;
+        }
+        return 0;
+    }
+
+    return -1;
+}
+
+static __always_inline struct sock *sock_from_fd(int fd)
+{
+    if (fd < 0)
+        return 0;
+
+    struct task_struct *task = (struct task_struct *)bpf_get_current_task_btf();
+    if (!task)
+        return 0;
+
+    struct files_struct *files = BPF_CORE_READ(task, files);
+    if (!files)
+        return 0;
+
+    struct fdtable *fdt = BPF_CORE_READ(files, fdt);
+    if (!fdt)
+        return 0;
+
+    int max_fds = BPF_CORE_READ(fdt, max_fds);
+    if (fd >= max_fds)
+        return 0;
+
+    struct file **fd_array = BPF_CORE_READ(fdt, fd);
+    if (!fd_array)
+        return 0;
+
+    struct file *file = 0;
+    if (bpf_probe_read_kernel(&file, sizeof(file), &fd_array[fd]) < 0 || !file)
+        return 0;
+
+    struct socket *sock = 0;
+    if (bpf_probe_read_kernel(&sock, sizeof(sock), &file->private_data) < 0 || !sock)
+        return 0;
+
+    return BPF_CORE_READ(sock, sk);
+}
+
+static __always_inline int fill_fd_state(int fd, struct fd_state_t *st)
+{
+    struct sock *sk = sock_from_fd(fd);
+    if (!sk)
+        return -1;
+
+    st->family = BPF_CORE_READ(sk, __sk_common.skc_family);
+    st->proto  = BPF_CORE_READ(sk, sk_protocol);
+
+    st->lport  = BPF_CORE_READ(sk, __sk_common.skc_num);
+
+    __u16 dport_be = BPF_CORE_READ(sk, __sk_common.skc_dport);
+    st->rport = bpf_ntohs(dport_be);
+
+    if (st->family == AF_INET) {
+        st->lip = BPF_CORE_READ(sk, __sk_common.skc_rcv_saddr);
+        st->rip = BPF_CORE_READ(sk, __sk_common.skc_daddr);
+        return 0;
+    }
+
+    if (st->family == AF_INET6) {
+        if (BPF_CORE_READ_INTO(&st->lip6, sk, __sk_common.skc_v6_rcv_saddr) < 0)
+            return -1;
+        if (BPF_CORE_READ_INTO(&st->rip6, sk, __sk_common.skc_v6_daddr) < 0)
+            return -1;
+        return 0;
+    }
+
+    return -1;
+}
+
+static __always_inline int fill_from_fd_state_map(struct trace_info *info, __u32 tgid, int fd, int is_send)
+{
+    struct fd_key_t k = { .tgid = tgid, .fd = fd };
+    struct fd_state_t *st = bpf_map_lookup_elem(&fd_state_map, &k);
+    if (!st)
+        return -1;
+
+    info->proto  = st->proto;
+    info->family = st->family;
+
+    if (st->family == AF_INET) {
+        if (is_send) {
+            info->srcIP.s_addr = st->lip;
+            info->dstIP.s_addr = st->rip;
+            info->sport = st->lport;
+            info->dport = st->rport;
+        } else {
+            info->srcIP.s_addr = st->rip;
+            info->dstIP.s_addr = st->lip;
+            info->sport = st->rport;
+            info->dport = st->lport;
+        }
+        return 0;
+    }
+
+    if (st->family == AF_INET6) {
+        if (is_send) {
+            __builtin_memcpy(&info->srcIP6, &st->lip6, sizeof(info->srcIP6));
+            __builtin_memcpy(&info->dstIP6, &st->rip6, sizeof(info->dstIP6));
+            info->sport = st->lport;
+            info->dport = st->rport;
+        } else {
+            __builtin_memcpy(&info->srcIP6, &st->rip6, sizeof(info->srcIP6));
+            __builtin_memcpy(&info->dstIP6, &st->lip6, sizeof(info->dstIP6));
+            info->sport = st->rport;
+            info->dport = st->lport;
+        }
+        return 0;
+    }
+
+    return -1;
+}
+
+static __always_inline void fill_local_src_from_fd(struct trace_info *info, int fd)
+{
+    struct fd_state_t st = {};
+    if (fill_fd_state(fd, &st) < 0)
+        return;
+
+    info->proto  = st.proto;
+    info->family = st.family;
+
+    if (st.family == AF_INET) {
+        info->srcIP.s_addr = st.lip;
+        info->sport        = st.lport;
+    } else if (st.family == AF_INET6) {
+        __builtin_memcpy(&info->srcIP6, &st.lip6, sizeof(info->srcIP6));
+        info->sport = st.lport;
+    }
+}
+
+static __always_inline void fill_local_dst_from_fd(struct trace_info *info, int fd)
+{
+    struct fd_state_t st = {};
+    if (fill_fd_state(fd, &st) < 0)
+        return;
+
+    info->proto  = st.proto;
+    info->family = st.family;
+
+    if (st.family == AF_INET) {
+        info->dstIP.s_addr = st.lip;
+        info->dport        = st.lport;
+    } else if (st.family == AF_INET6) {
+        __builtin_memcpy(&info->dstIP6, &st.lip6, sizeof(info->dstIP6));
+        info->dport = st.lport;
+    }
+}
+
+/* ====== connect ====== */
+
+SEC("tracepoint/syscalls/sys_enter_connect")
+int trace_connect_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    struct conn_info_t ci = {};
+    ci.pid = tgid;
+    ci.fd  = (__u32)ctx->args[0];
+    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+
+    struct inflight_fd_t in = {};
+    in.fd = (int)ctx->args[0];
+    bpf_map_update_elem(&connect_fd_map, &id, &in, BPF_ANY);
+
+    __u64 uaddr   = (__u64)ctx->args[1];
+    __u32 addrlen = (__u32)ctx->args[2];
+    if (uaddr && addrlen >= sizeof(__u16)) {
+        struct addr_ptrlen_t v = {.addr = uaddr, .len = addrlen};
+        bpf_map_update_elem(&addrConnect_map, &id, &v, BPF_ANY);
+    }
+
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_connect")
+int trace_connect_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0)
+        goto cleanup;
+
+    if (ret < 0 && ret != -EINPROGRESS && ret != -EALREADY)
+        goto cleanup;
+
+    struct inflight_fd_t *in = bpf_map_lookup_elem(&connect_fd_map, &id);
+    if (!in)
+        goto cleanup;
+
+    struct fd_state_t st = {};
+    if (fill_fd_state(in->fd, &st) < 0)
+        goto cleanup;
+
+    struct fd_key_t k = { .tgid = tgid, .fd = in->fd };
+    bpf_map_update_elem(&fd_state_map, &k, &st, BPF_ANY);
+
+    struct conn_info_t *conn = bpf_map_lookup_elem(&conn_info_map, &id);
+
+    struct trace_info info = {};
+    info.sysexit = EV_CONNECT;
+    info.pid     = tgid;
+    info.proto   = st.proto;
+    info.family  = st.family;
+    info.sport   = st.lport;
+    info.dport   = st.rport;
+    info.state   = (ret < 0) ? 1 : 0;
+
+    info.fd  = (__u32)in->fd;
+    info.ret = ret;
+
+    if (conn)
+        __builtin_memcpy(info.comm, conn->comm, sizeof(info.comm));
+    else
+        bpf_get_current_comm(info.comm, sizeof(info.comm));
+
+    if (st.family == AF_INET) {
+        info.srcIP.s_addr = st.lip;
+        info.dstIP.s_addr = st.rip;
+    } else if (st.family == AF_INET6) {
+        __builtin_memcpy(&info.srcIP6, &st.lip6, sizeof(info.srcIP6));
+        __builtin_memcpy(&info.dstIP6, &st.rip6, sizeof(info.dstIP6));
+    } else {
+        goto cleanup;
+    }
+
+    struct addr_ptrlen_t *ap = bpf_map_lookup_elem(&addrConnect_map, &id);
+    if (ap && ap->addr && ap->len)
+        (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 1);
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+cleanup:
+    bpf_map_delete_elem(&addrConnect_map, &id);
+    bpf_map_delete_elem(&connect_fd_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
+/* ====== accept/accept4 ====== */
+
+static __always_inline int accept_enter_common(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    struct conn_info_t ci = {};
+    ci.pid = tgid;
+    ci.fd  = (__u32)ctx->args[0]; // ✅ listen fd
+    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+    return 0;
+}
+
+static __always_inline int accept_exit_common(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 newfd = 0;
+    if (read_sys_exit_ret(ctx, &newfd) < 0 || newfd < 0)
+        goto cleanup;
+
+    struct fd_state_t st = {};
+    if (fill_fd_state((int)newfd, &st) < 0)
+        goto cleanup;
+
+    struct fd_key_t k = { .tgid = tgid, .fd = (int)newfd };
+    bpf_map_update_elem(&fd_state_map, &k, &st, BPF_ANY);
+
+    struct conn_info_t *conn = bpf_map_lookup_elem(&conn_info_map, &id);
+
+    struct trace_info info = {};
+    info.sysexit = EV_ACCEPT;
+    info.pid     = tgid;
+    info.proto   = st.proto;
+    info.family  = st.family;
+    info.sport   = st.rport;  // remote
+    info.dport   = st.lport;  // local
+
+    info.fd  = conn ? conn->fd : 0; // listen fd
+    info.ret = newfd;               // ✅ newfd in ret
+
+    if (conn)
+        __builtin_memcpy(info.comm, conn->comm, sizeof(info.comm));
+    else
+        bpf_get_current_comm(info.comm, sizeof(info.comm));
+
+    if (st.family == AF_INET) {
+        info.srcIP.s_addr = st.rip;
+        info.dstIP.s_addr = st.lip;
+    } else if (st.family == AF_INET6) {
+        __builtin_memcpy(&info.srcIP6, &st.rip6, sizeof(info.srcIP6));
+        __builtin_memcpy(&info.dstIP6, &st.lip6, sizeof(info.dstIP6));
+    } else {
+        goto cleanup;
+    }
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+cleanup:
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_enter_accept4")
+int trace_accept4_enter(struct trace_event_raw_sys_enter *ctx) { return accept_enter_common(ctx); }
+
+SEC("tracepoint/syscalls/sys_exit_accept4")
+int trace_accept4_exit(struct trace_event_raw_sys_exit *ctx) { return accept_exit_common(ctx); }
+
+SEC("tracepoint/syscalls/sys_enter_accept")
+int trace_accept_enter(struct trace_event_raw_sys_enter *ctx) { return accept_enter_common(ctx); }
+
+SEC("tracepoint/syscalls/sys_exit_accept")
+int trace_accept_exit(struct trace_event_raw_sys_exit *ctx) { return accept_exit_common(ctx); }
+
+/* ====== close ====== */
+
+SEC("tracepoint/syscalls/sys_enter_close")
+int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+    int fd     = (int)ctx->args[0];
+
+    struct fd_key_t k = { .tgid = tgid, .fd = fd };
+    bpf_map_delete_elem(&fd_state_map, &k);
+    return 0;
+}
+
+/* ====== bind ====== */
+
+SEC("tracepoint/syscalls/sys_enter_bind")
+int trace_bind_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    struct conn_info_t ci = {};
+    ci.pid = tgid;
+    ci.fd  = (__u32)ctx->args[0];
+    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+
+    __u64 uaddr   = (__u64)ctx->args[1];
+    __u32 addrlen = (__u32)ctx->args[2];
+    if (uaddr && addrlen >= sizeof(__u16)) {
+        struct addr_ptrlen_t v = {.addr = uaddr, .len = addrlen};
+        bpf_map_update_elem(&addrBind_map, &id, &v, BPF_ANY);
+    }
+
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_bind")
+int trace_bind_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0 || ret < 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+    struct addr_ptrlen_t *ap = bpf_map_lookup_elem(&addrBind_map, &id);
+    if (!ap || !ap->addr || !ap->len)
+        goto cleanup;
+
+    struct trace_info info = {};
+    __builtin_memcpy(info.comm, ci->comm, sizeof(info.comm));
+    info.pid     = ci->pid;
+    info.sysexit = EV_BINDOK;
+
+    info.fd  = ci->fd;
+    info.ret = ret;
+
+    (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 1);
+    if (info.family == 0)
+        goto cleanup;
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+cleanup:
+    bpf_map_delete_elem(&addrBind_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
+/* ====== sendto ====== */
+
+SEC("tracepoint/syscalls/sys_enter_sendto")
+int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    struct conn_info_t ci = {};
+    ci.pid = tgid;
+    ci.fd  = (__u32)ctx->args[0];
+    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+
+    __u64 uaddr   = (__u64)ctx->args[4];
+    __u32 addrlen = (__u32)ctx->args[5];
+    if (uaddr && addrlen >= sizeof(__u16)) {
+        struct addr_ptrlen_t v = {.addr = uaddr, .len = addrlen};
+        bpf_map_update_elem(&addrSend_map, &id, &v, BPF_ANY);
+    }
+
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_sendto")
+int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0)
+        goto cleanup;
+    if (ret <= 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+    struct trace_info info = {};
+    __builtin_memcpy(info.comm, ci->comm, sizeof(info.comm));
+    info.sysexit = EV_SENDTO;
+    info.pid     = ci->pid;
+
+    info.fd  = ci->fd;
+    info.ret = ret;
+
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
+        fill_local_src_from_fd(&info, (int)ci->fd);
+
+    struct addr_ptrlen_t *ap = bpf_map_lookup_elem(&addrSend_map, &id);
+    if (ap && ap->addr && ap->len)
+        (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 1);
+
+    if (info.family == 0)
+        goto cleanup;
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+cleanup:
+    bpf_map_delete_elem(&addrSend_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
+/* ====== recvfrom ====== */
+
+SEC("tracepoint/syscalls/sys_enter_recvfrom")
+int trace_recvfrom_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    struct conn_info_t ci = {};
+    ci.pid = tgid;
+    ci.fd  = (__u32)ctx->args[0];
+    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+
+    __u64 uaddr  = (__u64)ctx->args[4];
+    __u64 lenp_u = (__u64)ctx->args[5];
+    if (uaddr && lenp_u) {
+        struct addr_recv_meta_t m = {.addr = uaddr, .lenp = lenp_u};
+        bpf_map_update_elem(&addrRecv_map, &id, &m, BPF_ANY);
+    }
+
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_recvfrom")
+int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0)
+        goto cleanup;
+    if (ret <= 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+    struct trace_info info = {};
+    __builtin_memcpy(info.comm, ci->comm, sizeof(info.comm));
+    info.sysexit = EV_RECVFROM;
+    info.pid     = ci->pid;
+
+    info.fd  = ci->fd;
+    info.ret = ret;
+
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
+        fill_local_dst_from_fd(&info, (int)ci->fd);
+
+    struct addr_recv_meta_t *m = bpf_map_lookup_elem(&addrRecv_map, &id);
+    if (m && m->addr && m->lenp) {
+        __u32 addrlen = 0;
+        if (bpf_probe_read_user(&addrlen, sizeof(addrlen), (void *)m->lenp) == 0) {
+            if (addrlen >= sizeof(__u16))
+                (void)fill_from_sockaddr_user(&info, (void *)m->addr, addrlen, 0);
+        }
+    }
+
+    if (info.family == 0)
+        goto cleanup;
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+cleanup:
+    bpf_map_delete_elem(&addrRecv_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
+/* ====== sendmsg ====== */
+
+SEC("tracepoint/syscalls/sys_enter_sendmsg")
+int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    struct conn_info_t ci = {};
+    ci.pid = tgid;
+    ci.fd  = (__u32)ctx->args[0];
+    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+
+    __u64 msg_u = (__u64)ctx->args[1];
+    if (msg_u)
+        bpf_map_update_elem(&msgSend_map, &id, &msg_u, BPF_ANY);
+
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_sendmsg")
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0)
+        goto cleanup;
+    if (ret <= 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+    struct trace_info info = {};
+    __builtin_memcpy(info.comm, ci->comm, sizeof(info.comm));
+    info.sysexit = EV_SENDMSG;
+    info.pid     = ci->pid;
+
+    info.fd  = ci->fd;
+    info.ret = ret;
+
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
+        fill_local_src_from_fd(&info, (int)ci->fd);
+
+    __u64 *msgp = bpf_map_lookup_elem(&msgSend_map, &id);
+    if (msgp && *msgp) {
+        struct user_msghdr_head h = {};
+        if (read_msghdr_head(*msgp, &h) == 0) {
+            if (h.msg_name && h.msg_namelen >= sizeof(__u16))
+                (void)fill_from_sockaddr_user(&info, h.msg_name, h.msg_namelen, 1);
+        }
+    }
+
+    if (info.family == 0)
+        goto cleanup;
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+cleanup:
+    bpf_map_delete_elem(&msgSend_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
+/* ====== recvmsg ====== */
+
+SEC("tracepoint/syscalls/sys_enter_recvmsg")
+int trace_recvmsg_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    struct conn_info_t ci = {};
+    ci.pid = tgid;
+    ci.fd  = (__u32)ctx->args[0];
+    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+
+    __u64 msg_u = (__u64)ctx->args[1];
+    if (msg_u)
+        bpf_map_update_elem(&msgRecv_map, &id, &msg_u, BPF_ANY);
+
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_recvmsg")
+int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0)
+        goto cleanup;
+    if (ret <= 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+    struct trace_info info = {};
+    __builtin_memcpy(info.comm, ci->comm, sizeof(info.comm));
+    info.sysexit = EV_RECVMSG;
+    info.pid     = ci->pid;
+
+    info.fd  = ci->fd;
+    info.ret = ret;
+
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
+        fill_local_dst_from_fd(&info, (int)ci->fd);
+
+    __u64 *msgp = bpf_map_lookup_elem(&msgRecv_map, &id);
+    if (msgp && *msgp) {
+        struct user_msghdr_head h = {};
+        if (read_msghdr_head(*msgp, &h) == 0) {
+            if (h.msg_name && h.msg_namelen >= sizeof(__u16))
+                (void)fill_from_sockaddr_user(&info, h.msg_name, h.msg_namelen, 0);
+        }
+    }
+
+    if (info.family == 0)
+        goto cleanup;
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+cleanup:
+    bpf_map_delete_elem(&msgRecv_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
+
+
 
 package main
 
@@ -685,6 +1593,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -704,26 +1613,17 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 )
 
-/*
-Assumes generated by bpf2go:
-  - type bpfObjects struct { TraceEvents *ebpf.Map; TraceSendtoEnter *ebpf.Program; ... }
-  - func loadBpfObjects(*bpfObjects, *ebpf.CollectionOptions) error
-  - type bpfTraceInfo struct { ... } // from struct trace_info in C
-*/
-
 var objs bpfObjects
 
 const (
 	AF_INET  = 2
 	AF_INET6 = 10
 
-	// IP protocols
 	IPPROTO_ICMP   = 1
 	IPPROTO_TCP    = 6
 	IPPROTO_UDP    = 17
 	IPPROTO_ICMPV6 = 58
 
-	// event codes (from your BPF side)
 	EV_SENDTO   = 1
 	EV_RECVFROM = 2
 	EV_CONNECT  = 3
@@ -733,17 +1633,17 @@ const (
 	EV_RECVMSG  = 12
 )
 
-/* ===================== flags (NO env) ===================== */
+/* ===================== flags ===================== */
 
 var (
 	flgTracePort     = flag.Uint("tracePort", 9999, "UDP port to resolve dst/src owner via /proc snapshot (0=off)")
 	flgSnapshotEvery = flag.Duration("snapshotEvery", 0, "refresh UDP owners snapshot every duration (0=only once)")
-	flgTTL           = flag.Duration("ttl", 2*time.Second, "TTL for in-memory caches (udp/tcp)")
+	flgTTL           = flag.Duration("ttl", 2*time.Second, "TTL for in-memory caches")
 	flgDebug         = flag.Bool("debug", false, "debug logs")
 	flgPerfMB        = flag.Int("perfMB", 4, "perf ring buffer size in MB")
 	flgPrint         = flag.Bool("print", true, "print events")
-	flgSample        = flag.Uint64("sample", 1, "print every Nth matched event (>=1)")
-	flgMatchOnly     = flag.Bool("matchOnly", false, "if tracePort>0, only count/print events where sport/dport==tracePort")
+	flgSample        = flag.Uint64("sample", 1, "print every Nth event (>=1)")
+	flgMatchOnly     = flag.Bool("matchOnly", false, "if tracePort>0, only print events where sport/dport==tracePort")
 
 	flgStats     = flag.Duration("stats", 0, "print stats every interval (0=off)")
 	flgPprof     = flag.Bool("pprof", true, "enable pprof")
@@ -795,6 +1695,15 @@ type PendingConnect struct {
 	Seen     time.Time
 }
 
+type SockKey struct {
+	Pid uint32
+	Fd  uint32
+}
+
+type PendingByFD struct {
+	Seen time.Time
+}
+
 /* ===================== caches ===================== */
 
 var (
@@ -807,13 +1716,16 @@ var (
 	connMu sync.Mutex
 	connBy = make(map[ConnKey]Proc, 16384)
 
-	pendMu sync.Mutex
-	pendBy = make(map[ConnKey]PendingConnect, 16384)
+	pendConnMu sync.Mutex
+	pendConnBy = make(map[ConnKey]PendingConnect, 16384)
+
+	pendFdMu sync.Mutex
+	pendFdBy = make(map[SockKey]PendingByFD, 16384)
 
 	udpMu     sync.Mutex
-	udpByPort = make(map[uint16]Proc, 65536) // dynamic: port->proc learned from SEND*/RECV*
+	udpByPort = make(map[uint16]Proc, 65536)
 
-	udpOwnerAny atomic.Value // map[uint16]Proc from /proc snapshot (owners by local port)
+	udpOwnerAny atomic.Value // map[uint16]Proc from /proc snapshot
 )
 
 func setUDPOwners(m map[uint16]Proc) { udpOwnerAny.Store(m) }
@@ -823,6 +1735,74 @@ func getUDPOwnerSnapshot(port uint16) (Proc, bool) {
 		return Proc{}, false
 	}
 	p, ok := m[port]
+	return p, ok
+}
+
+func saveListen(ep EndpKey, p Proc) {
+	p.Seen = time.Now()
+	listenMu.Lock()
+	listenBy[ep] = p
+	listenMu.Unlock()
+}
+
+func lookupListen(family uint16, ip [16]byte, port uint16) (Proc, bool) {
+	k := EndpKey{Family: family, Port: port, IP: ip}
+	listenMu.Lock()
+	p, ok := listenBy[k]
+	listenMu.Unlock()
+	if ok {
+		return p, true
+	}
+	var zero [16]byte
+	k2 := EndpKey{Family: family, Port: port, IP: zero}
+	listenMu.Lock()
+	p2, ok2 := listenBy[k2]
+	listenMu.Unlock()
+	return p2, ok2
+}
+
+func saveConn(key ConnKey, client Proc) {
+	client.Seen = time.Now()
+	connMu.Lock()
+	connBy[key] = client
+	connMu.Unlock()
+}
+
+func lookupConn(key ConnKey) (Proc, bool) {
+	connMu.Lock()
+	p, ok := connBy[key]
+	connMu.Unlock()
+	return p, ok
+}
+
+func savePendingConn(key ConnKey, pc PendingConnect) {
+	pc.Seen = time.Now()
+	pendConnMu.Lock()
+	pendConnBy[key] = pc
+	pendConnMu.Unlock()
+}
+
+func takePendingConn(key ConnKey) (PendingConnect, bool) {
+	pendConnMu.Lock()
+	v, ok := pendConnBy[key]
+	if ok {
+		delete(pendConnBy, key)
+	}
+	pendConnMu.Unlock()
+	return v, ok
+}
+
+func udpSetOwner(port uint16, p Proc) {
+	p.Seen = time.Now()
+	udpMu.Lock()
+	udpByPort[port] = p
+	udpMu.Unlock()
+}
+
+func udpGetOwner(port uint16) (Proc, bool) {
+	udpMu.Lock()
+	p, ok := udpByPort[port]
+	udpMu.Unlock()
 	return p, ok
 }
 
@@ -890,7 +1870,6 @@ func evName(code uint8) string {
 
 /* ===================== endpoint formatting helpers ===================== */
 
-// in_addr.s_addr is network-order, but comes as uint32 on little-endian => restore bytes
 func ip4BytesFromU32Net(x uint32) (b [4]byte) {
 	binary.LittleEndian.PutUint32(b[:], x)
 	return
@@ -915,15 +1894,70 @@ func isIPv6Loop(ip [16]byte) bool {
 	return ip[15] == 1
 }
 
-func isLocalish(family uint16, ip [16]byte) bool {
-	if isAllZero16(ip) { // wildcard like 0.0.0.0 / ::
+var (
+	localIPv4Mu sync.RWMutex
+	localIPv4   = make(map[[4]byte]struct{}, 64)
+
+	localIPv6Mu sync.RWMutex
+	localIPv6   = make(map[[16]byte]struct{}, 64)
+)
+
+func refreshLocalIPs() {
+	addrs, _ := net.InterfaceAddrs()
+	m4 := make(map[[4]byte]struct{}, 64)
+	m6 := make(map[[16]byte]struct{}, 64)
+
+	for _, a := range addrs {
+		ipnet, ok := a.(*net.IPNet)
+		if !ok || ipnet.IP == nil {
+			continue
+		}
+		ip := ipnet.IP
+		if v4 := ip.To4(); v4 != nil {
+			var k [4]byte
+			copy(k[:], v4)
+			m4[k] = struct{}{}
+			continue
+		}
+		if v6 := ip.To16(); v6 != nil {
+			var k [16]byte
+			copy(k[:], v6)
+			m6[k] = struct{}{}
+		}
+	}
+
+	localIPv4Mu.Lock()
+	localIPv4 = m4
+	localIPv4Mu.Unlock()
+
+	localIPv6Mu.Lock()
+	localIPv6 = m6
+	localIPv6Mu.Unlock()
+}
+
+func isLocalAddr(family uint16, ip [16]byte) bool {
+	if isAllZero16(ip) {
 		return true
 	}
-	if family == AF_INET && isIPv4Loop(ip) {
-		return true
+	if family == AF_INET {
+		if isIPv4Loop(ip) {
+			return true
+		}
+		var k [4]byte
+		copy(k[:], ip[:4])
+		localIPv4Mu.RLock()
+		_, ok := localIPv4[k]
+		localIPv4Mu.RUnlock()
+		return ok
 	}
-	if family == AF_INET6 && isIPv6Loop(ip) {
-		return true
+	if family == AF_INET6 {
+		if isIPv6Loop(ip) {
+			return true
+		}
+		localIPv6Mu.RLock()
+		_, ok := localIPv6[ip]
+		localIPv6Mu.RUnlock()
+		return ok
 	}
 	return false
 }
@@ -936,7 +1970,6 @@ func endpFromEvIPv4(ipU32 uint32, port uint16) (ipStr string, ipKey [16]byte, po
 
 func endpFromEvIPv6(ipArr [16]uint8, port uint16) (ipStr string, ipKey [16]byte, portU16 uint16) {
 	copy(ipKey[:], ipArr[:])
-	// (без сжатия, как у тебя было)
 	return fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x",
 		uint16(ipArr[0])<<8|uint16(ipArr[1]),
 		uint16(ipArr[2])<<8|uint16(ipArr[3]),
@@ -959,7 +1992,6 @@ func formatEndp(family uint16, ipStr string, ipKey [16]byte, port uint16) string
 	return fmt.Sprintf("%s:%d", ipStr, port)
 }
 
-// ✅ для ICMP/ICMPv6 — только IP, без портов и без *:0 / *:58
 func formatIPOnly(ipStr string, ipKey [16]byte) string {
 	if isAllZero16(ipKey) {
 		return "*"
@@ -967,111 +1999,44 @@ func formatIPOnly(ipStr string, ipKey [16]byte) string {
 	return ipStr
 }
 
-/* ===================== caches ops ===================== */
-
-func saveListen(ep EndpKey, p Proc) {
-	p.Seen = time.Now()
-	listenMu.Lock()
-	listenBy[ep] = p
-	listenMu.Unlock()
-}
-
-func lookupListen(family uint16, ip [16]byte, port uint16) (Proc, bool) {
-	k := EndpKey{Family: family, Port: port, IP: ip}
-	listenMu.Lock()
-	p, ok := listenBy[k]
-	listenMu.Unlock()
-	if ok {
-		return p, true
-	}
-	// wildcard fallback (0.0.0.0 / ::)
-	var zero [16]byte
-	k2 := EndpKey{Family: family, Port: port, IP: zero}
-	listenMu.Lock()
-	p2, ok2 := listenBy[k2]
-	listenMu.Unlock()
-	return p2, ok2
-}
-
-func saveConn(key ConnKey, client Proc) {
-	client.Seen = time.Now()
-	connMu.Lock()
-	connBy[key] = client
-	connMu.Unlock()
-}
-
-func lookupConn(key ConnKey) (Proc, bool) {
-	connMu.Lock()
-	p, ok := connBy[key]
-	connMu.Unlock()
-	return p, ok
-}
-
-func savePending(key ConnKey, pc PendingConnect) {
-	pc.Seen = time.Now()
-	pendMu.Lock()
-	pendBy[key] = pc
-	pendMu.Unlock()
-}
-
-func takePending(key ConnKey) (PendingConnect, bool) {
-	pendMu.Lock()
-	v, ok := pendBy[key]
-	if ok {
-		delete(pendBy, key)
-	}
-	pendMu.Unlock()
-	return v, ok
-}
-
-func udpSetOwner(port uint16, p Proc) {
-	p.Seen = time.Now()
-	udpMu.Lock()
-	udpByPort[port] = p
-	udpMu.Unlock()
-}
-
-func udpGetOwner(port uint16) (Proc, bool) {
-	udpMu.Lock()
-	p, ok := udpByPort[port]
-	udpMu.Unlock()
-	return p, ok
-}
-
 /* ===================== printing ===================== */
 
-func printTCPConnect(client Proc, clientEp, serverEp string, server Proc) {
-	fmt.Printf("TCP CONNECT client=%s  %s -> %s  server=%s\n",
-		client.String(), clientEp, serverEp, server.String())
+func printTCPConnect(client Proc, clientEp, serverEp string, server Proc, fd uint32, ret int64) {
+	if server.Pid != 0 {
+		fmt.Printf("TCP CONNECT client=%s fd=%d ret=%d  %s -> %s  server=%s\n",
+			client.String(), fd, ret, clientEp, serverEp, server.String())
+		return
+	}
+	fmt.Printf("TCP CONNECT client=%s fd=%d ret=%d  %s -> %s  server=?\n",
+		client.String(), fd, ret, clientEp, serverEp)
 }
 
-func printTCPAccept(server Proc, serverEp, clientEp string, client Proc) {
-	fmt.Printf("TCP ACCEPT  server=%s  %s -> %s  client=%s\n",
-		server.String(), serverEp, clientEp, client.String())
+func printTCPAccept(server Proc, serverEp, clientEp string, client Proc, fd uint32, newfd int64) {
+	fmt.Printf("TCP ACCEPT  server=%s fd=%d newfd=%d  %s -> %s  client=%s\n",
+		server.String(), fd, newfd, serverEp, clientEp, client.String())
 }
 
-func printSendLine(proto, kind string, p Proc, srcEp, dstEp string, dst Proc, ok bool) {
+func printSendLine(proto, kind string, p Proc, fd uint32, ret int64, srcEp, dstEp string, dst Proc, ok bool) {
 	d := "?"
 	if ok {
 		d = dst.String()
 	}
-	// стиль как у тебя: "UDP SENDTO pid=... src=...  A -> B  dst=?"
-	fmt.Printf("%s %-7s pid=%s  src=%s  %s -> %s  dst=%s\n",
-		proto, kind, p.String(), p.String(), srcEp, dstEp, d)
+	fmt.Printf("%s %-7s pid=%s fd=%d ret=%d  src=%s  %s -> %s  dst=%s\n",
+		proto, kind, p.String(), fd, ret, p.String(), srcEp, dstEp, d)
 }
 
-func printRecvLine(proto, kind string, p Proc, src Proc, ok bool, srcEp, dstEp string) {
+func printRecvLine(proto, kind string, p Proc, fd uint32, ret int64, src Proc, ok bool, srcEp, dstEp string) {
 	s := "?"
 	if ok {
 		s = src.String()
 	}
-	fmt.Printf("%s %-7s pid=%s  src=%s  %s -> %s  dst=%s\n",
-		proto, kind, p.String(), s, srcEp, dstEp, p.String())
+	fmt.Printf("%s %-7s pid=%s fd=%d ret=%d  src=%s  %s -> %s  dst=%s\n",
+		proto, kind, p.String(), fd, ret, s, srcEp, dstEp, p.String())
 }
 
-func printICMP(proto, kind string, p Proc, srcIPOnly, dstIPOnly string) {
-	fmt.Printf("%s %-7s pid=%s  %s -> %s\n",
-		proto, kind, p.String(), srcIPOnly, dstIPOnly)
+func printICMP(proto, kind string, p Proc, fd uint32, ret int64, srcIPOnly, dstIPOnly string) {
+	fmt.Printf("%s %-7s pid=%s fd=%d ret=%d  %s -> %s\n",
+		proto, kind, p.String(), fd, ret, srcIPOnly, dstIPOnly)
 }
 
 /* ===================== cleanup (TTL) ===================== */
@@ -1107,16 +2072,23 @@ func cleanupTTL(ttl time.Duration) {
 		}
 		udpMu.Unlock()
 
-		// pending connect timeout => print server=?
-		pendMu.Lock()
-		for k, v := range pendBy {
+		pendConnMu.Lock()
+		for k, v := range pendConnBy {
 			if v.Seen.Before(cut) {
 				fmt.Printf("TCP CONNECT client=%s  %s -> %s  server=?\n",
 					v.Client.String(), v.ClientEp, v.ServerEp)
-				delete(pendBy, k)
+				delete(pendConnBy, k)
 			}
 		}
-		pendMu.Unlock()
+		pendConnMu.Unlock()
+
+		pendFdMu.Lock()
+		for k, v := range pendFdBy {
+			if v.Seen.Before(cut) {
+				delete(pendFdBy, k)
+			}
+		}
+		pendFdMu.Unlock()
 	}
 }
 
@@ -1191,9 +2163,7 @@ func buildInodeToProc(selfPID uint32) (map[uint64]Proc, int, int) {
 	return out, scanned, skipped
 }
 
-// /proc/net/udp*: wantState="" => all entries
-// fields: sl local_address rem_address st tx_queue:rx_queue tr:tm->when retrnsmt uid timeout inode ...
-func parseProcNetInodes(path string, wantState string) []inodePort {
+func parseProcNetInodes(path string) []inodePort {
 	f, err := os.Open(path)
 	if err != nil {
 		dbg("open %s: %v", path, err)
@@ -1207,10 +2177,7 @@ func parseProcNetInodes(path string, wantState string) []inodePort {
 	}
 
 	var out []inodePort
-	lines := 0
-
 	for sc.Scan() {
-		lines++
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {
 			continue
@@ -1221,11 +2188,6 @@ func parseProcNetInodes(path string, wantState string) []inodePort {
 		}
 
 		local := fields[1]
-		state := fields[3]
-		if wantState != "" && state != wantState {
-			continue
-		}
-
 		parts := strings.Split(local, ":")
 		if len(parts) != 2 {
 			continue
@@ -1242,37 +2204,27 @@ func parseProcNetInodes(path string, wantState string) []inodePort {
 
 		out = append(out, inodePort{Inode: inode, Port: uint16(port64)})
 	}
-
-	dbg("%s: scanned_lines=%d parsed_entries=%d", path, lines, len(out))
 	return out
 }
 
 func snapshotUDPOwners(tracePort uint16) {
 	selfPID := uint32(os.Getpid())
 
-	inode2proc, scanned, skipped := buildInodeToProc(selfPID)
-	dbg("snapshotUDPOwners: inode2proc: procs_scanned=%d procs_skipped=%d unique_inodes=%d", scanned, skipped, len(inode2proc))
-
-	udp4 := parseProcNetInodes("/proc/net/udp", "")
-	udp6 := parseProcNetInodes("/proc/net/udp6", "")
+	inode2proc, _, _ := buildInodeToProc(selfPID)
+	udp4 := parseProcNetInodes("/proc/net/udp")
+	udp6 := parseProcNetInodes("/proc/net/udp6")
 
 	owners := make(map[uint16]Proc, 256)
 
 	for _, it := range udp4 {
 		if p, ok := inode2proc[it.Inode]; ok {
 			owners[it.Port] = p
-			if tracePort != 0 && it.Port == tracePort {
-				dbg("UDP owner learned (udp4): port=%d proc=%s inode=%d", it.Port, p.String(), it.Inode)
-			}
 		}
 	}
 	for _, it := range udp6 {
 		if p, ok := inode2proc[it.Inode]; ok {
 			if _, exists := owners[it.Port]; !exists {
 				owners[it.Port] = p
-			}
-			if tracePort != 0 && it.Port == tracePort {
-				dbg("UDP owner learned (udp6): port=%d proc=%s inode=%d", it.Port, p.String(), it.Inode)
 			}
 		}
 	}
@@ -1294,13 +2246,6 @@ var (
 	cntAll   uint64
 	cntMatch uint64
 	cntLost  uint64
-
-	cntUDPSend    uint64
-	cntUDPRecv    uint64
-	cntUDPSendMsg uint64
-	cntUDPRecvMsg uint64
-	cntTCPConn    uint64
-	cntTCPAcc     uint64
 )
 
 /* ===================== main ===================== */
@@ -1308,6 +2253,8 @@ var (
 func main() {
 	flag.Parse()
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+
+	refreshLocalIPs()
 
 	tracePort := uint16(*flgTracePort)
 	if *flgSample < 1 {
@@ -1332,10 +2279,8 @@ func main() {
 		}()
 	}
 
-	// cleanup caches
 	go cleanupTTL(*flgTTL)
 
-	// snapshot UDP owners so dst resolves even if server started before bpfgo
 	if tracePort != 0 {
 		snapshotUDPOwners(tracePort)
 		if *flgSnapshotEvery > 0 {
@@ -1351,7 +2296,6 @@ func main() {
 
 	selfName := filepath.Base(os.Args[0])
 
-	// attach tracepoints
 	var links []link.Link
 	defer func() {
 		for _, l := range links {
@@ -1389,7 +2333,6 @@ func main() {
 	attach("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter)
 	attach("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit)
 
-	// perf reader
 	perfBytes := *flgPerfMB * 1024 * 1024
 	if perfBytes < 256*1024 {
 		perfBytes = 256 * 1024
@@ -1402,35 +2345,6 @@ func main() {
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-
-	// optional stats printer
-	if *flgStats > 0 {
-		go func() {
-			t := time.NewTicker(*flgStats)
-			defer t.Stop()
-			var lastAll, lastMatch, lastLost uint64
-			for range t.C {
-				all := atomic.LoadUint64(&cntAll)
-				match := atomic.LoadUint64(&cntMatch)
-				lost := atomic.LoadUint64(&cntLost)
-				epsAll := all - lastAll
-				epsMatch := match - lastMatch
-				lostDelta := lost - lastLost
-				lastAll, lastMatch, lastLost = all, match, lost
-
-				fmt.Printf("[STAT] eps_all=%d eps_match=%d lost=%d (+%d) udp_send=%d udp_recv=%d udp_sendmsg=%d udp_recvmsg=%d tcp_conn=%d tcp_acc=%d tracePort=%d\n",
-					epsAll, epsMatch, lost, lostDelta,
-					atomic.LoadUint64(&cntUDPSend),
-					atomic.LoadUint64(&cntUDPRecv),
-					atomic.LoadUint64(&cntUDPSendMsg),
-					atomic.LoadUint64(&cntUDPRecvMsg),
-					atomic.LoadUint64(&cntTCPConn),
-					atomic.LoadUint64(&cntTCPAcc),
-					tracePort,
-				)
-			}
-		}()
-	}
 
 	log.Println("Press Ctrl+C to exit")
 
@@ -1451,7 +2365,6 @@ func main() {
 			}
 			continue
 		}
-
 		if rec.LostSamples != 0 {
 			atomic.AddUint64(&cntLost, uint64(rec.LostSamples))
 			continue
@@ -1468,7 +2381,6 @@ func main() {
 			continue
 		}
 
-		// optional match filter (userspace) — по портам
 		if tracePort != 0 && *flgMatchOnly {
 			if ev.Sport != tracePort && ev.Dport != tracePort {
 				continue
@@ -1478,15 +2390,13 @@ func main() {
 
 		p := Proc{Pid: ev.Pid, Comm: comm}
 
-		// endpoints + keys
 		var (
 			srcEp, dstEp       string
 			srcIPKey, dstIPKey [16]byte
 			sport, dport       uint16
 			family             uint16
 
-			srcIPStr, dstIPStr     string
-			srcIPOnly, dstIPOnly   string
+			srcIPOnly, dstIPOnly string
 		)
 
 		family = uint16(ev.Family)
@@ -1496,27 +2406,21 @@ func main() {
 		if ev.Family == AF_INET {
 			sIP, sKey, sP := endpFromEvIPv4(ev.SrcIP.S_addr, ev.Sport)
 			dIP, dKey, dP := endpFromEvIPv4(ev.DstIP.S_addr, ev.Dport)
-
-			srcIPStr, dstIPStr = sIP, dIP
-			srcIPOnly = formatIPOnly(sIP, sKey)
-			dstIPOnly = formatIPOnly(dIP, dKey)
-
 			srcIPKey, dstIPKey = sKey, dKey
 			sport, dport = sP, dP
 			srcEp = formatEndp(AF_INET, sIP, sKey, sP)
 			dstEp = formatEndp(AF_INET, dIP, dKey, dP)
+			srcIPOnly = formatIPOnly(sIP, sKey)
+			dstIPOnly = formatIPOnly(dIP, dKey)
 		} else if ev.Family == AF_INET6 {
 			sIP, sKey, sP := endpFromEvIPv6(ev.SrcIP6.In6U.U6Addr8, ev.Sport)
 			dIP, dKey, dP := endpFromEvIPv6(ev.DstIP6.In6U.U6Addr8, ev.Dport)
-
-			srcIPStr, dstIPStr = sIP, dIP
-			srcIPOnly = formatIPOnly(sIP, sKey)
-			dstIPOnly = formatIPOnly(dIP, dKey)
-
 			srcIPKey, dstIPKey = sKey, dKey
 			sport, dport = sP, dP
 			srcEp = formatEndp(AF_INET6, sIP, sKey, sP)
 			dstEp = formatEndp(AF_INET6, dIP, dKey, dP)
+			srcIPOnly = formatIPOnly(sIP, sKey)
+			dstIPOnly = formatIPOnly(dIP, dKey)
 		} else {
 			continue
 		}
@@ -1525,177 +2429,177 @@ func main() {
 		pr := protoStr(proto)
 		evn := evName(ev.Sysexit)
 
-		// counters
-		switch ev.Sysexit {
-		case EV_SENDTO:
-			if proto == IPPROTO_UDP {
-				atomic.AddUint64(&cntUDPSend, 1)
+		// sampling
+		if *flgPrint {
+			n := atomic.AddUint64(&printed, 1)
+			if n%*flgSample != 0 {
+				continue
 			}
-		case EV_RECVFROM:
-			if proto == IPPROTO_UDP {
-				atomic.AddUint64(&cntUDPRecv, 1)
-			}
-		case EV_SENDMSG:
-			if proto == IPPROTO_UDP {
-				atomic.AddUint64(&cntUDPSendMsg, 1)
-			}
-		case EV_RECVMSG:
-			if proto == IPPROTO_UDP {
-				atomic.AddUint64(&cntUDPRecvMsg, 1)
-			}
-		case EV_CONNECT:
-			if proto == IPPROTO_TCP {
-				atomic.AddUint64(&cntTCPConn, 1)
-			}
-		case EV_ACCEPT:
-			if proto == IPPROTO_TCP {
-				atomic.AddUint64(&cntTCPAcc, 1)
-			}
+		} else {
+			continue
 		}
 
-		/* ===================== main logic ===================== */
+		fd := uint32(ev.Fd)
+		ret := int64(ev.Ret)
 
+		/* ========== ICMP/ICMPv6: только IP -> IP ========== */
+		if proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6 {
+			printICMP(pr, evn, p, fd, ret, srcIPOnly, dstIPOnly)
+			continue
+		}
+
+		/* ========== TCP connect/accept ========== */
 		switch ev.Sysexit {
-
 		case EV_BINDOK:
-			// bind: remember "who listens this local port"
 			saveListen(EndpKey{Family: family, Port: dport, IP: dstIPKey}, p)
 			var zero [16]byte
 			saveListen(EndpKey{Family: family, Port: dport, IP: zero}, p)
+			continue
 
 		case EV_CONNECT:
-			// CONNECT (TCP): src=client, dst=server
-			if proto != IPPROTO_TCP {
-				break
-			}
-			key := ConnKey{
-				Family:     family,
-				ClientIP:   srcIPKey,
-				ClientPort: sport,
-				ServerIP:   dstIPKey,
-				ServerPort: dport,
-			}
-			saveConn(key, p)
-
-			if server, ok := lookupListen(family, dstIPKey, dport); ok {
-				printTCPConnect(p, srcEp, dstEp, server)
-			} else {
-				savePending(key, PendingConnect{
-					Client:   p,
-					ClientEp: srcEp,
-					ServerEp: dstEp,
-					Seen:     time.Now(),
-				})
+			// если sport==0 или state==1 (EINPROGRESS/EALREADY) — не печатаем сразу, ждём первый TCP send/recv по (pid,fd)
+			if proto == IPPROTO_TCP && (sport == 0 || ev.State == 1) {
+				pendFdMu.Lock()
+				pendFdBy[SockKey{Pid: ev.Pid, Fd: fd}] = PendingByFD{Seen: time.Now()}
+				pendFdMu.Unlock()
+				// пока НЕ печатаем
+				continue
 			}
 
-		case EV_ACCEPT:
-			// ACCEPT (TCP): event in server pid, tuple src=client dst=server
-			if proto != IPPROTO_TCP {
-				break
-			}
-			server := p
+			if proto == IPPROTO_TCP {
+				key := ConnKey{
+					Family:     family,
+					ClientIP:   srcIPKey,
+					ClientPort: sport,
+					ServerIP:   dstIPKey,
+					ServerPort: dport,
+				}
+				saveConn(key, p)
 
-			// if bind missed, still remember server for its local port
-			saveListen(EndpKey{Family: family, Port: dport, IP: dstIPKey}, server)
-			var zero [16]byte
-			saveListen(EndpKey{Family: family, Port: dport, IP: zero}, server)
-
-			key := ConnKey{
-				Family:     family,
-				ClientIP:   srcIPKey,
-				ClientPort: sport,
-				ServerIP:   dstIPKey,
-				ServerPort: dport,
-			}
-
-			if pc, ok := takePending(key); ok {
-				printTCPConnect(pc.Client, pc.ClientEp, pc.ServerEp, server)
-				printTCPAccept(server, pc.ServerEp, pc.ClientEp, pc.Client)
-				break
-			}
-
-			client, ok := lookupConn(key)
-			if !ok {
-				client = Proc{}
-			}
-			printTCPAccept(server, dstEp, srcEp, client)
-
-		case EV_SENDTO, EV_SENDMSG:
-			// ✅ ICMP/ICMPv6: печатаем только IP -> IP
-			if proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6 {
-				if *flgPrint {
-					n := atomic.AddUint64(&printed, 1)
-					if n%*flgSample == 0 {
-						_ = srcIPStr
-						_ = dstIPStr
-						printICMP(pr, evn, p, srcIPOnly, dstIPOnly)
+				var server Proc
+				if isLocalAddr(family, dstIPKey) {
+					if sp, ok := lookupListen(family, dstIPKey, dport); ok {
+						server = sp
 					}
 				}
-				break
+				printTCPConnect(p, srcEp, dstEp, server, fd, ret)
 			}
+			continue
 
-			// learn UDP sender by its local port
+		case EV_ACCEPT:
+			if proto == IPPROTO_TCP {
+				server := p
+
+				saveListen(EndpKey{Family: family, Port: dport, IP: dstIPKey}, server)
+				var zero [16]byte
+				saveListen(EndpKey{Family: family, Port: dport, IP: zero}, server)
+
+				key := ConnKey{
+					Family:     family,
+					ClientIP:   srcIPKey,
+					ClientPort: sport,
+					ServerIP:   dstIPKey,
+					ServerPort: dport,
+				}
+
+				if pc, ok := takePendingConn(key); ok {
+					printTCPConnect(pc.Client, pc.ClientEp, pc.ServerEp, server, 0, 0)
+					printTCPAccept(server, pc.ServerEp, pc.ClientEp, pc.Client, fd, ret)
+					continue
+				}
+
+				client, ok := lookupConn(key)
+				if !ok {
+					client = Proc{}
+				}
+				printTCPAccept(server, dstEp, srcEp, client, fd, ret)
+			}
+			continue
+		}
+
+		/* ========== TCP “дозревание” CONNECT по (pid,fd) ========== */
+		if proto == IPPROTO_TCP {
+			sk := SockKey{Pid: ev.Pid, Fd: fd}
+			pendFdMu.Lock()
+			_, ok := pendFdBy[sk]
+			if ok && sport != 0 {
+				delete(pendFdBy, sk)
+			}
+			pendFdMu.Unlock()
+
+			if ok && sport != 0 {
+				// определяем локал/ремоут по направлению события
+				isSend := (ev.Sysexit == EV_SENDTO || ev.Sysexit == EV_SENDMSG)
+				var clientEp, serverEp string
+				var clientIP, serverIP [16]byte
+				var clientPort, serverPort uint16
+
+				if isSend {
+					// src=local, dst=remote
+					clientEp, serverEp = srcEp, dstEp
+					clientIP, serverIP = srcIPKey, dstIPKey
+					clientPort, serverPort = sport, dport
+				} else {
+					// src=remote, dst=local
+					clientEp, serverEp = dstEp, srcEp
+					clientIP, serverIP = dstIPKey, srcIPKey
+					clientPort, serverPort = dport, sport
+				}
+
+				key := ConnKey{
+					Family:     family,
+					ClientIP:   clientIP,
+					ClientPort: clientPort,
+					ServerIP:   serverIP,
+					ServerPort: serverPort,
+				}
+				saveConn(key, p)
+
+				var server Proc
+				if isLocalAddr(family, serverIP) {
+					if sp, ok2 := lookupListen(family, serverIP, serverPort); ok2 {
+						server = sp
+					}
+				}
+				printTCPConnect(p, clientEp, serverEp, server, fd, ret)
+				// дальше печатаем сам send/recv как обычно (не continue)
+			}
+		}
+
+		/* ========== UDP ownership + печать send/recv ========== */
+
+		switch ev.Sysexit {
+		case EV_SENDTO, EV_SENDMSG:
 			if proto == IPPROTO_UDP {
 				udpSetOwner(sport, p)
 			}
 
-			// dst owner only makes sense for local-ish destinations (loopback/*)
 			var dstOwner Proc
 			var ok bool
-			if proto == IPPROTO_UDP && isLocalish(family, dstIPKey) {
-				// priority: dynamic mapping -> snapshot (/proc) -> bind cache
+			if proto == IPPROTO_UDP && isLocalAddr(family, dstIPKey) {
 				if dstOwner, ok = udpGetOwner(dport); !ok {
 					if dstOwner, ok = getUDPOwnerSnapshot(dport); !ok {
 						dstOwner, ok = lookupListen(family, dstIPKey, dport)
 					}
 				}
 			}
-
-			if *flgPrint {
-				n := atomic.AddUint64(&printed, 1)
-				if n%*flgSample == 0 {
-					printSendLine(pr, evn, p, srcEp, dstEp, dstOwner, ok)
-				}
-			}
+			printSendLine(pr, evn, p, fd, ret, srcEp, dstEp, dstOwner, ok)
 
 		case EV_RECVFROM, EV_RECVMSG:
-			// ✅ ICMP/ICMPv6: печатаем только IP -> IP
-			if proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6 {
-				if *flgPrint {
-					n := atomic.AddUint64(&printed, 1)
-					if n%*flgSample == 0 {
-						printICMP(pr, evn, p, srcIPOnly, dstIPOnly)
-					}
-				}
-				break
-			}
-
-			// for UDP receive, dst is always this process
 			if proto == IPPROTO_UDP {
-				udpSetOwner(dport, p) // learn receiver by its local port (helps for server ports too)
+				udpSetOwner(dport, p)
 			}
 
-			// src owner if local-ish source (loopback/*)
 			var srcOwner Proc
 			var ok bool
-			if proto == IPPROTO_UDP && isLocalish(family, srcIPKey) {
-				// priority: dynamic mapping -> snapshot (/proc) -> bind cache
+			if proto == IPPROTO_UDP && isLocalAddr(family, srcIPKey) {
 				if srcOwner, ok = udpGetOwner(sport); !ok {
 					if srcOwner, ok = getUDPOwnerSnapshot(sport); !ok {
 						srcOwner, ok = lookupListen(family, srcIPKey, sport)
 					}
 				}
 			}
-
-			if *flgPrint {
-				n := atomic.AddUint64(&printed, 1)
-				if n%*flgSample == 0 {
-					printRecvLine(pr, evn, p, srcOwner, ok, srcEp, dstEp)
-				}
-			}
-
-		default:
-			// ignore others
+			printRecvLine(pr, evn, p, fd, ret, srcOwner, ok, srcEp, dstEp)
 		}
 	}
 }
