@@ -665,11 +665,5 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-TCP RECVFROM pid=3724(Socket Thread) fd=111 ret=34  src=?  10.0.2.15:0 -> 10.0.2.15:36254  dst=3724(Socket Thread)
-UDP SENDTO  pid=2892(Chrome_ChildIOT) fd=18 ret=37  src=2892(Chrome_ChildIOT)  127.0.0.1:60800 -> 127.0.0.53:53  dst=?
-UDP RECVFROM pid=536(systemd-resolve) fd=13 ret=37  src=?  127.0.0.1:0 -> 127.0.0.53:53  dst=536(systemd-resolve)
-UDP RECVMSG pid=536(systemd-resolve) fd=13 ret=37  src=2892(Chrome_ChildIOT)  127.0.0.1:60800 -> 127.0.0.53:53  dst=536(systemd-resolve)
-UDP SENDTO  pid=2892(Chrome_ChildIOT) fd=25 ret=37  src=2892(Chrome_ChildIOT)  127.0.0.1:31203 -> 127.0.0.53:53  dst=536(systemd-resolve)
-UDP RECVFROM pid=536(systemd-resolve) fd=13 ret=37  src=?  127.0.0.1:0 -> 127.0.0.53:53  dst=536(systemd-resolve)
-UDP SENDTO  pid=2892(Chrome_ChildIOT) fd=28 ret=37  src=2892(Chrome_ChildIOT)  127.0.0.1:19107 -> 127.0.0.53:53  dst=536(systemd-resolve)
+strace -f -e trace=recvfrom,recvmsg -p 536
 
