@@ -665,13 +665,64 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-TCP RECVFROM pid=3724(Socket Thread) fd=111 ret=5  src=?  10.0.2.15:0 -> 10.0.2.15:36254  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=111 ret=75  src=?  10.0.2.15:0 -> 10.0.2.15:36254  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=111 ret=5  src=?  10.0.2.15:0 -> 10.0.2.15:36254  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=111 ret=494  src=?  10.0.2.15:0 -> 10.0.2.15:36254  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=111 ret=5  src=?  10.0.2.15:0 -> 10.0.2.15:36254  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=111 ret=30  src=?  10.0.2.15:0 -> 10.0.2.15:36254  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=111 ret=5  src=?  10.0.2.15:0 -> 10.0.2.15:36254  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=111 ret=52  src=?  10.0.2.15:0 -> 10.0.2.15:36254  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=111 ret=5  src=?  10.0.2.15:0 -> 10.0.2.15:36254  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=111 ret=494  src=?  10.0.2.15:0 -> 10.0.2.15:36254  dst=3724(Socket Thread)
+#define IPPROTO_TCP 6
+
+static __always_inline int fill_from_fd_state_map(struct trace_info *info, __u32 tgid, int fd, int is_send)
+{
+    struct fd_key_t k = { .tgid = tgid, .fd = fd };
+
+    struct fd_state_t tmp = {};
+    struct fd_state_t *st = bpf_map_lookup_elem(&fd_state_map, &k);
+
+    // ✅ если нет записи — попробуем прочитать напрямую из sock и заодно закешировать
+    if (!st) {
+        if (fill_fd_state(fd, &tmp) < 0)
+            return -1;
+        bpf_map_update_elem(&fd_state_map, &k, &tmp, BPF_ANY);
+        st = &tmp;
+    } else {
+        // ✅ self-heal: если TCP и rport=0 — перечитать из sock и обновить
+        if (st->proto == IPPROTO_TCP && st->rport == 0) {
+            if (fill_fd_state(fd, &tmp) == 0) {
+                bpf_map_update_elem(&fd_state_map, &k, &tmp, BPF_ANY);
+                st = &tmp;
+            }
+        }
+    }
+
+    info->proto  = st->proto;
+    info->family = st->family;
+
+    if (st->family == AF_INET) {
+        if (is_send) {
+            info->srcIP.s_addr = st->lip;
+            info->dstIP.s_addr = st->rip;
+            info->sport = st->lport;
+            info->dport = st->rport;
+        } else {
+            info->srcIP.s_addr = st->rip;
+            info->dstIP.s_addr = st->lip;
+            info->sport = st->rport;
+            info->dport = st->lport;
+        }
+        return 0;
+    }
+
+    if (st->family == AF_INET6) {
+        if (is_send) {
+            __builtin_memcpy(&info->srcIP6, &st->lip6, sizeof(info->srcIP6));
+            __builtin_memcpy(&info->dstIP6, &st->rip6, sizeof(info->dstIP6));
+            info->sport = st->lport;
+            info->dport = st->rport;
+        } else {
+            __builtin_memcpy(&info->srcIP6, &st->rip6, sizeof(info->srcIP6));
+            __builtin_memcpy(&info->dstIP6, &st->lip6, sizeof(info->dstIP6));
+            info->sport = st->rport;
+            info->dport = st->lport;
+        }
+        return 0;
+    }
+
+    return -1;
+}
+
