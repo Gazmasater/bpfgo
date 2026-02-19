@@ -722,17 +722,19 @@ const (
 /* ===================== flags (NO env) ===================== */
 
 var (
-	flgTracePort     = flag.Uint("tracePort", 9999, "UDP port to resolve dst/src owner via /proc snapshot (0=off)")
-	flgSnapshotEvery = flag.Duration("snapshotEvery", 0, "refresh UDP owners snapshot every duration (0=only once)")
-	flgTTL           = flag.Duration("ttl", 2*time.Second, "TTL for in-memory caches (udp/tcp)")
+	flgTracePort     = flag.Uint("tracePort", 0, "if >0 and matchOnly=true, only events with sport/dport==tracePort are processed")
+	flgSnapshotEvery = flag.Duration("snapshotEvery", 0, "refresh /proc snapshots every duration (0=only once)")
+	flgProcSnapshot  = flag.Bool("procSnapshot", true, "use /proc snapshots (UDP owners + TCP listeners) to resolve peer pid (especially if server started before bpfgo)")
+	flgTTL           = flag.Duration("ttl", 2*time.Second, "TTL for in-memory caches")
 	flgDebug         = flag.Bool("debug", false, "debug logs")
 	flgPerfMB        = flag.Int("perfMB", 4, "perf ring buffer size in MB")
-	flgPrint         = flag.Bool("print", true, "print events")
-	flgSample        = flag.Uint64("sample", 1, "print every Nth matched event (>=1)")
-	flgMatchOnly     = flag.Bool("matchOnly", false, "if tracePort>0, only count/print events where sport/dport==tracePort")
 
-	flgStats    = flag.Duration("stats", 0, "print stats every interval (0=off)")
-	flgPprof    = flag.Bool("pprof", true, "enable pprof")
+	flgPrint     = flag.Bool("print", true, "print events")
+	flgSample    = flag.Uint64("sample", 1, "print every Nth matched event (>=1)")
+	flgMatchOnly = flag.Bool("matchOnly", false, "if tracePort>0, only count/print events where sport/dport==tracePort")
+
+	flgStats     = flag.Duration("stats", 1*time.Second, "print stats every interval (0=off)")
+	flgPprof     = flag.Bool("pprof", true, "enable pprof")
 	flgPprofAddr = flag.String("pprofAddr", ":6060", "pprof listen addr")
 )
 
@@ -781,25 +783,44 @@ type PendingConnect struct {
 	Seen     time.Time
 }
 
+// FlowKey: local->remote mapping, used to resolve peer pid for TCP (and optionally for UDP)
+type FlowKey struct {
+	Family  uint16
+	LocalIP [16]byte
+	LocalPt uint16
+	RemIP   [16]byte
+	RemPt   uint16
+}
+
 /* ===================== caches ===================== */
 
 var (
 	commMu    sync.RWMutex
 	commCache = make(map[[32]int8]string)
 
+	// bind/listen cache (from events)
 	listenMu sync.Mutex
 	listenBy = make(map[EndpKey]Proc, 4096)
 
+	// connect cache: ConnKey -> client proc
 	connMu sync.Mutex
 	connBy = make(map[ConnKey]Proc, 16384)
 
+	// pending connect (wait accept)
 	pendMu sync.Mutex
 	pendBy = make(map[ConnKey]PendingConnect, 16384)
 
-	udpMu    sync.Mutex
-	udpByPort = make(map[uint16]Proc, 65536) // dynamic: sport->proc (learned from SEND*), also server port after first send
+	// UDP dynamic owners (learned from traffic)
+	udpMu     sync.Mutex
+	udpByPort = make(map[uint16]Proc, 65536)
 
-	udpOwnerAny atomic.Value // map[uint16]Proc from /proc snapshot (listeners/owners by local port)
+	// TCP peer mapping: (local ip:port -> remote ip:port) -> peer proc
+	tcpPeerMu sync.Mutex
+	tcpPeerBy = make(map[FlowKey]Proc, 65536)
+
+	// /proc snapshots (lock-free reads)
+	udpOwnerAny atomic.Value // map[uint16]Proc (udp local port -> owning proc)
+	tcpLisAny   atomic.Value // map[uint16]Proc (tcp LISTEN port -> owning proc)
 )
 
 func setUDPOwners(m map[uint16]Proc) { udpOwnerAny.Store(m) }
@@ -811,6 +832,18 @@ func getUDPOwnerSnapshot(port uint16) (Proc, bool) {
 	p, ok := m[port]
 	return p, ok
 }
+
+func setTCPListeners(m map[uint16]Proc) { tcpLisAny.Store(m) }
+func getTCPListenerSnapshot(port uint16) (Proc, bool) {
+	m, _ := tcpLisAny.Load().(map[uint16]Proc)
+	if m == nil {
+		return Proc{}, false
+	}
+	p, ok := m[port]
+	return p, ok
+}
+
+/* ===================== cache ops ===================== */
 
 func saveListen(ep EndpKey, p Proc) {
 	p.Seen = time.Now()
@@ -878,6 +911,20 @@ func udpGetOwner(port uint16) (Proc, bool) {
 	udpMu.Lock()
 	p, ok := udpByPort[port]
 	udpMu.Unlock()
+	return p, ok
+}
+
+func tcpSetPeer(k FlowKey, peer Proc) {
+	peer.Seen = time.Now()
+	tcpPeerMu.Lock()
+	tcpPeerBy[k] = peer
+	tcpPeerMu.Unlock()
+}
+
+func tcpGetPeer(k FlowKey) (Proc, bool) {
+	tcpPeerMu.Lock()
+	p, ok := tcpPeerBy[k]
+	tcpPeerMu.Unlock()
 	return p, ok
 }
 
@@ -965,7 +1012,7 @@ func isIPv6Loop(ip [16]byte) bool {
 }
 
 func isLocalish(family uint16, ip [16]byte) bool {
-	if isAllZero16(ip) { // wildcard like 0.0.0.0 / ::
+	if isAllZero16(ip) { // wildcard 0.0.0.0 / ::
 		return true
 	}
 	if family == AF_INET && isIPv4Loop(ip) {
@@ -985,7 +1032,7 @@ func endpFromEvIPv4(ipU32 uint32, port uint16) (ipStr string, ipKey [16]byte, po
 
 func endpFromEvIPv6(ipArr [16]uint8, port uint16) (ipStr string, ipKey [16]byte, portU16 uint16) {
 	copy(ipKey[:], ipArr[:])
-	// keep your old formatting style (no compression)
+	// no compression, stable output
 	return fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x",
 		uint16(ipArr[0])<<8|uint16(ipArr[1]),
 		uint16(ipArr[2])<<8|uint16(ipArr[3]),
@@ -1010,30 +1057,41 @@ func formatEndp(family uint16, ipStr string, ipKey [16]byte, port uint16) string
 
 /* ===================== printing ===================== */
 
-func printTCPConnect(client Proc, clientEp, serverEp string, server Proc) {
-	fmt.Printf("TCP CONNECT client=%s  %s -> %s  server=%s\n",
-		client.String(), clientEp, serverEp, server.String())
-}
-
-func printTCPAccept(server Proc, serverEp, clientEp string, client Proc) {
-	fmt.Printf("TCP ACCEPT  server=%s  %s -> %s  client=%s\n",
-		server.String(), serverEp, clientEp, client.String())
-}
-
-func printUDPSend(proto string, kind string, p Proc, srcEp, dstEp string, dst Proc, ok bool) {
+func printSend(proto, kind string, self Proc, srcEp, dstEp string, dst Proc, ok bool) {
 	d := "?"
 	if ok {
 		d = dst.String()
 	}
-	fmt.Printf("%s %-7s pid=%s  src=%s  %s -> %s  dst=%s\n", proto, kind, p.String(), p.String(), srcEp, dstEp, d)
+	// формат как у тебя: "pid=... src=... ... dst=..."
+	fmt.Printf("%s %-7s pid=%s  src=%s  %s -> %s  dst=%s\n",
+		proto, kind, self.String(), self.String(), srcEp, dstEp, d)
 }
 
-func printUDPRecv(proto string, kind string, p Proc, src Proc, ok bool, srcEp, dstEp string) {
+func printRecv(proto, kind string, self Proc, src Proc, ok bool, srcEp, dstEp string) {
 	s := "?"
 	if ok {
 		s = src.String()
 	}
-	fmt.Printf("%s %-7s pid=%s  src=%s  %s -> %s  dst=%s\n", proto, kind, p.String(), s, srcEp, dstEp, p.String())
+	fmt.Printf("%s %-7s pid=%s  src=%s  %s -> %s  dst=%s\n",
+		proto, kind, self.String(), s, srcEp, dstEp, self.String())
+}
+
+func printTCPConnect(client Proc, clientEp, serverEp string, server Proc, ok bool) {
+	s := "?"
+	if ok {
+		s = server.String()
+	}
+	fmt.Printf("TCP CONNECT client=%s  %s -> %s  server=%s\n",
+		client.String(), clientEp, serverEp, s)
+}
+
+func printTCPAccept(server Proc, serverEp, clientEp string, client Proc, ok bool) {
+	c := "?"
+	if ok {
+		c = client.String()
+	}
+	fmt.Printf("TCP ACCEPT  server=%s  %s -> %s  client=%s\n",
+		server.String(), serverEp, clientEp, c)
 }
 
 /* ===================== cleanup (TTL) ===================== */
@@ -1069,6 +1127,14 @@ func cleanupTTL(ttl time.Duration) {
 		}
 		udpMu.Unlock()
 
+		tcpPeerMu.Lock()
+		for k, v := range tcpPeerBy {
+			if v.Seen.Before(cut) {
+				delete(tcpPeerBy, k)
+			}
+		}
+		tcpPeerMu.Unlock()
+
 		// pending connect timeout => print server=?
 		pendMu.Lock()
 		for k, v := range pendBy {
@@ -1082,7 +1148,7 @@ func cleanupTTL(ttl time.Duration) {
 	}
 }
 
-/* ===================== /proc UDP owners snapshot ===================== */
+/* ===================== /proc snapshots ===================== */
 
 type inodePort struct {
 	Inode uint64
@@ -1149,12 +1215,10 @@ func buildInodeToProc(selfPID uint32) (map[uint64]Proc, int, int) {
 			out[inode] = Proc{Pid: pid, Comm: comm}
 		}
 	}
-
 	return out, scanned, skipped
 }
 
-// /proc/net/udp*: wantState="" => all entries
-// fields: sl local_address rem_address st tx_queue:rx_queue tr:tm->when retrnsmt uid timeout inode ...
+// /proc/net/* parser: wantState="" => all entries, for tcp LISTEN use wantState="0A"
 func parseProcNetInodes(path string, wantState string) []inodePort {
 	f, err := os.Open(path)
 	if err != nil {
@@ -1194,14 +1258,13 @@ func parseProcNetInodes(path string, wantState string) []inodePort {
 		}
 
 		port64, err := strconv.ParseUint(parts[1], 16, 16)
-		if err != nil || port64 == 0 {
+		if err != nil {
 			continue
 		}
 		inode, err := strconv.ParseUint(fields[9], 10, 64)
 		if err != nil || inode == 0 {
 			continue
 		}
-
 		out = append(out, inodePort{Inode: inode, Port: uint16(port64)})
 	}
 
@@ -1209,45 +1272,47 @@ func parseProcNetInodes(path string, wantState string) []inodePort {
 	return out
 }
 
-func snapshotUDPOwners(tracePort uint16) {
+func snapshotProc() {
 	selfPID := uint32(os.Getpid())
-
 	inode2proc, scanned, skipped := buildInodeToProc(selfPID)
-	dbg("snapshotUDPOwners: inode2proc: procs_scanned=%d procs_skipped=%d unique_inodes=%d", scanned, skipped, len(inode2proc))
+	dbg("snapshotProc: inode2proc: procs_scanned=%d procs_skipped=%d unique_inodes=%d", scanned, skipped, len(inode2proc))
 
+	// UDP owners (all sockets)
 	udp4 := parseProcNetInodes("/proc/net/udp", "")
 	udp6 := parseProcNetInodes("/proc/net/udp6", "")
-
-	owners := make(map[uint16]Proc, 256)
-
+	udpOwners := make(map[uint16]Proc, 256)
 	for _, it := range udp4 {
 		if p, ok := inode2proc[it.Inode]; ok {
-			owners[it.Port] = p
-			if tracePort != 0 && it.Port == tracePort {
-				dbg("UDP owner learned (udp4): port=%d proc=%s inode=%d", it.Port, p.String(), it.Inode)
-			}
+			udpOwners[it.Port] = p
 		}
 	}
 	for _, it := range udp6 {
 		if p, ok := inode2proc[it.Inode]; ok {
-			if _, exists := owners[it.Port]; !exists {
-				owners[it.Port] = p
-			}
-			if tracePort != 0 && it.Port == tracePort {
-				dbg("UDP owner learned (udp6): port=%d proc=%s inode=%d", it.Port, p.String(), it.Inode)
+			if _, exists := udpOwners[it.Port]; !exists {
+				udpOwners[it.Port] = p
 			}
 		}
 	}
+	setUDPOwners(udpOwners)
 
-	setUDPOwners(owners)
-
-	if tracePort != 0 {
-		if p, ok := getUDPOwnerSnapshot(tracePort); ok {
-			dbg("snapshotUDPOwners: TRACE_PORT=%d owner=%s", tracePort, p.String())
-		} else {
-			dbg("snapshotUDPOwners: TRACE_PORT=%d owner NOT FOUND", tracePort)
+	// TCP listeners only (LISTEN=0A)
+	tcp4 := parseProcNetInodes("/proc/net/tcp", "0A")
+	tcp6 := parseProcNetInodes("/proc/net/tcp6", "0A")
+	tcpLis := make(map[uint16]Proc, 256)
+	for _, it := range tcp4 {
+		if p, ok := inode2proc[it.Inode]; ok {
+			tcpLis[it.Port] = p
 		}
 	}
+	for _, it := range tcp6 {
+		if p, ok := inode2proc[it.Inode]; ok {
+			if _, exists := tcpLis[it.Port]; !exists {
+				tcpLis[it.Port] = p
+			}
+		}
+	}
+	setTCPListeners(tcpLis)
+	dbg("snapshotProc: udpOwners=%d tcpListeners=%d", len(udpOwners), len(tcpLis))
 }
 
 /* ===================== stats ===================== */
@@ -1261,8 +1326,14 @@ var (
 	cntUDPRecv    uint64
 	cntUDPSendMsg uint64
 	cntUDPRecvMsg uint64
-	cntTCPConn    uint64
-	cntTCPAcc     uint64
+
+	cntTCPSend    uint64
+	cntTCPRecv    uint64
+	cntTCPSendMsg uint64
+	cntTCPRecvMsg uint64
+
+	cntTCPConn uint64
+	cntTCPAcc  uint64
 )
 
 /* ===================== main ===================== */
@@ -1276,8 +1347,8 @@ func main() {
 		*flgSample = 1
 	}
 
-	log.Printf("bpfgo start: debug=%v tracePort=%d perfMB=%d print=%v sample=%d matchOnly=%v snapshotEvery=%v ttl=%v stats=%v",
-		*flgDebug, tracePort, *flgPerfMB, *flgPrint, *flgSample, *flgMatchOnly, *flgSnapshotEvery, *flgTTL, *flgStats)
+	log.Printf("bpfgo start: debug=%v procSnapshot=%v snapshotEvery=%v ttl=%v tracePort=%d matchOnly=%v perfMB=%d print=%v sample=%d stats=%v",
+		*flgDebug, *flgProcSnapshot, *flgSnapshotEvery, *flgTTL, tracePort, *flgMatchOnly, *flgPerfMB, *flgPrint, *flgSample, *flgStats)
 
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.Fatalf("failed to remove memlock: %v", err)
@@ -1297,15 +1368,15 @@ func main() {
 	// cleanup caches
 	go cleanupTTL(*flgTTL)
 
-	// snapshot UDP owners so dst resolves even if server started before bpfgo
-	if tracePort != 0 {
-		snapshotUDPOwners(tracePort)
+	// /proc snapshot (UDP owners + TCP listeners)
+	if *flgProcSnapshot {
+		snapshotProc()
 		if *flgSnapshotEvery > 0 {
 			go func() {
 				t := time.NewTicker(*flgSnapshotEvery)
 				defer t.Stop()
 				for range t.C {
-					snapshotUDPOwners(tracePort)
+					snapshotProc()
 				}
 			}()
 		}
@@ -1320,6 +1391,7 @@ func main() {
 			_ = l.Close()
 		}
 	}()
+
 	attach := func(cat, name string, prog *ebpf.Program) {
 		l, err := link.Tracepoint(cat, name, prog, nil)
 		if err != nil {
@@ -1375,20 +1447,27 @@ func main() {
 				all := atomic.LoadUint64(&cntAll)
 				match := atomic.LoadUint64(&cntMatch)
 				lost := atomic.LoadUint64(&cntLost)
+
 				epsAll := all - lastAll
 				epsMatch := match - lastMatch
 				lostDelta := lost - lastLost
 				lastAll, lastMatch, lastLost = all, match, lost
 
-				fmt.Printf("[STAT] eps_all=%d eps_match=%d lost=%d (+%d) udp_send=%d udp_recv=%d udp_sendmsg=%d udp_recvmsg=%d tcp_conn=%d tcp_acc=%d tracePort=%d\n",
+				fmt.Printf("[STAT] eps_all=%d eps_match=%d lost=%d (+%d) "+
+					"udp_send=%d udp_recv=%d udp_sendmsg=%d udp_recvmsg=%d "+
+					"tcp_send=%d tcp_recv=%d tcp_sendmsg=%d tcp_recvmsg=%d "+
+					"tcp_conn=%d tcp_acc=%d\n",
 					epsAll, epsMatch, lost, lostDelta,
 					atomic.LoadUint64(&cntUDPSend),
 					atomic.LoadUint64(&cntUDPRecv),
 					atomic.LoadUint64(&cntUDPSendMsg),
 					atomic.LoadUint64(&cntUDPRecvMsg),
+					atomic.LoadUint64(&cntTCPSend),
+					atomic.LoadUint64(&cntTCPRecv),
+					atomic.LoadUint64(&cntTCPSendMsg),
+					atomic.LoadUint64(&cntTCPRecvMsg),
 					atomic.LoadUint64(&cntTCPConn),
 					atomic.LoadUint64(&cntTCPAcc),
-					tracePort,
 				)
 			}
 		}()
@@ -1438,14 +1517,14 @@ func main() {
 		}
 		atomic.AddUint64(&cntMatch, 1)
 
-		p := Proc{Pid: ev.Pid, Comm: comm}
+		self := Proc{Pid: ev.Pid, Comm: comm}
 
 		// endpoints + keys
 		var (
-			srcEp, dstEp         string
-			srcIPKey, dstIPKey   [16]byte
-			sport, dport         uint16
-			family               uint16
+			srcEp, dstEp       string
+			srcIPKey, dstIPKey [16]byte
+			sport, dport       uint16
+			family             uint16
 		)
 
 		family = uint16(ev.Family)
@@ -1470,83 +1549,110 @@ func main() {
 			continue
 		}
 
-		pr := protoStr(uint8(ev.Proto))
+		proto := uint8(ev.Proto)
+		pr := protoStr(proto)
 		evn := evName(ev.Sysexit)
 
 		// counters
 		switch ev.Sysexit {
 		case EV_SENDTO:
-			if uint8(ev.Proto) == IPPROTO_UDP {
+			if proto == IPPROTO_UDP {
 				atomic.AddUint64(&cntUDPSend, 1)
+			} else if proto == IPPROTO_TCP {
+				atomic.AddUint64(&cntTCPSend, 1)
 			}
 		case EV_RECVFROM:
-			if uint8(ev.Proto) == IPPROTO_UDP {
+			if proto == IPPROTO_UDP {
 				atomic.AddUint64(&cntUDPRecv, 1)
+			} else if proto == IPPROTO_TCP {
+				atomic.AddUint64(&cntTCPRecv, 1)
 			}
 		case EV_SENDMSG:
-			if uint8(ev.Proto) == IPPROTO_UDP {
+			if proto == IPPROTO_UDP {
 				atomic.AddUint64(&cntUDPSendMsg, 1)
+			} else if proto == IPPROTO_TCP {
+				atomic.AddUint64(&cntTCPSendMsg, 1)
 			}
 		case EV_RECVMSG:
-			if uint8(ev.Proto) == IPPROTO_UDP {
+			if proto == IPPROTO_UDP {
 				atomic.AddUint64(&cntUDPRecvMsg, 1)
+			} else if proto == IPPROTO_TCP {
+				atomic.AddUint64(&cntTCPRecvMsg, 1)
 			}
 		case EV_CONNECT:
-			if uint8(ev.Proto) == IPPROTO_TCP {
+			if proto == IPPROTO_TCP {
 				atomic.AddUint64(&cntTCPConn, 1)
 			}
 		case EV_ACCEPT:
-			if uint8(ev.Proto) == IPPROTO_TCP {
+			if proto == IPPROTO_TCP {
 				atomic.AddUint64(&cntTCPAcc, 1)
 			}
 		}
 
-		// main logic
+		/* ===== main logic ===== */
+
 		switch ev.Sysexit {
+
 		case EV_BINDOK:
 			// bind: remember "who listens this local port"
-			saveListen(EndpKey{Family: family, Port: dport, IP: dstIPKey}, p)
+			saveListen(EndpKey{Family: family, Port: dport, IP: dstIPKey}, self)
 			var zero [16]byte
-			saveListen(EndpKey{Family: family, Port: dport, IP: zero}, p)
+			saveListen(EndpKey{Family: family, Port: dport, IP: zero}, self)
 
 		case EV_CONNECT:
-			// CONNECT (TCP): src=client, dst=server
-			if uint8(ev.Proto) != IPPROTO_TCP {
+			if proto != IPPROTO_TCP {
 				break
 			}
-			key := ConnKey{
+
+			// ConnKey is client->server from event (src=client, dst=server)
+			ck := ConnKey{
 				Family:     family,
 				ClientIP:   srcIPKey,
 				ClientPort: sport,
 				ServerIP:   dstIPKey,
 				ServerPort: dport,
 			}
-			saveConn(key, p)
+			saveConn(ck, self)
 
-			if server, ok := lookupListen(family, dstIPKey, dport); ok {
-				printTCPConnect(p, srcEp, dstEp, server)
+			// resolve server proc (only meaningful if server is local-ish)
+			var server Proc
+			var okServer bool
+
+			if isLocalish(family, dstIPKey) && dport != 0 {
+				// priority: bind-cache -> /proc tcp LISTEN snapshot
+				if server, okServer = lookupListen(family, dstIPKey, dport); !okServer && *flgProcSnapshot {
+					server, okServer = getTCPListenerSnapshot(dport)
+				}
+			}
+
+			// build TCP peer mapping (client local->remote server)
+			if okServer {
+				kCS := FlowKey{Family: family, LocalIP: srcIPKey, LocalPt: sport, RemIP: dstIPKey, RemPt: dport}
+				kSC := FlowKey{Family: family, LocalIP: dstIPKey, LocalPt: dport, RemIP: srcIPKey, RemPt: sport}
+				tcpSetPeer(kCS, server) // on client side, peer is server
+				tcpSetPeer(kSC, self)   // on server side, peer is client (for loopback)
+			}
+
+			// print connect now if server known, else pending
+			if okServer {
+				printTCPConnect(self, srcEp, dstEp, server, true)
 			} else {
-				savePending(key, PendingConnect{
-					Client:   p,
-					ClientEp: srcEp,
-					ServerEp: dstEp,
-					Seen:     time.Now(),
-				})
+				savePending(ck, PendingConnect{Client: self, ClientEp: srcEp, ServerEp: dstEp, Seen: time.Now()})
 			}
 
 		case EV_ACCEPT:
-			// ACCEPT (TCP): event in server pid, tuple src=client dst=server
-			if uint8(ev.Proto) != IPPROTO_TCP {
+			if proto != IPPROTO_TCP {
 				break
 			}
-			server := p
+			server := self
 
-			// if bind missed, still remember server for its local port
+			// save listen just in case
 			saveListen(EndpKey{Family: family, Port: dport, IP: dstIPKey}, server)
 			var zero [16]byte
 			saveListen(EndpKey{Family: family, Port: dport, IP: zero}, server)
 
-			key := ConnKey{
+			// ConnKey from event (src=client, dst=server)
+			ck := ConnKey{
 				Family:     family,
 				ClientIP:   srcIPKey,
 				ClientPort: sport,
@@ -1554,32 +1660,60 @@ func main() {
 				ServerPort: dport,
 			}
 
-			if pc, ok := takePending(key); ok {
-				printTCPConnect(pc.Client, pc.ClientEp, pc.ServerEp, server)
-				printTCPAccept(server, pc.ServerEp, pc.ClientEp, pc.Client)
-				break
+			// try get client proc from connect-cache
+			client, okClient := lookupConn(ck)
+
+			// if we had pending connect, print both connect + accept
+			if pc, ok := takePending(ck); ok {
+				// even if client proc unknown, we at least know server proc
+				printTCPConnect(pc.Client, pc.ClientEp, pc.ServerEp, server, true)
+
+				// print accept with best-effort client
+				printTCPAccept(server, pc.ServerEp, pc.ClientEp, client, okClient)
+			} else {
+				// accept without pending
+				printTCPAccept(server, dstEp, srcEp, client, okClient)
 			}
 
-			client, ok := lookupConn(key)
-			if !ok {
-				client = Proc{}
+			// build TCP peer mapping if local and ports valid
+			if isLocalish(family, dstIPKey) && dport != 0 && okClient {
+				kCS := FlowKey{Family: family, LocalIP: srcIPKey, LocalPt: sport, RemIP: dstIPKey, RemPt: dport}
+				kSC := FlowKey{Family: family, LocalIP: dstIPKey, LocalPt: dport, RemIP: srcIPKey, RemPt: sport}
+				tcpSetPeer(kCS, server)
+				tcpSetPeer(kSC, client)
 			}
-			printTCPAccept(server, dstEp, srcEp, client)
 
 		case EV_SENDTO, EV_SENDMSG:
-			// protocol comes from event
-			if uint8(ev.Proto) == IPPROTO_UDP {
-				udpSetOwner(sport, p) // learn sender by its local port
-			}
+			// SEND path: want dst pid (peer)
+			var peer Proc
+			var okPeer bool
 
-			// dst owner only makes sense for local-ish destinations
-			var dstOwner Proc
-			var ok bool
-			if uint8(ev.Proto) == IPPROTO_UDP && isLocalish(family, dstIPKey) {
-				// priority: dynamic mapping -> snapshot (/proc) -> bind cache
-				if dstOwner, ok = udpGetOwner(dport); !ok {
-					if dstOwner, ok = getUDPOwnerSnapshot(dport); !ok {
-						dstOwner, ok = lookupListen(family, dstIPKey, dport)
+			if proto == IPPROTO_UDP {
+				// learn sender
+				udpSetOwner(sport, self)
+
+				// resolve only for local-ish destinations
+				if isLocalish(family, dstIPKey) && dport != 0 {
+					// priority: dynamic udp -> /proc snapshot udp -> bind cache
+					if peer, okPeer = udpGetOwner(dport); !okPeer && *flgProcSnapshot {
+						if peer, okPeer = getUDPOwnerSnapshot(dport); !okPeer {
+							peer, okPeer = lookupListen(family, dstIPKey, dport)
+						}
+					} else if !okPeer {
+						peer, okPeer = lookupListen(family, dstIPKey, dport)
+					}
+				}
+			} else if proto == IPPROTO_TCP {
+				// resolve only for local-ish destinations
+				if isLocalish(family, dstIPKey) && sport != 0 && dport != 0 {
+					// 1) flow-map (local->remote)
+					fk := FlowKey{Family: family, LocalIP: srcIPKey, LocalPt: sport, RemIP: dstIPKey, RemPt: dport}
+					if peer, okPeer = tcpGetPeer(fk); !okPeer {
+						// 2) bind/listen cache
+						if peer, okPeer = lookupListen(family, dstIPKey, dport); !okPeer && *flgProcSnapshot {
+							// 3) /proc tcp listeners
+							peer, okPeer = getTCPListenerSnapshot(dport)
+						}
 					}
 				}
 			}
@@ -1587,42 +1721,51 @@ func main() {
 			if *flgPrint {
 				n := atomic.AddUint64(&printed, 1)
 				if n%*flgSample == 0 {
-					printUDPSend(pr, evn, p, srcEp, dstEp, dstOwner, ok)
+					printSend(pr, evn, self, srcEp, dstEp, peer, okPeer)
 				}
 			}
 
 		case EV_RECVFROM, EV_RECVMSG:
-			// for UDP receive, dst is always this process
-			if uint8(ev.Proto) == IPPROTO_UDP {
-				udpSetOwner(dport, p) // learn receiver by its local port (helps for server ports too)
-			}
+			// RECV path: want src pid (peer)
+			var peer Proc
+			var okPeer bool
 
-			// src owner if local-ish source (loopback or wildcard)
-			var srcOwner Proc
-			var ok bool
-			if uint8(ev.Proto) == IPPROTO_UDP && isLocalish(family, srcIPKey) {
-				// priority: dynamic mapping -> snapshot (/proc) -> bind cache
-				if srcOwner, ok = udpGetOwner(sport); !ok {
-					if srcOwner, ok = getUDPOwnerSnapshot(sport); !ok {
-						srcOwner, ok = lookupListen(family, srcIPKey, sport)
+			if proto == IPPROTO_UDP {
+				// learn receiver
+				udpSetOwner(dport, self)
+
+				// resolve only for local-ish sources
+				if isLocalish(family, srcIPKey) && sport != 0 {
+					if peer, okPeer = udpGetOwner(sport); !okPeer && *flgProcSnapshot {
+						if peer, okPeer = getUDPOwnerSnapshot(sport); !okPeer {
+							peer, okPeer = lookupListen(family, srcIPKey, sport)
+						}
+					} else if !okPeer {
+						peer, okPeer = lookupListen(family, srcIPKey, sport)
 					}
+				}
+			} else if proto == IPPROTO_TCP {
+				// recv: local is dst (this proc), remote is src
+				// IMPORTANT: if your eBPF doesn’t populate src for tcp recv (you get *:0), then sport==0 and we cannot resolve peer.
+				if isLocalish(family, srcIPKey) && sport != 0 && dport != 0 {
+					// local->remote mapping for this proc:
+					// local endpoint is dstIPKey:dport, remote is srcIPKey:sport
+					fk := FlowKey{Family: family, LocalIP: dstIPKey, LocalPt: dport, RemIP: srcIPKey, RemPt: sport}
+					peer, okPeer = tcpGetPeer(fk)
 				}
 			}
 
 			if *flgPrint {
 				n := atomic.AddUint64(&printed, 1)
 				if n%*flgSample == 0 {
-					printUDPRecv(pr, evn, p, srcOwner, ok, srcEp, dstEp)
+					printRecv(pr, evn, self, peer, okPeer, srcEp, dstEp)
 				}
 			}
 
 		default:
-			// ignore others
+			// ignore
 		}
 	}
 }
-
-
-
 
 
