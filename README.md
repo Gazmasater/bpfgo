@@ -667,3 +667,13 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 strace -f -e trace=recvfrom,recvmsg -p 536
 
+
+lev@lev-VirtualBox:~/bpfgo$ sudo strace -f -e trace=recvfrom,recvmsg -p 536
+[sudo] password for lev: 
+strace: Process 536 attached
+recvfrom(13, NULL, 0, MSG_PEEK|MSG_TRUNC, NULL, NULL) = 55
+recvmsg(13, {msg_name={sa_family=AF_INET, sin_port=htons(41184), sin_addr=inet_addr("127.0.0.1")}, msg_namelen=128 => 16, msg_iov=[{iov_base="\221k\1 \0\1\0\0\0\0\0\1\7mozilla\16cloudflare-"..., iov_len=3920}], msg_iovlen=1, msg_control=[{cmsg_len=28, cmsg_level=SOL_IP, cmsg_type=IP_PKTINFO, cmsg_data={ipi_ifindex=if_nametoindex("lo"), ipi_spec_dst=inet_addr("127.0.0.53"), ipi_addr=inet_addr("127.0.0.53")}}, {cmsg_len=20, cmsg_level=SOL_IP, cmsg_type=IP_TTL, cmsg_data=[64]}], msg_controllen=56, msg_flags=0}, 0) = 55
+recvfrom(13, NULL, 0, MSG_PEEK|MSG_TRUNC, NULL, NULL) = 55
+recvmsg(13, {msg_name={sa_family=AF_INET, sin_port=htons(41184), sin_addr=inet_addr("127.0.0.1")}, msg_namelen=128 => 16, msg_iov=[{iov_base="\203w\1 \0\1\0\0\0\0\0\1\7mozilla\16cloudflare-"..., iov_len=3920}], msg_iovlen=1, msg_control=[{cmsg_len=28, cmsg_level=SOL_IP, cmsg_type=IP_PKTINFO, cmsg_data={ipi_ifindex=if_nametoindex("lo"), ipi_spec_dst=inet_addr("127.0.0.53"), ipi_addr=inet_addr("127.0.0.53")}}, {cmsg_len=20, cmsg_level=SOL_IP, cmsg_type=IP_TTL, cmsg_data=[64]}], msg_controllen=56, msg_flags=0}, 0) = 55
+
+
