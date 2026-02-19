@@ -665,7 +665,6 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-lev@lev-VirtualBox:~/bpfgo$ go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
-Fetching profile over HTTP from http://localhost:6060/debug/pprof/profile?seconds=30
-http://localhost:6060/debug/pprof/profile?seconds=30: Get "http://localhost:6060/debug/pprof/profile?seconds=30": net/http: timeout awaiting response headers
-failed to fetch any source profiles
+sudo ss -ltnp | grep ':6060'
+
+curl -v --max-time 2 http://127.0.0.1:6060/debug/pprof/
