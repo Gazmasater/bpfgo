@@ -667,6 +667,5 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 sudo ss -ltnp | grep ':6060'
 
-UDP RECVFROM pid=86536(ping) fd=5 ret=90  src=536(systemd-resolve)  127.0.0.53:53 -> 127.0.0.1:34184  dst=86536(ping)
-ICMP SENDTO  pid=86536(ping) fd=3 ret=64  10.0.2.15 -> 108.177.14.102
-ICMP RECVMSG pid=86536(ping) fd=3 ret=64  108.177.14.102 -> *
+uname -r
+sudo cat /sys/kernel/debug/tracing/available_events | grep -E 'raw|icmp|udp_queue|sock_rcv|netif_receive_skb'
