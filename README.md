@@ -667,4 +667,7 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 sudo ss -ltnp | grep ':6060'
 
-curl -v --max-time 2 http://127.0.0.1:6060/debug/pprof/
+ev@lev-VirtualBox:~/bpfgo$ sudo ss -ltnp | grep ':6060'
+[sudo] password for lev: 
+LISTEN 4      4096               *:6060            *:*    users:(("bpfgo",pid=11958,fd=33))        
+lev@lev-VirtualBox:~/bpfgo$ 
