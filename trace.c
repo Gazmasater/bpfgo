@@ -19,6 +19,8 @@
 #define EV_BINDOK    20
 #define EV_SENDMSG   11
 #define EV_RECVMSG   12
+#define IPPROTO_TCP 6
+
 
 // socket flags
 #define MSG_PEEK 0x2
@@ -330,9 +332,25 @@ static __always_inline int fill_fd_state(int fd, struct fd_state_t *st)
 static __always_inline int fill_from_fd_state_map(struct trace_info *info, __u32 tgid, int fd, int is_send)
 {
     struct fd_key_t k = { .tgid = tgid, .fd = fd };
+
+    struct fd_state_t tmp = {};
     struct fd_state_t *st = bpf_map_lookup_elem(&fd_state_map, &k);
-    if (!st)
-        return -1;
+
+    // ✅ если нет записи — попробуем прочитать напрямую из sock и заодно закешировать
+    if (!st) {
+        if (fill_fd_state(fd, &tmp) < 0)
+            return -1;
+        bpf_map_update_elem(&fd_state_map, &k, &tmp, BPF_ANY);
+        st = &tmp;
+    } else {
+        // ✅ self-heal: если TCP и rport=0 — перечитать из sock и обновить
+        if (st->proto == IPPROTO_TCP && st->rport == 0) {
+            if (fill_fd_state(fd, &tmp) == 0) {
+                bpf_map_update_elem(&fd_state_map, &k, &tmp, BPF_ANY);
+                st = &tmp;
+            }
+        }
+    }
 
     info->proto  = st->proto;
     info->family = st->family;
@@ -369,6 +387,7 @@ static __always_inline int fill_from_fd_state_map(struct trace_info *info, __u32
 
     return -1;
 }
+
 
 static __always_inline void fill_local_src_from_fd(struct trace_info *info, int fd)
 {
