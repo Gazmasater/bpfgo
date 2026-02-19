@@ -669,3 +669,17 @@ sudo ss -ltnp | grep ':6060'
 
 uname -r
 sudo cat /sys/kernel/debug/tracing/available_events | grep -E 'raw|icmp|udp_queue|sock_rcv|netif_receive_skb'
+
+
+
+lev@lev-VirtualBox:~/bpfgo$ sudo cat /sys/kernel/debug/tracing/available_events | grep -E 'raw|icmp|udp_queue|sock_rcv|netif_receive_skb'
+[sudo] password for lev: 
+raw_syscalls:sys_exit
+raw_syscalls:sys_enter
+sock:sock_rcvqueue_full
+net:netif_receive_skb_list_exit
+net:netif_receive_skb_exit
+net:netif_receive_skb_list_entry
+net:netif_receive_skb_entry
+net:netif_receive_skb
+lev@lev-VirtualBox:~/bpfgo$ 
