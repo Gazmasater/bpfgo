@@ -16,9 +16,12 @@
 #define EV_RECVFROM  2
 #define EV_CONNECT   3
 #define EV_ACCEPT    4
-#define EV_BINDOK   20
-#define EV_SENDMSG  11
-#define EV_RECVMSG  12
+#define EV_BINDOK    20
+#define EV_SENDMSG   11
+#define EV_RECVMSG   12
+
+// socket flags
+#define MSG_PEEK 0x2
 
 /* ====== types ====== */
 
@@ -51,7 +54,7 @@ struct inflight_fd_t {
     __s32 fd;
 };
 
-/* ✅ EVENT: добавили fd + ret */
+/* EVENT */
 struct trace_info {
     // IPv4
     struct in_addr  srcIP;
@@ -64,9 +67,9 @@ struct trace_info {
     __u32 pid;
     __u32 proto;
 
-    __u32 fd;      // NEW
-    __s32 _pad0;   // align ret to 8 bytes
-    __s64 ret;     // NEW (sys_exit return)
+    __u32 fd;      // syscall fd
+    __s32 _pad0;
+    __s64 ret;     // sys_exit return
 
     __u16 sport;
     __u16 dport;
@@ -93,9 +96,19 @@ struct addr_ptrlen_t {
     __u32 _pad;
 };
 
+/* recvfrom meta: include flags */
 struct addr_recv_meta_t {
-    __u64 addr;   // user sockaddr* (kernel fills)
-    __u64 lenp;   // user socklen_t*  (kernel fills)
+    __u64 addr;    // user sockaddr* (kernel fills)
+    __u64 lenp;    // user socklen_t*  (kernel fills)
+    __u32 flags;   // NEW
+    __u32 _pad;
+};
+
+/* recvmsg meta: msg* + flags */
+struct msg_ptrflags_t {
+    __u64 msg;     // user msghdr*
+    __u32 flags;   // recvmsg flags
+    __u32 _pad;
 };
 
 /* ====== maps ====== */
@@ -152,8 +165,8 @@ struct {
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 16384);
-    __type(key, __u64);    // pid_tgid
-    __type(value, __u64);  // user msghdr*
+    __type(key, __u64);                      // pid_tgid
+    __type(value, struct msg_ptrflags_t);    // NEW
 } msgRecv_map SEC(".maps");
 
 struct {
@@ -188,7 +201,7 @@ static __always_inline int read_msghdr_head(__u64 msg_u, struct user_msghdr_head
     return 0;
 }
 
-/* ✅ FIX: НЕ отбрасываем port==0 (ICMP/ICMPv6 ping именно так и ходит) */
+/* НЕ отбрасываем port==0 (ICMP/RAW и некоторые случаи) */
 static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
                                                    const void *uaddr,
                                                    __u32 addrlen,
@@ -214,10 +227,10 @@ static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
 
         info->family = AF_INET;
         if (is_dst) {
-            info->dstIP.s_addr = sa.sin_addr.s_addr; // net order
+            info->dstIP.s_addr = sa.sin_addr.s_addr;
             if (port) info->dport = port;
         } else {
-            info->srcIP.s_addr = sa.sin_addr.s_addr; // net order
+            info->srcIP.s_addr = sa.sin_addr.s_addr;
             if (port) info->sport = port;
         }
         return 0;
@@ -496,7 +509,7 @@ static __always_inline int accept_enter_common(struct trace_event_raw_sys_enter 
 
     struct conn_info_t ci = {};
     ci.pid = tgid;
-    ci.fd  = (__u32)ctx->args[0]; // ✅ listen fd
+    ci.fd  = (__u32)ctx->args[0]; // listen fd
     bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
     bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
     return 0;
@@ -529,7 +542,7 @@ static __always_inline int accept_exit_common(struct trace_event_raw_sys_exit *c
     info.dport   = st.lport;  // local
 
     info.fd  = conn ? conn->fd : 0; // listen fd
-    info.ret = newfd;               // ✅ newfd in ret
+    info.ret = newfd;               // newfd
 
     if (conn)
         __builtin_memcpy(info.comm, conn->comm, sizeof(info.comm));
@@ -706,7 +719,7 @@ cleanup:
     return 0;
 }
 
-/* ====== recvfrom ====== */
+/* ====== recvfrom (FILTER MSG_PEEK) ====== */
 
 SEC("tracepoint/syscalls/sys_enter_recvfrom")
 int trace_recvfrom_enter(struct trace_event_raw_sys_enter *ctx)
@@ -720,10 +733,13 @@ int trace_recvfrom_enter(struct trace_event_raw_sys_enter *ctx)
     bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
     bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
 
+    __u32 flags  = (__u32)ctx->args[3];
     __u64 uaddr  = (__u64)ctx->args[4];
     __u64 lenp_u = (__u64)ctx->args[5];
-    if (uaddr && lenp_u) {
-        struct addr_recv_meta_t m = {.addr = uaddr, .lenp = lenp_u};
+
+    // store meta only if peek OR we can read peer addr later
+    if ((flags & MSG_PEEK) || (uaddr && lenp_u)) {
+        struct addr_recv_meta_t m = {.addr = uaddr, .lenp = lenp_u, .flags = flags};
         bpf_map_update_elem(&addrRecv_map, &id, &m, BPF_ANY);
     }
 
@@ -742,6 +758,11 @@ int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx)
     if (ret <= 0)
         goto cleanup;
 
+    // filter PEEK early
+    struct addr_recv_meta_t *m = bpf_map_lookup_elem(&addrRecv_map, &id);
+    if (m && (m->flags & MSG_PEEK))
+        goto cleanup;
+
     struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
     if (!ci)
         goto cleanup;
@@ -757,7 +778,6 @@ int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
         fill_local_dst_from_fd(&info, (int)ci->fd);
 
-    struct addr_recv_meta_t *m = bpf_map_lookup_elem(&addrRecv_map, &id);
     if (m && m->addr && m->lenp) {
         __u32 addrlen = 0;
         if (bpf_probe_read_user(&addrlen, sizeof(addrlen), (void *)m->lenp) == 0) {
@@ -845,7 +865,7 @@ cleanup:
     return 0;
 }
 
-/* ====== recvmsg ====== */
+/* ====== recvmsg (FILTER MSG_PEEK) ====== */
 
 SEC("tracepoint/syscalls/sys_enter_recvmsg")
 int trace_recvmsg_enter(struct trace_event_raw_sys_enter *ctx)
@@ -860,8 +880,12 @@ int trace_recvmsg_enter(struct trace_event_raw_sys_enter *ctx)
     bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
 
     __u64 msg_u = (__u64)ctx->args[1];
-    if (msg_u)
-        bpf_map_update_elem(&msgRecv_map, &id, &msg_u, BPF_ANY);
+    __u32 flags = (__u32)ctx->args[2];
+
+    if (msg_u) {
+        struct msg_ptrflags_t v = {.msg = msg_u, .flags = flags};
+        bpf_map_update_elem(&msgRecv_map, &id, &v, BPF_ANY);
+    }
 
     return 0;
 }
@@ -876,6 +900,10 @@ int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (read_sys_exit_ret(ctx, &ret) < 0)
         goto cleanup;
     if (ret <= 0)
+        goto cleanup;
+
+    struct msg_ptrflags_t *pv = bpf_map_lookup_elem(&msgRecv_map, &id);
+    if (pv && (pv->flags & MSG_PEEK))
         goto cleanup;
 
     struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
@@ -893,10 +921,9 @@ int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
         fill_local_dst_from_fd(&info, (int)ci->fd);
 
-    __u64 *msgp = bpf_map_lookup_elem(&msgRecv_map, &id);
-    if (msgp && *msgp) {
+    if (pv && pv->msg) {
         struct user_msghdr_head h = {};
-        if (read_msghdr_head(*msgp, &h) == 0) {
+        if (read_msghdr_head(pv->msg, &h) == 0) {
             if (h.msg_name && h.msg_namelen >= sizeof(__u16))
                 (void)fill_from_sockaddr_user(&info, h.msg_name, h.msg_namelen, 0);
         }

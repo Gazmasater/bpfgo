@@ -19,8 +19,10 @@ type bpfAddrPtrlenT struct {
 }
 
 type bpfAddrRecvMetaT struct {
-	Addr uint64
-	Lenp uint64
+	Addr  uint64
+	Lenp  uint64
+	Flags uint32
+	Pad   uint32
 }
 
 type bpfConnInfoT struct {
@@ -47,6 +49,12 @@ type bpfFdStateT struct {
 }
 
 type bpfInflightFdT struct{ Fd int32 }
+
+type bpfMsgPtrflagsT struct {
+	Msg   uint64
+	Flags uint32
+	Pad   uint32
+}
 
 type bpfTraceInfo struct {
 	SrcIP   struct{ S_addr uint32 }
