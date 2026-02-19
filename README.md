@@ -667,5 +667,6 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 sudo ss -ltnp | grep ':6060'
 
-go tool pprof -timeout=30s "http://127.0.0.1:6060/debug/pprof/profile?seconds=5"
-go tool pprof -timeout=2m  "http://127.0.0.1:6060/debug/pprof/profile?seconds=30"
+UDP RECVFROM pid=86536(ping) fd=5 ret=90  src=536(systemd-resolve)  127.0.0.53:53 -> 127.0.0.1:34184  dst=86536(ping)
+ICMP SENDTO  pid=86536(ping) fd=3 ret=64  10.0.2.15 -> 108.177.14.102
+ICMP RECVMSG pid=86536(ping) fd=3 ret=64  108.177.14.102 -> *
