@@ -665,64 +665,16 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-#define IPPROTO_TCP 6
-
-static __always_inline int fill_from_fd_state_map(struct trace_info *info, __u32 tgid, int fd, int is_send)
-{
-    struct fd_key_t k = { .tgid = tgid, .fd = fd };
-
-    struct fd_state_t tmp = {};
-    struct fd_state_t *st = bpf_map_lookup_elem(&fd_state_map, &k);
-
-    // ✅ если нет записи — попробуем прочитать напрямую из sock и заодно закешировать
-    if (!st) {
-        if (fill_fd_state(fd, &tmp) < 0)
-            return -1;
-        bpf_map_update_elem(&fd_state_map, &k, &tmp, BPF_ANY);
-        st = &tmp;
-    } else {
-        // ✅ self-heal: если TCP и rport=0 — перечитать из sock и обновить
-        if (st->proto == IPPROTO_TCP && st->rport == 0) {
-            if (fill_fd_state(fd, &tmp) == 0) {
-                bpf_map_update_elem(&fd_state_map, &k, &tmp, BPF_ANY);
-                st = &tmp;
-            }
-        }
-    }
-
-    info->proto  = st->proto;
-    info->family = st->family;
-
-    if (st->family == AF_INET) {
-        if (is_send) {
-            info->srcIP.s_addr = st->lip;
-            info->dstIP.s_addr = st->rip;
-            info->sport = st->lport;
-            info->dport = st->rport;
-        } else {
-            info->srcIP.s_addr = st->rip;
-            info->dstIP.s_addr = st->lip;
-            info->sport = st->rport;
-            info->dport = st->lport;
-        }
-        return 0;
-    }
-
-    if (st->family == AF_INET6) {
-        if (is_send) {
-            __builtin_memcpy(&info->srcIP6, &st->lip6, sizeof(info->srcIP6));
-            __builtin_memcpy(&info->dstIP6, &st->rip6, sizeof(info->dstIP6));
-            info->sport = st->lport;
-            info->dport = st->rport;
-        } else {
-            __builtin_memcpy(&info->srcIP6, &st->rip6, sizeof(info->srcIP6));
-            __builtin_memcpy(&info->dstIP6, &st->lip6, sizeof(info->dstIP6));
-            info->sport = st->rport;
-            info->dport = st->lport;
-        }
-        return 0;
-    }
-
-    return -1;
-}
+TCP CONNECT client=676(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:0 -> [2620:2d:4000:1:0:0:0:23]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:40564 -> [2620:2d:4000:1:0:0:0:22]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:0 -> [2620:2d:4002:1:0:0:0:198]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:0 -> [2001:67c:1562:0:0:0:0:23]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:49678 -> [2620:2d:4000:1:0:0:0:97]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:0 -> [2620:2d:4002:1:0:0:0:196]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:0 -> [2620:2d:4000:1:0:0:0:2a]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:0 -> [2620:2d:4000:1:0:0:0:96]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:0 -> [2620:2d:4000:1:0:0:0:2b]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:0 -> [2620:2d:4000:1:0:0:0:98]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:0 -> [2620:2d:4002:1:0:0:0:197]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:0 -> [2001:67c:1562:0:0:0:0:24]:80  server=?
 
