@@ -665,16 +665,7 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-TCP CONNECT client=676(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:0 -> [2620:2d:4000:1:0:0:0:23]:80  server=?
-TCP CONNECT client=676(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:40564 -> [2620:2d:4000:1:0:0:0:22]:80  server=?
-TCP CONNECT client=676(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:0 -> [2620:2d:4002:1:0:0:0:198]:80  server=?
-TCP CONNECT client=676(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:0 -> [2001:67c:1562:0:0:0:0:23]:80  server=?
-TCP CONNECT client=676(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:49678 -> [2620:2d:4000:1:0:0:0:97]:80  server=?
-TCP CONNECT client=676(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:0 -> [2620:2d:4002:1:0:0:0:196]:80  server=?
-TCP CONNECT client=676(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:0 -> [2620:2d:4000:1:0:0:0:2a]:80  server=?
-TCP CONNECT client=676(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:0 -> [2620:2d:4000:1:0:0:0:96]:80  server=?
-TCP CONNECT client=676(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:0 -> [2620:2d:4000:1:0:0:0:2b]:80  server=?
-TCP CONNECT client=676(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:0 -> [2620:2d:4000:1:0:0:0:98]:80  server=?
-TCP CONNECT client=676(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:0 -> [2620:2d:4002:1:0:0:0:197]:80  server=?
-TCP CONNECT client=676(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:0 -> [2001:67c:1562:0:0:0:0:24]:80  server=?
-
+lev@lev-VirtualBox:~/bpfgo$ go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
+Fetching profile over HTTP from http://localhost:6060/debug/pprof/profile?seconds=30
+http://localhost:6060/debug/pprof/profile?seconds=30: Get "http://localhost:6060/debug/pprof/profile?seconds=30": net/http: timeout awaiting response headers
+failed to fetch any source profiles
