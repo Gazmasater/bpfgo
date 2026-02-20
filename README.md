@@ -665,4 +665,4 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-UDP CONNECT pid=2756(Chrome_ChildIOT) tid=2773 fd=26 cookie=41533 ret=0  [fd00:0:0:0:f610:70fb:1d7:4825]:38356 -> [2001:4860:4860:0:0:0:0:8888]:443
+P0 BIND    pid=2756(Chrome_ChildIOT) tid=2773 fd=19 cookie=45350 ret=0  *:0 -> *:38706
