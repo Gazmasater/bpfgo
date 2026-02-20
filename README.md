@@ -665,8 +665,4 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-ev@lev-VirtualBox:~/bpfgo$ git push --force-with-lease origin ProcNet_monitor
-To https://github.com/Gazmasater/bpfgo.git
- ! [rejected]        ProcNet_monitor -> ProcNet_monitor (stale info)
-error: failed to push some refs to 'https://github.com/Gazmasater/bpfgo.git'
-lev@lev-VirtualBox:~/bpfgo$ 
+git push --force origin ProcNet_monitor
