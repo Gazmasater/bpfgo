@@ -665,21 +665,15 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=5  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=34  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
-TCP SENDTO  pid=3724(Socket Thread) fd=131 ret=363  src=3724(Socket Thread)  10.0.2.15:38912 -> 64.233.164.198:443  dst=?
-TCP SENDTO  pid=3724(Socket Thread) fd=131 ret=571  src=3724(Socket Thread)  10.0.2.15:38912 -> 64.233.164.198:443  dst=?
-TCP SENDTO  pid=3724(Socket Thread) fd=131 ret=1412  src=3724(Socket Thread)  10.0.2.15:38912 -> 64.233.164.198:443  dst=?
-TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=5  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=67  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=5  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=1395  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=5  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=1395  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=5  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=323  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=5  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=26  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=5  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
-TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=34  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
-TCP SENDTO  pid=3724(Socket Thread) fd=131 ret=39  src=3724(Socket Thread)  10.0.2.15:38912 -> 64.233.164.
+TCP CONNECT client=676(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:56668 -> [2620:2d:4002:1:0:0:0:196]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:47744 -> [2620:2d:4000:1:0:0:0:23]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:47042 -> [2620:2d:4002:1:0:0:0:197]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:46006 -> [2620:2d:4000:1:0:0:0:2b]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:58188 -> [2001:67c:1562:0:0:0:0:23]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:47458 -> [2620:2d:4000:1:0:0:0:98]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:58410 -> [2620:2d:4000:1:0:0:0:22]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:53838 -> [2620:2d:4000:1:0:0:0:96]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:51568 -> [2620:2d:4000:1:0:0:0:97]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=29 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:59000 -> [2620:2d:4002:1:0:0:0:198]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:57484 -> [2001:67c:1562:0:0:0:0:24]:80  server=?
+TCP CONNECT client=676(NetworkManager) fd=30 ret=-115  [fd00:0:0:0:ae0d:b2da:4a50:27da]:52160 -> [2620:2d:4000:1:0:0:0:2a]:80  server=?
