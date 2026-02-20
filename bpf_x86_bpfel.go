@@ -26,7 +26,7 @@ type bpfAddrRecvMetaT struct {
 }
 
 type bpfConnInfoT struct {
-	Pid  uint32
+	Tgid uint32
 	Fd   uint32
 	Comm [64]int8
 }
@@ -39,7 +39,7 @@ type bpfFdKeyT struct {
 type bpfFdStateT struct {
 	Family uint16
 	Proto  uint8
-	_      [1]byte
+	Pad0   uint8
 	Lport  uint16
 	Rport  uint16
 	Lip    uint32
@@ -61,16 +61,21 @@ type bpfTraceInfo struct {
 	DstIP   struct{ S_addr uint32 }
 	SrcIP6  struct{ In6U struct{ U6Addr8 [16]uint8 } }
 	DstIP6  struct{ In6U struct{ U6Addr8 [16]uint8 } }
-	Pid     uint32
+	Tgid    uint32
+	Tid     uint32
 	Proto   uint32
 	Fd      uint32
 	Pad0    int32
+	_       [4]byte
 	Ret     int64
 	Sport   uint16
 	Dport   uint16
 	Family  uint16
 	Sysexit uint8
 	State   uint8
+	Pad1    uint16
+	_       [6]byte
+	Cookie  uint64
 	Comm    [32]int8
 }
 
