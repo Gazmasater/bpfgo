@@ -665,26 +665,88 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  [fd00:0:0:0:f610:70fb:1d7:4825]:46351 -> [2a04:4e42:400:0:0:0:0:347]:0
-UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:0 -> [2a04:4e42:400:0:0:0:0:347]:0
-UDP RECVFROM pid=5120(DNS Res~ver #39) tid=19519 fd=108 cookie=73045 ret=156  127.0.0.53:53 -> 127.0.0.1:41502
-UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  [fd00:0:0:0:f610:70fb:1d7:4825]:56492 -> [2a04:4e42:0:0:0:0:0:347]:0
-UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:0 -> [2a04:4e42:0:0:0:0:0:347]:0
-UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  [fd00:0:0:0:f610:70fb:1d7:4825]:43290 -> [2a04:4e42:600:0:0:0:0:347]:0
-UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:0 -> [2a04:4e42:600:0:0:0:0:347]:0
-UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  [fd00:0:0:0:f610:70fb:1d7:4825]:60433 -> [2a04:4e42:200:0:0:0:0:347]:0
-UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:0 -> [2a04:4e42:200:0:0:0:0:347]:0
-UDP CONNECT pid=5120(DNS Res~ver #39) tid=19519 fd=108 cookie=73046 ret=0  10.0.2.15:55779 -> 151.101.65.91:0
-UDP CONNECT pid=5120(DNS Res~ver #39) tid=19519 fd=108 cookie=73046 ret=0  *:0 -> *:0
-UDP CONNECT pid=5120(DNS Res~ver #39) tid=19519 fd=108 cookie=73046 ret=0  10.0.2.15:49282 -> 151.101.1.91:0
-UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:51271 -> 151.101.65.91:0
-UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:0 -> [0:0:0:0:0:ffff:9765:415b]:0
-UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:43338 -> 151.101.1.91:0
-UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:0 -> [0:0:0:0:0:ffff:9765:15b]:0
-UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:33995 -> 151.101.193.91:0
-UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:0 -> [0:0:0:0:0:ffff:9765:c15b]:0
-UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:46013 -> 151.101.129.91:0
-UDP CONNECT pid=5120(DNS Res~ver #39) tid=19519 fd=108 cookie=73046 ret=0  *:0 -> *:0
-UDP CONNECT pid=5120(DNS Res~ver #39) tid=19519 fd=108 cookie=73046 ret=0  10.0.2.15:34815 -> 151.101.193.91:0
-UDP CONNECT pid=5120(DNS Res~ver #39) tid=19519 fd=108 cookie=73046 ret=0  *:0 -> *:0
-UDP CONNECT pid=5120(DNS Res~ver #39) tid=19519 fd=108 cookie=73046 ret=0  10.0.2.15:48422 -> 151.101.129.91:0
+UDP CONNECT pid=2786(Chrome_ChildIOT) tid=2801 fd=32 cookie=22039 ret=0  [fd00:0:0:0:f971:c3ee:46ee:9b71]:44385 -> [2001:4860:4860:0:0:0:0:8888]:443
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=117  10.0.2.15:58772 -> 20.189.173.10:443
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=39  10.0.2.15:58772 -> 20.189.173.10:443
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=4327  10.0.2.15:58772 -> 20.189.173.10:443
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=35  10.0.2.15:58772 -> 20.189.173.10:443
+UDP CONNECT pid=2786(Chrome_ChildIOT) tid=2801 fd=30 cookie=22263 ret=0  [fd00:0:0:0:f971:c3ee:46ee:9b71]:54107 -> [2001:4860:4860:0:0:0:0:8888]:443
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=112  10.0.2.15:58772 -> 20.189.173.10:443
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=4327  10.0.2.15:58772 -> 20.189.173.10:443
+UDP CONNECT pid=2786(Chrome_ChildIOT) tid=2801 fd=30 cookie=29088 ret=0  [fd00:0:0:0:f971:c3ee:46ee:9b71]:36630 -> [2001:4860:4860:0:0:0:0:8888]:443
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=117  10.0.2.15:58772 -> 20.189.173.10:443
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=2698  10.0.2.15:58772 -> 20.189.173.10:443
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=35  10.0.2.15:58772 -> 20.189.173.10:443
+UDP CONNECT pid=2786(Chrome_ChildIOT) tid=2801 fd=30 cookie=29122 ret=0  [fd00:0:0:0:f971:c3ee:46ee:9b71]:46263 -> [2001:4860:4860:0:0:0:0:8888]:443
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=113  10.0.2.15:58772 -> 20.189.173.10:443
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=2698  10.0.2.15:58772 -> 20.189.173.10:443
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=35  10.0.2.15:58772 -> 20.189.173.10:443
+TCP CONNECT pid=3798(nc) tid=3798 fd=3 cookie=33403 ret=-115  127.0.0.1:0 -> 127.0.0.1:1234
+UDP CONNECT pid=2786(Chrome_ChildIOT) tid=2801 fd=30 cookie=29147 ret=0  [fd00:0:0:0:f971:c3ee:46ee:9b71]:38204 -> [2001:4860:4860:0:0:0:0:8888]:443
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=118  10.0.2.15:58772 -> 20.189.173.10:443
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=5108  10.0.2.15:58772 -> 20.189.173.10:443
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=35  10.0.2.15:58772 -> 20.189.173.10:443
+TCP BIND    pid=3864(nc) tid=3864 fd=3 cookie=36872 ret=0  local=127.0.0.1:1234
+TCP CONNECT pid=3926(nc) tid=3926 fd=3 cookie=36924 ret=-115  127.0.0.1:36482 -> 127.0.0.1:1234
+TCP ACCEPT  pid=3864(nc) tid=3864 fd=3 cookie=36873 ret=4  127.0.0.1:36482 -> 127.0.0.1:1234
+UDP CONNECT pid=2786(Chrome_ChildIOT) tid=2801 fd=30 cookie=29222 ret=0  [fd00:0:0:0:f971:c3ee:46ee:9b71]:59119 -> [2001:4860:4860:0:0:0:0:8888]:443
+UDP BIND    pid=2786(Chrome_ChildIOT) tid=2801 fd=30 cookie=29223 ret=0  local=*:36208
+UDP CONNECT pid=2786(Chrome_ChildIOT) tid=2801 fd=30 cookie=29223 ret=0  127.0.0.1:36208 -> 127.0.0.53:53
+UDP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=30 cookie=29223 ret=50  127.0.0.1:36208 -> 127.0.0.53:53
+UDP BIND    pid=2786(Chrome_ChildIOT) tid=2801 fd=32 cookie=29224 ret=0  local=*:31007
+UDP RECVMSG pid=516(systemd-resolve) tid=516 fd=13 cookie=7402 ret=50  127.0.0.1:36208 -> 127.0.0.53:53
+UDP CONNECT pid=516(systemd-resolve) tid=516 fd=11 cookie=33536 ret=0  10.0.2.15:38736 -> 10.0.2.3:53
+UDP CONNECT pid=2786(Chrome_ChildIOT) tid=2801 fd=32 cookie=29224 ret=0  127.0.0.1:31007 -> 127.0.0.53:53
+UDP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=32 cookie=29224 ret=50  127.0.0.1:31007 -> 127.0.0.53:53
+UDP BIND    pid=2786(Chrome_ChildIOT) tid=2801 fd=34 cookie=29225 ret=0  local=*:9865
+UDP RECVMSG pid=516(systemd-resolve) tid=516 fd=13 cookie=7402 ret=50  127.0.0.1:31007 -> 127.0.0.53:53
+UDP CONNECT pid=516(systemd-resolve) tid=516 fd=18 cookie=33537 ret=0  10.0.2.15:46511 -> 10.0.2.3:53
+UDP CONNECT pid=2786(Chrome_ChildIOT) tid=2801 fd=34 cookie=29225 ret=0  127.0.0.1:9865 -> 127.0.0.53:53
+UDP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=34 cookie=29225 ret=50  127.0.0.1:9865 -> 127.0.0.53:53
+UDP RECVMSG pid=516(systemd-resolve) tid=516 fd=13 cookie=7402 ret=50  127.0.0.1:9865 -> 127.0.0.53:53
+UDP CONNECT pid=516(systemd-resolve) tid=516 fd=19 cookie=33538 ret=0  10.0.2.15:41992 -> 10.0.2.3:53
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=118  10.0.2.15:58772 -> 20.189.173.10:443
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=39  10.0.2.15:58772 -> 20.189.173.10:443
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=2174  10.0.2.15:58772 -> 20.189.173.10:443
+UDP RECVMSG pid=516(systemd-resolve) tid=516 fd=18 cookie=33537 ret=345  10.0.2.3:53 -> 10.0.2.15:46511
+UDP CONNECT pid=516(systemd-resolve) tid=516 fd=18 cookie=33539 ret=0  10.0.2.15:43826 -> 10.0.2.3:53
+UDP RECVMSG pid=516(systemd-resolve) tid=516 fd=19 cookie=33538 ret=301  10.0.2.3:53 -> 10.0.2.15:41992
+UDP SENDMSG pid=516(systemd-resolve) tid=516 fd=13 cookie=7402 ret=173  127.0.0.53:53 -> 127.0.0.1:9865
+UDP RECVMSG pid=516(systemd-resolve) tid=516 fd=11 cookie=33536 ret=338  10.0.2.3:53 -> 10.0.2.15:38736
+UDP CONNECT pid=516(systemd-resolve) tid=516 fd=11 cookie=33540 ret=0  10.0.2.15:41582 -> 10.0.2.3:53
+UDP RECVMSG pid=2786(Chrome_ChildIOT) tid=2801 fd=34 cookie=29225 ret=173  127.0.0.53:53 -> 127.0.0.1:9865
+UDP RECVMSG pid=516(systemd-resolve) tid=516 fd=11 cookie=33540 ret=172  10.0.2.3:53 -> 10.0.2.15:41582
+UDP SENDMSG pid=516(systemd-resolve) tid=516 fd=13 cookie=7402 ret=214  127.0.0.53:53 -> 127.0.0.1:36208
+UDP RECVMSG pid=516(systemd-resolve) tid=516 fd=18 cookie=33539 ret=179  10.0.2.3:53 -> 10.0.2.15:43826
+UDP RECVMSG pid=2786(Chrome_ChildIOT) tid=2801 fd=30 cookie=29223 ret=214  127.0.0.53:53 -> 127.0.0.1:36208
+UDP SENDMSG pid=516(systemd-resolve) tid=516 fd=13 cookie=7402 ret=218  127.0.0.53:53 -> 127.0.0.1:31007
+UDP RECVMSG pid=2786(Chrome_ChildIOT) tid=2801 fd=32 cookie=29224 ret=218  127.0.0.53:53 -> 127.0.0.1:31007
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=35  10.0.2.15:58772 -> 20.189.173.10:443
+UDP BIND    pid=520(systemd-timesyn) tid=520 fd=16 cookie=29251 ret=0  local=*:34885
+UDP SENDTO  pid=520(systemd-timesyn) tid=520 fd=16 cookie=29251 ret=48  *:34885 -> 185.125.190.57:123
+UDP RECVMSG pid=520(systemd-timesyn) tid=520 fd=16 cookie=29251 ret=48  185.125.190.57:123 -> *:34885
+UDP SENDMSG pid=667(avahi-daemon) tid=667 fd=13 cookie=4065 ret=45  *:5353 -> [ff02:0:0:0:0:0:0:fb]:5353
+UDP SENDMSG pid=667(avahi-daemon) tid=667 fd=12 cookie=4064 ret=45  *:5353 -> 224.0.0.251:5353
+UDP SENDMSG pid=667(avahi-daemon) tid=667 fd=12 cookie=4064 ret=45  *:5353 -> 224.0.0.251:5353
+UDP RECVMSG pid=667(avahi-daemon) tid=667 fd=13 cookie=4065 ret=45  [fd00:0:0:0:bf53:d82b:4102:d10b]:5353 -> *:5353
+UDP RECVMSG pid=667(avahi-daemon) tid=667 fd=12 cookie=4064 ret=45  10.0.2.15:5353 -> *:5353
+UDP RECVMSG pid=667(avahi-daemon) tid=667 fd=12 cookie=4064 ret=45  127.0.0.1:5353 -> *:5353
+UDP CONNECT pid=516(systemd-resolve) tid=516 fd=11 cookie=33590 ret=0  10.0.2.15:46591 -> 10.0.2.3:53
+UDP RECVMSG pid=516(systemd-resolve) tid=516 fd=11 cookie=33590 ret=742  10.0.2.3:53 -> 10.0.2.15:46591
+TCP CONNECT pid=669(NetworkManager) tid=669 fd=29 cookie=33594 ret=-115  [fd00:0:0:0:f971:c3ee:46ee:9b71]:46258 -> [2620:2d:4002:1:0:0:0:196]:80
+TCP CONNECT pid=669(NetworkManager) tid=669 fd=30 cookie=33595 ret=-115  [fd00:0:0:0:f971:c3ee:46ee:9b71]:47280 -> [2620:2d:4000:1:0:0:0:2a]:80
+TCP CONNECT pid=669(NetworkManager) tid=669 fd=29 cookie=33596 ret=-115  [fd00:0:0:0:f971:c3ee:46ee:9b71]:32798 -> [2620:2d:4002:1:0:0:0:197]:80
+TCP CONNECT pid=669(NetworkManager) tid=669 fd=30 cookie=33597 ret=-115  [fd00:0:0:0:f971:c3ee:46ee:9b71]:41072 -> [2620:2d:4000:1:0:0:0:97]:80
+TCP CONNECT pid=669(NetworkManager) tid=669 fd=29 cookie=33598 ret=-115  [fd00:0:0:0:f971:c3ee:46ee:9b71]:44752 -> [2620:2d:4000:1:0:0:0:98]:80
+TCP CONNECT pid=669(NetworkManager) tid=669 fd=30 cookie=33599 ret=-115  [fd00:0:0:0:f971:c3ee:46ee:9b71]:35266 -> [2001:67c:1562:0:0:0:0:24]:80
+TCP CONNECT pid=669(NetworkManager) tid=669 fd=29 cookie=33600 ret=-115  [fd00:0:0:0:f971:c3ee:46ee:9b71]:33148 -> [2620:2d:4000:1:0:0:0:23]:80
+TCP CONNECT pid=669(NetworkManager) tid=669 fd=30 cookie=33601 ret=-115  [fd00:0:0:0:f971:c3ee:46ee:9b71]:42242 -> [2620:2d:4002:1:0:0:0:198]:80
+TCP CONNECT pid=669(NetworkManager) tid=669 fd=29 cookie=33602 ret=-115  [fd00:0:0:0:f971:c3ee:46ee:9b71]:39106 -> [2620:2d:4000:1:0:0:0:96]:80
+TCP CONNECT pid=669(NetworkManager) tid=669 fd=30 cookie=33603 ret=-115  [fd00:0:0:0:f971:c3ee:46ee:9b71]:58930 -> [2620:2d:4000:1:0:0:0:2b]:80
+TCP CONNECT pid=669(NetworkManager) tid=669 fd=29 cookie=33604 ret=-115  [fd00:0:0:0:f971:c3ee:46ee:9b71]:38898 -> [2620:2d:4000:1:0:0:0:22]:80
+TCP CONNECT pid=669(NetworkManager) tid=669 fd=30 cookie=33605 ret=-115  [fd00:0:0:0:f971:c3ee:46ee:9b71]:42094 -> [2001:67c:1562:0:0:0:0:23]:80
+UDP CONNECT pid=2786(Chrome_ChildIOT) tid=2801 fd=30 cookie=36987 ret=0  [fd00:0:0:0:f971:c3ee:46ee:9b71]:58841 -> [2001:4860:4860:0:0:0:0:8888]:443
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=113  10.0.2.15:58772 -> 20.189.173.10:443
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=2698  10.0.2.15:58772 -> 20.189.173.10:443
+TCP SENDTO  pid=2786(Chrome_ChildIOT) tid=2801 fd=28 cookie=18346 ret=35  10.0.2.15:58772 -> 20.189.173.10:443
+ICMPv6 RECVMSG pid=669(NetworkManager) tid=669 fd=26 cookie=7103 ret=32  fe80:0:0:0:0:0:0:2 -> *
