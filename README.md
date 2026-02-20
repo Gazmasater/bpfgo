@@ -2837,28 +2837,8 @@ func main() {
 
 
 
-[{
-	"resource": "/home/lev/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#2",
-	"code": {
-		"value": "MissingFieldOrMethod",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "MissingFieldOrMethod"
-		}
-	},
-	"severity": 8,
-	"message": "ev.Tgid undefined (type bpfTraceInfo has no field or method Tgid)",
-	"source": "compiler",
-	"startLineNumber": 1025,
-	"startColumn": 21,
-	"endLineNumber": 1025,
-	"endColumn": 25,
-	"modelVersionId": 30,
-	"origin": "extHost1"
-}]
-
-
+ev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
+[sudo] password for lev: 
+2026/02/20 03:41:41.595532 bpfgo start: debug=false tracePort=0 perfMB=4 print=true sample=1 matchOnly=false snapshotEvery=0s ttl=3s stats=0s routeSrc=true
+2026/02/20 03:41:41.841752 failed to load bpf objects: field TraceAccept4Exit: program trace_accept4_exit: load program: invalid argument: unknown func bpf_get_socket_cookie#46 (256 line(s) omitted)
+lev@lev-VirtualBox:~/bpfgo$ 
