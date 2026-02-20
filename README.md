@@ -665,19 +665,4 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-TCP RECVFROM pid=3724(Socket Thread) tid=3843 fd=96 cookie=327222 ret=5  140.82.113.25:443 -> 10.0.2.15:51032
-TCP RECVFROM pid=3724(Socket Thread) tid=3843 fd=96 cookie=327222 ret=20  140.82.113.25:443 -> 10.0.2.15:51032
-TCP SENDTO  pid=3724(Socket Thread) tid=3843 fd=96 cookie=327222 ret=29  10.0.2.15:51032 -> 140.82.113.25:443
-TCP SENDTO  pid=3724(Socket Thread) tid=3843 fd=127 cookie=327921 ret=39  10.0.2.15:55066 -> 64.233.164.198:443
-TCP RECVFROM pid=3724(Socket Thread) tid=3843 fd=127 cookie=327921 ret=5  64.233.164.198:443 -> 10.0.2.15:55066
-TCP RECVFROM pid=3724(Socket Thread) tid=3843 fd=127 cookie=327921 ret=34  64.233.164.198:443 -> 10.0.2.15:55066
-TCP SENDTO  pid=3724(Socket Thread) tid=3843 fd=59 cookie=329699 ret=39  10.0.2.15:33784 -> 34.107.243.93:443
-TCP SENDTO  pid=3724(Socket Thread) tid=3843 fd=124 cookie=247060 ret=39  10.0.2.15:55824 -> 162.159.61.4:443
-TCP RECVFROM pid=3724(Socket Thread) tid=3843 fd=124 cookie=247060 ret=5  162.159.61.4:443 -> 10.0.2.15:55824
-TCP RECVFROM pid=3724(Socket Thread) tid=3843 fd=124 cookie=247060 ret=34  162.159.61.4:443 -> 10.0.2.15:55824
-TCP RECVFROM pid=3724(Socket Thread) tid=3843 fd=59 cookie=329699 ret=5  34.107.243.93:443 -> 10.0.2.15:33784
-TCP RECVFROM pid=3724(Socket Thread) tid=3843 fd=59 cookie=329699 ret=34  34.107.243.93:443 -> 10.0.2.15:33784
-TCP SENDTO  pid=3724(Socket Thread) tid=3843 fd=128 cookie=332801 ret=46  10.0.2.15:59806 -> 151.101.129.91:443
-TCP RECVFROM pid=3724(Socket Thread) tid=3843 fd=128 cookie=332801 ret=5  151.101.129.91:443 -> 10.0.2.15:59806
-TCP RECVFROM pid=3724(Socket Thread) tid=3843 fd=128 cookie=332801 ret=41  151.101.129.91:443 -> 10.0.2.15:59806
-
+UDP CONNECT pid=2756(Chrome_ChildIOT) tid=2773 fd=26 cookie=41533 ret=0  [fd00:0:0:0:f610:70fb:1d7:4825]:38356 -> [2001:4860:4860:0:0:0:0:8888]:443
