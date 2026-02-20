@@ -665,21 +665,21 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-sudo ss -ltnp | grep ':6060'
-
-uname -r
-sudo cat /sys/kernel/debug/tracing/available_events | grep -E 'raw|icmp|udp_queue|sock_rcv|netif_receive_skb'
-
-
-
-lev@lev-VirtualBox:~/bpfgo$ sudo cat /sys/kernel/debug/tracing/available_events | grep -E 'raw|icmp|udp_queue|sock_rcv|netif_receive_skb'
-[sudo] password for lev: 
-raw_syscalls:sys_exit
-raw_syscalls:sys_enter
-sock:sock_rcvqueue_full
-net:netif_receive_skb_list_exit
-net:netif_receive_skb_exit
-net:netif_receive_skb_list_entry
-net:netif_receive_skb_entry
-net:netif_receive_skb
-lev@lev-VirtualBox:~/bpfgo$ 
+TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=5  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
+TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=34  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
+TCP SENDTO  pid=3724(Socket Thread) fd=131 ret=363  src=3724(Socket Thread)  10.0.2.15:38912 -> 64.233.164.198:443  dst=?
+TCP SENDTO  pid=3724(Socket Thread) fd=131 ret=571  src=3724(Socket Thread)  10.0.2.15:38912 -> 64.233.164.198:443  dst=?
+TCP SENDTO  pid=3724(Socket Thread) fd=131 ret=1412  src=3724(Socket Thread)  10.0.2.15:38912 -> 64.233.164.198:443  dst=?
+TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=5  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
+TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=67  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
+TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=5  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
+TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=1395  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
+TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=5  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
+TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=1395  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
+TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=5  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
+TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=323  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
+TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=5  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
+TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=26  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
+TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=5  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
+TCP RECVFROM pid=3724(Socket Thread) fd=131 ret=34  src=?  64.233.164.198:443 -> 10.0.2.15:38912  dst=3724(Socket Thread)
+TCP SENDTO  pid=3724(Socket Thread) fd=131 ret=39  src=3724(Socket Thread)  10.0.2.15:38912 -> 64.233.164.
