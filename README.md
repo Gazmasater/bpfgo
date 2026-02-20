@@ -665,16 +665,26 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-UDP RECVMSG pid=514(systemd-resolve) tid=514 fd=18 cookie=69138 ret=339  10.0.2.3:53 -> 10.0.2.15:41365
-UDP CONNECT pid=514(systemd-resolve) tid=514 fd=18 cookie=69140 ret=0  10.0.2.15:60919 -> 10.0.2.3:53
-UDP RECVMSG pid=514(systemd-resolve) tid=514 fd=19 cookie=69139 ret=295  10.0.2.3:53 -> 10.0.2.15:45531
-UDP SENDMSG pid=514(systemd-resolve) tid=514 fd=13 cookie=6937 ret=170  127.0.0.53:53 -> 127.0.0.1:42999
-UDP RECVMSG pid=2756(Chrome_ChildIOT) tid=2773 fd=33 cookie=70777 ret=170  127.0.0.53:53 -> 127.0.0.1:42999
-UDP RECVMSG pid=514(systemd-resolve) tid=514 fd=11 cookie=69137 ret=339  10.0.2.3:53 -> 10.0.2.15:60201
-UDP CONNECT pid=514(systemd-resolve) tid=514 fd=11 cookie=69141 ret=0  10.0.2.15:37946 -> 10.0.2.3:53
-UDP RECVMSG pid=514(systemd-resolve) tid=514 fd=11 cookie=69141 ret=173  10.0.2.3:53 -> 10.0.2.15:37946
-UDP SENDMSG pid=514(systemd-resolve) tid=514 fd=13 cookie=6937 ret=215  127.0.0.53:53 -> 127.0.0.1:14396
-UDP RECVMSG pid=2756(Chrome_ChildIOT) tid=2773 fd=28 cookie=70775 ret=215  127.0.0.53:53 -> 127.0.0.1:14396
-UDP RECVMSG pid=514(systemd-resolve) tid=514 fd=18 cookie=69140 ret=173  10.0.2.3:53 -> 10.0.2.15:60919
-UDP SENDMSG pid=514(systemd-resolve) tid=514 fd=13 cookie=6937 ret=215  127.0.0.53:53 -> 127.0.0.1:48252
-UDP RECVMSG pid=2756(Chrome_ChildIOT) tid=2773 fd=31 cookie=70776 ret=215  127.0.0.53:53 -> 127.0.0.1:48252
+UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  [fd00:0:0:0:f610:70fb:1d7:4825]:46351 -> [2a04:4e42:400:0:0:0:0:347]:0
+UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:0 -> [2a04:4e42:400:0:0:0:0:347]:0
+UDP RECVFROM pid=5120(DNS Res~ver #39) tid=19519 fd=108 cookie=73045 ret=156  127.0.0.53:53 -> 127.0.0.1:41502
+UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  [fd00:0:0:0:f610:70fb:1d7:4825]:56492 -> [2a04:4e42:0:0:0:0:0:347]:0
+UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:0 -> [2a04:4e42:0:0:0:0:0:347]:0
+UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  [fd00:0:0:0:f610:70fb:1d7:4825]:43290 -> [2a04:4e42:600:0:0:0:0:347]:0
+UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:0 -> [2a04:4e42:600:0:0:0:0:347]:0
+UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  [fd00:0:0:0:f610:70fb:1d7:4825]:60433 -> [2a04:4e42:200:0:0:0:0:347]:0
+UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:0 -> [2a04:4e42:200:0:0:0:0:347]:0
+UDP CONNECT pid=5120(DNS Res~ver #39) tid=19519 fd=108 cookie=73046 ret=0  10.0.2.15:55779 -> 151.101.65.91:0
+UDP CONNECT pid=5120(DNS Res~ver #39) tid=19519 fd=108 cookie=73046 ret=0  *:0 -> *:0
+UDP CONNECT pid=5120(DNS Res~ver #39) tid=19519 fd=108 cookie=73046 ret=0  10.0.2.15:49282 -> 151.101.1.91:0
+UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:51271 -> 151.101.65.91:0
+UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:0 -> [0:0:0:0:0:ffff:9765:415b]:0
+UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:43338 -> 151.101.1.91:0
+UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:0 -> [0:0:0:0:0:ffff:9765:15b]:0
+UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:33995 -> 151.101.193.91:0
+UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:0 -> [0:0:0:0:0:ffff:9765:c15b]:0
+UDP CONNECT pid=5120(DNS Res~ver #38) tid=19518 fd=97 cookie=74762 ret=0  *:46013 -> 151.101.129.91:0
+UDP CONNECT pid=5120(DNS Res~ver #39) tid=19519 fd=108 cookie=73046 ret=0  *:0 -> *:0
+UDP CONNECT pid=5120(DNS Res~ver #39) tid=19519 fd=108 cookie=73046 ret=0  10.0.2.15:34815 -> 151.101.193.91:0
+UDP CONNECT pid=5120(DNS Res~ver #39) tid=19519 fd=108 cookie=73046 ret=0  *:0 -> *:0
+UDP CONNECT pid=5120(DNS Res~ver #39) tid=19519 fd=108 cookie=73046 ret=0  10.0.2.15:48422 -> 151.101.129.91:0
