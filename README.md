@@ -665,4 +665,31 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-UDP CONNECT pid=5120(DNS Res~ver #27) tid=10449 fd=22 cookie=55989 ret=0  *:0 -> *:0
+UDP RECVFROM pid=5120(DNS Res~ver #31) tid=12275 fd=119 cookie=56867 ret=117  127.0.0.53:53 -> 127.0.0.1:35694
+UDP CONNECT pid=5120(DNS Res~ver #31) tid=12275 fd=119 cookie=56868 ret=0  10.0.2.15:40079 -> 185.199.109.154:0
+UDP CONNECT pid=5120(DNS Res~ver #31) tid=12275 fd=119 cookie=56868 ret=0  *:0 -> *:0
+UDP CONNECT pid=5120(DNS Res~ver #31) tid=12275 fd=119 cookie=56868 ret=0  10.0.2.15:34105 -> 185.199.108.154:0
+UDP CONNECT pid=5120(DNS Res~ver #31) tid=12275 fd=119 cookie=56868 ret=0  *:0 -> *:0
+UDP CONNECT pid=5120(DNS Res~ver #31) tid=12275 fd=119 cookie=56868 ret=0  10.0.2.15:58750 -> 185.199.110.154:0
+UDP CONNECT pid=5120(DNS Res~ver #31) tid=12275 fd=119 cookie=56868 ret=0  *:0 -> *:0
+UDP CONNECT pid=5120(DNS Res~ver #31) tid=12275 fd=119 cookie=56868 ret=0  10.0.2.15:48396 -> 185.199.111.154:0
+UDP SENDMSG pid=514(systemd-resolve) tid=514 fd=13 cookie=6937 ret=117  127.0.0.53:53 -> 127.0.0.1:35694
+TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=5  140.82.112.21:443 -> 10.0.2.15:50866
+TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=43  140.82.112.21:443 -> 10.0.2.15:50866
+TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=5  140.82.112.21:443 -> 10.0.2.15:50866
+TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=475  140.82.112.21:443 -> 10.0.2.15:50866
+UDP RECVMSG pid=514(systemd-resolve) tid=514 fd=18 cookie=56118 ret=142  10.0.2.3:53 -> 10.0.2.15:40832
+UDP SENDMSG pid=514(systemd-resolve) tid=514 fd=13 cookie=6937 ret=117  127.0.0.53:53 -> 127.0.0.1:52785
+UDP RECVFROM pid=5120(DNS Res~ver #30) tid=12116 fd=118 cookie=58431 ret=117  127.0.0.53:53 -> 127.0.0.1:52785
+TCP CONNECT pid=5120(Socket Thread) tid=5258 fd=118 cookie=58432 ret=-115  10.0.2.15:53600 -> 185.199.109.154:443
+TCP SENDTO  pid=5120(Socket Thread) tid=5258 fd=118 cookie=58432 ret=2351  10.0.2.15:53600 -> 185.199.109.154:443
+TCP SENDTO  pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=114  10.0.2.15:50866 -> 140.82.112.21:443
+TCP SENDTO  pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=1204  10.0.2.15:50866 -> 140.82.112.21:443
+TCP SENDTO  pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=6248  10.0.2.15:50866 -> 140.82.112.21:443
+TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=5  140.82.112.21:443 -> 10.0.2.15:50866
+TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=43  140.82.112.21:443 -> 10.0.2.15:50866
+TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=5  140.82.112.21:443 -> 10.0.2.15:50866
+TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=43  140.82.112.21:443 -> 10.0.2.15:50866
+TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=5  140.82.112.21:443 -> 10.0.2.15:50866
+TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=43  140.82.112.21:443 -> 10.0.2.15:50866
+TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=5  140.82.112.21:443 -> 10.0.2.15:50866
