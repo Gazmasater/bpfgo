@@ -665,31 +665,16 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-UDP RECVFROM pid=5120(DNS Res~ver #31) tid=12275 fd=119 cookie=56867 ret=117  127.0.0.53:53 -> 127.0.0.1:35694
-UDP CONNECT pid=5120(DNS Res~ver #31) tid=12275 fd=119 cookie=56868 ret=0  10.0.2.15:40079 -> 185.199.109.154:0
-UDP CONNECT pid=5120(DNS Res~ver #31) tid=12275 fd=119 cookie=56868 ret=0  *:0 -> *:0
-UDP CONNECT pid=5120(DNS Res~ver #31) tid=12275 fd=119 cookie=56868 ret=0  10.0.2.15:34105 -> 185.199.108.154:0
-UDP CONNECT pid=5120(DNS Res~ver #31) tid=12275 fd=119 cookie=56868 ret=0  *:0 -> *:0
-UDP CONNECT pid=5120(DNS Res~ver #31) tid=12275 fd=119 cookie=56868 ret=0  10.0.2.15:58750 -> 185.199.110.154:0
-UDP CONNECT pid=5120(DNS Res~ver #31) tid=12275 fd=119 cookie=56868 ret=0  *:0 -> *:0
-UDP CONNECT pid=5120(DNS Res~ver #31) tid=12275 fd=119 cookie=56868 ret=0  10.0.2.15:48396 -> 185.199.111.154:0
-UDP SENDMSG pid=514(systemd-resolve) tid=514 fd=13 cookie=6937 ret=117  127.0.0.53:53 -> 127.0.0.1:35694
-TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=5  140.82.112.21:443 -> 10.0.2.15:50866
-TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=43  140.82.112.21:443 -> 10.0.2.15:50866
-TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=5  140.82.112.21:443 -> 10.0.2.15:50866
-TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=475  140.82.112.21:443 -> 10.0.2.15:50866
-UDP RECVMSG pid=514(systemd-resolve) tid=514 fd=18 cookie=56118 ret=142  10.0.2.3:53 -> 10.0.2.15:40832
-UDP SENDMSG pid=514(systemd-resolve) tid=514 fd=13 cookie=6937 ret=117  127.0.0.53:53 -> 127.0.0.1:52785
-UDP RECVFROM pid=5120(DNS Res~ver #30) tid=12116 fd=118 cookie=58431 ret=117  127.0.0.53:53 -> 127.0.0.1:52785
-TCP CONNECT pid=5120(Socket Thread) tid=5258 fd=118 cookie=58432 ret=-115  10.0.2.15:53600 -> 185.199.109.154:443
-TCP SENDTO  pid=5120(Socket Thread) tid=5258 fd=118 cookie=58432 ret=2351  10.0.2.15:53600 -> 185.199.109.154:443
-TCP SENDTO  pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=114  10.0.2.15:50866 -> 140.82.112.21:443
-TCP SENDTO  pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=1204  10.0.2.15:50866 -> 140.82.112.21:443
-TCP SENDTO  pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=6248  10.0.2.15:50866 -> 140.82.112.21:443
-TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=5  140.82.112.21:443 -> 10.0.2.15:50866
-TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=43  140.82.112.21:443 -> 10.0.2.15:50866
-TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=5  140.82.112.21:443 -> 10.0.2.15:50866
-TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=43  140.82.112.21:443 -> 10.0.2.15:50866
-TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=5  140.82.112.21:443 -> 10.0.2.15:50866
-TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=43  140.82.112.21:443 -> 10.0.2.15:50866
-TCP RECVFROM pid=5120(Socket Thread) tid=5258 fd=117 cookie=57856 ret=5  140.82.112.21:443 -> 10.0.2.15:50866
+UDP RECVMSG pid=514(systemd-resolve) tid=514 fd=18 cookie=69138 ret=339  10.0.2.3:53 -> 10.0.2.15:41365
+UDP CONNECT pid=514(systemd-resolve) tid=514 fd=18 cookie=69140 ret=0  10.0.2.15:60919 -> 10.0.2.3:53
+UDP RECVMSG pid=514(systemd-resolve) tid=514 fd=19 cookie=69139 ret=295  10.0.2.3:53 -> 10.0.2.15:45531
+UDP SENDMSG pid=514(systemd-resolve) tid=514 fd=13 cookie=6937 ret=170  127.0.0.53:53 -> 127.0.0.1:42999
+UDP RECVMSG pid=2756(Chrome_ChildIOT) tid=2773 fd=33 cookie=70777 ret=170  127.0.0.53:53 -> 127.0.0.1:42999
+UDP RECVMSG pid=514(systemd-resolve) tid=514 fd=11 cookie=69137 ret=339  10.0.2.3:53 -> 10.0.2.15:60201
+UDP CONNECT pid=514(systemd-resolve) tid=514 fd=11 cookie=69141 ret=0  10.0.2.15:37946 -> 10.0.2.3:53
+UDP RECVMSG pid=514(systemd-resolve) tid=514 fd=11 cookie=69141 ret=173  10.0.2.3:53 -> 10.0.2.15:37946
+UDP SENDMSG pid=514(systemd-resolve) tid=514 fd=13 cookie=6937 ret=215  127.0.0.53:53 -> 127.0.0.1:14396
+UDP RECVMSG pid=2756(Chrome_ChildIOT) tid=2773 fd=28 cookie=70775 ret=215  127.0.0.53:53 -> 127.0.0.1:14396
+UDP RECVMSG pid=514(systemd-resolve) tid=514 fd=18 cookie=69140 ret=173  10.0.2.3:53 -> 10.0.2.15:60919
+UDP SENDMSG pid=514(systemd-resolve) tid=514 fd=13 cookie=6937 ret=215  127.0.0.53:53 -> 127.0.0.1:48252
+UDP RECVMSG pid=2756(Chrome_ChildIOT) tid=2773 fd=31 cookie=70776 ret=215  127.0.0.53:53 -> 127.0.0.1:48252
