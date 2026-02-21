@@ -1772,3 +1772,19 @@ int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
 
     return 0;
 }
+
+
+[{
+	"resource": "/home/lev/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "136",
+	"severity": 8,
+	"message": "struct \"inet_sock\" has no field \"inet_rcv_saddr\"",
+	"source": "C/C++",
+	"startLineNumber": 356,
+	"startColumn": 17,
+	"endLineNumber": 356,
+	"endColumn": 30,
+	"modelVersionId": 8,
+	"origin": "extHost1"
+}]
