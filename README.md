@@ -1962,3 +1962,10 @@ func main() {
 
 
 sudo ./bpfgo -h | grep -E "resolve|hostsPrefill|resolveTTL|resolveNegTTL" || echo "НЕТ resolve-флагов => старый бинарь"
+
+getent hosts 52.168.117.168
+getent hosts 140.82.112.22
+
+# или
+dig -x 52.168.117.168 +short
+dig -x 140.82.112.22 +short
