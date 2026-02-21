@@ -1961,6 +1961,4 @@ func main() {
 
 
 
-OPEN  TCP   pid=2820(Chrome_ChildIOT) cookie=260122  10.0.2.15:53488 -> 52.168.117.168:443
-OPEN  TCP   pid=3702(Socket Thread) cookie=260111  10.0.2.15:50436 -> 140.82.112.22:443
-CLOSE TCP   pid=2820(Chrome_ChildIOT) cookie=260122  10.0.2.15:53488 -> 52.168.117.168:443  out=2586B/4p in=137B/2p  age=6.474s reason=idle
+sudo ./bpfgo -h | grep -E "resolve|hostsPrefill|resolveTTL|resolveNegTTL" || echo "НЕТ resolve-флагов => старый бинарь"
