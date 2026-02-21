@@ -57,26 +57,27 @@ type bpfMsgPtrflagsT struct {
 }
 
 type bpfTraceInfo struct {
-	SrcIP   struct{ S_addr uint32 }
-	DstIP   struct{ S_addr uint32 }
-	SrcIP6  struct{ In6U struct{ U6Addr8 [16]uint8 } }
-	DstIP6  struct{ In6U struct{ U6Addr8 [16]uint8 } }
-	Tgid    uint32
-	Tid     uint32
-	Proto   uint32
-	Fd      uint32
-	Pad0    int32
-	_       [4]byte
-	Ret     int64
-	Sport   uint16
-	Dport   uint16
-	Family  uint16
-	Sysexit uint8
-	State   uint8
-	Pad1    uint16
-	_       [6]byte
-	Cookie  uint64
-	Comm    [32]int8
+	TsNs   uint64
+	Cookie uint64
+	Tgid   uint32
+	Tid    uint32
+	Fd     uint32
+	Pad0   int32
+	Ret    int64
+	Family uint16
+	Sport  uint16
+	Dport  uint16
+	Proto  uint8
+	Event  uint8
+	State  uint8
+	Pad1   uint8
+	_      [2]byte
+	SrcIp4 uint32
+	DstIp4 uint32
+	SrcIp6 [16]uint8
+	DstIp6 [16]uint8
+	Comm   [32]int8
+	_      [4]byte
 }
 
 // loadBpf returns the embedded CollectionSpec for bpf.

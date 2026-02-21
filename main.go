@@ -12,7 +12,10 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/cilium/ebpf"
@@ -41,21 +44,20 @@ const (
 	EV_BINDOK   = 20
 	EV_SENDMSG  = 11
 	EV_RECVMSG  = 12
+	EV_CLOSE    = 30
 )
 
 var (
-	flgPerfMB    = flag.Int("perfMB", 4, "perf buffer size in MB")
-	flgDebug     = flag.Bool("debug", false, "debug logs")
+	flgPerfMB    = flag.Int("perfMB", 16, "perf buffer size in MB")
 	flgPprof     = flag.Bool("pprof", true, "enable pprof")
 	flgPprofAddr = flag.String("pprofAddr", ":6060", "pprof listen addr")
-	flgSample    = flag.Uint64("sample", 1, "print every Nth event")
-)
 
-func dbg(format string, args ...any) {
-	if *flgDebug {
-		log.Printf("[DBG] "+format, args...)
-	}
-}
+	flgTTL   = flag.Duration("ttl", 5*time.Second, "idle TTL for flow close")
+	flgSweep = flag.Duration("print", 1*time.Second, "TTL sweep interval + perf-loss rate logging interval")
+
+	flgOnlyPID  = flag.Int("pid", 0, "only this pid (0=all)")
+	flgOnlyComm = flag.String("comm", "", "only comm containing substring (empty=all)")
+)
 
 func commString(c [32]int8) string {
 	var b [32]byte
@@ -69,8 +71,17 @@ func commString(c [32]int8) string {
 	return string(b[:n])
 }
 
-func protoStr(p uint32) string {
-	switch uint8(p) {
+func protoAllowed(p uint8) bool {
+	switch p {
+	case IPPROTO_TCP, IPPROTO_UDP, IPPROTO_ICMP, IPPROTO_ICMPV6:
+		return true
+	default:
+		return false
+	}
+}
+
+func protoStr(p uint8) string {
+	switch p {
 	case IPPROTO_TCP:
 		return "TCP"
 	case IPPROTO_UDP:
@@ -84,57 +95,8 @@ func protoStr(p uint32) string {
 	}
 }
 
-func evName(code uint8) string {
-	switch code {
-	case EV_SENDTO:
-		return "SENDTO"
-	case EV_RECVFROM:
-		return "RECVFROM"
-	case EV_SENDMSG:
-		return "SENDMSG"
-	case EV_RECVMSG:
-		return "RECVMSG"
-	case EV_CONNECT:
-		return "CONNECT"
-	case EV_ACCEPT:
-		return "ACCEPT"
-	case EV_BINDOK:
-		return "BIND"
-	default:
-		return fmt.Sprintf("EV%d", code)
-	}
-}
-
-// IPv4 u32 from kernel is network-order but looks swapped on little-endian.
-// This is the same trick you already used.
-func ip4BytesFromU32Net(x uint32) (b [4]byte) {
-	binary.LittleEndian.PutUint32(b[:], x)
-	return
-}
-
-func fmtIPv4(u32 uint32) (string, [16]byte) {
-	var key [16]byte
-	b := ip4BytesFromU32Net(u32)
-	copy(key[:4], b[:])
-	return fmt.Sprintf("%d.%d.%d.%d", b[0], b[1], b[2], b[3]), key
-}
-
-func fmtIPv6(a [16]uint8) (string, [16]byte) {
-	var key [16]byte
-	copy(key[:], a[:])
-	// simple (no compression) like your output
-	s := fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x",
-		uint16(a[0])<<8|uint16(a[1]),
-		uint16(a[2])<<8|uint16(a[3]),
-		uint16(a[4])<<8|uint16(a[5]),
-		uint16(a[6])<<8|uint16(a[7]),
-		uint16(a[8])<<8|uint16(a[9]),
-		uint16(a[10])<<8|uint16(a[11]),
-		uint16(a[12])<<8|uint16(a[13]),
-		uint16(a[14])<<8|uint16(a[15]),
-	)
-	return s, key
-}
+func isSend(ev uint8) bool { return ev == EV_SENDTO || ev == EV_SENDMSG }
+func isRecv(ev uint8) bool { return ev == EV_RECVFROM || ev == EV_RECVMSG }
 
 func isAllZero16(b [16]byte) bool {
 	for i := 0; i < 16; i++ {
@@ -145,30 +107,256 @@ func isAllZero16(b [16]byte) bool {
 	return true
 }
 
-func fmtEndp(family uint16, ipStr string, ipKey [16]byte, port uint16, forICMP bool) string {
-	if forICMP {
-		if isAllZero16(ipKey) {
+// IPv4 u32 from kernel is network-order but looks swapped on little-endian.
+func ip4KeyFromU32Net(x uint32) (key [16]byte) {
+	var b4 [4]byte
+	binary.LittleEndian.PutUint32(b4[:], x)
+	copy(key[:4], b4[:])
+	return
+}
+
+func fmtIPv4FromKey(k [16]byte) string {
+	return fmt.Sprintf("%d.%d.%d.%d", k[0], k[1], k[2], k[3])
+}
+
+func fmtIPv6Full(b [16]byte) string {
+	return fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x",
+		uint16(b[0])<<8|uint16(b[1]),
+		uint16(b[2])<<8|uint16(b[3]),
+		uint16(b[4])<<8|uint16(b[5]),
+		uint16(b[6])<<8|uint16(b[7]),
+		uint16(b[8])<<8|uint16(b[9]),
+		uint16(b[10])<<8|uint16(b[11]),
+		uint16(b[12])<<8|uint16(b[13]),
+		uint16(b[14])<<8|uint16(b[15]),
+	)
+}
+
+func fmtEndpoint(family uint16, ip [16]byte, port uint16, proto uint8) string {
+	isICMP := proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6
+	if isICMP {
+		if isAllZero16(ip) {
 			return "*"
 		}
-		return ipStr
+		if family == AF_INET6 {
+			return fmtIPv6Full(ip)
+		}
+		return fmtIPv4FromKey(ip)
 	}
 
-	if isAllZero16(ipKey) {
+	if isAllZero16(ip) {
 		return fmt.Sprintf("*:%d", port)
 	}
 	if family == AF_INET6 {
-		return fmt.Sprintf("[%s]:%d", ipStr, port)
+		return fmt.Sprintf("[%s]:%d", fmtIPv6Full(ip), port)
 	}
-	return fmt.Sprintf("%s:%d", ipStr, port)
+	return fmt.Sprintf("%s:%d", fmtIPv4FromKey(ip), port)
+}
+
+func srcKeyFromEvent(ev bpfTraceInfo) (k [16]byte) {
+	if uint16(ev.Family) == AF_INET {
+		return ip4KeyFromU32Net(ev.SrcIp4)
+	}
+	copy(k[:], ev.SrcIp6[:])
+	return
+}
+
+func dstKeyFromEvent(ev bpfTraceInfo) (k [16]byte) {
+	if uint16(ev.Family) == AF_INET {
+		return ip4KeyFromU32Net(ev.DstIp4)
+	}
+	copy(k[:], ev.DstIp6[:])
+	return
+}
+
+/* ===== FLOW ===== */
+
+type FlowKey struct {
+	TGID   uint32
+	Cookie uint64
+	Proto  uint8
+	Family uint16
+
+	PeerMode uint8 // 0=socket-only, 1=per-peer (UDP/ICMP when enough info)
+	Rport    uint16
+	Remote   [16]byte
+}
+
+type Flow struct {
+	Key  FlowKey
+	Comm string
+
+	Local  [16]byte
+	Lport  uint16
+	Remote [16]byte
+	Rport  uint16
+
+	FirstSeen time.Time
+	LastSeen  time.Time
+
+	InBytes  uint64
+	OutBytes uint64
+	InPkts   uint64
+	OutPkts  uint64
+
+	OpenedPrinted bool
+
+	GenStart uint64 // loss generation at flow creation
+}
+
+func makeKey(ev bpfTraceInfo) FlowKey {
+	k := FlowKey{
+		TGID:   ev.Tgid,
+		Cookie: ev.Cookie,
+		Proto:  uint8(ev.Proto),
+		Family: uint16(ev.Family),
+	}
+
+	switch k.Proto {
+	case IPPROTO_UDP:
+		var remote [16]byte
+		var rport uint16
+		if isRecv(uint8(ev.Event)) {
+			remote = srcKeyFromEvent(ev)
+			rport = uint16(ev.Sport)
+		} else {
+			remote = dstKeyFromEvent(ev)
+			rport = uint16(ev.Dport)
+		}
+		if rport != 0 && !isAllZero16(remote) {
+			k.PeerMode = 1
+			k.Remote = remote
+			k.Rport = rport
+		}
+
+	case IPPROTO_ICMP, IPPROTO_ICMPV6:
+		var remote [16]byte
+		if isRecv(uint8(ev.Event)) {
+			remote = srcKeyFromEvent(ev)
+		} else {
+			remote = dstKeyFromEvent(ev)
+		}
+		if !isAllZero16(remote) {
+			k.PeerMode = 1
+			k.Remote = remote
+		}
+	}
+
+	return k
+}
+
+// normalize to local -> remote
+func applyEndpoints(f *Flow, ev bpfTraceInfo) {
+	evt := uint8(ev.Event)
+
+	var localIP, remoteIP [16]byte
+	var lport, rport uint16
+
+	switch {
+	case isSend(evt) || evt == EV_CONNECT:
+		localIP = srcKeyFromEvent(ev)
+		remoteIP = dstKeyFromEvent(ev)
+		lport = uint16(ev.Sport)
+		rport = uint16(ev.Dport)
+
+	case isRecv(evt):
+		localIP = dstKeyFromEvent(ev)
+		remoteIP = srcKeyFromEvent(ev)
+		lport = uint16(ev.Dport)
+		rport = uint16(ev.Sport)
+
+	case evt == EV_BINDOK:
+		localIP = srcKeyFromEvent(ev)
+		lport = uint16(ev.Sport)
+
+	case evt == EV_ACCEPT:
+		localIP = dstKeyFromEvent(ev)
+		remoteIP = srcKeyFromEvent(ev)
+		lport = uint16(ev.Dport)
+		rport = uint16(ev.Sport)
+	}
+
+	if f.Lport == 0 && lport != 0 {
+		f.Lport = lport
+	}
+	if isAllZero16(f.Local) && !isAllZero16(localIP) {
+		f.Local = localIP
+	}
+	if f.Rport == 0 && rport != 0 {
+		f.Rport = rport
+	}
+	if isAllZero16(f.Remote) && !isAllZero16(remoteIP) {
+		f.Remote = remoteIP
+	}
+}
+
+func flowReadyToOpen(f *Flow) bool {
+	return !isAllZero16(f.Remote)
+}
+
+var lostTotal uint64
+var lostGen uint64
+
+func maybeLostNote(f *Flow) string {
+	if f.InBytes == 0 && f.OutBytes == 0 && f.GenStart != atomic.LoadUint64(&lostGen) {
+		return " maybe_lost=1"
+	}
+	return ""
+}
+
+func incompleteNote(f *Flow) string {
+	switch f.Key.Proto {
+	case IPPROTO_TCP, IPPROTO_UDP:
+		if isAllZero16(f.Remote) || f.Lport == 0 || f.Rport == 0 {
+			return " incomplete=1"
+		}
+	case IPPROTO_ICMP, IPPROTO_ICMPV6:
+		if isAllZero16(f.Remote) {
+			return " incomplete=1"
+		}
+	}
+	return ""
+}
+
+func dropZeroFlow(f *Flow) bool {
+	if f.InBytes != 0 || f.OutBytes != 0 {
+		return false
+	}
+	// UDP/ICMP нулевые режем только если за жизнь флоу не было потерь
+	if f.Key.Proto == IPPROTO_UDP || f.Key.Proto == IPPROTO_ICMP || f.Key.Proto == IPPROTO_ICMPV6 {
+		return f.GenStart == atomic.LoadUint64(&lostGen)
+	}
+	return false
+}
+
+func printOpen(f *Flow) {
+	fmt.Printf("OPEN  %-5s pid=%d(%s) cookie=%d  %s -> %s%s%s\n",
+		protoStr(f.Key.Proto),
+		f.Key.TGID, f.Comm, f.Key.Cookie,
+		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.Key.Proto),
+		incompleteNote(f),
+		maybeLostNote(f),
+	)
+}
+
+func printClose(f *Flow, reason string) {
+	age := time.Since(f.FirstSeen).Truncate(time.Millisecond)
+	fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s reason=%s%s%s\n",
+		protoStr(f.Key.Proto),
+		f.Key.TGID, f.Comm, f.Key.Cookie,
+		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.Key.Proto),
+		f.OutBytes, f.OutPkts, f.InBytes, f.InPkts,
+		age, reason,
+		incompleteNote(f),
+		maybeLostNote(f),
+	)
 }
 
 func main() {
 	flag.Parse()
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
-
-	if *flgSample < 1 {
-		*flgSample = 1
-	}
 
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.Fatalf("failed to remove memlock: %v", err)
@@ -187,7 +375,6 @@ func main() {
 
 	selfName := filepath.Base(os.Args[0])
 
-	// attach tracepoints
 	var links []link.Link
 	defer func() {
 		for _, l := range links {
@@ -238,84 +425,182 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	log.Println("Press Ctrl+C to exit")
+	type evWrap struct {
+		ev  bpfTraceInfo
+		now time.Time
+	}
 
-	var printed uint64
+	evCh := make(chan evWrap, 16384)
+
+	go func() {
+		defer close(evCh)
+		for {
+			rec, e := rd.Read()
+			if e != nil {
+				if errors.Is(e, perf.ErrClosed) {
+					return
+				}
+				continue
+			}
+			if rec.LostSamples != 0 {
+				total := atomic.AddUint64(&lostTotal, rec.LostSamples)
+				gen := atomic.AddUint64(&lostGen, 1)
+				log.Printf("PERF_LOST chunk=%d total=%d gen=%d", rec.LostSamples, total, gen)
+			}
+			if len(rec.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
+				continue
+			}
+			ev := *(*bpfTraceInfo)(unsafe.Pointer(&rec.RawSample[0]))
+			evCh <- evWrap{ev: ev, now: time.Now()}
+		}
+	}()
+
+	flows := make(map[FlowKey]*Flow, 8192)
+	ticker := time.NewTicker(*flgSweep)
+	defer ticker.Stop()
+
+	log.Println("OPEN/CLOSE only (TCP/UDP/ICMP) + PERF_LOST generation. Press Ctrl+C to exit")
+
+	shouldKeep := func(pid uint32, comm string) bool {
+		if comm == "" || comm == selfName {
+			return false
+		}
+		if *flgOnlyPID != 0 && int(pid) != *flgOnlyPID {
+			return false
+		}
+		if *flgOnlyComm != "" && !strings.Contains(comm, *flgOnlyComm) {
+			return false
+		}
+		return true
+	}
+
+	closeByCookie := func(tgid uint32, cookie uint64, reason string) {
+		for k, f := range flows {
+			if k.TGID == tgid && k.Cookie == cookie {
+				if dropZeroFlow(f) {
+					delete(flows, k)
+					continue
+				}
+				if !f.OpenedPrinted && flowReadyToOpen(f) {
+					printOpen(f)
+					f.OpenedPrinted = true
+				}
+				if f.OpenedPrinted {
+					printClose(f, reason)
+				}
+				delete(flows, k)
+			}
+		}
+	}
+
+	lastLost := uint64(0)
+	lastTick := time.Now()
 
 	for {
 		select {
 		case <-stop:
+			_ = rd.Close()
+			log.Printf("PERF_LOST_TOTAL total=%d gen=%d", atomic.LoadUint64(&lostTotal), atomic.LoadUint64(&lostGen))
+			for _, f := range flows {
+				if dropZeroFlow(f) {
+					continue
+				}
+				if f.OpenedPrinted {
+					printClose(f, "signal")
+				}
+			}
 			log.Println("Exiting...")
 			return
-		default:
-		}
 
-		rec, err := rd.Read()
-		if err != nil {
-			if errors.Is(err, perf.ErrClosed) {
+		case <-ticker.C:
+			now := time.Now()
+
+			total := atomic.LoadUint64(&lostTotal)
+			delta := total - lastLost
+			dt := now.Sub(lastTick)
+			if delta > 0 {
+				log.Printf("PERF_LOST_RATE lost=%d in=%s total=%d gen=%d evCh=%d/%d flows=%d",
+					delta, dt.Truncate(time.Millisecond),
+					total, atomic.LoadUint64(&lostGen),
+					len(evCh), cap(evCh), len(flows),
+				)
+			}
+			lastLost = total
+			lastTick = now
+
+			// TTL sweep
+			for k, f := range flows {
+				if now.Sub(f.LastSeen) > *flgTTL {
+					if dropZeroFlow(f) {
+						delete(flows, k)
+						continue
+					}
+					if !f.OpenedPrinted && flowReadyToOpen(f) {
+						printOpen(f)
+						f.OpenedPrinted = true
+					}
+					if f.OpenedPrinted {
+						printClose(f, "idle")
+					}
+					delete(flows, k)
+				}
+			}
+
+		case w, ok := <-evCh:
+			if !ok {
 				return
 			}
-			continue
+
+			ev := w.ev
+			comm := commString(ev.Comm)
+			if !shouldKeep(ev.Tgid, comm) {
+				continue
+			}
+
+			evt := uint8(ev.Event)
+			proto := uint8(ev.Proto)
+			family := uint16(ev.Family)
+
+			if !protoAllowed(proto) {
+				continue
+			}
+			if family != AF_INET && family != AF_INET6 {
+				continue
+			}
+
+			if evt == EV_CLOSE {
+				closeByCookie(ev.Tgid, ev.Cookie, "close()")
+				continue
+			}
+
+			key := makeKey(ev)
+			f := flows[key]
+			if f == nil {
+				f = &Flow{
+					Key:       key,
+					Comm:      comm,
+					FirstSeen: w.now,
+					LastSeen:  w.now,
+					GenStart:  atomic.LoadUint64(&lostGen),
+				}
+				flows[key] = f
+			}
+
+			f.LastSeen = w.now
+			applyEndpoints(f, ev)
+
+			if isSend(evt) && ev.Ret > 0 {
+				f.OutBytes += uint64(ev.Ret)
+				f.OutPkts++
+			} else if isRecv(evt) && ev.Ret > 0 {
+				f.InBytes += uint64(ev.Ret)
+				f.InPkts++
+			}
+
+			if !f.OpenedPrinted && flowReadyToOpen(f) {
+				printOpen(f)
+				f.OpenedPrinted = true
+			}
 		}
-		if rec.LostSamples != 0 {
-			dbg("lost samples: %d", rec.LostSamples)
-			continue
-		}
-		if len(rec.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
-			continue
-		}
-
-		ev := *(*bpfTraceInfo)(unsafe.Pointer(&rec.RawSample[0]))
-		comm := commString(ev.Comm)
-		if comm == "" || comm == selfName {
-			continue
-		}
-
-		printed++
-		if printed%*flgSample != 0 {
-			continue
-		}
-
-		family := uint16(ev.Family)
-		sport := uint16(ev.Sport)
-		dport := uint16(ev.Dport)
-
-		proto := ev.Proto
-		pr := protoStr(proto)
-		evn := evName(ev.Sysexit)
-
-		tgid := ev.Tgid
-		tid := ev.Tid
-		fd := ev.Fd
-		ret := ev.Ret
-		cookie := ev.Cookie
-
-		var srcIPStr, dstIPStr string
-		var srcKey, dstKey [16]byte
-
-		if family == AF_INET {
-			srcIPStr, srcKey = fmtIPv4(ev.SrcIP.S_addr)
-			dstIPStr, dstKey = fmtIPv4(ev.DstIP.S_addr)
-		} else if family == AF_INET6 {
-			srcIPStr, srcKey = fmtIPv6(ev.SrcIP6.In6U.U6Addr8)
-			dstIPStr, dstKey = fmtIPv6(ev.DstIP6.In6U.U6Addr8)
-		} else {
-			continue
-		}
-
-		isICMP := uint8(proto) == IPPROTO_ICMP || uint8(proto) == IPPROTO_ICMPV6
-
-		srcEp := fmtEndp(family, srcIPStr, srcKey, sport, isICMP)
-		dstEp := fmtEndp(family, dstIPStr, dstKey, dport, isICMP)
-
-		// output close to your style + add tid+cookie
-		if isICMP {
-			fmt.Printf("%s %-7s pid=%d(%s) tid=%d fd=%d cookie=%d ret=%d  %s -> %s\n",
-				pr, evn, tgid, comm, tid, fd, cookie, ret, srcEp, dstEp)
-			continue
-		}
-
-		fmt.Printf("%s %-7s pid=%d(%s) tid=%d fd=%d cookie=%d ret=%d  %s -> %s\n",
-			pr, evn, tgid, comm, tid, fd, cookie, ret, srcEp, dstEp)
 	}
 }
