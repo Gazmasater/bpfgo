@@ -119,7 +119,6 @@ func isAllZero16(b [16]byte) bool {
 	return true
 }
 
-// IPv4 u32 from kernel is network-order but looks swapped on little-endian.
 func ip4KeyFromU32Net(x uint32) (key [16]byte) {
 	var b4 [4]byte
 	binary.LittleEndian.PutUint32(b4[:], x)
@@ -184,7 +183,6 @@ func fmtEndpoint(family uint16, ip [16]byte, scope uint32, port uint16, proto ui
 			return "*"
 		}
 		if family == AF_INET6 {
-			// scope печатаем ТОЛЬКО для ICMPv6
 			if proto == IPPROTO_ICMPV6 {
 				return fmtIPv6WithScope(ip, scope)
 			}
@@ -193,7 +191,6 @@ func fmtEndpoint(family uint16, ip [16]byte, scope uint32, port uint16, proto ui
 		return fmtIPv4FromKey(ip)
 	}
 
-	// UDP/TCP: scope игнорим
 	if isAllZero16(ip) {
 		return fmt.Sprintf("*:%d", port)
 	}
@@ -231,7 +228,7 @@ type FlowKey struct {
 	Rport    uint16
 	Remote   [16]byte
 
-	// scope only for ICMPv6 (link-local disambiguation + stable)
+	// only to disambiguate ICMPv6 link-local peers (fe80 needs ifindex)
 	RemoteScope uint32
 }
 
@@ -244,7 +241,6 @@ type Flow struct {
 	Remote [16]byte
 	Rport  uint16
 
-	// scope only for ICMPv6 printing (and link-local correctness)
 	LocalScope  uint32
 	RemoteScope uint32
 
@@ -257,7 +253,7 @@ type Flow struct {
 	OutPkts  uint64
 
 	OpenedPrinted bool
-	GenStart      uint64 // loss generation at flow creation
+	GenStart      uint64
 }
 
 func makeKey(ev bpfTraceInfo) FlowKey {
@@ -307,7 +303,6 @@ func makeKey(ev bpfTraceInfo) FlowKey {
 	return k
 }
 
-// normalize to local -> remote
 func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 	evt := uint8(ev.Event)
 	proto := uint8(ev.Proto)
@@ -315,10 +310,8 @@ func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 	var localIP, remoteIP [16]byte
 	var lport, rport uint16
 
-	// scope only for ICMPv6
 	var lscope, rscope uint32
 	if proto == IPPROTO_ICMPV6 {
-		// NOTE: эти поля заполняются из sockaddr_in6.sin6_scope_id, когда он доступен
 		srcScope := uint32(ev.SrcScope)
 		dstScope := uint32(ev.DstScope)
 
@@ -335,9 +328,6 @@ func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 			lscope = dstScope
 			rscope = srcScope
 		}
-
-		// храним только для link-local, иначе смысла нет
-		// (fmtEndpoint всё равно использует scope только для fe80::/10)
 	}
 
 	switch {
@@ -377,7 +367,6 @@ func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 		f.Remote = remoteIP
 	}
 
-	// scope сохраняем только для ICMPv6 (и реально будет полезен только на fe80)
 	if proto == IPPROTO_ICMPV6 {
 		if f.LocalScope == 0 && lscope != 0 {
 			f.LocalScope = lscope
@@ -590,7 +579,6 @@ func main() {
 		return true
 	}
 
-	// upgrade cookie-only UDP/ICMP flow to per-peer when peer becomes known
 	upgradeKeyIfNeeded := func(key FlowKey) (FlowKey, *Flow) {
 		if key.PeerMode != 1 {
 			return key, nil
@@ -601,11 +589,10 @@ func main() {
 		base := key
 		base.PeerMode = 0
 		base.Rport = 0
+		base.RemoteScope = 0
 		for i := range base.Remote {
 			base.Remote[i] = 0
 		}
-		base.RemoteScope = 0
-
 		if fb := flows[base]; fb != nil {
 			delete(flows, base)
 			fb.Key = key
@@ -735,7 +722,6 @@ func main() {
 			f.LastSeen = w.now
 			applyEndpoints(f, ev)
 
-			// accounting
 			switch evt {
 			case EV_SENDMMSG:
 				if ev.Ret > 0 {

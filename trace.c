@@ -42,6 +42,12 @@
 // bounded loops
 #define MAX_MMSG 16
 #define MAX_IOV  4
+#define MAX_CMSG 6
+
+// cmsg parsing (x86_64)
+#define SOL_IPV6      41
+#define IPV6_PKTINFO  50
+#define CMSG_ALIGN(len) (((len) + 7) & ~7ULL)
 
 /* ====== types ====== */
 
@@ -102,20 +108,14 @@ struct trace_info {
     __u8  src_ip6[16];
     __u8  dst_ip6[16];
 
-    // ONLY for ICMPv6 link-local correctness (fe80::/10 needs ifindex scope)
-    __u32 src_scope; // sin6_scope_id if known
-    __u32 dst_scope; // sin6_scope_id if known
+    // scope for ICMPv6 link-local (fe80::/10) + also from IPV6_PKTINFO
+    __u32 src_scope; // ifindex
+    __u32 dst_scope; // ifindex
 
     char  comm[32];
 };
 
 const struct trace_info *unused __attribute__((unused));
-
-struct user_msghdr_head {
-    void *msg_name;
-    __u32 msg_namelen;
-    __u32 _pad;
-};
 
 struct addr_ptrlen_t {
     __u64 addr;   // user sockaddr*
@@ -169,6 +169,19 @@ struct mmsg_ptrvlen_t {
     __u32 vlen;
     __u32 flags;
 };
+
+/* ---- cmsg ---- */
+
+struct user_cmsghdr64 {
+    __u64 cmsg_len;    // size_t
+    __s32 cmsg_level;
+    __s32 cmsg_type;
+};
+
+struct user_in6_pktinfo {
+    struct in6_addr ipi6_addr;
+    __s32 ipi6_ifindex;
+} __attribute__((packed));
 
 /* ====== maps ====== */
 
@@ -267,7 +280,7 @@ static __always_inline int read_sys_exit_ret(struct trace_event_raw_sys_exit *ct
     return 0;
 }
 
-static __always_inline int read_msghdr_head(__u64 msg_u, struct user_msghdr_head *h)
+static __always_inline int read_msghdr64(__u64 msg_u, struct user_msghdr64 *h)
 {
     if (!msg_u)
         return -1;
@@ -338,6 +351,68 @@ static __always_inline __s64 sum_mmsg_iov_bytes(__u64 vec_u, __u32 n)
         }
     }
     return total;
+}
+
+static __always_inline int is_all_zero6(const __u8 a[16])
+{
+#pragma clang loop unroll(full)
+    for (int i = 0; i < 16; i++) {
+        if (a[i] != 0)
+            return 0;
+    }
+    return 1;
+}
+
+// Parse IPV6_PKTINFO from user msghdr control buffer and set local endpoint.
+// set_dst=1 => write into dst_ip6/dst_scope (recv direction local)
+// set_dst=0 => write into src_ip6/src_scope (send direction local)
+static __always_inline void parse_ipv6_pktinfo(struct trace_info *info, __u64 ctrl, __u64 controllen, int set_dst)
+{
+    if (!ctrl || controllen < sizeof(struct user_cmsghdr64))
+        return;
+
+    // only for ICMPv6 over AF_INET6
+    if (info->family != AF_INET6 || info->proto != IPPROTO_ICMPV6)
+        return;
+
+    __u64 p = ctrl;
+    __u64 left = controllen;
+
+#define CMSG_TRY_STEP() do { \
+    if (left < sizeof(struct user_cmsghdr64)) return; \
+    struct user_cmsghdr64 ch = {}; \
+    if (bpf_probe_read_user(&ch, sizeof(ch), (void *)p) != 0) return; \
+    if (ch.cmsg_len < sizeof(struct user_cmsghdr64) || ch.cmsg_len > left) return; \
+    __u64 data = p + sizeof(struct user_cmsghdr64); \
+    __u64 datalen = ch.cmsg_len - sizeof(struct user_cmsghdr64); \
+    if (ch.cmsg_level == SOL_IPV6 && ch.cmsg_type == IPV6_PKTINFO && datalen >= sizeof(struct user_in6_pktinfo)) { \
+        struct user_in6_pktinfo pi = {}; \
+        if (bpf_probe_read_user(&pi, sizeof(pi), (void *)data) == 0) { \
+            if (set_dst) { \
+                __builtin_memcpy(info->dst_ip6, &pi.ipi6_addr, 16); \
+                if (pi.ipi6_ifindex > 0) info->dst_scope = (__u32)pi.ipi6_ifindex; \
+            } else { \
+                __builtin_memcpy(info->src_ip6, &pi.ipi6_addr, 16); \
+                if (pi.ipi6_ifindex > 0) info->src_scope = (__u32)pi.ipi6_ifindex; \
+            } \
+        } \
+        return; \
+    } \
+    __u64 step = CMSG_ALIGN(ch.cmsg_len); \
+    if (step == 0 || step > left) return; \
+    p += step; \
+    left -= step; \
+} while (0)
+
+    // scan up to MAX_CMSG chunks without a loop (verifier-friendly, no unroll warnings)
+    CMSG_TRY_STEP();
+    CMSG_TRY_STEP();
+    CMSG_TRY_STEP();
+    CMSG_TRY_STEP();
+    CMSG_TRY_STEP();
+    CMSG_TRY_STEP();
+
+#undef CMSG_TRY_STEP
 }
 
 /* ---- fd->file helpers ---- */
@@ -428,9 +503,8 @@ static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
     if (bpf_probe_read_user(&family, sizeof(family), uaddr) < 0)
         return -1;
 
-    // если family уже известна из сокета — НЕ даём ей "прыгать"
+    // if family fixed already — do not jump (except v4->v6 mapped)
     if (info->family != 0 && family != info->family) {
-        // dual-stack case: socket AF_INET6, but sockaddr is AF_INET -> map to v4-mapped
         if (info->family == AF_INET6 && family == AF_INET) {
             if (addrlen < sizeof(struct sockaddr_in))
                 return -1;
@@ -454,7 +528,6 @@ static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
             }
             return 0;
         }
-
         return -1;
     }
 
@@ -539,7 +612,7 @@ static __always_inline void loopback_fallback(struct trace_info *info, int is_se
     if (info->family == AF_INET) {
         if (is_send_dir) {
             if (info->src_ip4 == 0 && is_ipv4_loopback(info->dst_ip4))
-                info->src_ip4 = bpf_htonl(0x7f000001); // 127.0.0.1
+                info->src_ip4 = bpf_htonl(0x7f000001);
         } else {
             if (info->dst_ip4 == 0 && is_ipv4_loopback(info->src_ip4))
                 info->dst_ip4 = bpf_htonl(0x7f000001);
@@ -547,9 +620,7 @@ static __always_inline void loopback_fallback(struct trace_info *info, int is_se
     } else if (info->family == AF_INET6) {
         if (is_send_dir) {
             if (is_ipv6_loopback(info->dst_ip6) && !is_ipv6_loopback(info->src_ip6)) {
-                int all0 = 1;
-#pragma clang loop unroll(full)
-                for (int i = 0; i < 16; i++) if (info->src_ip6[i] != 0) all0 = 0;
+                int all0 = is_all_zero6(info->src_ip6);
                 if (all0) {
 #pragma clang loop unroll(full)
                     for (int i = 0; i < 15; i++) info->src_ip6[i] = 0;
@@ -557,9 +628,7 @@ static __always_inline void loopback_fallback(struct trace_info *info, int is_se
                 }
             }
         } else {
-            int all0 = 1;
-#pragma clang loop unroll(full)
-            for (int i = 0; i < 16; i++) if (info->dst_ip6[i] != 0) all0 = 0;
+            int all0 = is_all_zero6(info->dst_ip6);
             if (all0 && is_ipv6_loopback(info->src_ip6)) {
 #pragma clang loop unroll(full)
                 for (int i = 0; i < 15; i++) info->dst_ip6[i] = 0;
@@ -1091,6 +1160,7 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
         goto cleanup;
 
     struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    __u64 *msgp = bpf_map_lookup_elem(&msgSend_map, &id);
     if (!ci)
         goto cleanup;
 
@@ -1104,12 +1174,14 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
         goto cleanup;
 
-    __u64 *msgp = bpf_map_lookup_elem(&msgSend_map, &id);
     if (msgp && *msgp) {
-        struct user_msghdr_head h = {};
-        if (read_msghdr_head(*msgp, &h) == 0) {
-            if (h.msg_name && h.msg_namelen >= sizeof(__u16))
-                (void)fill_from_sockaddr_user(&info, h.msg_name, h.msg_namelen, 1);
+        struct user_msghdr64 mh = {};
+        if (read_msghdr64(*msgp, &mh) == 0) {
+            if (mh.msg_name && mh.msg_namelen >= sizeof(__u16)) {
+                (void)fill_from_sockaddr_user(&info, (void *)mh.msg_name, mh.msg_namelen, 1);
+            }
+            // for ICMPv6: allow src from IPV6_PKTINFO (if app sets it)
+            parse_ipv6_pktinfo(&info, mh.msg_control, mh.msg_controllen, 0 /*src*/);
         }
     }
 
@@ -1161,7 +1233,7 @@ int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx)
         goto cleanup;
 
     struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci)
+    if (!ci || !pv || !pv->msg)
         goto cleanup;
 
     struct trace_info info = {};
@@ -1174,12 +1246,14 @@ int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
         goto cleanup;
 
-    if (pv && pv->msg) {
-        struct user_msghdr_head h = {};
-        if (read_msghdr_head(pv->msg, &h) == 0) {
-            if (h.msg_name && h.msg_namelen >= sizeof(__u16))
-                (void)fill_from_sockaddr_user(&info, h.msg_name, h.msg_namelen, 0);
+    struct user_msghdr64 mh = {};
+    if (read_msghdr64(pv->msg, &mh) == 0) {
+        // peer from msg_name
+        if (mh.msg_name && mh.msg_namelen >= sizeof(__u16)) {
+            (void)fill_from_sockaddr_user(&info, (void *)mh.msg_name, mh.msg_namelen, 0);
         }
+        // for ICMPv6: local dst from IPV6_PKTINFO -> убирает '*' слева
+        parse_ipv6_pktinfo(&info, mh.msg_control, mh.msg_controllen, 1 /*dst*/);
     }
 
     loopback_fallback(&info, 0);
@@ -1246,12 +1320,13 @@ int trace_sendmmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
         goto cleanup;
 
-    // prefer explicit dst from first mmsghdr (if present) + scope_id
+    // dst + optional pktinfo from first mmsghdr
     struct user_mmsghdr64 m0 = {};
     if (read_mmsg0(pv->vec, &m0) == 0) {
         if (m0.msg_hdr.msg_name && m0.msg_hdr.msg_namelen >= sizeof(__u16)) {
             (void)fill_from_sockaddr_user(&info, (void *)m0.msg_hdr.msg_name, m0.msg_hdr.msg_namelen, 1);
         }
+        parse_ipv6_pktinfo(&info, m0.msg_hdr.msg_control, m0.msg_hdr.msg_controllen, 0 /*src*/);
     }
 
     loopback_fallback(&info, 1);
@@ -1321,12 +1396,14 @@ int trace_recvmmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
         goto cleanup;
 
-    // peer addr from first mmsghdr (if kernel filled it) + scope_id
+    // peer + local from first mmsghdr
     struct user_mmsghdr64 m0 = {};
     if (read_mmsg0(pv->vec, &m0) == 0) {
         if (m0.msg_hdr.msg_name && m0.msg_hdr.msg_namelen >= sizeof(__u16)) {
             (void)fill_from_sockaddr_user(&info, (void *)m0.msg_hdr.msg_name, m0.msg_hdr.msg_namelen, 0);
         }
+        // local dst from pktinfo -> убирает '*'
+        parse_ipv6_pktinfo(&info, m0.msg_hdr.msg_control, m0.msg_hdr.msg_controllen, 1 /*dst*/);
     }
 
     loopback_fallback(&info, 0);
@@ -1485,4 +1562,3 @@ int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
 
     return 0;
 }
-
