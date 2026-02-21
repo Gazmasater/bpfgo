@@ -663,609 +663,269 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-package main
-
-import (
-	"bytes"
-	"encoding/binary"
-	"errors"
-	"flag"
-	"fmt"
-	"log"
-	"net/http"
-	_ "net/http/pprof"
-	"os"
-	"os/signal"
-	"path/filepath"
-	"strings"
-	"sync/atomic"
-	"syscall"
-	"time"
-	"unsafe"
-
-	"github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/link"
-	"github.com/cilium/ebpf/perf"
-	"github.com/cilium/ebpf/rlimit"
-)
-
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target amd64 -type trace_info bpf trace.c -- -I.
-
-var objs bpfObjects
-
-const (
-	AF_INET  = 2
-	AF_INET6 = 10
-
-	IPPROTO_ICMP   = 1
-	IPPROTO_TCP    = 6
-	IPPROTO_UDP    = 17
-	IPPROTO_ICMPV6 = 58
-
-	EV_SENDTO   = 1
-	EV_RECVFROM = 2
-	EV_CONNECT  = 3
-	EV_ACCEPT   = 4
-	EV_BINDOK   = 20
-	EV_SENDMSG  = 11
-	EV_RECVMSG  = 12
-	EV_CLOSE    = 30
-)
-
-var (
-	flgPerfMB    = flag.Int("perfMB", 16, "perf buffer size in MB")
-	flgPprof     = flag.Bool("pprof", true, "enable pprof")
-	flgPprofAddr = flag.String("pprofAddr", ":6060", "pprof listen addr")
-
-	flgTTL   = flag.Duration("ttl", 5*time.Second, "idle TTL for flow close")
-	flgSweep = flag.Duration("print", 1*time.Second, "TTL sweep interval + perf-loss rate logging interval")
-
-	flgOnlyPID  = flag.Int("pid", 0, "only this pid (0=all)")
-	flgOnlyComm = flag.String("comm", "", "only comm containing substring (empty=all)")
-)
-
-func commString(c [32]int8) string {
-	var b [32]byte
-	for i := 0; i < 32; i++ {
-		b[i] = byte(c[i])
-	}
-	n := bytes.IndexByte(b[:], 0)
-	if n < 0 {
-		n = len(b)
-	}
-	return string(b[:n])
-}
-
-func protoAllowed(p uint8) bool {
-	switch p {
-	case IPPROTO_TCP, IPPROTO_UDP, IPPROTO_ICMP, IPPROTO_ICMPV6:
-		return true
-	default:
-		return false
-	}
-}
-
-func protoStr(p uint8) string {
-	switch p {
-	case IPPROTO_TCP:
-		return "TCP"
-	case IPPROTO_UDP:
-		return "UDP"
-	case IPPROTO_ICMP:
-		return "ICMP"
-	case IPPROTO_ICMPV6:
-		return "ICMPv6"
-	default:
-		return fmt.Sprintf("P%d", p)
-	}
-}
-
-func isSend(ev uint8) bool { return ev == EV_SENDTO || ev == EV_SENDMSG }
-func isRecv(ev uint8) bool { return ev == EV_RECVFROM || ev == EV_RECVMSG }
-
-func isAllZero16(b [16]byte) bool {
-	for i := 0; i < 16; i++ {
-		if b[i] != 0 {
-			return false
-		}
-	}
-	return true
-}
-
-// IPv4 u32 from kernel is network-order but looks swapped on little-endian.
-func ip4KeyFromU32Net(x uint32) (key [16]byte) {
-	var b4 [4]byte
-	binary.LittleEndian.PutUint32(b4[:], x)
-	copy(key[:4], b4[:])
-	return
-}
-
-func fmtIPv4FromKey(k [16]byte) string {
-	return fmt.Sprintf("%d.%d.%d.%d", k[0], k[1], k[2], k[3])
-}
-
-func fmtIPv6Full(b [16]byte) string {
-	return fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x",
-		uint16(b[0])<<8|uint16(b[1]),
-		uint16(b[2])<<8|uint16(b[3]),
-		uint16(b[4])<<8|uint16(b[5]),
-		uint16(b[6])<<8|uint16(b[7]),
-		uint16(b[8])<<8|uint16(b[9]),
-		uint16(b[10])<<8|uint16(b[11]),
-		uint16(b[12])<<8|uint16(b[13]),
-		uint16(b[14])<<8|uint16(b[15]),
-	)
-}
-
-func fmtEndpoint(family uint16, ip [16]byte, port uint16, proto uint8) string {
-	isICMP := proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6
-	if isICMP {
-		if isAllZero16(ip) {
-			return "*"
-		}
-		if family == AF_INET6 {
-			return fmtIPv6Full(ip)
-		}
-		return fmtIPv4FromKey(ip)
-	}
-
-	if isAllZero16(ip) {
-		return fmt.Sprintf("*:%d", port)
-	}
-	if family == AF_INET6 {
-		return fmt.Sprintf("[%s]:%d", fmtIPv6Full(ip), port)
-	}
-	return fmt.Sprintf("%s:%d", fmtIPv4FromKey(ip), port)
-}
-
-func srcKeyFromEvent(ev bpfTraceInfo) (k [16]byte) {
-	if uint16(ev.Family) == AF_INET {
-		return ip4KeyFromU32Net(ev.SrcIp4)
-	}
-	copy(k[:], ev.SrcIp6[:])
-	return
-}
-
-func dstKeyFromEvent(ev bpfTraceInfo) (k [16]byte) {
-	if uint16(ev.Family) == AF_INET {
-		return ip4KeyFromU32Net(ev.DstIp4)
-	}
-	copy(k[:], ev.DstIp6[:])
-	return
-}
-
-/* ===== FLOW ===== */
-
-type FlowKey struct {
-	TGID   uint32
-	Cookie uint64
-	Proto  uint8
-	Family uint16
-
-	PeerMode uint8 // 0=socket-only, 1=per-peer (UDP/ICMP when enough info)
-	Rport    uint16
-	Remote   [16]byte
-}
-
-type Flow struct {
-	Key  FlowKey
-	Comm string
-
-	Local  [16]byte
-	Lport  uint16
-	Remote [16]byte
-	Rport  uint16
-
-	FirstSeen time.Time
-	LastSeen  time.Time
-
-	InBytes  uint64
-	OutBytes uint64
-	InPkts   uint64
-	OutPkts  uint64
-
-	OpenedPrinted bool
-
-	GenStart uint64 // loss generation at flow creation
-}
-
-func makeKey(ev bpfTraceInfo) FlowKey {
-	k := FlowKey{
-		TGID:   ev.Tgid,
-		Cookie: ev.Cookie,
-		Proto:  uint8(ev.Proto),
-		Family: uint16(ev.Family),
-	}
-
-	switch k.Proto {
-	case IPPROTO_UDP:
-		var remote [16]byte
-		var rport uint16
-		if isRecv(uint8(ev.Event)) {
-			remote = srcKeyFromEvent(ev)
-			rport = uint16(ev.Sport)
-		} else {
-			remote = dstKeyFromEvent(ev)
-			rport = uint16(ev.Dport)
-		}
-		if rport != 0 && !isAllZero16(remote) {
-			k.PeerMode = 1
-			k.Remote = remote
-			k.Rport = rport
-		}
-
-	case IPPROTO_ICMP, IPPROTO_ICMPV6:
-		var remote [16]byte
-		if isRecv(uint8(ev.Event)) {
-			remote = srcKeyFromEvent(ev)
-		} else {
-			remote = dstKeyFromEvent(ev)
-		}
-		if !isAllZero16(remote) {
-			k.PeerMode = 1
-			k.Remote = remote
-		}
-	}
-
-	return k
-}
-
-// normalize to local -> remote
-func applyEndpoints(f *Flow, ev bpfTraceInfo) {
-	evt := uint8(ev.Event)
-
-	var localIP, remoteIP [16]byte
-	var lport, rport uint16
-
-	switch {
-	case isSend(evt) || evt == EV_CONNECT:
-		localIP = srcKeyFromEvent(ev)
-		remoteIP = dstKeyFromEvent(ev)
-		lport = uint16(ev.Sport)
-		rport = uint16(ev.Dport)
-
-	case isRecv(evt):
-		localIP = dstKeyFromEvent(ev)
-		remoteIP = srcKeyFromEvent(ev)
-		lport = uint16(ev.Dport)
-		rport = uint16(ev.Sport)
-
-	case evt == EV_BINDOK:
-		localIP = srcKeyFromEvent(ev)
-		lport = uint16(ev.Sport)
-
-	case evt == EV_ACCEPT:
-		localIP = dstKeyFromEvent(ev)
-		remoteIP = srcKeyFromEvent(ev)
-		lport = uint16(ev.Dport)
-		rport = uint16(ev.Sport)
-	}
-
-	if f.Lport == 0 && lport != 0 {
-		f.Lport = lport
-	}
-	if isAllZero16(f.Local) && !isAllZero16(localIP) {
-		f.Local = localIP
-	}
-	if f.Rport == 0 && rport != 0 {
-		f.Rport = rport
-	}
-	if isAllZero16(f.Remote) && !isAllZero16(remoteIP) {
-		f.Remote = remoteIP
-	}
-}
-
-func flowReadyToOpen(f *Flow) bool {
-	return !isAllZero16(f.Remote)
-}
-
-var lostTotal uint64
-var lostGen uint64
-
-func maybeLostNote(f *Flow) string {
-	if f.InBytes == 0 && f.OutBytes == 0 && f.GenStart != atomic.LoadUint64(&lostGen) {
-		return " maybe_lost=1"
-	}
-	return ""
-}
-
-func incompleteNote(f *Flow) string {
-	switch f.Key.Proto {
-	case IPPROTO_TCP, IPPROTO_UDP:
-		if isAllZero16(f.Remote) || f.Lport == 0 || f.Rport == 0 {
-			return " incomplete=1"
-		}
-	case IPPROTO_ICMP, IPPROTO_ICMPV6:
-		if isAllZero16(f.Remote) {
-			return " incomplete=1"
-		}
-	}
-	return ""
-}
-
-func dropZeroFlow(f *Flow) bool {
-	if f.InBytes != 0 || f.OutBytes != 0 {
-		return false
-	}
-	// UDP/ICMP нулевые режем только если за жизнь флоу не было потерь
-	if f.Key.Proto == IPPROTO_UDP || f.Key.Proto == IPPROTO_ICMP || f.Key.Proto == IPPROTO_ICMPV6 {
-		return f.GenStart == atomic.LoadUint64(&lostGen)
-	}
-	return false
-}
-
-func printOpen(f *Flow) {
-	fmt.Printf("OPEN  %-5s pid=%d(%s) cookie=%d  %s -> %s%s%s\n",
-		protoStr(f.Key.Proto),
-		f.Key.TGID, f.Comm, f.Key.Cookie,
-		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.Key.Proto),
-		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.Key.Proto),
-		incompleteNote(f),
-		maybeLostNote(f),
-	)
-}
-
-func printClose(f *Flow, reason string) {
-	age := time.Since(f.FirstSeen).Truncate(time.Millisecond)
-	fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s reason=%s%s%s\n",
-		protoStr(f.Key.Proto),
-		f.Key.TGID, f.Comm, f.Key.Cookie,
-		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.Key.Proto),
-		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.Key.Proto),
-		f.OutBytes, f.OutPkts, f.InBytes, f.InPkts,
-		age, reason,
-		incompleteNote(f),
-		maybeLostNote(f),
-	)
-}
-
-func main() {
-	flag.Parse()
-	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
-
-	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatalf("failed to remove memlock: %v", err)
-	}
-	if err := loadBpfObjects(&objs, nil); err != nil {
-		log.Fatalf("failed to load bpf objects: %v", err)
-	}
-	defer objs.Close()
-
-	if *flgPprof {
-		go func() {
-			log.Printf("pprof on %s", *flgPprofAddr)
-			_ = http.ListenAndServe(*flgPprofAddr, nil)
-		}()
-	}
-
-	selfName := filepath.Base(os.Args[0])
-
-	var links []link.Link
-	defer func() {
-		for _, l := range links {
-			_ = l.Close()
-		}
-	}()
-	attach := func(cat, name string, prog *ebpf.Program) {
-		l, err := link.Tracepoint(cat, name, prog, nil)
-		if err != nil {
-			log.Fatalf("attach %s/%s: %v", cat, name, err)
-		}
-		links = append(links, l)
-	}
-
-	attach("syscalls", "sys_enter_bind", objs.TraceBindEnter)
-	attach("syscalls", "sys_exit_bind", objs.TraceBindExit)
-
-	attach("syscalls", "sys_enter_connect", objs.TraceConnectEnter)
-	attach("syscalls", "sys_exit_connect", objs.TraceConnectExit)
-
-	attach("syscalls", "sys_enter_accept4", objs.TraceAccept4Enter)
-	attach("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit)
-	attach("syscalls", "sys_enter_accept", objs.TraceAcceptEnter)
-	attach("syscalls", "sys_exit_accept", objs.TraceAcceptExit)
-
-	attach("syscalls", "sys_enter_close", objs.TraceCloseEnter)
-
-	attach("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter)
-	attach("syscalls", "sys_exit_sendto", objs.TraceSendtoExit)
-	attach("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter)
-	attach("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit)
-
-	attach("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter)
-	attach("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit)
-	attach("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter)
-	attach("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit)
-
-	perfBytes := *flgPerfMB * 1024 * 1024
-	if perfBytes < 256*1024 {
-		perfBytes = 256 * 1024
-	}
-	rd, err := perf.NewReader(objs.TraceEvents, perfBytes)
-	if err != nil {
-		log.Fatalf("perf.NewReader: %v", err)
-	}
-	defer rd.Close()
-
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-
-	type evWrap struct {
-		ev  bpfTraceInfo
-		now time.Time
-	}
-
-	evCh := make(chan evWrap, 16384)
-
-	go func() {
-		defer close(evCh)
-		for {
-			rec, e := rd.Read()
-			if e != nil {
-				if errors.Is(e, perf.ErrClosed) {
-					return
-				}
-				continue
-			}
-			if rec.LostSamples != 0 {
-				total := atomic.AddUint64(&lostTotal, rec.LostSamples)
-				gen := atomic.AddUint64(&lostGen, 1)
-				log.Printf("PERF_LOST chunk=%d total=%d gen=%d", rec.LostSamples, total, gen)
-			}
-			if len(rec.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
-				continue
-			}
-			ev := *(*bpfTraceInfo)(unsafe.Pointer(&rec.RawSample[0]))
-			evCh <- evWrap{ev: ev, now: time.Now()}
-		}
-	}()
-
-	flows := make(map[FlowKey]*Flow, 8192)
-	ticker := time.NewTicker(*flgSweep)
-	defer ticker.Stop()
-
-	log.Println("OPEN/CLOSE only (TCP/UDP/ICMP) + PERF_LOST generation. Press Ctrl+C to exit")
-
-	shouldKeep := func(pid uint32, comm string) bool {
-		if comm == "" || comm == selfName {
-			return false
-		}
-		if *flgOnlyPID != 0 && int(pid) != *flgOnlyPID {
-			return false
-		}
-		if *flgOnlyComm != "" && !strings.Contains(comm, *flgOnlyComm) {
-			return false
-		}
-		return true
-	}
-
-	closeByCookie := func(tgid uint32, cookie uint64, reason string) {
-		for k, f := range flows {
-			if k.TGID == tgid && k.Cookie == cookie {
-				if dropZeroFlow(f) {
-					delete(flows, k)
-					continue
-				}
-				if !f.OpenedPrinted && flowReadyToOpen(f) {
-					printOpen(f)
-					f.OpenedPrinted = true
-				}
-				if f.OpenedPrinted {
-					printClose(f, reason)
-				}
-				delete(flows, k)
-			}
-		}
-	}
-
-	lastLost := uint64(0)
-	lastTick := time.Now()
-
-	for {
-		select {
-		case <-stop:
-			_ = rd.Close()
-			log.Printf("PERF_LOST_TOTAL total=%d gen=%d", atomic.LoadUint64(&lostTotal), atomic.LoadUint64(&lostGen))
-			for _, f := range flows {
-				if dropZeroFlow(f) {
-					continue
-				}
-				if f.OpenedPrinted {
-					printClose(f, "signal")
-				}
-			}
-			log.Println("Exiting...")
-			return
-
-		case <-ticker.C:
-			now := time.Now()
-
-			total := atomic.LoadUint64(&lostTotal)
-			delta := total - lastLost
-			dt := now.Sub(lastTick)
-			if delta > 0 {
-				log.Printf("PERF_LOST_RATE lost=%d in=%s total=%d gen=%d evCh=%d/%d flows=%d",
-					delta, dt.Truncate(time.Millisecond),
-					total, atomic.LoadUint64(&lostGen),
-					len(evCh), cap(evCh), len(flows),
-				)
-			}
-			lastLost = total
-			lastTick = now
-
-			// TTL sweep
-			for k, f := range flows {
-				if now.Sub(f.LastSeen) > *flgTTL {
-					if dropZeroFlow(f) {
-						delete(flows, k)
-						continue
-					}
-					if !f.OpenedPrinted && flowReadyToOpen(f) {
-						printOpen(f)
-						f.OpenedPrinted = true
-					}
-					if f.OpenedPrinted {
-						printClose(f, "idle")
-					}
-					delete(flows, k)
-				}
-			}
-
-		case w, ok := <-evCh:
-			if !ok {
-				return
-			}
-
-			ev := w.ev
-			comm := commString(ev.Comm)
-			if !shouldKeep(ev.Tgid, comm) {
-				continue
-			}
-
-			evt := uint8(ev.Event)
-			proto := uint8(ev.Proto)
-			family := uint16(ev.Family)
-
-			if !protoAllowed(proto) {
-				continue
-			}
-			if family != AF_INET && family != AF_INET6 {
-				continue
-			}
-
-			if evt == EV_CLOSE {
-				closeByCookie(ev.Tgid, ev.Cookie, "close()")
-				continue
-			}
-
-			key := makeKey(ev)
-			f := flows[key]
-			if f == nil {
-				f = &Flow{
-					Key:       key,
-					Comm:      comm,
-					FirstSeen: w.now,
-					LastSeen:  w.now,
-					GenStart:  atomic.LoadUint64(&lostGen),
-				}
-				flows[key] = f
-			}
-
-			f.LastSeen = w.now
-			applyEndpoints(f, ev)
-
-			if isSend(evt) && ev.Ret > 0 {
-				f.OutBytes += uint64(ev.Ret)
-				f.OutPkts++
-			} else if isRecv(evt) && ev.Ret > 0 {
-				f.InBytes += uint64(ev.Ret)
-				f.InPkts++
-			}
-
-			if !f.OpenedPrinted && flowReadyToOpen(f) {
-				printOpen(f)
-				f.OpenedPrinted = true
-			}
-		}
-	}
-}
+lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
+[sudo] password for lev: 
+2026/02/21 04:00:41.084685 pprof on :6060
+2026/02/21 04:00:41.164681 OPEN/CLOSE only (TCP/UDP/ICMP) + PERF_LOST generation. Press Ctrl+C to exit
+OPEN  UDP   pid=516(systemd-resolve) cookie=115867  10.0.2.15:36200 -> 10.0.2.3:53
+CLOSE UDP   pid=516(systemd-resolve) cookie=115867  10.0.2.15:36200 -> 10.0.2.3:53  out=0B/0p in=742B/1p  age=50ms reason=close()
+OPEN  TCP   pid=669(NetworkManager) cookie=115871  [fd00:0:0:0:f971:c3ee:46ee:9b71]:57974 -> [2620:2d:4000:1:0:0:0:2b]:80
+OPEN  TCP   pid=669(NetworkManager) cookie=115872  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4000:1:0:0:0:97]:80 incomplete=1
+CLOSE TCP   pid=669(NetworkManager) cookie=115871  [fd00:0:0:0:f971:c3ee:46ee:9b71]:57974 -> [2620:2d:4000:1:0:0:0:2b]:80  out=0B/0p in=0B/0p  age=1ms reason=close()
+OPEN  TCP   pid=669(NetworkManager) cookie=115873  [fd00:0:0:0:f971:c3ee:46ee:9b71]:59086 -> [2620:2d:4000:1:0:0:0:98]:80
+CLOSE TCP   pid=669(NetworkManager) cookie=115872  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4000:1:0:0:0:97]:80  out=0B/0p in=0B/0p  age=2ms reason=close() incomplete=1
+OPEN  TCP   pid=669(NetworkManager) cookie=115874  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4002:1:0:0:0:196]:80 incomplete=1
+CLOSE TCP   pid=669(NetworkManager) cookie=115873  [fd00:0:0:0:f971:c3ee:46ee:9b71]:59086 -> [2620:2d:4000:1:0:0:0:98]:80  out=0B/0p in=0B/0p  age=2ms reason=close()
+OPEN  TCP   pid=669(NetworkManager) cookie=115875  [fd00:0:0:0:f971:c3ee:46ee:9b71]:43802 -> [2620:2d:4002:1:0:0:0:197]:80
+CLOSE TCP   pid=669(NetworkManager) cookie=115874  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4002:1:0:0:0:196]:80  out=0B/0p in=0B/0p  age=2ms reason=close() incomplete=1
+OPEN  TCP   pid=669(NetworkManager) cookie=115876  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2001:67c:1562:0:0:0:0:24]:80 incomplete=1
+CLOSE TCP   pid=669(NetworkManager) cookie=115875  [fd00:0:0:0:f971:c3ee:46ee:9b71]:43802 -> [2620:2d:4002:1:0:0:0:197]:80  out=0B/0p in=0B/0p  age=4ms reason=close()
+OPEN  TCP   pid=669(NetworkManager) cookie=115877  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4002:1:0:0:0:198]:80 incomplete=1
+CLOSE TCP   pid=669(NetworkManager) cookie=115876  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2001:67c:1562:0:0:0:0:24]:80  out=0B/0p in=0B/0p  age=5ms reason=close() incomplete=1
+OPEN  TCP   pid=669(NetworkManager) cookie=115878  [fd00:0:0:0:f971:c3ee:46ee:9b71]:44374 -> [2620:2d:4000:1:0:0:0:22]:80
+CLOSE TCP   pid=669(NetworkManager) cookie=115877  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4002:1:0:0:0:198]:80  out=0B/0p in=0B/0p  age=2ms reason=close() incomplete=1
+OPEN  TCP   pid=669(NetworkManager) cookie=115879  [fd00:0:0:0:f971:c3ee:46ee:9b71]:47324 -> [2620:2d:4000:1:0:0:0:96]:80
+CLOSE TCP   pid=669(NetworkManager) cookie=115878  [fd00:0:0:0:f971:c3ee:46ee:9b71]:44374 -> [2620:2d:4000:1:0:0:0:22]:80  out=0B/0p in=0B/0p  age=1ms reason=close()
+OPEN  TCP   pid=669(NetworkManager) cookie=115880  [fd00:0:0:0:f971:c3ee:46ee:9b71]:53166 -> [2620:2d:4000:1:0:0:0:2a]:80
+CLOSE TCP   pid=669(NetworkManager) cookie=115879  [fd00:0:0:0:f971:c3ee:46ee:9b71]:47324 -> [2620:2d:4000:1:0:0:0:96]:80  out=0B/0p in=0B/0p  age=1ms reason=close()
+OPEN  TCP   pid=669(NetworkManager) cookie=115881  [fd00:0:0:0:f971:c3ee:46ee:9b71]:60404 -> [2001:67c:1562:0:0:0:0:23]:80
+CLOSE TCP   pid=669(NetworkManager) cookie=115880  [fd00:0:0:0:f971:c3ee:46ee:9b71]:53166 -> [2620:2d:4000:1:0:0:0:2a]:80  out=0B/0p in=0B/0p  age=1ms reason=close()
+OPEN  TCP   pid=669(NetworkManager) cookie=115882  [fd00:0:0:0:f971:c3ee:46ee:9b71]:46790 -> [2620:2d:4000:1:0:0:0:23]:80
+CLOSE TCP   pid=669(NetworkManager) cookie=115881  [fd00:0:0:0:f971:c3ee:46ee:9b71]:60404 -> [2001:67c:1562:0:0:0:0:23]:80  out=0B/0p in=0B/0p  age=0s reason=close()
+CLOSE TCP   pid=669(NetworkManager) cookie=115882  [fd00:0:0:0:f971:c3ee:46ee:9b71]:46790 -> [2620:2d:4000:1:0:0:0:23]:80  out=0B/0p in=0B/0p  age=1ms reason=close()
+OPEN  ICMPv6 pid=669(NetworkManager) cookie=7103  * -> fe80:0:0:0:0:0:0:2
+CLOSE ICMPv6 pid=669(NetworkManager) cookie=7103  * -> fe80:0:0:0:0:0:0:2  out=0B/0p in=32B/1p  age=5.857s reason=idle
+OPEN  TCP   pid=4131(Socket Thread) cookie=109702  10.0.2.15:52056 -> 64.233.164.198:443
+CLOSE TCP   pid=4131(Socket Thread) cookie=109702  10.0.2.15:52056 -> 64.233.164.198:443  out=63B/2p in=0B/0p  age=2ms reason=close()
+OPEN  TCP   pid=4131(Socket Thread) cookie=112994  10.0.2.15:57710 -> 140.82.113.22:443
+OPEN  UDP   pid=4131(DNS Res~ver #25) cookie=112996  127.0.0.1:59005 -> 127.0.0.53:53
+OPEN  UDP   pid=4131(DNS Res~ver #23) cookie=114042  127.0.0.1:58216 -> 127.0.0.53:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:59005
+OPEN  UDP   pid=516(systemd-resolve) cookie=112997  10.0.2.15:40078 -> 10.0.2.3:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:58216
+OPEN  UDP   pid=516(systemd-resolve) cookie=112998  10.0.2.15:50582 -> 10.0.2.3:53
+CLOSE UDP   pid=516(systemd-resolve) cookie=112998  10.0.2.15:50582 -> 10.0.2.3:53  out=0B/0p in=142B/1p  age=15ms reason=close()
+CLOSE UDP   pid=516(systemd-resolve) cookie=112997  10.0.2.15:40078 -> 10.0.2.3:53  out=0B/0p in=103B/1p  age=47ms reason=close()
+CLOSE UDP   pid=4131(DNS Res~ver #23) cookie=114042  127.0.0.1:58216 -> 127.0.0.53:53  out=0B/0p in=310B/2p  age=57ms reason=close()
+CLOSE UDP   pid=4131(DNS Res~ver #25) cookie=112996  127.0.0.1:59005 -> 127.0.0.53:53  out=49B/1p in=163B/1p  age=62ms reason=close()
+OPEN  UDP   pid=4131(DNS Res~ver #28) cookie=114044  127.0.0.1:45839 -> 127.0.0.53:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:45839
+OPEN  UDP   pid=516(systemd-resolve) cookie=114046  10.0.2.15:49849 -> 10.0.2.3:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=114047  10.0.2.15:38060 -> 10.0.2.3:53
+CLOSE UDP   pid=516(systemd-resolve) cookie=114046  10.0.2.15:49849 -> 10.0.2.3:53  out=0B/0p in=199B/1p  age=3ms reason=close()
+CLOSE UDP   pid=516(systemd-resolve) cookie=114047  10.0.2.15:38060 -> 10.0.2.3:53  out=0B/0p in=211B/1p  age=6ms reason=close()
+CLOSE UDP   pid=4131(DNS Res~ver #28) cookie=114044  127.0.0.1:45839 -> 127.0.0.53:53  out=0B/0p in=254B/2p  age=20ms reason=close()
+OPEN  UDP   pid=4131(DNS Res~ver #28) cookie=114049  10.0.2.15:35179 -> 64.233.164.198:0 incomplete=1
+OPEN  UDP   pid=4131(DNS Res~ver #28) cookie=114051  [fd00:0:0:0:f971:c3ee:46ee:9b71]:35084 -> [2a00:1450:4010:c07:0:0:0:c6]:0 incomplete=1
+OPEN  UDP   pid=4131(Socket Thread) cookie=114045  *:43449 -> 64.233.164.198:443
+OPEN  UDP   pid=4131(DNS Res~ver #23) cookie=114052  127.0.0.1:56711 -> 127.0.0.53:53
+OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=113001  127.0.0.1:40848 -> 127.0.0.53:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:56711
+OPEN  UDP   pid=516(systemd-resolve) cookie=114053  10.0.2.15:48493 -> 10.0.2.3:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:40848
+OPEN  UDP   pid=516(systemd-resolve) cookie=114054  10.0.2.15:35660 -> 10.0.2.3:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=114055  10.0.2.15:37991 -> 10.0.2.3:53
+CLOSE UDP   pid=516(systemd-resolve) cookie=114053  10.0.2.15:48493 -> 10.0.2.3:53  out=0B/0p in=119B/1p  age=34ms reason=close()
+CLOSE UDP   pid=4131(DNS Res~ver #23) cookie=114052  127.0.0.1:56711 -> 127.0.0.53:53  out=40B/1p in=97B/1p  age=38ms reason=close()
+CLOSE UDP   pid=516(systemd-resolve) cookie=114054  10.0.2.15:35660 -> 10.0.2.3:53  out=0B/0p in=337B/1p  age=36ms reason=close()
+CLOSE UDP   pid=516(systemd-resolve) cookie=114055  10.0.2.15:37991 -> 10.0.2.3:53  out=0B/0p in=196B/1p  age=39ms reason=close()
+CLOSE UDP   pid=4131(DNS Res~ver #26) cookie=113001  127.0.0.1:40848 -> 127.0.0.53:53  out=0B/0p in=368B/2p  age=53ms reason=close()
+OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=113002  10.0.2.15:43119 -> 64.233.162.119:0 incomplete=1
+OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=114056  [fd00:0:0:0:f971:c3ee:46ee:9b71]:46025 -> [2a00:1450:4010:c01:0:0:0:77]:0 incomplete=1
+OPEN  UDP   pid=4131(Socket Thread) cookie=114057  *:42388 -> 74.125.205.119:443
+OPEN  UDP   pid=4131(DNS Res~ver #28) cookie=114087  127.0.0.1:50202 -> 127.0.0.53:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:50202
+OPEN  UDP   pid=516(systemd-resolve) cookie=114088  10.0.2.15:58999 -> 10.0.2.3:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=114090  10.0.2.15:57622 -> 10.0.2.3:53
+OPEN  UDP   pid=4131(DNS Res~ver #25) cookie=113003  127.0.0.1:44479 -> 127.0.0.53:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:44479
+OPEN  UDP   pid=516(systemd-resolve) cookie=114092  10.0.2.15:59954 -> 10.0.2.3:53
+CLOSE UDP   pid=516(systemd-resolve) cookie=114090  10.0.2.15:57622 -> 10.0.2.3:53  out=0B/0p in=95B/1p  age=46ms reason=close()
+CLOSE UDP   pid=516(systemd-resolve) cookie=114088  10.0.2.15:58999 -> 10.0.2.3:53  out=0B/0p in=83B/1p  age=57ms reason=close()
+CLOSE UDP   pid=516(systemd-resolve) cookie=114092  10.0.2.15:59954 -> 10.0.2.3:53  out=0B/0p in=128B/1p  age=48ms reason=close()
+CLOSE UDP   pid=4131(DNS Res~ver #28) cookie=114087  127.0.0.1:50202 -> 127.0.0.53:53  out=0B/0p in=140B/2p  age=67ms reason=close()
+CLOSE UDP   pid=4131(DNS Res~ver #25) cookie=113003  127.0.0.1:44479 -> 127.0.0.53:53  out=48B/1p in=98B/1p  age=62ms reason=close()
+OPEN  UDP   pid=4131(DNS Res~ver #28) cookie=114096  [fd00:0:0:0:f971:c3ee:46ee:9b71]:49703 -> [2a00:1450:4010:c02:0:0:0:54]:0 incomplete=1
+OPEN  UDP   pid=4131(DNS Res~ver #28) cookie=114096  *:58200 -> 74.125.205.84:0 incomplete=1
+OPEN  UDP   pid=4131(Socket Thread) cookie=116103  *:42705 -> 74.125.205.84:443
+OPEN  TCP   pid=4131(Socket Thread) cookie=116107  10.0.2.15:57496 -> 74.125.205.84:443
+OPEN  UDP   pid=4131(DNS Res~ver #23) cookie=114098  127.0.0.1:56141 -> 127.0.0.53:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:56141
+OPEN  UDP   pid=516(systemd-resolve) cookie=114099  10.0.2.15:48900 -> 10.0.2.3:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=114100  10.0.2.15:45456 -> 10.0.2.3:53
+CLOSE UDP   pid=516(systemd-resolve) cookie=114100  10.0.2.15:45456 -> 10.0.2.3:53  out=0B/0p in=211B/1p  age=45ms reason=close()
+CLOSE UDP   pid=516(systemd-resolve) cookie=114099  10.0.2.15:48900 -> 10.0.2.3:53  out=0B/0p in=223B/1p  age=50ms reason=close()
+CLOSE UDP   pid=4131(DNS Res~ver #23) cookie=114098  127.0.0.1:56141 -> 127.0.0.53:53  out=0B/0p in=294B/2p  age=51ms reason=close()
+OPEN  UDP   pid=4131(DNS Res~ver #23) cookie=114119  [fd00:0:0:0:f971:c3ee:46ee:9b71]:42808 -> [2a00:1450:4010:c02:0:0:0:69]:0 incomplete=1
+OPEN  UDP   pid=4131(DNS Res~ver #23) cookie=114119  *:47799 -> 108.177.14.103:0 incomplete=1
+OPEN  UDP   pid=4131(Socket Thread) cookie=114129  *:40849 -> 108.177.14.103:443
+OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=114211  127.0.0.1:39864 -> 127.0.0.53:53
+OPEN  UDP   pid=4131(DNS Res~ver #25) cookie=115059  127.0.0.1:56332 -> 127.0.0.53:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:39864
+OPEN  UDP   pid=516(systemd-resolve) cookie=114212  10.0.2.15:42361 -> 10.0.2.3:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=113025  10.0.2.15:50980 -> 10.0.2.3:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:56332
+OPEN  UDP   pid=516(systemd-resolve) cookie=113026  10.0.2.15:56658 -> 10.0.2.3:53
+CLOSE UDP   pid=516(systemd-resolve) cookie=113025  10.0.2.15:50980 -> 10.0.2.3:53  out=0B/0p in=276B/1p  age=62ms reason=close()
+CLOSE UDP   pid=516(systemd-resolve) cookie=114212  10.0.2.15:42361 -> 10.0.2.3:53  out=0B/0p in=228B/1p  age=66ms reason=close()
+CLOSE UDP   pid=516(systemd-resolve) cookie=113026  10.0.2.15:56658 -> 10.0.2.3:53  out=0B/0p in=108B/1p  age=60ms reason=close()
+CLOSE UDP   pid=4131(DNS Res~ver #25) cookie=115059  127.0.0.1:56332 -> 127.0.0.53:53  out=56B/1p in=81B/1p  age=71ms reason=close()
+CLOSE UDP   pid=4131(DNS Res~ver #26) cookie=114211  127.0.0.1:39864 -> 127.0.0.53:53  out=0B/0p in=288B/2p  age=75ms reason=close()
+OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=114213  [fd00:0:0:0:f971:c3ee:46ee:9b71]:55650 -> [2a00:1450:4010:c0f:0:0:0:9c]:0 incomplete=1
+OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=114213  *:56979 -> 108.177.14.155:0 incomplete=1
+OPEN  UDP   pid=4131(Socket Thread) cookie=113027  *:40619 -> 108.177.14.155:443
+OPEN  TCP   pid=4131(Socket Thread) cookie=113031  10.0.2.15:40066 -> 108.177.14.155:443
+OPEN  UDP   pid=4131(DNS Res~ver #23) cookie=114215  127.0.0.1:55604 -> 127.0.0.53:53
+OPEN  UDP   pid=4131(DNS Res~ver #28) cookie=114216  127.0.0.1:55250 -> 127.0.0.53:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:55604
+OPEN  UDP   pid=516(systemd-resolve) cookie=113034  10.0.2.15:48652 -> 10.0.2.3:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=113035  10.0.2.15:59926 -> 10.0.2.3:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:55250
+OPEN  UDP   pid=516(systemd-resolve) cookie=113036  10.0.2.15:42807 -> 10.0.2.3:53
+CLOSE UDP   pid=516(systemd-resolve) cookie=113034  10.0.2.15:48652 -> 10.0.2.3:53  out=0B/0p in=187B/1p  age=46ms reason=close()
+CLOSE UDP   pid=516(systemd-resolve) cookie=113035  10.0.2.15:59926 -> 10.0.2.3:53  out=0B/0p in=199B/1p  age=50ms reason=close()
+CLOSE UDP   pid=4131(DNS Res~ver #23) cookie=114215  127.0.0.1:55604 -> 127.0.0.53:53  out=0B/0p in=228B/2p  age=59ms reason=close()
+OPEN  UDP   pid=4131(DNS Res~ver #23) cookie=114217  10.0.2.15:49746 -> 173.194.18.9:0 incomplete=1
+OPEN  UDP   pid=4131(DNS Res~ver #23) cookie=114218  [fd00:0:0:0:f971:c3ee:46ee:9b71]:47650 -> [2a00:1450:4006:6:0:0:0:9]:0 incomplete=1
+CLOSE UDP   pid=516(systemd-resolve) cookie=113036  10.0.2.15:42807 -> 10.0.2.3:53  out=0B/0p in=193B/1p  age=42ms reason=close()
+OPEN  TCP   pid=4131(Socket Thread) cookie=113037  10.0.2.15:34096 -> 173.194.18.9:443
+CLOSE UDP   pid=4131(DNS Res~ver #28) cookie=114216  127.0.0.1:55250 -> 127.0.0.53:53  out=62B/1p in=114B/1p  age=68ms reason=close()
+OPEN  TCP   pid=4131(Socket Thread) cookie=113038  10.0.2.15:34102 -> 173.194.18.9:443
+OPEN  UDP   pid=4131(DNS Res~ver #25) cookie=114220  127.0.0.1:43951 -> 127.0.0.53:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:43951
+CLOSE TCP   pid=4131(Socket Thread) cookie=113037  10.0.2.15:34096 -> 173.194.18.9:443  out=0B/0p in=0B/0p  age=21ms reason=close()
+CLOSE TCP   pid=4131(Socket Thread) cookie=113038  10.0.2.15:34102 -> 173.194.18.9:443  out=0B/0p in=0B/0p  age=15ms reason=close()
+CLOSE UDP   pid=4131(DNS Res~ver #25) cookie=114220  127.0.0.1:43951 -> 127.0.0.53:53  out=0B/0p in=164B/2p  age=16ms reason=close()
+OPEN  UDP   pid=4131(DNS Res~ver #25) cookie=114221  10.0.2.15:40843 -> 173.194.18.9:0 incomplete=1
+OPEN  UDP   pid=4131(DNS Res~ver #25) cookie=114222  [fd00:0:0:0:f971:c3ee:46ee:9b71]:45024 -> [2a00:1450:4006:6:0:0:0:9]:0 incomplete=1
+OPEN  UDP   pid=4131(Socket Thread) cookie=113039  *:40498 -> 173.194.18.9:443
+OPEN  TCP   pid=4131(Socket Thread) cookie=113043  10.0.2.15:34104 -> 173.194.18.9:443
+OPEN  TCP   pid=4131(Socket Thread) cookie=113044  10.0.2.15:34120 -> 173.194.18.9:443
+CLOSE TCP   pid=4131(Socket Thread) cookie=112994  10.0.2.15:57710 -> 140.82.113.22:443  out=10514B/6p in=6383B/22p  age=5.798s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:56711  out=97B/1p in=40B/1p  age=5.435s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:45839  out=254B/2p in=88B/2p  age=5.694s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:58216  out=310B/2p in=98B/2p  age=5.772s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:40848  out=368B/2p in=80B/2p  age=5.433s reason=idle
+CLOSE UDP   pid=4131(Socket Thread) cookie=114057  *:42388 -> 74.125.205.119:443  out=5389B/7p in=0B/0p  age=5.335s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:59005  out=163B/1p in=49B/1p  age=5.775s reason=idle
+OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=114224  127.0.0.1:41041 -> 127.0.0.53:53
+OPEN  UDP   pid=4131(DNS Res~ver #23) cookie=114225  127.0.0.1:48775 -> 127.0.0.53:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:41041
+OPEN  UDP   pid=516(systemd-resolve) cookie=113045  10.0.2.15:50802 -> 10.0.2.3:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=113046  10.0.2.15:52250 -> 10.0.2.3:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:48775
+OPEN  UDP   pid=516(systemd-resolve) cookie=113047  10.0.2.15:44525 -> 10.0.2.3:53
+CLOSE UDP   pid=516(systemd-resolve) cookie=113045  10.0.2.15:50802 -> 10.0.2.3:53  out=0B/0p in=71B/1p  age=36ms reason=close()
+CLOSE UDP   pid=516(systemd-resolve) cookie=113046  10.0.2.15:52250 -> 10.0.2.3:53  out=0B/0p in=83B/1p  age=36ms reason=close()
+CLOSE UDP   pid=4131(DNS Res~ver #26) cookie=114224  127.0.0.1:41041 -> 127.0.0.53:53  out=0B/0p in=128B/2p  age=51ms reason=close()
+OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=114226  10.0.2.15:56396 -> 142.251.1.94:0 incomplete=1
+CLOSE UDP   pid=516(systemd-resolve) cookie=113047  10.0.2.15:44525 -> 10.0.2.3:53  out=0B/0p in=80B/1p  age=38ms reason=close()
+OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=114227  [fd00:0:0:0:f971:c3ee:46ee:9b71]:40506 -> [2a00:1450:4010:c1e:0:0:0:5e]:0 incomplete=1
+OPEN  TCP   pid=4131(Socket Thread) cookie=113048  10.0.2.15:57186 -> 142.251.1.94:443
+CLOSE UDP   pid=4131(DNS Res~ver #23) cookie=114225  127.0.0.1:48775 -> 127.0.0.53:53  out=42B/1p in=67B/1p  age=71ms reason=close()
+OPEN  UDP   pid=4131(Socket Thread) cookie=114228  *:45679 -> 142.251.1.94:443
+CLOSE TCP   pid=4131(Socket Thread) cookie=113048  10.0.2.15:57186 -> 142.251.1.94:443  out=2646B/7p in=6683B/20p  age=367ms reason=close()
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:50202  out=140B/2p in=96B/2p  age=5.439s reason=idle
+CLOSE TCP   pid=4131(Socket Thread) cookie=116107  10.0.2.15:57496 -> 74.125.205.84:443  out=2688B/5p in=1951B/12p  age=5.314s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:44479  out=98B/1p in=48B/1p  age=5.425s reason=idle
+CLOSE UDP   pid=4131(Socket Thread) cookie=116103  *:42705 -> 74.125.205.84:443  out=6834B/10p in=0B/0p  age=6.318s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:56141  out=294B/2p in=86B/2p  age=5.393s reason=idle
+OPEN  TCP   pid=4131(Socket Thread) cookie=102736  10.0.2.15:32798 -> 34.107.243.93:443
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:39864  out=288B/2p in=112B/2p  age=5.121s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:56332  out=81B/1p in=56B/1p  age=5.114s reason=idle
+CLOSE TCP   pid=4131(Socket Thread) cookie=113031  10.0.2.15:40066 -> 108.177.14.155:443  out=2099B/4p in=6117B/12p  age=5.938s reason=idle
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:47455
+OPEN  UDP   pid=4131(DNS Res~ver #28) cookie=114272  127.0.0.1:47455 -> 127.0.0.53:53
+OPEN  UDP   pid=4131(DNS Res~ver #25) cookie=114273  127.0.0.1:37203 -> 127.0.0.53:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=113064  10.0.2.15:48446 -> 10.0.2.3:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=113065  10.0.2.15:49822 -> 10.0.2.3:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:37203
+OPEN  UDP   pid=516(systemd-resolve) cookie=113066  10.0.2.15:58153 -> 10.0.2.3:53
+CLOSE TCP   pid=4131(Socket Thread) cookie=113044  10.0.2.15:34120 -> 173.194.18.9:443  out=2006B/3p in=4626B/6p  age=5.222s reason=close()
+CLOSE TCP   pid=4131(Socket Thread) cookie=113043  10.0.2.15:34104 -> 173.194.18.9:443  out=2006B/3p in=4626B/6p  age=5.234s reason=close()
+CLOSE UDP   pid=516(systemd-resolve) cookie=113065  10.0.2.15:49822 -> 10.0.2.3:53  out=0B/0p in=196B/1p  age=48ms reason=close()
+CLOSE UDP   pid=516(systemd-resolve) cookie=113064  10.0.2.15:48446 -> 10.0.2.3:53  out=0B/0p in=148B/1p  age=54ms reason=close()
+CLOSE UDP   pid=4131(DNS Res~ver #28) cookie=114272  127.0.0.1:47455 -> 127.0.0.53:53  out=0B/0p in=256B/2p  age=63ms reason=close()
+OPEN  UDP   pid=4131(DNS Res~ver #28) cookie=115408  [fd00:0:0:0:f971:c3ee:46ee:9b71]:52136 -> [2a00:1450:4010:c07:0:0:0:5d]:0 incomplete=1
+CLOSE UDP   pid=516(systemd-resolve) cookie=113066  10.0.2.15:58153 -> 10.0.2.3:53  out=0B/0p in=66B/1p  age=92ms reason=close()
+CLOSE UDP   pid=4131(DNS Res~ver #25) cookie=114273  127.0.0.1:37203 -> 127.0.0.53:53  out=40B/1p in=55B/1p  age=100ms reason=close()
+OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=114275  127.0.0.1:46905 -> 127.0.0.53:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:46905
+OPEN  UDP   pid=4131(DNS Res~ver #28) cookie=115408  *:40992 -> 64.233.164.93:0 incomplete=1
+CLOSE UDP   pid=4131(DNS Res~ver #26) cookie=114275  127.0.0.1:46905 -> 127.0.0.53:53  out=40B/1p in=104B/1p  age=6ms reason=close()
+OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=113067  10.0.2.15:43928 -> 64.233.164.136:0 incomplete=1
+OPEN  TCP   pid=4131(Socket Thread) cookie=115409  10.0.2.15:60648 -> 64.233.164.136:443
+OPEN  TCP   pid=4131(Socket Thread) cookie=115410  10.0.2.15:60660 -> 64.233.164.136:443
+CLOSE UDP   pid=4131(Socket Thread) cookie=113027  *:40619 -> 108.177.14.155:443  out=7082B/9p in=0B/0p  age=6.975s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:43951  out=164B/2p in=120B/2p  age=5.512s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:55250  out=114B/1p in=62B/1p  age=5.583s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:55604  out=228B/2p in=124B/2p  age=5.59s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:48775  out=67B/1p in=42B/1p  age=5.959s reason=idle
+CLOSE UDP   pid=4131(Socket Thread) cookie=113039  *:40498 -> 173.194.18.9:443  out=9755B/14p in=0B/0p  age=6.463s reason=idle
+CLOSE UDP   pid=4131(Socket Thread) cookie=114129  *:40849 -> 108.177.14.103:443  out=5734B/5p in=0B/0p  age=9.271s reason=idle
+CLOSE UDP   pid=4131(Socket Thread) cookie=114228  *:45679 -> 142.251.1.94:443  out=3996B/5p in=0B/0p  age=5.861s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:41041  out=128B/2p in=84B/2p  age=5.97s reason=idle
+CLOSE TCP   pid=4131(Socket Thread) cookie=102736  10.0.2.15:32798 -> 34.107.243.93:443  out=28B/1p in=24B/2p  age=5.935s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:47455  out=256B/2p in=80B/2p  age=5.245s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:37203  out=55B/1p in=40B/1p  age=5.241s reason=idle
+CLOSE UDP   pid=4131(Socket Thread) cookie=114045  *:43449 -> 64.233.164.198:443  out=21409B/197p in=0B/0p  age=15.666s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:46905  out=104B/1p in=40B/1p  age=5.135s reason=idle
+CLOSE TCP   pid=4131(Socket Thread) cookie=115410  10.0.2.15:60660 -> 64.233.164.136:443  out=3002B/6p in=4325B/20p  age=6.098s reason=idle
+CLOSE TCP   pid=4131(Socket Thread) cookie=115409  10.0.2.15:60648 -> 64.233.164.136:443  out=2680B/5p in=1951B/12p  age=6.106s reason=idle
+OPEN  UDP   pid=4131(DNS Res~ver #23) cookie=116637  127.0.0.1:35577 -> 127.0.0.53:53
+OPEN  UDP   pid=4131(DNS Res~ver #25) cookie=114362  127.0.0.1:53705 -> 127.0.0.53:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:35577
+OPEN  UDP   pid=516(systemd-resolve) cookie=114363  10.0.2.15:46785 -> 10.0.2.3:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:53705
+OPEN  UDP   pid=516(systemd-resolve) cookie=114364  10.0.2.15:50504 -> 10.0.2.3:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=114365  10.0.2.15:34690 -> 10.0.2.3:53
+CLOSE UDP   pid=516(systemd-resolve) cookie=114363  10.0.2.15:46785 -> 10.0.2.3:53  out=0B/0p in=136B/1p  age=47ms reason=close()
+CLOSE UDP   pid=4131(DNS Res~ver #23) cookie=116637  127.0.0.1:35577 -> 127.0.0.53:53  out=51B/1p in=111B/1p  age=52ms reason=close()
+CLOSE UDP   pid=516(systemd-resolve) cookie=114364  10.0.2.15:50504 -> 10.0.2.3:53  out=0B/0p in=127B/1p  age=47ms reason=close()
+CLOSE UDP   pid=516(systemd-resolve) cookie=114365  10.0.2.15:34690 -> 10.0.2.3:53  out=0B/0p in=151B/1p  age=46ms reason=close()
+CLOSE UDP   pid=4131(DNS Res~ver #25) cookie=114362  127.0.0.1:53705 -> 127.0.0.53:53  out=0B/0p in=190B/2p  age=59ms reason=close()
+OPEN  UDP   pid=4131(DNS Res~ver #25) cookie=114366  10.0.2.15:42783 -> 108.177.14.148:0 incomplete=1
+OPEN  UDP   pid=4131(DNS Res~ver #25) cookie=114367  [fd00:0:0:0:f971:c3ee:46ee:9b71]:54638 -> [2a00:1450:4010:c0f:0:0:0:95]:0 incomplete=1
+OPEN  TCP   pid=4131(Socket Thread) cookie=113133  10.0.2.15:38634 -> 108.177.14.148:443
+OPEN  UDP   pid=4131(Socket Thread) cookie=114045  *:43449 -> 64.233.164.198:443
+OPEN  UDP   pid=4131(Socket Thread) cookie=115470  *:55578 -> 108.177.14.148:443
+CLOSE TCP   pid=4131(Socket Thread) cookie=113133  10.0.2.15:38634 -> 108.177.14.148:443  out=2513B/8p in=6268B/14p  age=521ms reason=close()
+OPEN  TCP   pid=4131(Socket Thread) cookie=111390  10.0.2.15:54134 -> 151.101.65.91:443
+OPEN  TCP   pid=4131(Socket Thread) cookie=111377  10.0.2.15:54130 -> 151.101.65.91:443
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:53705  out=190B/2p in=102B/2p  age=5.876s reason=idle
+CLOSE UDP   pid=4131(Socket Thread) cookie=114045  *:43449 -> 64.233.164.198:443  out=1481B/5p in=0B/0p  age=5.762s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:35577  out=111B/1p in=51B/1p  age=5.878s reason=idle
+CLOSE UDP   pid=4131(Socket Thread) cookie=115470  *:55578 -> 108.177.14.148:443  out=5250B/6p in=0B/0p  age=5.4s reason=idle
+OPEN  TCP   pid=4131(Socket Thread) cookie=90891  10.0.2.15:51126 -> 140.82.113.25:443
+OPEN  UDP   pid=4131(DNS Res~ver #28) cookie=115489  127.0.0.1:41964 -> 127.0.0.53:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:41964
+OPEN  UDP   pid=516(systemd-resolve) cookie=114478  10.0.2.15:48199 -> 10.0.2.3:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=114479  10.0.2.15:48414 -> 10.0.2.3:53
+CLOSE UDP   pid=516(systemd-resolve) cookie=114478  10.0.2.15:48199 -> 10.0.2.3:53  out=0B/0p in=121B/1p  age=45ms reason=close()
+CLOSE UDP   pid=516(systemd-resolve) cookie=114479  10.0.2.15:48414 -> 10.0.2.3:53  out=0B/0p in=174B/1p  age=45ms reason=close()
+OPEN  UDP   pid=516(systemd-resolve) cookie=114480  10.0.2.15:54325 -> 10.0.2.3:53
+CLOSE UDP   pid=516(systemd-resolve) cookie=114480  10.0.2.15:54325 -> 10.0.2.3:53  out=0B/0p in=128B/1p  age=32ms reason=close()
+CLOSE UDP   pid=4131(DNS Res~ver #28) cookie=115489  127.0.0.1:41964 -> 127.0.0.53:53  out=0B/0p in=209B/2p  age=82ms reason=close()
+OPEN  UDP   pid=4131(DNS Res~ver #23) cookie=116680  127.0.0.1:45651 -> 127.0.0.53:53
+OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=113287  127.0.0.1:43610 -> 127.0.0.53:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:45651
+OPEN  UDP   pid=516(systemd-resolve) cookie=114481  10.0.2.15:40170 -> 10.0.2.3:53
+OPEN  UDP   pid=4131(DNS Res~ver #25) cookie=115491  127.0.0.1:37648 -> 127.0.0.53:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:43610
+OPEN  UDP   pid=516(systemd-resolve) cookie=114482  10.0.2.15:37441 -> 10.0.2.3:53
+OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:37648
+CLOSE UDP   pid=4131(DNS Res~ver #25) cookie=115491  127.0.0.1:37648 -> 127.0.0.53:53  out=45B/1p in=145B/1p  age=3ms reason=close()
+CLOSE UDP   pid=516(systemd-resolve) cookie=114482  10.0.2.15:37441 -> 10.0.2.3:53  out=0B/0p in=128B/1p  age=2ms reason=close()
+CLOSE UDP   pid=4131(DNS Res~ver #26) cookie=113287  127.0.0.1:43610 -> 127.0.0.53:53  out=0B/0p in=274B/2p  age=12ms reason=close()
+OPEN  TCP   pid=4131(Socket Thread) cookie=113288  10.0.2.15:42440 -> 140.82.114.26:443
+CLOSE UDP   pid=516(systemd-resolve) cookie=114481  10.0.2.15:40170 -> 10.0.2.3:53  out=0B/0p in=141B/1p  age=33ms reason=close()
+CLOSE UDP   pid=4131(DNS Res~ver #23) cookie=116680  127.0.0.1:45651 -> 127.0.0.53:53  out=45B/1p in=213B/1p  age=36ms reason=close()
+CLOSE TCP   pid=4131(Socket Thread) cookie=90891  10.0.2.15:51126 -> 140.82.113.25:443  out=69B/2p in=41B/2p  age=1.02s reason=close()
+CLOSE TCP   pid=4131(Socket Thread) cookie=111377  10.0.2.15:54130 -> 151.101.65.91:443  out=39B/1p in=39B/2p  age=5.796s reason=idle
+CLOSE TCP   pid=4131(Socket Thread) cookie=111390  10.0.2.15:54134 -> 151.101.65.91:443  out=39B/1p in=39B/2p  age=5.797s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:45651  out=213B/1p in=45B/1p  age=5.248s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:43610  out=274B/2p in=90B/2p  age=5.247s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:37648  out=145B/1p in=45B/1p  age=5.246s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:41964  out=209B/2p in=90B/2p  age=5.334s reason=idle
+CLOSE TCP   pid=4131(Socket Thread) cookie=113288  10.0.2.15:42440 -> 140.82.114.26:443  out=3653B/4p in=3896B/20p  age=6.234s reason=idle
+^Z
