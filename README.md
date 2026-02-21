@@ -663,47 +663,15 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-func flowReadyToOpen(f *Flow) bool {
-	switch f.Key.Proto {
-	case IPPROTO_TCP:
-		// режем именно твой кейс: TCP без локального/удалённого порта
-		return !isAllZero16(f.Remote) && f.Lport != 0 && f.Rport != 0
-
-	case IPPROTO_UDP:
-		// UDP печатаем когда есть remote и (порт известен ИЛИ уже были байты)
-		if isAllZero16(f.Remote) || f.Lport == 0 {
-			return false
-		}
-		return f.Rport != 0 || f.InBytes > 0 || f.OutBytes > 0
-
-	case IPPROTO_ICMP, IPPROTO_ICMPV6:
-		return !isAllZero16(f.Remote)
-
-	default:
-		return false
-	}
-}
-
-
-
-
-func flowReadyToOpen(f *Flow) bool {
-	switch f.Key.Proto {
-	case IPPROTO_TCP:
-		// режем именно твой кейс: TCP без локального/удалённого порта
-		return !isAllZero16(f.Remote) && f.Lport != 0 && f.Rport != 0
-
-	case IPPROTO_UDP:
-		// UDP печатаем когда есть remote и (порт известен ИЛИ уже были байты)
-		if isAllZero16(f.Remote) || f.Lport == 0 {
-			return false
-		}
-		return f.Rport != 0 || f.InBytes > 0 || f.OutBytes > 0
-
-	case IPPROTO_ICMP, IPPROTO_ICMPV6:
-		return !isAllZero16(f.Remote)
-
-	default:
-		return false
-	}
-}
+CLOSE UDP   pid=4131(DNS Res~ver #25) cookie=128431  127.0.0.1:51695 -> 127.0.0.53:53  out=0B/0p in=190B/2p  age=90ms reason=close()
+OPEN  UDP   pid=4131(DNS Res~ver #25) cookie=128435  10.0.2.15:48919 -> 108.177.14.149:0 incomplete=1
+OPEN  UDP   pid=4131(DNS Res~ver #25) cookie=128436  [fd00:0:0:0:f971:c3ee:46ee:9b71]:34674 -> [2a00:1450:4010:c0f:0:0:0:94]:0 incomplete=1
+OPEN  UDP   pid=4131(Socket Thread) cookie=131163  *:49978 -> 108.177.14.148:443
+OPEN  TCP   pid=4131(Socket Thread) cookie=131167  10.0.2.15:38714 -> 108.177.14.148:443
+CLOSE UDP   pid=4131(Socket Thread) cookie=131114  *:43967 -> 142.251.1.94:443  out=5040B/3p in=0B/0p  age=5.45s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:38326  out=58B/1p in=42B/1p  age=5.581s reason=idle
+CLOSE TCP   pid=4131(Socket Thread) cookie=129070  10.0.2.15:54578 -> 64.233.164.198:443  out=8121B/23p in=216082B/500p  age=12.63s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:44331  out=128B/2p in=84B/2p  age=5.591s reason=idle
+CLOSE UDP   pid=4131(Socket Thread) cookie=126936  *:50010 -> 74.125.205.103:443  out=5696B/6p in=0B/0p  age=10.463s reason=idle
+OPEN  UDP   pid=2786(Chrome_ChildIOT) cookie=129323  [fd00:0:0:0:f971:c3ee:46ee:9b71]:48433 -> [2001:4860:4860:0:0:0:0:8888]:443
+OPEN  UDP   pid=2786(Chrome_ChildIOT) cookie=129324  [fd00:0:0:0:f971:c3ee:46ee:9b71]:54370 -> [2001:4860:4860:0:0:0:0:8888]:443
