@@ -663,28 +663,47 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-OPEN  TCP   pid=669(NetworkManager) cookie=126380  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2001:67c:1562:0:0:0:0:24]:80 incomplete=1
-OPEN  TCP   pid=669(NetworkManager) cookie=126381  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4002:1:0:0:0:198]:80 incomplete=1
-CLOSE TCP   pid=669(NetworkManager) cookie=126380  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2001:67c:1562:0:0:0:0:24]:80  out=0B/0p in=0B/0p  age=1ms reason=close() incomplete=1
-OPEN  TCP   pid=669(NetworkManager) cookie=127069  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2001:67c:1562:0:0:0:0:23]:80 incomplete=1
-CLOSE TCP   pid=669(NetworkManager) cookie=126381  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4002:1:0:0:0:198]:80  out=0B/0p in=0B/0p  age=1ms reason=close() incomplete=1
-OPEN  TCP   pid=669(NetworkManager) cookie=127070  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4000:1:0:0:0:98]:80 incomplete=1
-CLOSE TCP   pid=669(NetworkManager) cookie=127069  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2001:67c:1562:0:0:0:0:23]:80  out=0B/0p in=0B/0p  age=2ms reason=close() incomplete=1
-OPEN  TCP   pid=669(NetworkManager) cookie=127071  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4002:1:0:0:0:197]:80 incomplete=1
-CLOSE TCP   pid=669(NetworkManager) cookie=127070  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4000:1:0:0:0:98]:80  out=0B/0p in=0B/0p  age=2ms reason=close() incomplete=1
-OPEN  TCP   pid=669(NetworkManager) cookie=127072  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4000:1:0:0:0:97]:80 incomplete=1
-CLOSE TCP   pid=669(NetworkManager) cookie=127071  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4002:1:0:0:0:197]:80  out=0B/0p in=0B/0p  age=2ms reason=close() incomplete=1
-OPEN  TCP   pid=669(NetworkManager) cookie=127073  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4000:1:0:0:0:2a]:80 incomplete=1
-CLOSE TCP   pid=669(NetworkManager) cookie=127072  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4000:1:0:0:0:97]:80  out=0B/0p in=0B/0p  age=2ms reason=close() incomplete=1
-OPEN  TCP   pid=669(NetworkManager) cookie=127074  [fd00:0:0:0:f971:c3ee:46ee:9b71]:48214 -> [2620:2d:4000:1:0:0:0:96]:80
-CLOSE TCP   pid=669(NetworkManager) cookie=127073  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4000:1:0:0:0:2a]:80  out=0B/0p in=0B/0p  age=1ms reason=close() incomplete=1
-OPEN  TCP   pid=669(NetworkManager) cookie=127075  [fd00:0:0:0:f971:c3ee:46ee:9b71]:52256 -> [2620:2d:4000:1:0:0:0:23]:80
-CLOSE TCP   pid=669(NetworkManager) cookie=127074  [fd00:0:0:0:f971:c3ee:46ee:9b71]:48214 -> [2620:2d:4000:1:0:0:0:96]:80  out=0B/0p in=0B/0p  age=1ms reason=close()
-OPEN  TCP   pid=669(NetworkManager) cookie=127076  [fd00:0:0:0:f971:c3ee:46ee:9b71]:40702 -> [2620:2d:4002:1:0:0:0:196]:80
-CLOSE TCP   pid=669(NetworkManager) cookie=127075  [fd00:0:0:0:f971:c3ee:46ee:9b71]:52256 -> [2620:2d:4000:1:0:0:0:23]:80  out=0B/0p in=0B/0p  age=1ms reason=close()
-OPEN  TCP   pid=669(NetworkManager) cookie=127077  [fd00:0:0:0:f971:c3ee:46ee:9b71]:33694 -> [2620:2d:4000:1:0:0:0:22]:80
-CLOSE TCP   pid=669(NetworkManager) cookie=127076  [fd00:0:0:0:f971:c3ee:46ee:9b71]:40702 -> [2620:2d:4002:1:0:0:0:196]:80  out=0B/0p in=0B/0p  age=2ms reason=close()
-OPEN  TCP   pid=669(NetworkManager) cookie=127078  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4000:1:0:0:0:2b]:80 incomplete=1
-CLOSE TCP   pid=669(NetworkManager) cookie=127077  [fd00:0:0:0:f971:c3ee:46ee:9b71]:33694 -> [2620:2d:4000:1:0:0:0:22]:80  out=0B/0p in=0B/0p  age=2ms reason=close()
-CLOSE TCP   pid=669(NetworkManager) cookie=127078  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4000:1:0:0:0:2b]:80  out=0B/0p in=0B/0p  age=1ms reason=close() incomplete=1
-OPEN  ICMPv6 pid=669(NetworkManager) cookie=7103  * -> fe80:0:0:0:0:0:0:2
+func flowReadyToOpen(f *Flow) bool {
+	switch f.Key.Proto {
+	case IPPROTO_TCP:
+		// режем именно твой кейс: TCP без локального/удалённого порта
+		return !isAllZero16(f.Remote) && f.Lport != 0 && f.Rport != 0
+
+	case IPPROTO_UDP:
+		// UDP печатаем когда есть remote и (порт известен ИЛИ уже были байты)
+		if isAllZero16(f.Remote) || f.Lport == 0 {
+			return false
+		}
+		return f.Rport != 0 || f.InBytes > 0 || f.OutBytes > 0
+
+	case IPPROTO_ICMP, IPPROTO_ICMPV6:
+		return !isAllZero16(f.Remote)
+
+	default:
+		return false
+	}
+}
+
+
+
+
+func flowReadyToOpen(f *Flow) bool {
+	switch f.Key.Proto {
+	case IPPROTO_TCP:
+		// режем именно твой кейс: TCP без локального/удалённого порта
+		return !isAllZero16(f.Remote) && f.Lport != 0 && f.Rport != 0
+
+	case IPPROTO_UDP:
+		// UDP печатаем когда есть remote и (порт известен ИЛИ уже были байты)
+		if isAllZero16(f.Remote) || f.Lport == 0 {
+			return false
+		}
+		return f.Rport != 0 || f.InBytes > 0 || f.OutBytes > 0
+
+	case IPPROTO_ICMP, IPPROTO_ICMPV6:
+		return !isAllZero16(f.Remote)
+
+	default:
+		return false
+	}
+}
