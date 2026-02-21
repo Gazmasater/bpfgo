@@ -663,10 +663,35 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
-[sudo] password for lev: 
-2026/02/22 01:37:11 dotenv loaded: .env
-2026/02/22 01:37:11.079090 hostsPrefill: added=7 from /etc/hosts
-2026/02/22 01:37:11.079113 cfg: resolve=true workers=4 q=4096 ttl=30m0s negTTL=5m0s timeout=2s hostState=true hostsPrefill=true hostsFile=/etc/hosts sweepEach=500 pokeEach=256
-2026/02/22 01:37:11.522797 pprof on :6060
-2026/02/22 01:37:11.627705 perf.NewReader: failed to create perf ring for CPU 3: can't mmap: cannot allocate memory
+OPEN  TCP   pid=3702(Socket Thread) cookie=275906  10.0.2.15:56518 -> 140.82.112.25:443 host_pending=1
+OPEN  UDP   pid=506(systemd-resolve) cookie=1019  127.0.0.53:53 -> 127.0.0.1:60159 host_miss=1
+OPEN  UDP   pid=506(systemd-resolve) cookie=277802  10.0.2.15:35740 -> 10.0.2.3:53 host_pending=1
+OPEN  UDP   pid=506(systemd-resolve) cookie=1019  127.0.0.53:53 -> 127.0.0.1:53191 host_miss=1
+OPEN  UDP   pid=506(systemd-resolve) cookie=277804  10.0.2.15:48569 -> 10.0.2.3:53 host_pending=1
+CLOSE UDP   pid=506(systemd-resolve) cookie=277802  10.0.2.15:35740 -> 10.0.2.3:53  out=55B/1p in=126B/1p  age=48ms reason=close() host_pending=1
+CLOSE UDP   pid=506(systemd-resolve) cookie=277804  10.0.2.15:48569 -> 10.0.2.3:53  out=89B/2p in=89B/2p  age=76ms reason=close() host_pending=1
+CLOSE UDP   pid=506(systemd-resolve) cookie=1019  127.0.0.53:53 -> 127.0.0.1:60159  out=100B/1p in=55B/1p  age=5.609s reason=idle host_miss=1
+CLOSE UDP   pid=506(systemd-resolve) cookie=1019  127.0.0.53:53 -> 127.0.0.1:53191  out=50B/1p in=50B/1p  age=5.587s reason=idle host_miss=1
+CLOSE TCP   pid=3702(Socket Thread) cookie=275906  10.0.2.15:56518 -> 140.82.112.25:443  out=29B/1p in=25B/2p  age=5.623s reason=idle host=lb-140-82-112-25-iad.github.com
+OPEN  TCP   pid=3702(Socket Thread) cookie=277413  10.0.2.15:53620 -> 34.107.243.93:443 host_pending=1
+OPEN  UDP   pid=506(systemd-resolve) cookie=1019  127.0.0.53:53 -> 127.0.0.1:35682 host_miss=1
+OPEN  UDP   pid=506(systemd-resolve) cookie=279681  10.0.2.15:33876 -> 10.0.2.3:53 host_neg=1
+CLOSE UDP   pid=506(systemd-resolve) cookie=279681  10.0.2.15:33876 -> 10.0.2.3:53  out=55B/1p in=133B/1p  age=39ms reason=close() host_neg=1
+OPEN  UDP   pid=158307(send_udp) cookie=278000  127.0.0.1:57449 -> 127.0.0.1:9999 host_miss=1
+CLOSE UDP   pid=158307(send_udp) cookie=278000  127.0.0.1:57449 -> 127.0.0.1:9999  out=5B/1p in=0B/0p  age=8ms reason=close() host_miss=1
+OPEN  TCP   pid=3702(Socket Thread) cookie=276356  10.0.2.15:47466 -> 151.101.65.91:443 host_pending=1
+OPEN  UDP   pid=506(systemd-resolve) cookie=1019  127.0.0.53:53 -> 127.0.0.1:37388 host_miss=1
+OPEN  UDP   pid=506(systemd-resolve) cookie=279742  10.0.2.15:34112 -> 10.0.2.3:53 host_neg=1
+CLOSE UDP   pid=506(systemd-resolve) cookie=279742  10.0.2.15:34112 -> 10.0.2.3:53  out=99B/2p in=278B/2p  age=32ms reason=close() host_neg=1
+CLOSE UDP   pid=506(systemd-resolve) cookie=1019  127.0.0.53:53 -> 127.0.0.1:35682  out=107B/1p in=55B/1p  age=5.449s reason=idle host_miss=1
+CLOSE TCP   pid=3702(Socket Thread) cookie=277413  10.0.2.15:53620 -> 34.107.243.93:443  out=39B/1p in=39B/2p  age=5.458s reason=idle host=93.243.107.34.bc.googleusercontent.com
+CLOSE TCP   pid=3702(Socket Thread) cookie=276356  10.0.2.15:47466 -> 151.101.65.91:443  out=46B/1p in=46B/2p  age=5.468s reason=idle host_neg=1
+CLOSE UDP   pid=506(systemd-resolve) cookie=1019  127.0.0.53:53 -> 127.0.0.1:37388  out=115B/1p in=55B/1p  age=5.461s reason=idle host_miss=1
+OPEN  TCP   pid=3702(Socket Thread) cookie=276776  10.0.2.15:44262 -> 185.199.111.133:443 host_pending=1
+OPEN  TCP   pid=3702(Socket Thread) cookie=277402  10.0.2.15:39162 -> 185.199.110.154:443 host_pending=1
+OPEN  UDP   pid=506(systemd-resolve) cookie=1019  127.0.0.53:53 -> 127.0.0.1:36082 host_miss=1
+CLOSE TCP   pid=3702(Socket Thread) cookie=276776  10.0.2.15:44262 -> 185.199.111.133:443  out=63B/2p in=0B/0p  age=17ms reason=close() host_pending=1
+OPEN  UDP   pid=506(systemd-resolve) cookie=279114  10.0.2.15:32862 -> 10.0.2.3:53 host_neg=1
+OPEN  UDP   pid=506(systemd-resolve) cookie=1019  127.0.0.53:53 -> 127.0.0.1:50007 host_miss=1
+CLOSE TCP   pid=3702(Socket Thread) cookie=277402  10.0.2.15:39162 -> 185.199.110.154:443  out=63B/2p in=0B/0p  age=15ms reason=close() host_pending=1
+OPEN  UDP   pid=506(systemd-resolve) cookie=278157  10.0.2.15:50750 -> 10.0.2.3:53 host_neg=1
