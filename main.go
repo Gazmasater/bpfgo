@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -245,6 +247,139 @@ func dstScopeFromEvent(ev bpfTraceInfo) uint32 {
 	return 0
 }
 
+// ===== .env loader (no deps) + env->flags =====
+
+func getenv(k, def string) string {
+	if v, ok := os.LookupEnv(k); ok {
+		return v
+	}
+	return def
+}
+
+func fileExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && !st.IsDir()
+}
+
+func loadDotEnvFile(path string, override bool) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return loadDotEnvReader(f, override)
+}
+
+func loadDotEnvReader(r io.Reader, override bool) error {
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		// remove inline comment: key=val # comment
+		if i := strings.Index(line, " #"); i >= 0 {
+			line = strings.TrimSpace(line[:i])
+		}
+		// allow "export KEY=VAL"
+		if strings.HasPrefix(line, "export ") {
+			line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		}
+		i := strings.IndexByte(line, '=')
+		if i <= 0 {
+			continue
+		}
+		key := strings.TrimSpace(line[:i])
+		val := strings.TrimSpace(line[i+1:])
+
+		// strip quotes
+		if len(val) >= 2 {
+			if (val[0] == '"' && val[len(val)-1] == '"') || (val[0] == '\'' && val[len(val)-1] == '\'') {
+				val = val[1 : len(val)-1]
+			}
+		}
+
+		if key == "" {
+			continue
+		}
+		if !override {
+			if _, exists := os.LookupEnv(key); exists {
+				continue
+			}
+		}
+		_ = os.Setenv(key, val)
+	}
+	return sc.Err()
+}
+
+// load .env from:
+// 1) BPFGO_DOTENV (if set)
+// 2) ./ .env
+// 3) рядом с бинарём
+func loadDotEnvAuto() (string, error) {
+	if p, ok := os.LookupEnv("BPFGO_DOTENV"); ok && strings.TrimSpace(p) != "" {
+		p = strings.TrimSpace(p)
+		if fileExists(p) {
+			return p, loadDotEnvFile(p, false)
+		}
+		return p, fmt.Errorf("BPFGO_DOTENV set but file not found: %s", p)
+	}
+
+	if fileExists(".env") {
+		return ".env", loadDotEnvFile(".env", false)
+	}
+
+	if exe, err := os.Executable(); err == nil {
+		dir := filepath.Dir(exe)
+		p := filepath.Join(dir, ".env")
+		if fileExists(p) {
+			return p, loadDotEnvFile(p, false)
+		}
+	}
+
+	return "", nil
+}
+
+// apply env vars to flags BEFORE flag.Parse()
+// CLI args still override after Parse.
+func applyEnvToFlags() {
+	set := func(flagName, envName string) {
+		if v, ok := os.LookupEnv(envName); ok && strings.TrimSpace(v) != "" {
+			_ = flag.Set(flagName, strings.TrimSpace(v))
+		}
+	}
+
+	// base
+	set("perfMB", "BPFGO_PERF_MB")
+	set("pprof", "BPFGO_PPROF")
+	set("pprofAddr", "BPFGO_PPROF_ADDR")
+
+	set("ttl", "BPFGO_TTL")
+	set("print", "BPFGO_SWEEP")
+
+	set("pid", "BPFGO_ONLY_PID")
+	set("comm", "BPFGO_ONLY_COMM")
+
+	set("rw", "BPFGO_RW")
+	set("mmsg", "BPFGO_MMSG")
+
+	// resolve
+	set("resolve", "BPFGO_RESOLVE")
+	set("resolveTTL", "BPFGO_RESOLVE_TTL")
+	set("resolveNegTTL", "BPFGO_RESOLVE_NEG_TTL")
+	set("resolveWorkers", "BPFGO_RESOLVE_WORKERS")
+	set("resolveTimeout", "BPFGO_RESOLVE_TIMEOUT")
+	set("resolveQ", "BPFGO_RESOLVE_Q")
+
+	// known names prefill
+	set("hostsPrefill", "BPFGO_HOSTS_PREFILL")
+	set("hostsFile", "BPFGO_HOSTS_FILE")
+	set("hostsTTL", "BPFGO_HOSTS_TTL")
+
+	// sweep cache
+	set("resolveSweepEach", "BPFGO_RESOLVE_SWEEP_EACH")
+}
+
 /* ===== FLOW ===== */
 
 type FlowKey struct {
@@ -472,7 +607,19 @@ func printClose(f *Flow, reason string) {
 }
 
 func main() {
+	// 1) читаем .env (если есть)
+	if p, err := loadDotEnvAuto(); err != nil {
+		log.Printf("dotenv: %v", err)
+	} else if p != "" {
+		log.Printf("dotenv loaded: %s", p)
+	}
+
+	// 2) применяем env к флагам (как дефолты)
+	applyEnvToFlags()
+
+	// 3) CLI всё равно имеет приоритет
 	flag.Parse()
+
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
 	if err := rlimit.RemoveMemlock(); err != nil {
