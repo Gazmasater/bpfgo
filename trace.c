@@ -102,6 +102,10 @@ struct trace_info {
     __u8  src_ip6[16];
     __u8  dst_ip6[16];
 
+    // ONLY for ICMPv6 link-local correctness (fe80::/10 needs ifindex scope)
+    __u32 src_scope; // sin6_scope_id if known
+    __u32 dst_scope; // sin6_scope_id if known
+
     char  comm[32];
 };
 
@@ -481,14 +485,18 @@ static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
         struct sockaddr_in6 sa6 = {};
         if (bpf_probe_read_user(&sa6, sizeof(sa6), uaddr) < 0)
             return -1;
-        __u16 port = bpf_ntohs(sa6.sin6_port);
+
+        __u16 port  = bpf_ntohs(sa6.sin6_port);
+        __u32 scope = sa6.sin6_scope_id;
 
         if (fill_dst) {
             __builtin_memcpy(info->dst_ip6, &sa6.sin6_addr, 16);
-            if (port) info->dport = port;
+            if (port)  info->dport = port;
+            if (scope) info->dst_scope = scope;
         } else {
             __builtin_memcpy(info->src_ip6, &sa6.sin6_addr, 16);
-            if (port) info->sport = port;
+            if (port)  info->sport = port;
+            if (scope) info->src_scope = scope;
         }
         return 0;
     }
@@ -749,7 +757,6 @@ int trace_connect_exit(struct trace_event_raw_sys_exit *ctx)
         (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 1);
 
     loopback_fallback(&info, 1);
-
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
 cleanup:
@@ -825,7 +832,6 @@ static __always_inline int accept_exit_common(struct trace_event_raw_sys_exit *c
     }
 
     loopback_fallback(&info, 0);
-
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
 cleanup:
@@ -911,7 +917,6 @@ int trace_bind_exit(struct trace_event_raw_sys_exit *ctx)
         (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 0);
 
     loopback_fallback(&info, 1);
-
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
 cleanup:
@@ -972,7 +977,6 @@ int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx)
         (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 1);
 
     loopback_fallback(&info, 1);
-
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
 cleanup:
@@ -1047,7 +1051,6 @@ int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx)
     }
 
     loopback_fallback(&info, 0);
-
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
 cleanup:
@@ -1111,7 +1114,6 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
     }
 
     loopback_fallback(&info, 1);
-
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
 cleanup:
@@ -1181,7 +1183,6 @@ int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx)
     }
 
     loopback_fallback(&info, 0);
-
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
 cleanup:
@@ -1245,7 +1246,7 @@ int trace_sendmmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
         goto cleanup;
 
-    // prefer explicit dst from first mmsghdr (if present)
+    // prefer explicit dst from first mmsghdr (if present) + scope_id
     struct user_mmsghdr64 m0 = {};
     if (read_mmsg0(pv->vec, &m0) == 0) {
         if (m0.msg_hdr.msg_name && m0.msg_hdr.msg_namelen >= sizeof(__u16)) {
@@ -1320,7 +1321,7 @@ int trace_recvmmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
         goto cleanup;
 
-    // peer addr from first mmsghdr (if kernel filled it)
+    // peer addr from first mmsghdr (if kernel filled it) + scope_id
     struct user_mmsghdr64 m0 = {};
     if (read_mmsg0(pv->vec, &m0) == 0) {
         if (m0.msg_hdr.msg_name && m0.msg_hdr.msg_namelen >= sizeof(__u16)) {
@@ -1484,3 +1485,4 @@ int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
 
     return 0;
 }
+

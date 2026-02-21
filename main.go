@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -143,18 +144,56 @@ func fmtIPv6Full(b [16]byte) string {
 	)
 }
 
-func fmtEndpoint(family uint16, ip [16]byte, port uint16, proto uint8) string {
+/* ===== scope only for ICMPv6 link-local ===== */
+
+func isIPv6LinkLocal(ip [16]byte) bool {
+	return ip[0] == 0xfe && (ip[1]&0xc0) == 0x80 // fe80::/10
+}
+
+var ifNameCache = map[uint32]string{}
+
+func ifName(idx uint32) string {
+	if idx == 0 {
+		return ""
+	}
+	if s, ok := ifNameCache[idx]; ok {
+		return s
+	}
+	ifi, err := net.InterfaceByIndex(int(idx))
+	if err == nil && ifi != nil && ifi.Name != "" {
+		ifNameCache[idx] = ifi.Name
+		return ifi.Name
+	}
+	s := fmt.Sprintf("%d", idx)
+	ifNameCache[idx] = s
+	return s
+}
+
+func fmtIPv6WithScope(ip [16]byte, scope uint32) string {
+	s := fmtIPv6Full(ip)
+	if isIPv6LinkLocal(ip) && scope != 0 {
+		return s + "%" + ifName(scope)
+	}
+	return s
+}
+
+func fmtEndpoint(family uint16, ip [16]byte, scope uint32, port uint16, proto uint8) string {
 	isICMP := proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6
 	if isICMP {
 		if isAllZero16(ip) {
 			return "*"
 		}
 		if family == AF_INET6 {
+			// scope печатаем ТОЛЬКО для ICMPv6
+			if proto == IPPROTO_ICMPV6 {
+				return fmtIPv6WithScope(ip, scope)
+			}
 			return fmtIPv6Full(ip)
 		}
 		return fmtIPv4FromKey(ip)
 	}
 
+	// UDP/TCP: scope игнорим
 	if isAllZero16(ip) {
 		return fmt.Sprintf("*:%d", port)
 	}
@@ -191,6 +230,9 @@ type FlowKey struct {
 	PeerMode uint8 // 0=socket-only, 1=per-peer (UDP/ICMP when enough info)
 	Rport    uint16
 	Remote   [16]byte
+
+	// scope only for ICMPv6 (link-local disambiguation + stable)
+	RemoteScope uint32
 }
 
 type Flow struct {
@@ -202,6 +244,10 @@ type Flow struct {
 	Remote [16]byte
 	Rport  uint16
 
+	// scope only for ICMPv6 printing (and link-local correctness)
+	LocalScope  uint32
+	RemoteScope uint32
+
 	FirstSeen time.Time
 	LastSeen  time.Time
 
@@ -211,8 +257,7 @@ type Flow struct {
 	OutPkts  uint64
 
 	OpenedPrinted bool
-
-	GenStart uint64 // loss generation at flow creation
+	GenStart      uint64 // loss generation at flow creation
 }
 
 func makeKey(ev bpfTraceInfo) FlowKey {
@@ -242,14 +287,20 @@ func makeKey(ev bpfTraceInfo) FlowKey {
 
 	case IPPROTO_ICMP, IPPROTO_ICMPV6:
 		var remote [16]byte
+		var rscope uint32
 		if isRecv(uint8(ev.Event)) {
 			remote = srcKeyFromEvent(ev)
+			rscope = uint32(ev.SrcScope)
 		} else {
 			remote = dstKeyFromEvent(ev)
+			rscope = uint32(ev.DstScope)
 		}
 		if !isAllZero16(remote) {
 			k.PeerMode = 1
 			k.Remote = remote
+			if k.Proto == IPPROTO_ICMPV6 && isIPv6LinkLocal(remote) && rscope != 0 {
+				k.RemoteScope = rscope
+			}
 		}
 	}
 
@@ -259,9 +310,35 @@ func makeKey(ev bpfTraceInfo) FlowKey {
 // normalize to local -> remote
 func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 	evt := uint8(ev.Event)
+	proto := uint8(ev.Proto)
 
 	var localIP, remoteIP [16]byte
 	var lport, rport uint16
+
+	// scope only for ICMPv6
+	var lscope, rscope uint32
+	if proto == IPPROTO_ICMPV6 {
+		// NOTE: эти поля заполняются из sockaddr_in6.sin6_scope_id, когда он доступен
+		srcScope := uint32(ev.SrcScope)
+		dstScope := uint32(ev.DstScope)
+
+		switch {
+		case isSend(evt) || evt == EV_CONNECT:
+			lscope = srcScope
+			rscope = dstScope
+		case isRecv(evt):
+			lscope = dstScope
+			rscope = srcScope
+		case evt == EV_BINDOK:
+			lscope = srcScope
+		case evt == EV_ACCEPT:
+			lscope = dstScope
+			rscope = srcScope
+		}
+
+		// храним только для link-local, иначе смысла нет
+		// (fmtEndpoint всё равно использует scope только для fe80::/10)
+	}
 
 	switch {
 	case isSend(evt) || evt == EV_CONNECT:
@@ -298,6 +375,16 @@ func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 	}
 	if isAllZero16(f.Remote) && !isAllZero16(remoteIP) {
 		f.Remote = remoteIP
+	}
+
+	// scope сохраняем только для ICMPv6 (и реально будет полезен только на fe80)
+	if proto == IPPROTO_ICMPV6 {
+		if f.LocalScope == 0 && lscope != 0 {
+			f.LocalScope = lscope
+		}
+		if f.RemoteScope == 0 && rscope != 0 {
+			f.RemoteScope = rscope
+		}
 	}
 }
 
@@ -351,8 +438,8 @@ func printOpen(f *Flow) {
 	fmt.Printf("OPEN  %-5s pid=%d(%s) cookie=%d  %s -> %s%s%s\n",
 		protoStr(f.Key.Proto),
 		f.Key.TGID, f.Comm, f.Key.Cookie,
-		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.Key.Proto),
-		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Local, f.LocalScope, f.Lport, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Remote, f.RemoteScope, f.Rport, f.Key.Proto),
 		incompleteNote(f),
 		maybeLostNote(f),
 	)
@@ -363,8 +450,8 @@ func printClose(f *Flow, reason string) {
 	fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s reason=%s%s%s\n",
 		protoStr(f.Key.Proto),
 		f.Key.TGID, f.Comm, f.Key.Cookie,
-		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.Key.Proto),
-		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Local, f.LocalScope, f.Lport, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Remote, f.RemoteScope, f.Rport, f.Key.Proto),
 		f.OutBytes, f.OutPkts, f.InBytes, f.InPkts,
 		age, reason,
 		incompleteNote(f),
@@ -517,6 +604,8 @@ func main() {
 		for i := range base.Remote {
 			base.Remote[i] = 0
 		}
+		base.RemoteScope = 0
+
 		if fb := flows[base]; fb != nil {
 			delete(flows, base)
 			fb.Key = key
