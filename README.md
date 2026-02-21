@@ -2266,3 +2266,12 @@ func main() {
 		}
 	}
 }
+
+
+
+
+go generate ./...
+go build -o bpfgo .
+sudo ./bpfgo -comm Chrome -print 1s -ttl 5s
+# или чтобы видеть сырые события:
+sudo ./bpfgo -comm Chrome -raw
