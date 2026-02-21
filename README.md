@@ -1685,3 +1685,93 @@ int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
 
 
 
+func fmtErr(ret int64) string {
+	if ret >= 0 {
+		return ""
+	}
+	return syscall.Errno(-ret).Error()
+}
+
+func printRaw(ev bpfTraceInfo, comm string) {
+	evt := uint8(ev.Event)
+	proto := uint8(ev.Proto)
+	family := uint16(ev.Family)
+
+	// защитимся от мусора
+	if proto == 0 || family == 0 {
+		return
+	}
+
+	var localIP, remoteIP [16]byte
+	var lport, rport uint16
+	dir := "?"
+
+	switch {
+	case evt == EV_BINDOK:
+		dir = "BIND"
+		localIP = srcKeyFromEvent(ev)
+		lport = uint16(ev.Sport)
+
+	case evt == EV_ACCEPT:
+		dir = "ACPT"
+		// accept: peer->local в эвенте, нормализуем local->peer
+		localIP = dstKeyFromEvent(ev)
+		lport = uint16(ev.Dport)
+		remoteIP = srcKeyFromEvent(ev)
+		rport = uint16(ev.Sport)
+
+	case evt == EV_CLOSE:
+		dir = "CLOSE"
+		// close мы заполняем как is_send=1 (local->remote)
+		localIP = srcKeyFromEvent(ev)
+		lport = uint16(ev.Sport)
+		remoteIP = dstKeyFromEvent(ev)
+		rport = uint16(ev.Dport)
+
+	case isSend(evt) || evt == EV_CONNECT:
+		dir = "OUT"
+		localIP = srcKeyFromEvent(ev)
+		lport = uint16(ev.Sport)
+		remoteIP = dstKeyFromEvent(ev)
+		rport = uint16(ev.Dport)
+
+	case isRecv(evt):
+		dir = "IN"
+		// recv: peer->local в эвенте, нормализуем local->peer
+		localIP = dstKeyFromEvent(ev)
+		lport = uint16(ev.Dport)
+		remoteIP = srcKeyFromEvent(ev)
+		rport = uint16(ev.Sport)
+	}
+
+	errs := fmtErr(ev.Ret)
+	state := ""
+	if evt == EV_CONNECT && ev.State == 1 {
+		state = " inprogress"
+	}
+
+	if evt == EV_BINDOK {
+		fmt.Printf("%-5s %-7s dir=%-5s pid=%d(%s) tid=%d fd=%d cookie=%d ret=%d%s  local=%s\n",
+			protoStr(proto), evName(evt), dir,
+			ev.Tgid, comm, ev.Tid, ev.Fd, ev.Cookie, ev.Ret, func() string {
+				if errs == "" { return state }
+				return " err=" + errs + state
+			}(),
+			fmtEndpoint(family, localIP, lport, proto),
+		)
+		return
+	}
+
+	fmt.Printf("%-5s %-7s dir=%-5s pid=%d(%s) tid=%d fd=%d cookie=%d ret=%d%s  %s -> %s\n",
+		protoStr(proto), evName(evt), dir,
+		ev.Tgid, comm, ev.Tid, ev.Fd, ev.Cookie, ev.Ret, func() string {
+			if errs == "" { return state }
+			return " err=" + errs + state
+		}(),
+		fmtEndpoint(family, localIP, lport, proto),
+		fmtEndpoint(family, remoteIP, rport, proto),
+	)
+}
+
+
+
