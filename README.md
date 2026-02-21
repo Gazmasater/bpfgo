@@ -663,133 +663,6 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
-[sudo] password for lev: 
-Sorry, try again.
-[sudo] password for lev: 
-2026/02/21 05:01:55.556017 pprof on :6060
-2026/02/21 05:01:55.645316 OPEN/CLOSE only (TCP/UDP/ICMP) + PERF_LOST generation. Press Ctrl+C to exit
-OPEN  UDP   pid=4131(DNS Res~ver #23) cookie=181086  127.0.0.1:60983 -> 127.0.0.53:53
-OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:60983
-OPEN  UDP   pid=4131(DNS Res~ver #29) cookie=183475  127.0.0.1:33306 -> 127.0.0.53:53
-OPEN  UDP   pid=516(systemd-resolve) cookie=181863  10.0.2.15:50574 -> 10.0.2.3:53
-OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=181088  127.0.0.1:41929 -> 127.0.0.53:53
-OPEN  UDP   pid=516(systemd-resolve) cookie=181865  10.0.2.15:35502 -> 10.0.2.3:53
-OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:33306
-OPEN  UDP   pid=516(systemd-resolve) cookie=181866  10.0.2.15:37657 -> 10.0.2.3:53
-OPEN  TCP   pid=4131(Socket Thread) cookie=181864  10.0.2.15:41006 -> 64.233.164.198:443
-OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:41929
-CLOSE UDP   pid=516(systemd-resolve) cookie=181863  10.0.2.15:50574 -> 10.0.2.3:53  out=0B/0p in=199B/1p  age=56ms reason=close()
-CLOSE UDP   pid=516(systemd-resolve) cookie=181865  10.0.2.15:35502 -> 10.0.2.3:53  out=0B/0p in=211B/1p  age=58ms reason=close()
-CLOSE UDP   pid=4131(DNS Res~ver #26) cookie=181088  127.0.0.1:41929 -> 127.0.0.53:53  out=44B/1p in=121B/1p  age=67ms reason=close()
-CLOSE UDP   pid=4131(DNS Res~ver #23) cookie=181086  127.0.0.1:60983 -> 127.0.0.53:53  out=0B/0p in=254B/2p  age=79ms reason=close()
-OPEN  UDP   pid=4131(DNS Res~ver #23) cookie=182453  10.0.2.15:46534 -> 64.233.164.198:0 incomplete=1
-CLOSE UDP   pid=516(systemd-resolve) cookie=181866  10.0.2.15:37657 -> 10.0.2.3:53  out=0B/0p in=240B/1p  age=61ms reason=close()
-OPEN  UDP   pid=516(systemd-resolve) cookie=181867  10.0.2.15:33655 -> 10.0.2.3:53
-OPEN  UDP   pid=4131(DNS Res~ver #23) cookie=182454  [fd00:0:0:0:f971:c3ee:46ee:9b71]:54335 -> [2a00:1450:4010:c07:0:0:0:c6]:0 incomplete=1
-CLOSE UDP   pid=516(systemd-resolve) cookie=181867  10.0.2.15:33655 -> 10.0.2.3:53  out=0B/0p in=136B/1p  age=37ms reason=close()
-CLOSE UDP   pid=4131(DNS Res~ver #29) cookie=183475  127.0.0.1:33306 -> 127.0.0.53:53  out=44B/1p in=155B/1p  age=134ms reason=close()
-OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=181090  127.0.0.1:50991 -> 127.0.0.53:53
-OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:50991
-OPEN  UDP   pid=516(systemd-resolve) cookie=181868  10.0.2.15:54881 -> 10.0.2.3:53
-OPEN  UDP   pid=516(systemd-resolve) cookie=181869  10.0.2.15:55471 -> 10.0.2.3:53
-CLOSE UDP   pid=516(systemd-resolve) cookie=181868  10.0.2.15:54881 -> 10.0.2.3:53  out=0B/0p in=79B/1p  age=48ms reason=close()
-CLOSE UDP   pid=516(systemd-resolve) cookie=181869  10.0.2.15:55471 -> 10.0.2.3:53  out=0B/0p in=91B/1p  age=49ms reason=close()
-CLOSE UDP   pid=4131(DNS Res~ver #26) cookie=181090  127.0.0.1:50991 -> 127.0.0.53:53  out=0B/0p in=136B/2p  age=74ms reason=close()
-OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=181091  10.0.2.15:53340 -> 209.85.233.94:0 incomplete=1
-OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=181092  [fd00:0:0:0:f971:c3ee:46ee:9b71]:51149 -> [2a00:1450:4010:c03:0:0:0:5e]:0 incomplete=1
-OPEN  UDP   pid=4131(Socket Thread) cookie=181093  *:34022 -> 209.85.233.94:443
-OPEN  UDP   pid=4131(DNS Res~ver #29) cookie=181099  127.0.0.1:59773 -> 127.0.0.53:53
-OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:59773
-OPEN  UDP   pid=516(systemd-resolve) cookie=181898  10.0.2.15:58937 -> 10.0.2.3:53
-OPEN  UDP   pid=4131(DNS Res~ver #23) cookie=182463  127.0.0.1:41821 -> 127.0.0.53:53
-OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:41821
-OPEN  UDP   pid=516(systemd-resolve) cookie=181899  10.0.2.15:46831 -> 10.0.2.3:53
-OPEN  UDP   pid=516(systemd-resolve) cookie=181900  10.0.2.15:44814 -> 10.0.2.3:53
-CLOSE UDP   pid=516(systemd-resolve) cookie=181898  10.0.2.15:58937 -> 10.0.2.3:53  out=0B/0p in=119B/1p  age=65ms reason=close()
-CLOSE UDP   pid=516(systemd-resolve) cookie=181900  10.0.2.15:44814 -> 10.0.2.3:53  out=0B/0p in=196B/1p  age=48ms reason=close()
-CLOSE UDP   pid=4131(DNS Res~ver #29) cookie=181099  127.0.0.1:59773 -> 127.0.0.53:53  out=40B/1p in=97B/1p  age=96ms reason=close()
-CLOSE UDP   pid=516(systemd-resolve) cookie=181899  10.0.2.15:46831 -> 10.0.2.3:53  out=0B/0p in=337B/1p  age=77ms reason=close()
-CLOSE UDP   pid=4131(DNS Res~ver #23) cookie=182463  127.0.0.1:41821 -> 127.0.0.53:53  out=0B/0p in=368B/2p  age=100ms reason=close()
-OPEN  UDP   pid=4131(DNS Res~ver #23) cookie=181901  [fd00:0:0:0:f971:c3ee:46ee:9b71]:47633 -> [2a00:1450:4010:c08:0:0:0:77]:0 incomplete=1
-OPEN  UDP   pid=4131(Socket Thread) cookie=183607  *:34244 -> 64.233.162.119:443
-OPEN  TCP   pid=4131(Socket Thread) cookie=183611  10.0.2.15:48902 -> 64.233.162.119:443
-OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=181103  127.0.0.1:60842 -> 127.0.0.53:53
-OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:60842
-CLOSE UDP   pid=4131(DNS Res~ver #26) cookie=181103  127.0.0.1:60842 -> 127.0.0.53:53  out=40B/1p in=216B/1p  age=13ms reason=close()
-OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=182522  10.0.2.15:38892 -> 64.233.161.119:0 incomplete=1
-OPEN  UDP   pid=4131(DNS Res~ver #29) cookie=181105  127.0.0.1:58403 -> 127.0.0.53:53
-OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:58403
-OPEN  UDP   pid=516(systemd-resolve) cookie=181930  10.0.2.15:43706 -> 10.0.2.3:53
-OPEN  UDP   pid=516(systemd-resolve) cookie=181931  10.0.2.15:55538 -> 10.0.2.3:53
-OPEN  UDP   pid=4131(Socket Thread) cookie=182523  *:60225 -> 108.177.14.106:443
-CLOSE UDP   pid=516(systemd-resolve) cookie=181930  10.0.2.15:43706 -> 10.0.2.3:53  out=0B/0p in=223B/1p  age=59ms reason=close()
-CLOSE UDP   pid=516(systemd-resolve) cookie=181931  10.0.2.15:55538 -> 10.0.2.3:53  out=0B/0p in=211B/1p  age=59ms reason=close()
-CLOSE UDP   pid=4131(DNS Res~ver #29) cookie=181105  127.0.0.1:58403 -> 127.0.0.53:53  out=0B/0p in=294B/2p  age=86ms reason=close()
-OPEN  UDP   pid=4131(DNS Res~ver #29) cookie=181106  10.0.2.15:34288 -> 74.125.205.105:0 incomplete=1
-OPEN  UDP   pid=4131(DNS Res~ver #23) cookie=181933  127.0.0.1:45584 -> 127.0.0.53:53
-OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=182527  127.0.0.1:43327 -> 127.0.0.53:53
-OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:45584
-OPEN  UDP   pid=516(systemd-resolve) cookie=181934  10.0.2.15:34287 -> 10.0.2.3:53
-OPEN  UDP   pid=516(systemd-resolve) cookie=181935  10.0.2.15:46397 -> 10.0.2.3:53
-OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:43327
-OPEN  UDP   pid=516(systemd-resolve) cookie=181936  10.0.2.15:60304 -> 10.0.2.3:53
-OPEN  UDP   pid=4131(DNS Res~ver #29) cookie=181107  [fd00:0:0:0:f971:c3ee:46ee:9b71]:43247 -> [2a00:1450:4010:c0f:0:0:0:69]:0 incomplete=1
-CLOSE UDP   pid=516(systemd-resolve) cookie=181934  10.0.2.15:34287 -> 10.0.2.3:53  out=0B/0p in=83B/1p  age=47ms reason=close()
-CLOSE UDP   pid=516(systemd-resolve) cookie=181935  10.0.2.15:46397 -> 10.0.2.3:53  out=0B/0p in=95B/1p  age=46ms reason=close()
-OPEN  UDP   pid=4131(Socket Thread) cookie=182528  *:60776 -> 74.125.205.84:443
-CLOSE UDP   pid=516(systemd-resolve) cookie=181936  10.0.2.15:60304 -> 10.0.2.3:53  out=0B/0p in=128B/1p  age=52ms reason=close()
-CLOSE UDP   pid=4131(DNS Res~ver #26) cookie=182527  127.0.0.1:43327 -> 127.0.0.53:53  out=48B/1p in=98B/1p  age=78ms reason=close()
-CLOSE UDP   pid=4131(DNS Res~ver #23) cookie=181933  127.0.0.1:45584 -> 127.0.0.53:53  out=0B/0p in=140B/2p  age=88ms reason=close()
-OPEN  UDP   pid=4131(DNS Res~ver #23) cookie=181937  10.0.2.15:54038 -> 74.125.205.84:0 incomplete=1
-OPEN  UDP   pid=4131(DNS Res~ver #23) cookie=182532  [fd00:0:0:0:f971:c3ee:46ee:9b71]:57655 -> [2a00:1450:4010:c02:0:0:0:54]:0 incomplete=1
-OPEN  UDP   pid=4131(DNS Res~ver #29) cookie=181109  127.0.0.1:55804 -> 127.0.0.53:53
-OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:55804
-OPEN  TCP   pid=4131(Socket Thread) cookie=182533  10.0.2.15:56398 -> 74.125.205.84:443
-CLOSE UDP   pid=4131(DNS Res~ver #29) cookie=181109  127.0.0.1:55804 -> 127.0.0.53:53  out=48B/1p in=64B/1p  age=21ms reason=close()
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:33306  out=155B/1p in=44B/1p  age=5.737s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:41929  out=121B/1p in=44B/1p  age=5.726s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:50991  out=136B/2p in=92B/2p  age=5.105s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:60983  out=254B/2p in=88B/2p  age=5.753s reason=idle
-CLOSE UDP   pid=4131(Socket Thread) cookie=181093  *:34022 -> 209.85.233.94:443  out=5040B/3p in=0B/0p  age=5.999s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:41821  out=368B/2p in=80B/2p  age=5.278s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:59773  out=97B/1p in=40B/1p  age=5.286s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:60842  out=216B/1p in=40B/1p  age=5.136s reason=idle
-CLOSE TCP   pid=4131(Socket Thread) cookie=183611  10.0.2.15:48902 -> 64.233.162.119:443  out=2680B/5p in=1951B/12p  age=6.147s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:55804  out=64B/1p in=48B/1p  age=5.16s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:58403  out=294B/2p in=86B/2p  age=5.464s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:43327  out=98B/1p in=48B/1p  age=5.281s reason=idle
-CLOSE UDP   pid=4131(Socket Thread) cookie=183607  *:34244 -> 64.233.162.119:443  out=5039B/3p in=0B/0p  age=6.233s reason=idle
-CLOSE UDP   pid=4131(Socket Thread) cookie=182523  *:60225 -> 108.177.14.106:443  out=5040B/3p in=0B/0p  age=5.418s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:45584  out=140B/2p in=96B/2p  age=5.298s reason=idle
-CLOSE TCP   pid=4131(Socket Thread) cookie=182533  10.0.2.15:56398 -> 74.125.205.84:443  out=2688B/5p in=1951B/12p  age=6.158s reason=idle
-CLOSE UDP   pid=4131(Socket Thread) cookie=182528  *:60776 -> 74.125.205.84:443  out=6876B/10p in=0B/0p  age=6.229s reason=idle
-OPEN  UDP   pid=516(systemd-resolve) cookie=182072  10.0.2.15:53076 -> 10.0.2.3:53
-CLOSE UDP   pid=516(systemd-resolve) cookie=182072  10.0.2.15:53076 -> 10.0.2.3:53  out=0B/0p in=598B/1p  age=58ms reason=close()
-OPEN  TCP   pid=669(NetworkManager) cookie=183837  10.0.2.15:50106 -> 91.189.91.48:80
-CLOSE TCP   pid=669(NetworkManager) cookie=183837  10.0.2.15:50106 -> 91.189.91.48:80  out=87B/1p in=189B/1p  age=143ms reason=close()
-CLOSE TCP   pid=4131(Socket Thread) cookie=181864  10.0.2.15:41006 -> 64.233.164.198:443  out=35546B/66p in=749893B/1230p  age=19.736s reason=idle
-OPEN  TCP   pid=4131(Socket Thread) cookie=181864  10.0.2.15:41006 -> 64.233.164.198:443
-CLOSE TCP   pid=4131(Socket Thread) cookie=181864  10.0.2.15:41006 -> 64.233.164.198:443  out=451B/5p in=62984B/102p  age=5.594s reason=idle
-OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:53321
-OPEN  UDP   pid=4131(DNS Res~ver #23) cookie=183861  127.0.0.1:53321 -> 127.0.0.53:53
-OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=182910  127.0.0.1:38063 -> 127.0.0.53:53
-OPEN  UDP   pid=516(systemd-resolve) cookie=182114  10.0.2.15:51609 -> 10.0.2.3:53
-OPEN  UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:38063
-OPEN  UDP   pid=516(systemd-resolve) cookie=182115  10.0.2.15:52284 -> 10.0.2.3:53
-OPEN  UDP   pid=516(systemd-resolve) cookie=182116  10.0.2.15:44912 -> 10.0.2.3:53
-CLOSE UDP   pid=516(systemd-resolve) cookie=182116  10.0.2.15:44912 -> 10.0.2.3:53  out=0B/0p in=196B/1p  age=49ms reason=close()
-CLOSE UDP   pid=516(systemd-resolve) cookie=182115  10.0.2.15:52284 -> 10.0.2.3:53  out=0B/0p in=148B/1p  age=60ms reason=close()
-CLOSE UDP   pid=4131(DNS Res~ver #26) cookie=182910  127.0.0.1:38063 -> 127.0.0.53:53  out=0B/0p in=256B/2p  age=69ms reason=close()
-CLOSE UDP   pid=516(systemd-resolve) cookie=182114  10.0.2.15:51609 -> 10.0.2.3:53  out=0B/0p in=66B/1p  age=69ms reason=close()
-OPEN  UDP   pid=4131(DNS Res~ver #26) cookie=182911  [fd00:0:0:0:f971:c3ee:46ee:9b71]:42750 -> [2a00:1450:4010:c07:0:0:0:be]:0 incomplete=1
-CLOSE UDP   pid=4131(DNS Res~ver #23) cookie=183861  127.0.0.1:53321 -> 127.0.0.53:53  out=40B/1p in=55B/1p  age=77ms reason=close()
-OPEN  TCP   pid=4131(Socket Thread) cookie=182117  10.0.2.15:40114 -> 64.233.164.136:443
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:38063  out=256B/2p in=80B/2p  age=5.394s reason=idle
-CLOSE TCP   pid=4131(Socket Thread) cookie=182117  10.0.2.15:40114 -> 64.233.164.136:443  out=3002B/6p in=4326B/20p  age=5.3s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:53321  out=55B/1p in=40B/1p  age=5.401s reason=idle
-
-
 //go:build ignore
 #include "vmlinux.h"
 
@@ -857,6 +730,15 @@ struct inflight_fd_t {
     __s32 fd;
 };
 
+/* UDP peer cache per (tgid,fd) */
+struct udp_peer_t {
+    __u16 family;
+    __u16 port;      // host order
+    __u32 ip4;       // net order
+    struct in6_addr ip6;
+    __u64 ts_ns;
+};
+
 /* EVENT (to userspace) */
 struct trace_info {
     __u64 ts_ns;
@@ -888,6 +770,7 @@ struct trace_info {
 };
 
 const struct trace_info *unused __attribute__((unused));
+
 struct user_msghdr_head {
     void *msg_name;
     __u32 msg_namelen;
@@ -921,6 +804,14 @@ struct {
     __type(key, struct fd_key_t);
     __type(value, struct fd_state_t);
 } fd_state_map SEC(".maps");
+
+/* last UDP peer: LRU, чтобы не копить мусор */
+struct {
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    __uint(max_entries, 65536);
+    __type(key, struct fd_key_t);
+    __type(value, struct udp_peer_t);
+} udp_peer_map SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
@@ -1093,7 +984,7 @@ static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
 
     // если family уже известна из сокета — НЕ даём ей "прыгать"
     if (info->family != 0 && family != info->family) {
-        // dual-stack case: socket AF_INET6, but sockaddr is AF_INET -> map to v4-mapped
+        // dual-stack case: socket AF_INET6, but sockaddr is AF_INET -> v4-mapped
         if (info->family == AF_INET6 && family == AF_INET) {
             if (addrlen < sizeof(struct sockaddr_in))
                 return -1;
@@ -1106,7 +997,6 @@ static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
             __u8 v6[16] = {};
             v6[10] = 0xff;
             v6[11] = 0xff;
-            // ipv4 bytes are already in network order inside s_addr
             __builtin_memcpy(&v6[12], &sa.sin_addr.s_addr, 4);
 
             if (fill_dst) {
@@ -1118,12 +1008,9 @@ static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
             }
             return 0;
         }
-
-        // остальные несовпадения family просто игнорим
         return -1;
     }
 
-    // если family ещё не была известна — фиксируем её один раз
     if (info->family == 0)
         info->family = family;
 
@@ -1170,17 +1057,14 @@ static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
 
 static __always_inline __u32 ipv4_local_addr(struct sock *sk)
 {
-    // часто 0.0.0.0 для UDP "any", но пробуем
     __u32 a = BPF_CORE_READ(sk, __sk_common.skc_rcv_saddr);
-
     if (a == 0) {
-        // fallback: inet_saddr (есть в большинстве ядер)
         struct inet_sock *inet = (struct inet_sock *)sk;
         a = BPF_CORE_READ(inet, inet_saddr);
     }
-
     return a;
 }
+
 static __always_inline int is_ipv4_loopback(__u32 addr_be)
 {
     if (addr_be == 0)
@@ -1199,42 +1083,103 @@ static __always_inline int is_ipv6_loopback(const __u8 a[16])
     return a[15] == 1;
 }
 
+static __always_inline int is_zero_ip6(const __u8 a[16])
+{
+    int all0 = 1;
+#pragma clang loop unroll(full)
+    for (int i = 0; i < 16; i++) {
+        if (a[i] != 0) all0 = 0;
+    }
+    return all0;
+}
+
 static __always_inline void loopback_fallback(struct trace_info *info, int is_send_dir)
 {
-    // is_send_dir: 1 => src is local, dst is remote
-    //              0 => src is remote, dst is local
     if (info->family == AF_INET) {
         if (is_send_dir) {
             if (info->src_ip4 == 0 && is_ipv4_loopback(info->dst_ip4))
-                info->src_ip4 = bpf_htonl(0x7f000001); // 127.0.0.1
+                info->src_ip4 = bpf_htonl(0x7f000001);
         } else {
             if (info->dst_ip4 == 0 && is_ipv4_loopback(info->src_ip4))
                 info->dst_ip4 = bpf_htonl(0x7f000001);
         }
     } else if (info->family == AF_INET6) {
         if (is_send_dir) {
-            if (is_ipv6_loopback(info->dst_ip6) && !is_ipv6_loopback(info->src_ip6)) {
-                // if src is all-zero and dst is ::1 => set src=::1
-                int all0 = 1;
+            if (is_ipv6_loopback(info->dst_ip6) && is_zero_ip6(info->src_ip6)) {
 #pragma clang loop unroll(full)
-                for (int i = 0; i < 16; i++) if (info->src_ip6[i] != 0) all0 = 0;
-                if (all0) {
-#pragma clang loop unroll(full)
-                    for (int i = 0; i < 15; i++) info->src_ip6[i] = 0;
-                    info->src_ip6[15] = 1;
-                }
+                for (int i = 0; i < 15; i++) info->src_ip6[i] = 0;
+                info->src_ip6[15] = 1;
             }
         } else {
-            int all0 = 1;
-#pragma clang loop unroll(full)
-            for (int i = 0; i < 16; i++) if (info->dst_ip6[i] != 0) all0 = 0;
-            if (all0 && is_ipv6_loopback(info->src_ip6)) {
+            if (is_zero_ip6(info->dst_ip6) && is_ipv6_loopback(info->src_ip6)) {
 #pragma clang loop unroll(full)
                 for (int i = 0; i < 15; i++) info->dst_ip6[i] = 0;
                 info->dst_ip6[15] = 1;
             }
         }
     }
+}
+
+/* ---- UDP peer cache ---- */
+
+static __always_inline void udp_peer_set_from_info(__u32 tgid, int fd,
+                                                   const struct trace_info *info,
+                                                   int from_dst /*1=dst/dport,0=src/sport*/)
+{
+    if (info->proto != IPPROTO_UDP)
+        return;
+    if (info->family != AF_INET && info->family != AF_INET6)
+        return;
+
+    __u16 port = from_dst ? info->dport : info->sport;
+    if (port == 0)
+        return;
+
+    struct udp_peer_t p = {};
+    p.family = info->family;
+    p.port   = port;
+    p.ts_ns  = info->ts_ns;
+
+    if (info->family == AF_INET) {
+        __u32 ip = from_dst ? info->dst_ip4 : info->src_ip4;
+        if (ip == 0)
+            return;
+        p.ip4 = ip;
+    } else {
+        const __u8 *ip6 = from_dst ? info->dst_ip6 : info->src_ip6;
+        if (is_zero_ip6(ip6))
+            return;
+        __builtin_memcpy(&p.ip6, ip6, 16);
+    }
+
+    struct fd_key_t k = { .tgid = tgid, .fd = fd };
+    bpf_map_update_elem(&udp_peer_map, &k, &p, BPF_ANY);
+}
+
+static __always_inline void udp_peer_apply_to_info(__u32 tgid, int fd, struct trace_info *info)
+{
+    if (info->proto != IPPROTO_UDP)
+        return;
+    if (info->family != AF_INET && info->family != AF_INET6)
+        return;
+
+    struct fd_key_t k = { .tgid = tgid, .fd = fd };
+    struct udp_peer_t *p = bpf_map_lookup_elem(&udp_peer_map, &k);
+    if (!p)
+        return;
+    if (p->family != info->family)
+        return;
+
+    if (info->family == AF_INET) {
+        if (info->dst_ip4 == 0)
+            info->dst_ip4 = p->ip4;
+    } else {
+        if (is_zero_ip6(info->dst_ip6))
+            __builtin_memcpy(info->dst_ip6, &p->ip6, 16);
+    }
+
+    if (info->dport == 0)
+        info->dport = p->port;
 }
 
 /* ---- fd state ---- */
@@ -1284,7 +1229,9 @@ static __always_inline int fill_from_fd_state_map(struct trace_info *info, __u32
         bpf_map_update_elem(&fd_state_map, &k, &tmp, BPF_ANY);
         st = &tmp;
     } else {
-        if (st->proto == IPPROTO_TCP && (st->lport == 0 || st->rport == 0)) {
+        /* self-heal для TCP/UDP: порты могут "появиться" после bind/send */
+        if ((st->proto == IPPROTO_TCP || st->proto == IPPROTO_UDP) &&
+            (st->lport == 0 || (st->proto == IPPROTO_TCP && st->rport == 0))) {
             if (fill_fd_state(fd, &tmp) == 0) {
                 bpf_map_update_elem(&fd_state_map, &k, &tmp, BPF_ANY);
                 st = &tmp;
@@ -1334,7 +1281,7 @@ static __always_inline void fill_ids_comm_cookie(struct trace_info *info, __u64 
 {
     info->ts_ns  = bpf_ktime_get_ns();
     info->tgid   = pid_tgid >> 32;
-    info->tid    = (__u32)pid_tgid;
+    info->tid    (__u32)pid_tgid;
     info->cookie = cookie_from_fd(fd);
 
     if (comm64_opt) {
@@ -1428,6 +1375,13 @@ int trace_connect_exit(struct trace_event_raw_sys_exit *ctx)
 
     loopback_fallback(&info, 1);
 
+    // UDP connect :0 часто "probe" — не мусорим
+    if (info.proto == IPPROTO_UDP && info.dport == 0)
+        goto cleanup;
+
+    // remember peer for connected UDP
+    udp_peer_set_from_info(tgid, (int)info.fd, &info, 1);
+
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
 cleanup:
@@ -1489,7 +1443,7 @@ static __always_inline int accept_exit_common(struct trace_event_raw_sys_exit *c
     info.proto  = st.proto;
     info.family = st.family;
 
-    // accept: peer -> local (userspace потом нормализует)
+    // accept: peer -> local
     info.sport = st.rport;
     info.dport = st.lport;
 
@@ -1578,7 +1532,6 @@ int trace_bind_exit(struct trace_event_raw_sys_exit *ctx)
     info.proto  = st.proto;
     info.family = st.family;
 
-    // bind = local: положим в src (чтобы userspace стабильно использовал)
     info.sport = st.lport;
     if (st.family == AF_INET) {
         info.src_ip4 = st.lip;
@@ -1653,6 +1606,18 @@ int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx)
     if (ap && ap->addr && ap->len)
         (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 1);
 
+    // if sendto had no sockaddr (connected UDP) -> apply last peer
+    if (info.proto == IPPROTO_UDP &&
+        (info.dport == 0 ||
+         (info.family == AF_INET && info.dst_ip4 == 0) ||
+         (info.family == AF_INET6 && is_zero_ip6(info.dst_ip6))))
+    {
+        udp_peer_apply_to_info(tgid, (int)info.fd, &info);
+    }
+
+    // remember dst peer if we have it now
+    udp_peer_set_from_info(tgid, (int)info.fd, &info, 1);
+
     loopback_fallback(&info, 1);
 
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
@@ -1685,7 +1650,6 @@ int trace_recvfrom_enter(struct trace_event_raw_sys_enter *ctx)
         struct addr_recv_meta_t m = {.addr = uaddr, .lenp = lenp_u, .flags = flags};
         bpf_map_update_elem(&addrRecv_map, &id, &m, BPF_ANY);
     } else if (flags & MSG_PEEK) {
-        // store peek flag even if no addr pointers
         struct addr_recv_meta_t m = {.addr = 0, .lenp = 0, .flags = flags};
         bpf_map_update_elem(&addrRecv_map, &id, &m, BPF_ANY);
     }
@@ -1729,6 +1693,9 @@ int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx)
                 (void)fill_from_sockaddr_user(&info, (void *)m->addr, addrlen, 0);
         }
     }
+
+    // remember last UDP peer from recv (src/sport)
+    udp_peer_set_from_info(tgid, (int)info.fd, &info, 0);
 
     loopback_fallback(&info, 0);
 
@@ -1793,6 +1760,17 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
                 (void)fill_from_sockaddr_user(&info, h.msg_name, h.msg_namelen, 1);
         }
     }
+
+    // if msg_name is NULL (connected UDP) -> apply last peer
+    if (info.proto == IPPROTO_UDP &&
+        (info.dport == 0 ||
+         (info.family == AF_INET && info.dst_ip4 == 0) ||
+         (info.family == AF_INET6 && is_zero_ip6(info.dst_ip6))))
+    {
+        udp_peer_apply_to_info(tgid, (int)info.fd, &info);
+    }
+
+    udp_peer_set_from_info(tgid, (int)info.fd, &info, 1);
 
     loopback_fallback(&info, 1);
 
@@ -1864,6 +1842,9 @@ int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx)
         }
     }
 
+    // remember last UDP peer from recv (src/sport)
+    udp_peer_set_from_info(tgid, (int)info.fd, &info, 0);
+
     loopback_fallback(&info, 0);
 
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
@@ -1886,6 +1867,7 @@ int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
     // cleanup cached state always
     struct fd_key_t k = { .tgid = tgid, .fd = fd };
     bpf_map_delete_elem(&fd_state_map, &k);
+    bpf_map_delete_elem(&udp_peer_map, &k);
 
     // emit only for socket fds
     if (!is_socket_fd(fd))
@@ -1913,6 +1895,7 @@ int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
             __builtin_memcpy(info.src_ip6, &st.lip6, 16);
             __builtin_memcpy(info.dst_ip6, &st.rip6, 16);
         }
+
         loopback_fallback(&info, 1);
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
     }
@@ -2214,8 +2197,16 @@ func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 	}
 }
 
+// OPEN печатаем только когда flow "полный" (без :0 мусора)
 func flowReadyToOpen(f *Flow) bool {
-	return !isAllZero16(f.Remote)
+	switch f.Key.Proto {
+	case IPPROTO_TCP, IPPROTO_UDP:
+		return !isAllZero16(f.Remote) && f.Lport != 0 && f.Rport != 0
+	case IPPROTO_ICMP, IPPROTO_ICMPV6:
+		return !isAllZero16(f.Remote)
+	default:
+		return false
+	}
 }
 
 var lostTotal uint64
@@ -2497,6 +2488,11 @@ func main() {
 				continue
 			}
 
+			// на всякий случай (в trace.c мы уже режем UDP connect :0)
+			if evt == EV_CONNECT && proto == IPPROTO_UDP && uint16(ev.Dport) == 0 {
+				continue
+			}
+
 			key := makeKey(ev)
 			f := flows[key]
 			if f == nil {
@@ -2528,4 +2524,3 @@ func main() {
 		}
 	}
 }
-
