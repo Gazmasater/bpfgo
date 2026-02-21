@@ -50,6 +50,12 @@ type bpfFdStateT struct {
 
 type bpfInflightFdT struct{ Fd int32 }
 
+type bpfMmsgPtrvlenT struct {
+	Vec   uint64
+	Vlen  uint32
+	Flags uint32
+}
+
 type bpfMsgPtrflagsT struct {
 	Msg   uint64
 	Flags uint32
@@ -131,14 +137,22 @@ type bpfProgramSpecs struct {
 	TraceCloseEnter    *ebpf.ProgramSpec `ebpf:"trace_close_enter"`
 	TraceConnectEnter  *ebpf.ProgramSpec `ebpf:"trace_connect_enter"`
 	TraceConnectExit   *ebpf.ProgramSpec `ebpf:"trace_connect_exit"`
+	TraceReadEnter     *ebpf.ProgramSpec `ebpf:"trace_read_enter"`
+	TraceReadExit      *ebpf.ProgramSpec `ebpf:"trace_read_exit"`
 	TraceRecvfromEnter *ebpf.ProgramSpec `ebpf:"trace_recvfrom_enter"`
 	TraceRecvfromExit  *ebpf.ProgramSpec `ebpf:"trace_recvfrom_exit"`
+	TraceRecvmmsgEnter *ebpf.ProgramSpec `ebpf:"trace_recvmmsg_enter"`
+	TraceRecvmmsgExit  *ebpf.ProgramSpec `ebpf:"trace_recvmmsg_exit"`
 	TraceRecvmsgEnter  *ebpf.ProgramSpec `ebpf:"trace_recvmsg_enter"`
 	TraceRecvmsgExit   *ebpf.ProgramSpec `ebpf:"trace_recvmsg_exit"`
+	TraceSendmmsgEnter *ebpf.ProgramSpec `ebpf:"trace_sendmmsg_enter"`
+	TraceSendmmsgExit  *ebpf.ProgramSpec `ebpf:"trace_sendmmsg_exit"`
 	TraceSendmsgEnter  *ebpf.ProgramSpec `ebpf:"trace_sendmsg_enter"`
 	TraceSendmsgExit   *ebpf.ProgramSpec `ebpf:"trace_sendmsg_exit"`
 	TraceSendtoEnter   *ebpf.ProgramSpec `ebpf:"trace_sendto_enter"`
 	TraceSendtoExit    *ebpf.ProgramSpec `ebpf:"trace_sendto_exit"`
+	TraceWriteEnter    *ebpf.ProgramSpec `ebpf:"trace_write_enter"`
+	TraceWriteExit     *ebpf.ProgramSpec `ebpf:"trace_write_exit"`
 }
 
 // bpfMapSpecs contains maps before they are loaded into the kernel.
@@ -152,6 +166,8 @@ type bpfMapSpecs struct {
 	ConnInfoMap    *ebpf.MapSpec `ebpf:"conn_info_map"`
 	ConnectFdMap   *ebpf.MapSpec `ebpf:"connect_fd_map"`
 	FdStateMap     *ebpf.MapSpec `ebpf:"fd_state_map"`
+	MmsgRecvMap    *ebpf.MapSpec `ebpf:"mmsgRecv_map"`
+	MmsgSendMap    *ebpf.MapSpec `ebpf:"mmsgSend_map"`
 	MsgRecvMap     *ebpf.MapSpec `ebpf:"msgRecv_map"`
 	MsgSendMap     *ebpf.MapSpec `ebpf:"msgSend_map"`
 	TraceEvents    *ebpf.MapSpec `ebpf:"trace_events"`
@@ -191,6 +207,8 @@ type bpfMaps struct {
 	ConnInfoMap    *ebpf.Map `ebpf:"conn_info_map"`
 	ConnectFdMap   *ebpf.Map `ebpf:"connect_fd_map"`
 	FdStateMap     *ebpf.Map `ebpf:"fd_state_map"`
+	MmsgRecvMap    *ebpf.Map `ebpf:"mmsgRecv_map"`
+	MmsgSendMap    *ebpf.Map `ebpf:"mmsgSend_map"`
 	MsgRecvMap     *ebpf.Map `ebpf:"msgRecv_map"`
 	MsgSendMap     *ebpf.Map `ebpf:"msgSend_map"`
 	TraceEvents    *ebpf.Map `ebpf:"trace_events"`
@@ -205,6 +223,8 @@ func (m *bpfMaps) Close() error {
 		m.ConnInfoMap,
 		m.ConnectFdMap,
 		m.FdStateMap,
+		m.MmsgRecvMap,
+		m.MmsgSendMap,
 		m.MsgRecvMap,
 		m.MsgSendMap,
 		m.TraceEvents,
@@ -231,14 +251,22 @@ type bpfPrograms struct {
 	TraceCloseEnter    *ebpf.Program `ebpf:"trace_close_enter"`
 	TraceConnectEnter  *ebpf.Program `ebpf:"trace_connect_enter"`
 	TraceConnectExit   *ebpf.Program `ebpf:"trace_connect_exit"`
+	TraceReadEnter     *ebpf.Program `ebpf:"trace_read_enter"`
+	TraceReadExit      *ebpf.Program `ebpf:"trace_read_exit"`
 	TraceRecvfromEnter *ebpf.Program `ebpf:"trace_recvfrom_enter"`
 	TraceRecvfromExit  *ebpf.Program `ebpf:"trace_recvfrom_exit"`
+	TraceRecvmmsgEnter *ebpf.Program `ebpf:"trace_recvmmsg_enter"`
+	TraceRecvmmsgExit  *ebpf.Program `ebpf:"trace_recvmmsg_exit"`
 	TraceRecvmsgEnter  *ebpf.Program `ebpf:"trace_recvmsg_enter"`
 	TraceRecvmsgExit   *ebpf.Program `ebpf:"trace_recvmsg_exit"`
+	TraceSendmmsgEnter *ebpf.Program `ebpf:"trace_sendmmsg_enter"`
+	TraceSendmmsgExit  *ebpf.Program `ebpf:"trace_sendmmsg_exit"`
 	TraceSendmsgEnter  *ebpf.Program `ebpf:"trace_sendmsg_enter"`
 	TraceSendmsgExit   *ebpf.Program `ebpf:"trace_sendmsg_exit"`
 	TraceSendtoEnter   *ebpf.Program `ebpf:"trace_sendto_enter"`
 	TraceSendtoExit    *ebpf.Program `ebpf:"trace_sendto_exit"`
+	TraceWriteEnter    *ebpf.Program `ebpf:"trace_write_enter"`
+	TraceWriteExit     *ebpf.Program `ebpf:"trace_write_exit"`
 }
 
 func (p *bpfPrograms) Close() error {
@@ -252,14 +280,22 @@ func (p *bpfPrograms) Close() error {
 		p.TraceCloseEnter,
 		p.TraceConnectEnter,
 		p.TraceConnectExit,
+		p.TraceReadEnter,
+		p.TraceReadExit,
 		p.TraceRecvfromEnter,
 		p.TraceRecvfromExit,
+		p.TraceRecvmmsgEnter,
+		p.TraceRecvmmsgExit,
 		p.TraceRecvmsgEnter,
 		p.TraceRecvmsgExit,
+		p.TraceSendmmsgEnter,
+		p.TraceSendmmsgExit,
 		p.TraceSendmsgEnter,
 		p.TraceSendmsgExit,
 		p.TraceSendtoEnter,
 		p.TraceSendtoExit,
+		p.TraceWriteEnter,
+		p.TraceWriteExit,
 	)
 }
 

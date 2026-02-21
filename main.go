@@ -44,7 +44,13 @@ const (
 	EV_BINDOK   = 20
 	EV_SENDMSG  = 11
 	EV_RECVMSG  = 12
-	EV_CLOSE    = 30
+
+	EV_SENDMMSG = 13
+	EV_RECVMMSG = 14
+	EV_READ     = 21
+	EV_WRITE    = 22
+
+	EV_CLOSE = 30
 )
 
 var (
@@ -95,8 +101,13 @@ func protoStr(p uint8) string {
 	}
 }
 
-func isSend(ev uint8) bool { return ev == EV_SENDTO || ev == EV_SENDMSG }
-func isRecv(ev uint8) bool { return ev == EV_RECVFROM || ev == EV_RECVMSG }
+func isSend(ev uint8) bool {
+	return ev == EV_SENDTO || ev == EV_SENDMSG || ev == EV_SENDMMSG || ev == EV_WRITE
+}
+
+func isRecv(ev uint8) bool {
+	return ev == EV_RECVFROM || ev == EV_RECVMSG || ev == EV_RECVMMSG || ev == EV_READ
+}
 
 func isAllZero16(b [16]byte) bool {
 	for i := 0; i < 16; i++ {
@@ -291,7 +302,15 @@ func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 }
 
 func flowReadyToOpen(f *Flow) bool {
-	return !isAllZero16(f.Remote)
+	if isAllZero16(f.Remote) {
+		return false
+	}
+	switch f.Key.Proto {
+	case IPPROTO_TCP, IPPROTO_UDP:
+		return f.Lport != 0 && f.Rport != 0
+	default:
+		return true
+	}
 }
 
 var lostTotal uint64
@@ -322,7 +341,6 @@ func dropZeroFlow(f *Flow) bool {
 	if f.InBytes != 0 || f.OutBytes != 0 {
 		return false
 	}
-	// UDP/ICMP нулевые режем только если за жизнь флоу не было потерь
 	if f.Key.Proto == IPPROTO_UDP || f.Key.Proto == IPPROTO_ICMP || f.Key.Proto == IPPROTO_ICMPV6 {
 		return f.GenStart == atomic.LoadUint64(&lostGen)
 	}
@@ -381,6 +399,7 @@ func main() {
 			_ = l.Close()
 		}
 	}()
+
 	attach := func(cat, name string, prog *ebpf.Program) {
 		l, err := link.Tracepoint(cat, name, prog, nil)
 		if err != nil {
@@ -411,6 +430,16 @@ func main() {
 	attach("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit)
 	attach("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter)
 	attach("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit)
+
+	attach("syscalls", "sys_enter_sendmmsg", objs.TraceSendmmsgEnter)
+	attach("syscalls", "sys_exit_sendmmsg", objs.TraceSendmmsgExit)
+	attach("syscalls", "sys_enter_recvmmsg", objs.TraceRecvmmsgEnter)
+	attach("syscalls", "sys_exit_recvmmsg", objs.TraceRecvmmsgExit)
+
+	attach("syscalls", "sys_enter_write", objs.TraceWriteEnter)
+	attach("syscalls", "sys_exit_write", objs.TraceWriteExit)
+	attach("syscalls", "sys_enter_read", objs.TraceReadEnter)
+	attach("syscalls", "sys_exit_read", objs.TraceReadExit)
 
 	perfBytes := *flgPerfMB * 1024 * 1024
 	if perfBytes < 256*1024 {
@@ -474,6 +503,29 @@ func main() {
 		return true
 	}
 
+	// upgrade cookie-only UDP/ICMP flow to per-peer when peer becomes known
+	upgradeKeyIfNeeded := func(key FlowKey) (FlowKey, *Flow) {
+		if key.PeerMode != 1 {
+			return key, nil
+		}
+		if key.Proto != IPPROTO_UDP && key.Proto != IPPROTO_ICMP && key.Proto != IPPROTO_ICMPV6 {
+			return key, nil
+		}
+		base := key
+		base.PeerMode = 0
+		base.Rport = 0
+		for i := range base.Remote {
+			base.Remote[i] = 0
+		}
+		if fb := flows[base]; fb != nil {
+			delete(flows, base)
+			fb.Key = key
+			flows[key] = fb
+			return key, fb
+		}
+		return key, nil
+	}
+
 	closeByCookie := func(tgid uint32, cookie uint64, reason string) {
 		for k, f := range flows {
 			if k.TGID == tgid && k.Cookie == cookie {
@@ -528,7 +580,6 @@ func main() {
 			lastLost = total
 			lastTick = now
 
-			// TTL sweep
 			for k, f := range flows {
 				if now.Sub(f.LastSeen) > *flgTTL {
 					if dropZeroFlow(f) {
@@ -574,27 +625,57 @@ func main() {
 			}
 
 			key := makeKey(ev)
+			key, upgraded := upgradeKeyIfNeeded(key)
+
 			f := flows[key]
 			if f == nil {
-				f = &Flow{
-					Key:       key,
-					Comm:      comm,
-					FirstSeen: w.now,
-					LastSeen:  w.now,
-					GenStart:  atomic.LoadUint64(&lostGen),
+				if upgraded != nil {
+					f = upgraded
+				} else {
+					f = &Flow{
+						Key:       key,
+						Comm:      comm,
+						FirstSeen: w.now,
+						LastSeen:  w.now,
+						GenStart:  atomic.LoadUint64(&lostGen),
+					}
+					flows[key] = f
 				}
-				flows[key] = f
 			}
 
 			f.LastSeen = w.now
 			applyEndpoints(f, ev)
 
-			if isSend(evt) && ev.Ret > 0 {
-				f.OutBytes += uint64(ev.Ret)
-				f.OutPkts++
-			} else if isRecv(evt) && ev.Ret > 0 {
-				f.InBytes += uint64(ev.Ret)
-				f.InPkts++
+			// accounting
+			switch evt {
+			case EV_SENDMMSG:
+				if ev.Ret > 0 {
+					f.OutBytes += uint64(ev.Ret)
+				}
+				if ev.State > 0 {
+					f.OutPkts += uint64(ev.State)
+				} else {
+					f.OutPkts++
+				}
+
+			case EV_RECVMMSG:
+				if ev.Ret > 0 {
+					f.InBytes += uint64(ev.Ret)
+				}
+				if ev.State > 0 {
+					f.InPkts += uint64(ev.State)
+				} else {
+					f.InPkts++
+				}
+
+			default:
+				if isSend(evt) && ev.Ret > 0 {
+					f.OutBytes += uint64(ev.Ret)
+					f.OutPkts++
+				} else if isRecv(evt) && ev.Ret > 0 {
+					f.InBytes += uint64(ev.Ret)
+					f.InPkts++
+				}
 			}
 
 			if !f.OpenedPrinted && flowReadyToOpen(f) {

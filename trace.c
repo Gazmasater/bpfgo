@@ -27,11 +27,21 @@
 #define EV_RECVMSG   12
 #define EV_CLOSE     30
 
+// extra events
+#define EV_SENDMMSG  13
+#define EV_RECVMMSG  14
+#define EV_READ      21
+#define EV_WRITE     22
+
 // socket flags
 #define MSG_PEEK 0x2
 
 #define S_IFMT   0170000
 #define S_IFSOCK 0140000
+
+// bounded loops
+#define MAX_MMSG 16
+#define MAX_IOV  4
 
 /* ====== types ====== */
 
@@ -76,7 +86,7 @@ struct trace_info {
     __u32 fd;
     __s32 _pad0;
 
-    __s64 ret;
+    __s64 ret;     // bytes (for mmsg: summed best-effort)
 
     __u16 family;
     __u16 sport;
@@ -84,7 +94,7 @@ struct trace_info {
 
     __u8  proto;
     __u8  event;
-    __u8  state;
+    __u8  state;   // for mmsg: packets count (clamped to 255)
     __u8  _pad1;
 
     __u32 src_ip4; // net order
@@ -96,6 +106,7 @@ struct trace_info {
 };
 
 const struct trace_info *unused __attribute__((unused));
+
 struct user_msghdr_head {
     void *msg_name;
     __u32 msg_namelen;
@@ -119,6 +130,40 @@ struct msg_ptrflags_t {
     __u64 msg;    // user msghdr*
     __u32 flags;
     __u32 _pad;
+};
+
+/* ---- mmsg (x86_64 userspace ABI) ---- */
+
+struct user_iovec64 {
+    __u64 iov_base;
+    __u64 iov_len;
+};
+
+struct user_msghdr64 {
+    __u64 msg_name;       // void*
+    __u32 msg_namelen;    // int
+    __u32 _pad0;
+
+    __u64 msg_iov;        // struct iovec*
+    __u64 msg_iovlen;     // size_t
+
+    __u64 msg_control;    // void*
+    __u64 msg_controllen; // size_t
+
+    __u32 msg_flags;      // int/uint
+    __u32 _pad1;
+};
+
+struct user_mmsghdr64 {
+    struct user_msghdr64 msg_hdr;
+    __u32 msg_len;        // recv: filled by kernel; send: often 0
+    __u32 _pad;
+};
+
+struct mmsg_ptrvlen_t {
+    __u64 vec;    // user mmsghdr*
+    __u32 vlen;
+    __u32 flags;
 };
 
 /* ====== maps ====== */
@@ -183,6 +228,20 @@ struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 16384);
     __type(key, __u64);
+    __type(value, struct mmsg_ptrvlen_t);
+} mmsgSend_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 16384);
+    __type(key, __u64);
+    __type(value, struct mmsg_ptrvlen_t);
+} mmsgRecv_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 16384);
+    __type(key, __u64);
     __type(value, struct conn_info_t);
 } conn_info_map SEC(".maps");
 
@@ -194,6 +253,8 @@ struct {
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 /* ====== helpers ====== */
+
+static __always_inline __u32 min_u32(__u32 a, __u32 b) { return a < b ? a : b; }
 
 static __always_inline int read_sys_exit_ret(struct trace_event_raw_sys_exit *ctx, __s64 *ret)
 {
@@ -209,6 +270,70 @@ static __always_inline int read_msghdr_head(__u64 msg_u, struct user_msghdr_head
     if (bpf_probe_read_user(h, sizeof(*h), (void *)msg_u) < 0)
         return -1;
     return 0;
+}
+
+static __always_inline int read_mmsg0(__u64 vec_u, struct user_mmsghdr64 *out)
+{
+    if (!vec_u)
+        return -1;
+    if (bpf_probe_read_user(out, sizeof(*out), (void *)vec_u) < 0)
+        return -1;
+    return 0;
+}
+
+// recv: sum msg_len (kernel fills it)
+static __always_inline __s64 sum_mmsg_len(__u64 vec_u, __u32 n)
+{
+    __s64 total = 0;
+
+#pragma clang loop unroll(full)
+    for (int i = 0; i < MAX_MMSG; i++) {
+        if ((__u32)i >= n)
+            continue;
+
+        struct user_mmsghdr64 mh = {};
+        __u64 p = vec_u + (__u64)i * (__u64)sizeof(struct user_mmsghdr64);
+        if (bpf_probe_read_user(&mh, sizeof(mh), (void *)p) == 0) {
+            total += (__s64)mh.msg_len;
+        }
+    }
+    return total;
+}
+
+// send: best-effort sum iov_len (common case iovlen=1)
+static __always_inline __s64 sum_mmsg_iov_bytes(__u64 vec_u, __u32 n)
+{
+    __s64 total = 0;
+
+#pragma clang loop unroll(full)
+    for (int i = 0; i < MAX_MMSG; i++) {
+        if ((__u32)i >= n)
+            continue;
+
+        struct user_mmsghdr64 mh = {};
+        __u64 p = vec_u + (__u64)i * (__u64)sizeof(struct user_mmsghdr64);
+        if (bpf_probe_read_user(&mh, sizeof(mh), (void *)p) != 0)
+            continue;
+
+        if (!mh.msg_hdr.msg_iov || mh.msg_hdr.msg_iovlen == 0)
+            continue;
+
+        __u32 iovcnt = (mh.msg_hdr.msg_iovlen > 0xffffffffULL) ? 0xffffffffU : (__u32)mh.msg_hdr.msg_iovlen;
+        iovcnt = min_u32(iovcnt, MAX_IOV);
+
+#pragma clang loop unroll(full)
+        for (int j = 0; j < MAX_IOV; j++) {
+            if ((__u32)j >= iovcnt)
+                continue;
+
+            struct user_iovec64 iv = {};
+            __u64 ip = mh.msg_hdr.msg_iov + (__u64)j * (__u64)sizeof(struct user_iovec64);
+            if (bpf_probe_read_user(&iv, sizeof(iv), (void *)ip) == 0) {
+                total += (__s64)iv.iov_len;
+            }
+        }
+    }
+    return total;
 }
 
 /* ---- fd->file helpers ---- */
@@ -314,7 +439,6 @@ static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
             __u8 v6[16] = {};
             v6[10] = 0xff;
             v6[11] = 0xff;
-            // ipv4 bytes are already in network order inside s_addr
             __builtin_memcpy(&v6[12], &sa.sin_addr.s_addr, 4);
 
             if (fill_dst) {
@@ -327,11 +451,9 @@ static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
             return 0;
         }
 
-        // остальные несовпадения family просто игнорим
         return -1;
     }
 
-    // если family ещё не была известна — фиксируем её один раз
     if (info->family == 0)
         info->family = family;
 
@@ -378,17 +500,14 @@ static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
 
 static __always_inline __u32 ipv4_local_addr(struct sock *sk)
 {
-    // часто 0.0.0.0 для UDP "any", но пробуем
     __u32 a = BPF_CORE_READ(sk, __sk_common.skc_rcv_saddr);
-
     if (a == 0) {
-        // fallback: inet_saddr (есть в большинстве ядер)
         struct inet_sock *inet = (struct inet_sock *)sk;
         a = BPF_CORE_READ(inet, inet_saddr);
     }
-
     return a;
 }
+
 static __always_inline int is_ipv4_loopback(__u32 addr_be)
 {
     if (addr_be == 0)
@@ -409,8 +528,6 @@ static __always_inline int is_ipv6_loopback(const __u8 a[16])
 
 static __always_inline void loopback_fallback(struct trace_info *info, int is_send_dir)
 {
-    // is_send_dir: 1 => src is local, dst is remote
-    //              0 => src is remote, dst is local
     if (info->family == AF_INET) {
         if (is_send_dir) {
             if (info->src_ip4 == 0 && is_ipv4_loopback(info->dst_ip4))
@@ -422,7 +539,6 @@ static __always_inline void loopback_fallback(struct trace_info *info, int is_se
     } else if (info->family == AF_INET6) {
         if (is_send_dir) {
             if (is_ipv6_loopback(info->dst_ip6) && !is_ipv6_loopback(info->src_ip6)) {
-                // if src is all-zero and dst is ::1 => set src=::1
                 int all0 = 1;
 #pragma clang loop unroll(full)
                 for (int i = 0; i < 16; i++) if (info->src_ip6[i] != 0) all0 = 0;
@@ -478,7 +594,6 @@ static __always_inline int fill_fd_state(int fd, struct fd_state_t *st)
     return -1;
 }
 
-/* cache + self-heal */
 static __always_inline int fill_from_fd_state_map(struct trace_info *info, __u32 tgid, int fd, int is_send_dir)
 {
     struct fd_key_t k = { .tgid = tgid, .fd = fd };
@@ -629,7 +744,6 @@ int trace_connect_exit(struct trace_event_raw_sys_exit *ctx)
         goto cleanup;
     }
 
-    // prefer user-provided dst sockaddr (more accurate)
     struct addr_ptrlen_t *ap = bpf_map_lookup_elem(&addrConnect_map, &id);
     if (ap && ap->addr && ap->len)
         (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 1);
@@ -654,7 +768,7 @@ static __always_inline int accept_enter_common(struct trace_event_raw_sys_enter 
 
     struct conn_info_t ci = {};
     ci.tgid = tgid;
-    ci.fd   = (__u32)ctx->args[0]; // listen fd
+    ci.fd   = (__u32)ctx->args[0];
     bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
     bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
     return 0;
@@ -681,7 +795,7 @@ static __always_inline int accept_exit_common(struct trace_event_raw_sys_exit *c
     struct trace_info info = {};
     info.event = EV_ACCEPT;
 
-    info.fd  = conn ? conn->fd : 0; // listen fd
+    info.fd  = conn ? conn->fd : 0;
     info.ret = newfd;
 
     info.ts_ns  = bpf_ktime_get_ns();
@@ -697,7 +811,6 @@ static __always_inline int accept_exit_common(struct trace_event_raw_sys_exit *c
     info.proto  = st.proto;
     info.family = st.family;
 
-    // accept: peer -> local (userspace потом нормализует)
     info.sport = st.rport;
     info.dport = st.lport;
 
@@ -786,7 +899,6 @@ int trace_bind_exit(struct trace_event_raw_sys_exit *ctx)
     info.proto  = st.proto;
     info.family = st.family;
 
-    // bind = local: положим в src (чтобы userspace стабильно использовал)
     info.sport = st.lport;
     if (st.family == AF_INET) {
         info.src_ip4 = st.lip;
@@ -794,7 +906,6 @@ int trace_bind_exit(struct trace_event_raw_sys_exit *ctx)
         __builtin_memcpy(info.src_ip6, &st.lip6, 16);
     }
 
-    // user sockaddr может уточнить (IP/порт), но не должен затирать нулями
     struct addr_ptrlen_t *ap = bpf_map_lookup_elem(&addrBind_map, &id);
     if (ap && ap->addr && ap->len)
         (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 0);
@@ -856,7 +967,6 @@ int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
         goto cleanup;
 
-    // prefer explicit dst sockaddr from sendto
     struct addr_ptrlen_t *ap = bpf_map_lookup_elem(&addrSend_map, &id);
     if (ap && ap->addr && ap->len)
         (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 1);
@@ -893,7 +1003,6 @@ int trace_recvfrom_enter(struct trace_event_raw_sys_enter *ctx)
         struct addr_recv_meta_t m = {.addr = uaddr, .lenp = lenp_u, .flags = flags};
         bpf_map_update_elem(&addrRecv_map, &id, &m, BPF_ANY);
     } else if (flags & MSG_PEEK) {
-        // store peek flag even if no addr pointers
         struct addr_recv_meta_t m = {.addr = 0, .lenp = 0, .flags = flags};
         bpf_map_update_elem(&addrRecv_map, &id, &m, BPF_ANY);
     }
@@ -929,7 +1038,6 @@ int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
         goto cleanup;
 
-    // peer addr written by kernel
     if (m && m->addr && m->lenp) {
         __u32 addrlen = 0;
         if (bpf_probe_read_user(&addrlen, sizeof(addrlen), (void *)m->lenp) == 0) {
@@ -1082,6 +1190,257 @@ cleanup:
     return 0;
 }
 
+/* ====== sendmmsg ====== */
+
+SEC("tracepoint/syscalls/sys_enter_sendmmsg")
+int trace_sendmmsg_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    struct conn_info_t ci = {};
+    ci.tgid = tgid;
+    ci.fd   = (__u32)ctx->args[0];
+    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+
+    struct mmsg_ptrvlen_t v = {};
+    v.vec   = (__u64)ctx->args[1];
+    v.vlen  = (__u32)ctx->args[2];
+    v.flags = (__u32)ctx->args[3];
+
+    if (v.vec && v.vlen)
+        bpf_map_update_elem(&mmsgSend_map, &id, &v, BPF_ANY);
+
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_sendmmsg")
+int trace_sendmmsg_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    struct mmsg_ptrvlen_t *pv = bpf_map_lookup_elem(&mmsgSend_map, &id);
+    if (!ci || !pv || !pv->vec)
+        goto cleanup;
+
+    __u32 cnt = (__u32)ret;
+    cnt = min_u32(cnt, pv->vlen);
+    cnt = min_u32(cnt, MAX_MMSG);
+
+    struct trace_info info = {};
+    info.event = EV_SENDMMSG;
+    info.fd    = ci->fd;
+    info.state = (ret > 255) ? 255 : (__u8)ret;
+    info.ret   = sum_mmsg_iov_bytes(pv->vec, cnt);
+
+    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
+        goto cleanup;
+
+    // prefer explicit dst from first mmsghdr (if present)
+    struct user_mmsghdr64 m0 = {};
+    if (read_mmsg0(pv->vec, &m0) == 0) {
+        if (m0.msg_hdr.msg_name && m0.msg_hdr.msg_namelen >= sizeof(__u16)) {
+            (void)fill_from_sockaddr_user(&info, (void *)m0.msg_hdr.msg_name, m0.msg_hdr.msg_namelen, 1);
+        }
+    }
+
+    loopback_fallback(&info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+cleanup:
+    bpf_map_delete_elem(&mmsgSend_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
+/* ====== recvmmsg (filter MSG_PEEK) ====== */
+
+SEC("tracepoint/syscalls/sys_enter_recvmmsg")
+int trace_recvmmsg_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    struct conn_info_t ci = {};
+    ci.tgid = tgid;
+    ci.fd   = (__u32)ctx->args[0];
+    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+
+    struct mmsg_ptrvlen_t v = {};
+    v.vec   = (__u64)ctx->args[1];
+    v.vlen  = (__u32)ctx->args[2];
+    v.flags = (__u32)ctx->args[3];
+
+    if (v.vec && v.vlen)
+        bpf_map_update_elem(&mmsgRecv_map, &id, &v, BPF_ANY);
+
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_recvmmsg")
+int trace_recvmmsg_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
+        goto cleanup;
+
+    struct mmsg_ptrvlen_t *pv = bpf_map_lookup_elem(&mmsgRecv_map, &id);
+    if (pv && (pv->flags & MSG_PEEK))
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci || !pv || !pv->vec)
+        goto cleanup;
+
+    __u32 cnt = (__u32)ret;
+    cnt = min_u32(cnt, pv->vlen);
+    cnt = min_u32(cnt, MAX_MMSG);
+
+    struct trace_info info = {};
+    info.event = EV_RECVMMSG;
+    info.fd    = ci->fd;
+    info.state = (ret > 255) ? 255 : (__u8)ret;
+    info.ret   = sum_mmsg_len(pv->vec, cnt);
+
+    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
+        goto cleanup;
+
+    // peer addr from first mmsghdr (if kernel filled it)
+    struct user_mmsghdr64 m0 = {};
+    if (read_mmsg0(pv->vec, &m0) == 0) {
+        if (m0.msg_hdr.msg_name && m0.msg_hdr.msg_namelen >= sizeof(__u16)) {
+            (void)fill_from_sockaddr_user(&info, (void *)m0.msg_hdr.msg_name, m0.msg_hdr.msg_namelen, 0);
+        }
+    }
+
+    loopback_fallback(&info, 0);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+cleanup:
+    bpf_map_delete_elem(&mmsgRecv_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
+/* ====== write/read (ONLY SOCKETS) ====== */
+
+SEC("tracepoint/syscalls/sys_enter_write")
+int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+    int fd = (int)ctx->args[0];
+
+    if (!is_socket_fd(fd))
+        return 0;
+
+    struct conn_info_t ci = {};
+    ci.tgid = tgid;
+    ci.fd   = (__u32)fd;
+    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_write")
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+    struct trace_info info = {};
+    info.event = EV_WRITE;
+    info.fd    = ci->fd;
+    info.ret   = ret;
+
+    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
+        goto cleanup;
+
+    loopback_fallback(&info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+cleanup:
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_enter_read")
+int trace_read_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+    int fd = (int)ctx->args[0];
+
+    if (!is_socket_fd(fd))
+        return 0;
+
+    struct conn_info_t ci = {};
+    ci.tgid = tgid;
+    ci.fd   = (__u32)fd;
+    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_read")
+int trace_read_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+    struct trace_info info = {};
+    info.event = EV_READ;
+    info.fd    = ci->fd;
+    info.ret   = ret;
+
+    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
+        goto cleanup;
+
+    loopback_fallback(&info, 0);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+cleanup:
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
 /* ====== close (ONLY SOCKETS) ====== */
 
 SEC("tracepoint/syscalls/sys_enter_close")
@@ -1095,7 +1454,6 @@ int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
     struct fd_key_t k = { .tgid = tgid, .fd = fd };
     bpf_map_delete_elem(&fd_state_map, &k);
 
-    // emit only for socket fds
     if (!is_socket_fd(fd))
         return 0;
 
@@ -1106,7 +1464,6 @@ int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
 
     fill_ids_comm_cookie(&info, id, fd, 0);
 
-    // best effort: fill current endpoint state without relying on cache
     struct fd_state_t st = {};
     if (fill_fd_state(fd, &st) == 0) {
         info.proto  = st.proto;
