@@ -692,21 +692,11 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 #define EV_RECVMSG   12
 #define EV_CLOSE     30
 
-// extra events
-#define EV_SENDMMSG  13
-#define EV_RECVMMSG  14
-#define EV_READ      21
-#define EV_WRITE     22
-
 // socket flags
 #define MSG_PEEK 0x2
 
 #define S_IFMT   0170000
 #define S_IFSOCK 0140000
-
-// bounded loops
-#define MAX_MMSG 16
-#define MAX_IOV  4
 
 /* ====== types ====== */
 
@@ -751,7 +741,7 @@ struct trace_info {
     __u32 fd;
     __s32 _pad0;
 
-    __s64 ret;     // bytes (for mmsg: summed best-effort)
+    __s64 ret;
 
     __u16 family;
     __u16 sport;
@@ -759,13 +749,17 @@ struct trace_info {
 
     __u8  proto;
     __u8  event;
-    __u8  state;   // for mmsg: packets count (clamped to 255)
+    __u8  state;
     __u8  _pad1;
 
     __u32 src_ip4; // net order
     __u32 dst_ip4; // net order
     __u8  src_ip6[16];
     __u8  dst_ip6[16];
+
+    // IMPORTANT: link-local IPv6 needs scope_id (ifindex)
+    __u32 src_scope; // sin6_scope_id if known
+    __u32 dst_scope; // sin6_scope_id if known
 
     char  comm[32];
 };
@@ -795,40 +789,6 @@ struct msg_ptrflags_t {
     __u64 msg;    // user msghdr*
     __u32 flags;
     __u32 _pad;
-};
-
-/* ---- mmsg (x86_64 userspace ABI) ---- */
-
-struct user_iovec64 {
-    __u64 iov_base;
-    __u64 iov_len;
-};
-
-struct user_msghdr64 {
-    __u64 msg_name;       // void*
-    __u32 msg_namelen;    // int
-    __u32 _pad0;
-
-    __u64 msg_iov;        // struct iovec*
-    __u64 msg_iovlen;     // size_t
-
-    __u64 msg_control;    // void*
-    __u64 msg_controllen; // size_t
-
-    __u32 msg_flags;      // int/uint
-    __u32 _pad1;
-};
-
-struct user_mmsghdr64 {
-    struct user_msghdr64 msg_hdr;
-    __u32 msg_len;        // recv: filled by kernel; send: often 0
-    __u32 _pad;
-};
-
-struct mmsg_ptrvlen_t {
-    __u64 vec;    // user mmsghdr*
-    __u32 vlen;
-    __u32 flags;
 };
 
 /* ====== maps ====== */
@@ -893,20 +853,6 @@ struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 16384);
     __type(key, __u64);
-    __type(value, struct mmsg_ptrvlen_t);
-} mmsgSend_map SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 16384);
-    __type(key, __u64);
-    __type(value, struct mmsg_ptrvlen_t);
-} mmsgRecv_map SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 16384);
-    __type(key, __u64);
     __type(value, struct conn_info_t);
 } conn_info_map SEC(".maps");
 
@@ -918,8 +864,6 @@ struct {
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 /* ====== helpers ====== */
-
-static __always_inline __u32 min_u32(__u32 a, __u32 b) { return a < b ? a : b; }
 
 static __always_inline int read_sys_exit_ret(struct trace_event_raw_sys_exit *ctx, __s64 *ret)
 {
@@ -935,70 +879,6 @@ static __always_inline int read_msghdr_head(__u64 msg_u, struct user_msghdr_head
     if (bpf_probe_read_user(h, sizeof(*h), (void *)msg_u) < 0)
         return -1;
     return 0;
-}
-
-static __always_inline int read_mmsg0(__u64 vec_u, struct user_mmsghdr64 *out)
-{
-    if (!vec_u)
-        return -1;
-    if (bpf_probe_read_user(out, sizeof(*out), (void *)vec_u) < 0)
-        return -1;
-    return 0;
-}
-
-// recv: sum msg_len (kernel fills it)
-static __always_inline __s64 sum_mmsg_len(__u64 vec_u, __u32 n)
-{
-    __s64 total = 0;
-
-#pragma clang loop unroll(full)
-    for (int i = 0; i < MAX_MMSG; i++) {
-        if ((__u32)i >= n)
-            continue;
-
-        struct user_mmsghdr64 mh = {};
-        __u64 p = vec_u + (__u64)i * (__u64)sizeof(struct user_mmsghdr64);
-        if (bpf_probe_read_user(&mh, sizeof(mh), (void *)p) == 0) {
-            total += (__s64)mh.msg_len;
-        }
-    }
-    return total;
-}
-
-// send: best-effort sum iov_len (common case iovlen=1)
-static __always_inline __s64 sum_mmsg_iov_bytes(__u64 vec_u, __u32 n)
-{
-    __s64 total = 0;
-
-#pragma clang loop unroll(full)
-    for (int i = 0; i < MAX_MMSG; i++) {
-        if ((__u32)i >= n)
-            continue;
-
-        struct user_mmsghdr64 mh = {};
-        __u64 p = vec_u + (__u64)i * (__u64)sizeof(struct user_mmsghdr64);
-        if (bpf_probe_read_user(&mh, sizeof(mh), (void *)p) != 0)
-            continue;
-
-        if (!mh.msg_hdr.msg_iov || mh.msg_hdr.msg_iovlen == 0)
-            continue;
-
-        __u32 iovcnt = (mh.msg_hdr.msg_iovlen > 0xffffffffULL) ? 0xffffffffU : (__u32)mh.msg_hdr.msg_iovlen;
-        iovcnt = min_u32(iovcnt, MAX_IOV);
-
-#pragma clang loop unroll(full)
-        for (int j = 0; j < MAX_IOV; j++) {
-            if ((__u32)j >= iovcnt)
-                continue;
-
-            struct user_iovec64 iv = {};
-            __u64 ip = mh.msg_hdr.msg_iov + (__u64)j * (__u64)sizeof(struct user_iovec64);
-            if (bpf_probe_read_user(&iv, sizeof(iv), (void *)ip) == 0) {
-                total += (__s64)iv.iov_len;
-            }
-        }
-    }
-    return total;
 }
 
 /* ---- fd->file helpers ---- */
@@ -1146,14 +1026,18 @@ static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
         struct sockaddr_in6 sa6 = {};
         if (bpf_probe_read_user(&sa6, sizeof(sa6), uaddr) < 0)
             return -1;
+
         __u16 port = bpf_ntohs(sa6.sin6_port);
+        __u32 scope = sa6.sin6_scope_id;
 
         if (fill_dst) {
             __builtin_memcpy(info->dst_ip6, &sa6.sin6_addr, 16);
             if (port) info->dport = port;
+            if (scope) info->dst_scope = scope;
         } else {
             __builtin_memcpy(info->src_ip6, &sa6.sin6_addr, 16);
             if (port) info->sport = port;
+            if (scope) info->src_scope = scope;
         }
         return 0;
     }
@@ -1166,10 +1050,12 @@ static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
 static __always_inline __u32 ipv4_local_addr(struct sock *sk)
 {
     __u32 a = BPF_CORE_READ(sk, __sk_common.skc_rcv_saddr);
+
     if (a == 0) {
         struct inet_sock *inet = (struct inet_sock *)sk;
         a = BPF_CORE_READ(inet, inet_saddr);
     }
+
     return a;
 }
 
@@ -1259,6 +1145,7 @@ static __always_inline int fill_fd_state(int fd, struct fd_state_t *st)
     return -1;
 }
 
+/* cache + self-heal */
 static __always_inline int fill_from_fd_state_map(struct trace_info *info, __u32 tgid, int fd, int is_send_dir)
 {
     struct fd_key_t k = { .tgid = tgid, .fd = fd };
@@ -1409,6 +1296,7 @@ int trace_connect_exit(struct trace_event_raw_sys_exit *ctx)
         goto cleanup;
     }
 
+    // prefer user-provided dst sockaddr (more accurate + scope_id)
     struct addr_ptrlen_t *ap = bpf_map_lookup_elem(&addrConnect_map, &id);
     if (ap && ap->addr && ap->len)
         (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 1);
@@ -1433,7 +1321,7 @@ static __always_inline int accept_enter_common(struct trace_event_raw_sys_enter 
 
     struct conn_info_t ci = {};
     ci.tgid = tgid;
-    ci.fd   = (__u32)ctx->args[0];
+    ci.fd   = (__u32)ctx->args[0]; // listen fd
     bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
     bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
     return 0;
@@ -1460,7 +1348,7 @@ static __always_inline int accept_exit_common(struct trace_event_raw_sys_exit *c
     struct trace_info info = {};
     info.event = EV_ACCEPT;
 
-    info.fd  = conn ? conn->fd : 0;
+    info.fd  = conn ? conn->fd : 0; // listen fd
     info.ret = newfd;
 
     info.ts_ns  = bpf_ktime_get_ns();
@@ -1476,6 +1364,7 @@ static __always_inline int accept_exit_common(struct trace_event_raw_sys_exit *c
     info.proto  = st.proto;
     info.family = st.family;
 
+    // accept: peer -> local
     info.sport = st.rport;
     info.dport = st.lport;
 
@@ -1571,6 +1460,7 @@ int trace_bind_exit(struct trace_event_raw_sys_exit *ctx)
         __builtin_memcpy(info.src_ip6, &st.lip6, 16);
     }
 
+    // user sockaddr may refine (IP/port/scope) but won't overwrite with zeros
     struct addr_ptrlen_t *ap = bpf_map_lookup_elem(&addrBind_map, &id);
     if (ap && ap->addr && ap->len)
         (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 0);
@@ -1632,6 +1522,7 @@ int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
         goto cleanup;
 
+    // prefer explicit dst sockaddr from sendto (includes scope_id for fe80::)
     struct addr_ptrlen_t *ap = bpf_map_lookup_elem(&addrSend_map, &id);
     if (ap && ap->addr && ap->len)
         (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 1);
@@ -1703,6 +1594,7 @@ int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
         goto cleanup;
 
+    // peer addr written by kernel (for fe80:: it usually includes scope_id)
     if (m && m->addr && m->lenp) {
         __u32 addrlen = 0;
         if (bpf_probe_read_user(&addrlen, sizeof(addrlen), (void *)m->lenp) == 0) {
@@ -1855,257 +1747,6 @@ cleanup:
     return 0;
 }
 
-/* ====== sendmmsg ====== */
-
-SEC("tracepoint/syscalls/sys_enter_sendmmsg")
-int trace_sendmmsg_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    struct conn_info_t ci = {};
-    ci.tgid = tgid;
-    ci.fd   = (__u32)ctx->args[0];
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
-
-    struct mmsg_ptrvlen_t v = {};
-    v.vec   = (__u64)ctx->args[1];
-    v.vlen  = (__u32)ctx->args[2];
-    v.flags = (__u32)ctx->args[3];
-
-    if (v.vec && v.vlen)
-        bpf_map_update_elem(&mmsgSend_map, &id, &v, BPF_ANY);
-
-    return 0;
-}
-
-SEC("tracepoint/syscalls/sys_exit_sendmmsg")
-int trace_sendmmsg_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
-        goto cleanup;
-
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    struct mmsg_ptrvlen_t *pv = bpf_map_lookup_elem(&mmsgSend_map, &id);
-    if (!ci || !pv || !pv->vec)
-        goto cleanup;
-
-    __u32 cnt = (__u32)ret;
-    cnt = min_u32(cnt, pv->vlen);
-    cnt = min_u32(cnt, MAX_MMSG);
-
-    struct trace_info info = {};
-    info.event = EV_SENDMMSG;
-    info.fd    = ci->fd;
-    info.state = (ret > 255) ? 255 : (__u8)ret;
-    info.ret   = sum_mmsg_iov_bytes(pv->vec, cnt);
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
-        goto cleanup;
-
-    // prefer explicit dst from first mmsghdr (if present)
-    struct user_mmsghdr64 m0 = {};
-    if (read_mmsg0(pv->vec, &m0) == 0) {
-        if (m0.msg_hdr.msg_name && m0.msg_hdr.msg_namelen >= sizeof(__u16)) {
-            (void)fill_from_sockaddr_user(&info, (void *)m0.msg_hdr.msg_name, m0.msg_hdr.msg_namelen, 1);
-        }
-    }
-
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-cleanup:
-    bpf_map_delete_elem(&mmsgSend_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
-
-/* ====== recvmmsg (filter MSG_PEEK) ====== */
-
-SEC("tracepoint/syscalls/sys_enter_recvmmsg")
-int trace_recvmmsg_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    struct conn_info_t ci = {};
-    ci.tgid = tgid;
-    ci.fd   = (__u32)ctx->args[0];
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
-
-    struct mmsg_ptrvlen_t v = {};
-    v.vec   = (__u64)ctx->args[1];
-    v.vlen  = (__u32)ctx->args[2];
-    v.flags = (__u32)ctx->args[3];
-
-    if (v.vec && v.vlen)
-        bpf_map_update_elem(&mmsgRecv_map, &id, &v, BPF_ANY);
-
-    return 0;
-}
-
-SEC("tracepoint/syscalls/sys_exit_recvmmsg")
-int trace_recvmmsg_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
-        goto cleanup;
-
-    struct mmsg_ptrvlen_t *pv = bpf_map_lookup_elem(&mmsgRecv_map, &id);
-    if (pv && (pv->flags & MSG_PEEK))
-        goto cleanup;
-
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci || !pv || !pv->vec)
-        goto cleanup;
-
-    __u32 cnt = (__u32)ret;
-    cnt = min_u32(cnt, pv->vlen);
-    cnt = min_u32(cnt, MAX_MMSG);
-
-    struct trace_info info = {};
-    info.event = EV_RECVMMSG;
-    info.fd    = ci->fd;
-    info.state = (ret > 255) ? 255 : (__u8)ret;
-    info.ret   = sum_mmsg_len(pv->vec, cnt);
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
-        goto cleanup;
-
-    // peer addr from first mmsghdr (if kernel filled it)
-    struct user_mmsghdr64 m0 = {};
-    if (read_mmsg0(pv->vec, &m0) == 0) {
-        if (m0.msg_hdr.msg_name && m0.msg_hdr.msg_namelen >= sizeof(__u16)) {
-            (void)fill_from_sockaddr_user(&info, (void *)m0.msg_hdr.msg_name, m0.msg_hdr.msg_namelen, 0);
-        }
-    }
-
-    loopback_fallback(&info, 0);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-cleanup:
-    bpf_map_delete_elem(&mmsgRecv_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
-
-/* ====== write/read (ONLY SOCKETS) ====== */
-
-SEC("tracepoint/syscalls/sys_enter_write")
-int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-    int fd = (int)ctx->args[0];
-
-    if (!is_socket_fd(fd))
-        return 0;
-
-    struct conn_info_t ci = {};
-    ci.tgid = tgid;
-    ci.fd   = (__u32)fd;
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
-
-    return 0;
-}
-
-SEC("tracepoint/syscalls/sys_exit_write")
-int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
-        goto cleanup;
-
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci)
-        goto cleanup;
-
-    struct trace_info info = {};
-    info.event = EV_WRITE;
-    info.fd    = ci->fd;
-    info.ret   = ret;
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
-        goto cleanup;
-
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-cleanup:
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
-
-SEC("tracepoint/syscalls/sys_enter_read")
-int trace_read_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-    int fd = (int)ctx->args[0];
-
-    if (!is_socket_fd(fd))
-        return 0;
-
-    struct conn_info_t ci = {};
-    ci.tgid = tgid;
-    ci.fd   = (__u32)fd;
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
-
-    return 0;
-}
-
-SEC("tracepoint/syscalls/sys_exit_read")
-int trace_read_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
-        goto cleanup;
-
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci)
-        goto cleanup;
-
-    struct trace_info info = {};
-    info.event = EV_READ;
-    info.fd    = ci->fd;
-    info.ret   = ret;
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
-        goto cleanup;
-
-    loopback_fallback(&info, 0);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-cleanup:
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
-
 /* ====== close (ONLY SOCKETS) ====== */
 
 SEC("tracepoint/syscalls/sys_enter_close")
@@ -2119,6 +1760,7 @@ int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
     struct fd_key_t k = { .tgid = tgid, .fd = fd };
     bpf_map_delete_elem(&fd_state_map, &k);
 
+    // emit only for socket fds
     if (!is_socket_fd(fd))
         return 0;
 
@@ -2129,6 +1771,7 @@ int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
 
     fill_ids_comm_cookie(&info, id, fd, 0);
 
+    // best effort: fill current endpoint state without relying on cache
     struct fd_state_t st = {};
     if (fill_fd_state(fd, &st) == 0) {
         info.proto  = st.proto;
@@ -2163,6 +1806,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -2200,13 +1844,7 @@ const (
 	EV_BINDOK   = 20
 	EV_SENDMSG  = 11
 	EV_RECVMSG  = 12
-
-	EV_SENDMMSG = 13
-	EV_RECVMMSG = 14
-	EV_READ     = 21
-	EV_WRITE    = 22
-
-	EV_CLOSE = 30
+	EV_CLOSE    = 30
 )
 
 var (
@@ -2257,13 +1895,8 @@ func protoStr(p uint8) string {
 	}
 }
 
-func isSend(ev uint8) bool {
-	return ev == EV_SENDTO || ev == EV_SENDMSG || ev == EV_SENDMMSG || ev == EV_WRITE
-}
-
-func isRecv(ev uint8) bool {
-	return ev == EV_RECVFROM || ev == EV_RECVMSG || ev == EV_RECVMMSG || ev == EV_READ
-}
+func isSend(ev uint8) bool { return ev == EV_SENDTO || ev == EV_SENDMSG }
+func isRecv(ev uint8) bool { return ev == EV_RECVFROM || ev == EV_RECVMSG }
 
 func isAllZero16(b [16]byte) bool {
 	for i := 0; i < 16; i++ {
@@ -2299,14 +1932,45 @@ func fmtIPv6Full(b [16]byte) string {
 	)
 }
 
-func fmtEndpoint(family uint16, ip [16]byte, port uint16, proto uint8) string {
+func isIPv6LinkLocal(ip [16]byte) bool {
+	return ip[0] == 0xfe && (ip[1]&0xc0) == 0x80 // fe80::/10
+}
+
+var ifNameCache = map[uint32]string{}
+
+func ifName(idx uint32) string {
+	if idx == 0 {
+		return ""
+	}
+	if s, ok := ifNameCache[idx]; ok {
+		return s
+	}
+	ifi, err := net.InterfaceByIndex(int(idx))
+	if err == nil && ifi != nil && ifi.Name != "" {
+		ifNameCache[idx] = ifi.Name
+		return ifi.Name
+	}
+	s := fmt.Sprintf("%d", idx)
+	ifNameCache[idx] = s
+	return s
+}
+
+func fmtIPv6WithScope(ip [16]byte, scope uint32) string {
+	s := fmtIPv6Full(ip)
+	if isIPv6LinkLocal(ip) && scope != 0 {
+		return s + "%" + ifName(scope)
+	}
+	return s
+}
+
+func fmtEndpoint(family uint16, ip [16]byte, scope uint32, port uint16, proto uint8) string {
 	isICMP := proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6
 	if isICMP {
 		if isAllZero16(ip) {
 			return "*"
 		}
 		if family == AF_INET6 {
-			return fmtIPv6Full(ip)
+			return fmtIPv6WithScope(ip, scope)
 		}
 		return fmtIPv4FromKey(ip)
 	}
@@ -2315,7 +1979,7 @@ func fmtEndpoint(family uint16, ip [16]byte, port uint16, proto uint8) string {
 		return fmt.Sprintf("*:%d", port)
 	}
 	if family == AF_INET6 {
-		return fmt.Sprintf("[%s]:%d", fmtIPv6Full(ip), port)
+		return fmt.Sprintf("[%s]:%d", fmtIPv6WithScope(ip, scope), port)
 	}
 	return fmt.Sprintf("%s:%d", fmtIPv4FromKey(ip), port)
 }
@@ -2353,10 +2017,12 @@ type Flow struct {
 	Key  FlowKey
 	Comm string
 
-	Local  [16]byte
-	Lport  uint16
-	Remote [16]byte
-	Rport  uint16
+	Local       [16]byte
+	LocalScope  uint32
+	Lport       uint16
+	Remote      [16]byte
+	RemoteScope uint32
+	Rport       uint16
 
 	FirstSeen time.Time
 	LastSeen  time.Time
@@ -2418,6 +2084,10 @@ func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 
 	var localIP, remoteIP [16]byte
 	var lport, rport uint16
+	var lscope, rscope uint32
+
+	srcScope := uint32(ev.SrcScope)
+	dstScope := uint32(ev.DstScope)
 
 	switch {
 	case isSend(evt) || evt == EV_CONNECT:
@@ -2425,22 +2095,29 @@ func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 		remoteIP = dstKeyFromEvent(ev)
 		lport = uint16(ev.Sport)
 		rport = uint16(ev.Dport)
+		lscope = srcScope
+		rscope = dstScope
 
 	case isRecv(evt):
 		localIP = dstKeyFromEvent(ev)
 		remoteIP = srcKeyFromEvent(ev)
 		lport = uint16(ev.Dport)
 		rport = uint16(ev.Sport)
+		lscope = dstScope
+		rscope = srcScope
 
 	case evt == EV_BINDOK:
 		localIP = srcKeyFromEvent(ev)
 		lport = uint16(ev.Sport)
+		lscope = srcScope
 
 	case evt == EV_ACCEPT:
 		localIP = dstKeyFromEvent(ev)
 		remoteIP = srcKeyFromEvent(ev)
 		lport = uint16(ev.Dport)
 		rport = uint16(ev.Sport)
+		lscope = dstScope
+		rscope = srcScope
 	}
 
 	if f.Lport == 0 && lport != 0 {
@@ -2449,11 +2126,18 @@ func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 	if isAllZero16(f.Local) && !isAllZero16(localIP) {
 		f.Local = localIP
 	}
+	if f.LocalScope == 0 && lscope != 0 {
+		f.LocalScope = lscope
+	}
+
 	if f.Rport == 0 && rport != 0 {
 		f.Rport = rport
 	}
 	if isAllZero16(f.Remote) && !isAllZero16(remoteIP) {
 		f.Remote = remoteIP
+	}
+	if f.RemoteScope == 0 && rscope != 0 {
+		f.RemoteScope = rscope
 	}
 }
 
@@ -2507,8 +2191,8 @@ func printOpen(f *Flow) {
 	fmt.Printf("OPEN  %-5s pid=%d(%s) cookie=%d  %s -> %s%s%s\n",
 		protoStr(f.Key.Proto),
 		f.Key.TGID, f.Comm, f.Key.Cookie,
-		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.Key.Proto),
-		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Local, f.LocalScope, f.Lport, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Remote, f.RemoteScope, f.Rport, f.Key.Proto),
 		incompleteNote(f),
 		maybeLostNote(f),
 	)
@@ -2519,8 +2203,8 @@ func printClose(f *Flow, reason string) {
 	fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s reason=%s%s%s\n",
 		protoStr(f.Key.Proto),
 		f.Key.TGID, f.Comm, f.Key.Cookie,
-		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.Key.Proto),
-		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Local, f.LocalScope, f.Lport, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Remote, f.RemoteScope, f.Rport, f.Key.Proto),
 		f.OutBytes, f.OutPkts, f.InBytes, f.InPkts,
 		age, reason,
 		incompleteNote(f),
@@ -2555,7 +2239,6 @@ func main() {
 			_ = l.Close()
 		}
 	}()
-
 	attach := func(cat, name string, prog *ebpf.Program) {
 		l, err := link.Tracepoint(cat, name, prog, nil)
 		if err != nil {
@@ -2586,16 +2269,6 @@ func main() {
 	attach("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit)
 	attach("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter)
 	attach("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit)
-
-	attach("syscalls", "sys_enter_sendmmsg", objs.TraceSendmmsgEnter)
-	attach("syscalls", "sys_exit_sendmmsg", objs.TraceSendmmsgExit)
-	attach("syscalls", "sys_enter_recvmmsg", objs.TraceRecvmmsgEnter)
-	attach("syscalls", "sys_exit_recvmmsg", objs.TraceRecvmmsgExit)
-
-	attach("syscalls", "sys_enter_write", objs.TraceWriteEnter)
-	attach("syscalls", "sys_exit_write", objs.TraceWriteExit)
-	attach("syscalls", "sys_enter_read", objs.TraceReadEnter)
-	attach("syscalls", "sys_exit_read", objs.TraceReadExit)
 
 	perfBytes := *flgPerfMB * 1024 * 1024
 	if perfBytes < 256*1024 {
@@ -2660,12 +2333,12 @@ func main() {
 	}
 
 	// upgrade cookie-only UDP/ICMP flow to per-peer when peer becomes known
-	upgradeKeyIfNeeded := func(key FlowKey) (FlowKey, *Flow) {
+	upgradeKeyIfNeeded := func(key FlowKey) (*Flow, bool) {
 		if key.PeerMode != 1 {
-			return key, nil
+			return nil, false
 		}
 		if key.Proto != IPPROTO_UDP && key.Proto != IPPROTO_ICMP && key.Proto != IPPROTO_ICMPV6 {
-			return key, nil
+			return nil, false
 		}
 		base := key
 		base.PeerMode = 0
@@ -2677,9 +2350,9 @@ func main() {
 			delete(flows, base)
 			fb.Key = key
 			flows[key] = fb
-			return key, fb
+			return fb, true
 		}
-		return key, nil
+		return nil, false
 	}
 
 	closeByCookie := func(tgid uint32, cookie uint64, reason string) {
@@ -2736,6 +2409,7 @@ func main() {
 			lastLost = total
 			lastTick = now
 
+			// TTL sweep
 			for k, f := range flows {
 				if now.Sub(f.LastSeen) > *flgTTL {
 					if dropZeroFlow(f) {
@@ -2781,57 +2455,32 @@ func main() {
 			}
 
 			key := makeKey(ev)
-			key, upgraded := upgradeKeyIfNeeded(key)
+
+			if up, ok := upgradeKeyIfNeeded(key); ok {
+				up.Comm = comm
+			}
 
 			f := flows[key]
 			if f == nil {
-				if upgraded != nil {
-					f = upgraded
-				} else {
-					f = &Flow{
-						Key:       key,
-						Comm:      comm,
-						FirstSeen: w.now,
-						LastSeen:  w.now,
-						GenStart:  atomic.LoadUint64(&lostGen),
-					}
-					flows[key] = f
+				f = &Flow{
+					Key:       key,
+					Comm:      comm,
+					FirstSeen: w.now,
+					LastSeen:  w.now,
+					GenStart:  atomic.LoadUint64(&lostGen),
 				}
+				flows[key] = f
 			}
 
 			f.LastSeen = w.now
 			applyEndpoints(f, ev)
 
-			// accounting
-			switch evt {
-			case EV_SENDMMSG:
-				if ev.Ret > 0 {
-					f.OutBytes += uint64(ev.Ret)
-				}
-				if ev.State > 0 {
-					f.OutPkts += uint64(ev.State)
-				} else {
-					f.OutPkts++
-				}
-
-			case EV_RECVMMSG:
-				if ev.Ret > 0 {
-					f.InBytes += uint64(ev.Ret)
-				}
-				if ev.State > 0 {
-					f.InPkts += uint64(ev.State)
-				} else {
-					f.InPkts++
-				}
-
-			default:
-				if isSend(evt) && ev.Ret > 0 {
-					f.OutBytes += uint64(ev.Ret)
-					f.OutPkts++
-				} else if isRecv(evt) && ev.Ret > 0 {
-					f.InBytes += uint64(ev.Ret)
-					f.InPkts++
-				}
+			if isSend(evt) && ev.Ret > 0 {
+				f.OutBytes += uint64(ev.Ret)
+				f.OutPkts++
+			} else if isRecv(evt) && ev.Ret > 0 {
+				f.InBytes += uint64(ev.Ret)
+				f.InPkts++
 			}
 
 			if !f.OpenedPrinted && flowReadyToOpen(f) {
