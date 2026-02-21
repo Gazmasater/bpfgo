@@ -663,89 +663,27 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
-                                                   const void *uaddr,
-                                                   __u32 addrlen,
-                                                   int fill_dst)
-{
-    __u16 family = 0;
-    if (!uaddr || addrlen < sizeof(__u16))
-        return -1;
-
-    if (bpf_probe_read_user(&family, sizeof(family), uaddr) < 0)
-        return -1;
-
-    // если family уже известна из сокета — НЕ даём ей "прыгать"
-    if (info->family != 0 && family != info->family) {
-        // dual-stack case: socket AF_INET6, but sockaddr is AF_INET -> map to v4-mapped
-        if (info->family == AF_INET6 && family == AF_INET) {
-            if (addrlen < sizeof(struct sockaddr_in))
-                return -1;
-            struct sockaddr_in sa = {};
-            if (bpf_probe_read_user(&sa, sizeof(sa), uaddr) < 0)
-                return -1;
-
-            __u16 port = bpf_ntohs(sa.sin_port);
-
-            __u8 v6[16] = {};
-            v6[10] = 0xff;
-            v6[11] = 0xff;
-            // ipv4 bytes are already in network order inside s_addr
-            __builtin_memcpy(&v6[12], &sa.sin_addr.s_addr, 4);
-
-            if (fill_dst) {
-                __builtin_memcpy(info->dst_ip6, v6, 16);
-                if (port) info->dport = port;
-            } else {
-                __builtin_memcpy(info->src_ip6, v6, 16);
-                if (port) info->sport = port;
-            }
-            return 0;
-        }
-
-        // остальные несовпадения family просто игнорим
-        return -1;
-    }
-
-    // если family ещё не была известна — фиксируем её один раз
-    if (info->family == 0)
-        info->family = family;
-
-    if (family == AF_INET) {
-        if (addrlen < sizeof(struct sockaddr_in))
-            return -1;
-        struct sockaddr_in sa = {};
-        if (bpf_probe_read_user(&sa, sizeof(sa), uaddr) < 0)
-            return -1;
-        __u16 port = bpf_ntohs(sa.sin_port);
-
-        if (fill_dst) {
-            info->dst_ip4 = sa.sin_addr.s_addr;
-            if (port) info->dport = port;
-        } else {
-            info->src_ip4 = sa.sin_addr.s_addr;
-            if (port) info->sport = port;
-        }
-        return 0;
-    }
-
-    if (family == AF_INET6) {
-        if (addrlen < sizeof(struct sockaddr_in6))
-            return -1;
-        struct sockaddr_in6 sa6 = {};
-        if (bpf_probe_read_user(&sa6, sizeof(sa6), uaddr) < 0)
-            return -1;
-        __u16 port = bpf_ntohs(sa6.sin6_port);
-
-        if (fill_dst) {
-            __builtin_memcpy(info->dst_ip6, &sa6.sin6_addr, 16);
-            if (port) info->dport = port;
-        } else {
-            __builtin_memcpy(info->src_ip6, &sa6.sin6_addr, 16);
-            if (port) info->sport = port;
-        }
-        return 0;
-    }
-
-    return -1;
-}
+OPEN  TCP   pid=669(NetworkManager) cookie=126380  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2001:67c:1562:0:0:0:0:24]:80 incomplete=1
+OPEN  TCP   pid=669(NetworkManager) cookie=126381  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4002:1:0:0:0:198]:80 incomplete=1
+CLOSE TCP   pid=669(NetworkManager) cookie=126380  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2001:67c:1562:0:0:0:0:24]:80  out=0B/0p in=0B/0p  age=1ms reason=close() incomplete=1
+OPEN  TCP   pid=669(NetworkManager) cookie=127069  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2001:67c:1562:0:0:0:0:23]:80 incomplete=1
+CLOSE TCP   pid=669(NetworkManager) cookie=126381  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4002:1:0:0:0:198]:80  out=0B/0p in=0B/0p  age=1ms reason=close() incomplete=1
+OPEN  TCP   pid=669(NetworkManager) cookie=127070  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4000:1:0:0:0:98]:80 incomplete=1
+CLOSE TCP   pid=669(NetworkManager) cookie=127069  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2001:67c:1562:0:0:0:0:23]:80  out=0B/0p in=0B/0p  age=2ms reason=close() incomplete=1
+OPEN  TCP   pid=669(NetworkManager) cookie=127071  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4002:1:0:0:0:197]:80 incomplete=1
+CLOSE TCP   pid=669(NetworkManager) cookie=127070  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4000:1:0:0:0:98]:80  out=0B/0p in=0B/0p  age=2ms reason=close() incomplete=1
+OPEN  TCP   pid=669(NetworkManager) cookie=127072  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4000:1:0:0:0:97]:80 incomplete=1
+CLOSE TCP   pid=669(NetworkManager) cookie=127071  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4002:1:0:0:0:197]:80  out=0B/0p in=0B/0p  age=2ms reason=close() incomplete=1
+OPEN  TCP   pid=669(NetworkManager) cookie=127073  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4000:1:0:0:0:2a]:80 incomplete=1
+CLOSE TCP   pid=669(NetworkManager) cookie=127072  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4000:1:0:0:0:97]:80  out=0B/0p in=0B/0p  age=2ms reason=close() incomplete=1
+OPEN  TCP   pid=669(NetworkManager) cookie=127074  [fd00:0:0:0:f971:c3ee:46ee:9b71]:48214 -> [2620:2d:4000:1:0:0:0:96]:80
+CLOSE TCP   pid=669(NetworkManager) cookie=127073  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4000:1:0:0:0:2a]:80  out=0B/0p in=0B/0p  age=1ms reason=close() incomplete=1
+OPEN  TCP   pid=669(NetworkManager) cookie=127075  [fd00:0:0:0:f971:c3ee:46ee:9b71]:52256 -> [2620:2d:4000:1:0:0:0:23]:80
+CLOSE TCP   pid=669(NetworkManager) cookie=127074  [fd00:0:0:0:f971:c3ee:46ee:9b71]:48214 -> [2620:2d:4000:1:0:0:0:96]:80  out=0B/0p in=0B/0p  age=1ms reason=close()
+OPEN  TCP   pid=669(NetworkManager) cookie=127076  [fd00:0:0:0:f971:c3ee:46ee:9b71]:40702 -> [2620:2d:4002:1:0:0:0:196]:80
+CLOSE TCP   pid=669(NetworkManager) cookie=127075  [fd00:0:0:0:f971:c3ee:46ee:9b71]:52256 -> [2620:2d:4000:1:0:0:0:23]:80  out=0B/0p in=0B/0p  age=1ms reason=close()
+OPEN  TCP   pid=669(NetworkManager) cookie=127077  [fd00:0:0:0:f971:c3ee:46ee:9b71]:33694 -> [2620:2d:4000:1:0:0:0:22]:80
+CLOSE TCP   pid=669(NetworkManager) cookie=127076  [fd00:0:0:0:f971:c3ee:46ee:9b71]:40702 -> [2620:2d:4002:1:0:0:0:196]:80  out=0B/0p in=0B/0p  age=2ms reason=close()
+OPEN  TCP   pid=669(NetworkManager) cookie=127078  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4000:1:0:0:0:2b]:80 incomplete=1
+CLOSE TCP   pid=669(NetworkManager) cookie=127077  [fd00:0:0:0:f971:c3ee:46ee:9b71]:33694 -> [2620:2d:4000:1:0:0:0:22]:80  out=0B/0p in=0B/0p  age=2ms reason=close()
+CLOSE TCP   pid=669(NetworkManager) cookie=127078  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4000:1:0:0:0:2b]:80  out=0B/0p in=0B/0p  age=1ms reason=close() incomplete=1
