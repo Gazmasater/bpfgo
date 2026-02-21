@@ -663,26 +663,56 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-go generate ./...
-go build -o bpfgo .
-sudo ./bpfgo -comm Chrome -print 1s -ttl 5s
-# или чтобы видеть сырые события:
-sudo ./bpfgo -comm Chrome -raw
-
-sudo ./bpfgo -mode raw -comm nc
-
-
-
-static __always_inline __u32 ipv4_local_addr(struct sock *sk)
-{
-    // часто 0.0.0.0 для UDP "any", но пробуем
-    __u32 a = BPF_CORE_READ(sk, __sk_common.skc_rcv_saddr);
-
-    if (a == 0) {
-        // fallback: inet_saddr (есть в большинстве ядер)
-        struct inet_sock *inet = (struct inet_sock *)sk;
-        a = BPF_CORE_READ(inet, inet_saddr);
-    }
-
-    return a;
-}
+OPEN  TCP   pid=4131(Socket Thread) cookie=88532  10.0.2.15:60518 -> 151.101.129.91:443
+OPEN  UDP   pid=4131(DNS Res~ver #24) cookie=90226  *:39884 -> 151.101.129.91:0 incomplete=1
+CLOSE UDP   pid=4131(DNS Res~ver #24) cookie=90226  [fd00:0:0:0:f971:c3ee:46ee:9b71]:44627 -> [2a04:4e42:400:0:0:0:0:347]:0  out=0B/0p in=0B/0p  age=47ms reason=close() incomplete=1
+CLOSE UDP   pid=4131(DNS Res~ver #24) cookie=90226  *:39884 -> 151.101.129.91:0  out=0B/0p in=0B/0p  age=7ms reason=close() incomplete=1
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:58315  out=142B/2p in=98B/2p  age=5.241s reason=idle
+CLOSE TCP   pid=4131(Socket Thread) cookie=86882  10.0.2.15:44078 -> 34.120.208.123:443  out=5225B/7p in=1546B/18p  age=5.712s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:58805  out=97B/1p in=40B/1p  age=5.357s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:42963  out=128B/1p in=47B/1p  age=5.753s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:51418  out=278B/2p in=86B/2p  age=5.734s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:59068  out=270B/2p in=94B/2p  age=5.987s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:36224  out=344B/2p in=96B/2p  age=6.01s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:60391  out=331B/2p in=118B/2p  age=6.031s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:56539  out=126B/1p in=46B/1p  age=5.734s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:53427  out=159B/2p in=78B/2p  age=5.691s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:43442  out=136B/1p in=43B/1p  age=5.722s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:45254  out=104B/1p in=39B/1p  age=5.594s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:48323  out=368B/2p in=80B/2p  age=5.352s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:36596  out=145B/1p in=48B/1p  age=6.017s reason=idle
+CLOSE TCP   pid=4131(Socket Thread) cookie=89122  10.0.2.15:56898 -> 140.82.114.22:443  out=10494B/6p in=6386B/22p  age=6.367s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:59596  out=194B/2p in=92B/2p  age=5.748s reason=idle
+CLOSE ICMPv6 pid=669(NetworkManager) cookie=7103  * -> fe80:0:0:0:0:0:0:2  out=0B/0p in=32B/1p  age=5.944s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:52079  out=134B/1p in=59B/1p  age=5.761s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:55555  out=106B/1p in=49B/1p  age=5.249s reason=idle
+CLOSE UDP   pid=4131(Socket Thread) cookie=88439  *:38953 -> 64.233.164.95:443  out=3994B/5p in=0B/0p  age=5.439s reason=idle
+CLOSE UDP   pid=4131(Socket Thread) cookie=88443  *:60371 -> 74.125.205.119:443  out=3973B/4p in=0B/0p  age=5.415s reason=idle
+OPEN  TCP   pid=4131(Socket Thread) cookie=82566  10.0.2.15:42424 -> 140.82.113.25:443
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:49538  out=71B/1p in=46B/1p  age=5.524s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:54527  out=136B/2p in=92B/2p  age=5.534s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:52277  out=98B/1p in=48B/1p  age=5.468s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:49764  out=140B/2p in=96B/2p  age=5.462s reason=idle
+CLOSE UDP   pid=4131(Socket Thread) cookie=87429  *:42389 -> 209.85.233.94:443  out=3997B/5p in=0B/0p  age=5.98s reason=idle
+CLOSE UDP   pid=4131(Socket Thread) cookie=88457  *:45710 -> 209.85.233.94:443  out=4397B/8p in=0B/0p  age=6.371s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:33790  out=294B/2p in=86B/2p  age=5.371s reason=idle
+CLOSE UDP   pid=4131(Socket Thread) cookie=88461  *:43201 -> 74.125.205.84:443  out=6259B/11p in=0B/0p  age=6.364s reason=idle
+CLOSE TCP   pid=4131(Socket Thread) cookie=88465  10.0.2.15:54800 -> 74.125.205.84:443  out=2091B/4p in=4567B/12p  age=6.356s reason=idle
+CLOSE TCP   pid=4131(Socket Thread) cookie=88466  10.0.2.15:39264 -> 209.85.233.94:443  out=2089B/4p in=5867B/12p  age=6.347s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:45099  out=68B/1p in=43B/1p  age=5.367s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:50255  out=292B/2p in=116B/2p  age=5.065s reason=idle
+CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:34789  out=122B/1p in=58B/1p  age=5.057s reason=idle
+CLOSE UDP   pid=4131(Socket Thread) cookie=87435  *:45987 -> 108.177.14.103:443  out=4040B/6p in=0B/0p  age=6.253s reason=idle
+CLOSE TCP   pid=4131(Socket Thread) cookie=88532  10.0.2.15:60518 -> 151.101.129.91:443  out=2921B/6p in=5319B/20p  age=5.931s reason=idle
+CLOSE TCP   pid=4131(Socket Thread) cookie=82566  10.0.2.15:42424 -> 140.82.113.25:443  out=29B/1p in=25B/2p  age=5.957s reason=idle
+CLOSE UDP   pid=4131(Socket Thread) cookie=86870  *:41057 -> 64.233.164.198:443  out=18733B/85p in=0B/0p  age=12.8s reason=idle
+OPEN  TCP   pid=4131(Socket Thread) cookie=81421  10.0.2.15:60596 -> 34.107.243.93:443
+CLOSE TCP   pid=4131(Socket Thread) cookie=81421  10.0.2.15:60596 -> 34.107.243.93:443  out=28B/1p in=24B/2p  age=5.644s reason=idle
+OPEN  TCP   pid=4131(Socket Thread) cookie=84750  10.0.2.15:49074 -> 151.101.65.91:443
+CLOSE TCP   pid=4131(Socket Thread) cookie=84750  10.0.2.15:49074 -> 151.101.65.91:443  out=39B/1p in=39B/2p  age=5.79s reason=idle
+OPEN  TCP   pid=4131(Socket Thread) cookie=89122  10.0.2.15:56898 -> 140.82.114.22:443
+OPEN  TCP   pid=4131(Socket Thread) cookie=86882  10.0.2.15:44078 -> 34.120.208.123:443
+OPEN  TCP   pid=4131(Socket Thread) cookie=88466  10.0.2.15:39264 -> 209.85.233.94:443
+OPEN  TCP   pid=4131(Socket Thread) cookie=88465  10.0.2.15:54800 -> 74.125.205.84:443
+OPEN  TCP   pid=4131(Socket Thread) cookie=88532  10.0.2.15:60518 -> 151.101.129.91:443
+CLOSE TCP   pid=4131(Socket Thread) cookie=86882  10.0.2.15:44078 -> 34.120.208.123:443  out=39B/1p in=39B/2p  age=5.74s reason=idle
