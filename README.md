@@ -1685,93 +1685,570 @@ int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
 
 
 
-func fmtErr(ret int64) string {
-	if ret >= 0 {
-		return ""
+package main
+
+import (
+	"bytes"
+	"encoding/binary"
+	"errors"
+	"flag"
+	"fmt"
+	"log"
+	"net/http"
+	_ "net/http/pprof"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"strings"
+	"syscall"
+	"time"
+	"unsafe"
+
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/perf"
+	"github.com/cilium/ebpf/rlimit"
+)
+
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target amd64 -type trace_info bpf trace.c -- -I.
+
+var objs bpfObjects
+
+const (
+	AF_INET  = 2
+	AF_INET6 = 10
+
+	IPPROTO_ICMP   = 1
+	IPPROTO_TCP    = 6
+	IPPROTO_UDP    = 17
+	IPPROTO_ICMPV6 = 58
+
+	EV_SENDTO   = 1
+	EV_RECVFROM = 2
+	EV_CONNECT  = 3
+	EV_ACCEPT   = 4
+	EV_BINDOK   = 20
+	EV_SENDMSG  = 11
+	EV_RECVMSG  = 12
+	EV_CLOSE    = 30
+)
+
+var (
+	flgPerfMB    = flag.Int("perfMB", 16, "perf buffer size in MB")
+	flgPprof     = flag.Bool("pprof", true, "enable pprof")
+	flgPprofAddr = flag.String("pprofAddr", ":6060", "pprof listen addr")
+
+	flgTTL        = flag.Duration("ttl", 5*time.Second, "idle TTL for flow close")
+	flgPrintEvery = flag.Duration("print", 1*time.Second, "print interval for active flows")
+
+	flgOnlyPID  = flag.Int("pid", 0, "only this pid (0=all)")
+	flgOnlyComm = flag.String("comm", "", "only comm containing substring (empty=all)")
+
+	flgRaw = flag.Bool("raw", false, "also print raw events (very noisy)")
+)
+
+func commString(c [32]int8) string {
+	var b [32]byte
+	for i := 0; i < 32; i++ {
+		b[i] = byte(c[i])
 	}
-	return syscall.Errno(-ret).Error()
+	n := bytes.IndexByte(b[:], 0)
+	if n < 0 {
+		n = len(b)
+	}
+	return string(b[:n])
 }
 
-func printRaw(ev bpfTraceInfo, comm string) {
-	evt := uint8(ev.Event)
-	proto := uint8(ev.Proto)
-	family := uint16(ev.Family)
-
-	// защитимся от мусора
-	if proto == 0 || family == 0 {
-		return
+func protoStr(p uint8) string {
+	switch p {
+	case IPPROTO_TCP:
+		return "TCP"
+	case IPPROTO_UDP:
+		return "UDP"
+	case IPPROTO_ICMP:
+		return "ICMP"
+	case IPPROTO_ICMPV6:
+		return "ICMPv6"
+	default:
+		return fmt.Sprintf("P%d", p)
 	}
+}
+
+func evName(code uint8) string {
+	switch code {
+	case EV_SENDTO:
+		return "SENDTO"
+	case EV_RECVFROM:
+		return "RECVFROM"
+	case EV_SENDMSG:
+		return "SENDMSG"
+	case EV_RECVMSG:
+		return "RECVMSG"
+	case EV_CONNECT:
+		return "CONNECT"
+	case EV_ACCEPT:
+		return "ACCEPT"
+	case EV_BINDOK:
+		return "BIND"
+	case EV_CLOSE:
+		return "CLOSE"
+	default:
+		return fmt.Sprintf("EV%d", code)
+	}
+}
+
+func isSend(ev uint8) bool { return ev == EV_SENDTO || ev == EV_SENDMSG }
+func isRecv(ev uint8) bool { return ev == EV_RECVFROM || ev == EV_RECVMSG }
+
+func isAllZero16(b [16]byte) bool {
+	for i := 0; i < 16; i++ {
+		if b[i] != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// IPv4 u32 from kernel is network-order but looks swapped on little-endian.
+// Keep your proven trick.
+func ip4KeyFromU32Net(x uint32) (key [16]byte) {
+	var b4 [4]byte
+	binary.LittleEndian.PutUint32(b4[:], x)
+	copy(key[:4], b4[:])
+	return
+}
+
+func fmtIPv4FromKey(k [16]byte) string {
+	return fmt.Sprintf("%d.%d.%d.%d", k[0], k[1], k[2], k[3])
+}
+
+func fmtIPv6Full(b [16]byte) string {
+	return fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x",
+		uint16(b[0])<<8|uint16(b[1]),
+		uint16(b[2])<<8|uint16(b[3]),
+		uint16(b[4])<<8|uint16(b[5]),
+		uint16(b[6])<<8|uint16(b[7]),
+		uint16(b[8])<<8|uint16(b[9]),
+		uint16(b[10])<<8|uint16(b[11]),
+		uint16(b[12])<<8|uint16(b[13]),
+		uint16(b[14])<<8|uint16(b[15]),
+	)
+}
+
+func fmtEndpoint(family uint16, ip [16]byte, port uint16, proto uint8) string {
+	isICMP := proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6
+	if isICMP {
+		if isAllZero16(ip) {
+			return "*"
+		}
+		if family == AF_INET6 {
+			return fmtIPv6Full(ip)
+		}
+		return fmtIPv4FromKey(ip)
+	}
+
+	if isAllZero16(ip) {
+		return fmt.Sprintf("*:%d", port)
+	}
+	if family == AF_INET6 {
+		return fmt.Sprintf("[%s]:%d", fmtIPv6Full(ip), port)
+	}
+	return fmt.Sprintf("%s:%d", fmtIPv4FromKey(ip), port)
+}
+
+func srcKeyFromEvent(ev bpfTraceInfo) (k [16]byte) {
+	if uint16(ev.Family) == AF_INET {
+		return ip4KeyFromU32Net(ev.SrcIp4)
+	}
+	copy(k[:], ev.SrcIp6[:])
+	return
+}
+
+func dstKeyFromEvent(ev bpfTraceInfo) (k [16]byte) {
+	if uint16(ev.Family) == AF_INET {
+		return ip4KeyFromU32Net(ev.DstIp4)
+	}
+	copy(k[:], ev.DstIp6[:])
+	return
+}
+
+/* ===== FLOW ===== */
+
+type FlowKey struct {
+	TGID   uint32
+	Cookie uint64
+	Proto  uint8
+	Family uint16
+
+	PeerMode uint8 // 0=socket-only, 1=per-peer (UDP when peer known)
+	Rport    uint16
+	Remote   [16]byte
+}
+
+type Flow struct {
+	Key  FlowKey
+	Comm string
+
+	Local  [16]byte
+	Lport  uint16
+	Remote [16]byte
+	Rport  uint16
+
+	FirstSeen time.Time
+	LastSeen  time.Time
+
+	InBytes  uint64
+	OutBytes uint64
+	InPkts   uint64
+	OutPkts  uint64
+
+	OpenedPrinted bool
+	Dirty         bool
+}
+
+func makeKey(ev bpfTraceInfo) FlowKey {
+	k := FlowKey{
+		TGID:   ev.Tgid,
+		Cookie: ev.Cookie,
+		Proto:  uint8(ev.Proto),
+		Family: uint16(ev.Family),
+	}
+
+	// UDP: если есть peer — делаем per-peer
+	if k.Proto == IPPROTO_UDP {
+		var remote [16]byte
+		var rport uint16
+
+		if isRecv(uint8(ev.Event)) {
+			remote = srcKeyFromEvent(ev)
+			rport = uint16(ev.Sport)
+		} else {
+			remote = dstKeyFromEvent(ev)
+			rport = uint16(ev.Dport)
+		}
+
+		if rport != 0 && !isAllZero16(remote) {
+			k.PeerMode = 1
+			k.Remote = remote
+			k.Rport = rport
+		}
+	}
+
+	return k
+}
+
+// normalize to local -> remote (stable flow printing)
+func applyEndpoints(f *Flow, ev bpfTraceInfo) {
+	evt := uint8(ev.Event)
 
 	var localIP, remoteIP [16]byte
 	var lport, rport uint16
-	dir := "?"
 
 	switch {
+	case isSend(evt) || evt == EV_CONNECT:
+		localIP = srcKeyFromEvent(ev)
+		remoteIP = dstKeyFromEvent(ev)
+		lport = uint16(ev.Sport)
+		rport = uint16(ev.Dport)
+
+	case isRecv(evt):
+		// recv: src=peer, dst=local
+		localIP = dstKeyFromEvent(ev)
+		remoteIP = srcKeyFromEvent(ev)
+		lport = uint16(ev.Dport)
+		rport = uint16(ev.Sport)
+
 	case evt == EV_BINDOK:
-		dir = "BIND"
 		localIP = srcKeyFromEvent(ev)
 		lport = uint16(ev.Sport)
 
 	case evt == EV_ACCEPT:
-		dir = "ACPT"
-		// accept: peer->local в эвенте, нормализуем local->peer
 		localIP = dstKeyFromEvent(ev)
-		lport = uint16(ev.Dport)
 		remoteIP = srcKeyFromEvent(ev)
-		rport = uint16(ev.Sport)
-
-	case evt == EV_CLOSE:
-		dir = "CLOSE"
-		// close мы заполняем как is_send=1 (local->remote)
-		localIP = srcKeyFromEvent(ev)
-		lport = uint16(ev.Sport)
-		remoteIP = dstKeyFromEvent(ev)
-		rport = uint16(ev.Dport)
-
-	case isSend(evt) || evt == EV_CONNECT:
-		dir = "OUT"
-		localIP = srcKeyFromEvent(ev)
-		lport = uint16(ev.Sport)
-		remoteIP = dstKeyFromEvent(ev)
-		rport = uint16(ev.Dport)
-
-	case isRecv(evt):
-		dir = "IN"
-		// recv: peer->local в эвенте, нормализуем local->peer
-		localIP = dstKeyFromEvent(ev)
 		lport = uint16(ev.Dport)
-		remoteIP = srcKeyFromEvent(ev)
 		rport = uint16(ev.Sport)
 	}
 
-	errs := fmtErr(ev.Ret)
-	state := ""
-	if evt == EV_CONNECT && ev.State == 1 {
-		state = " inprogress"
+	if f.Lport == 0 && lport != 0 {
+		f.Lport = lport
+	}
+	if isAllZero16(f.Local) && !isAllZero16(localIP) {
+		f.Local = localIP
 	}
 
-	if evt == EV_BINDOK {
-		fmt.Printf("%-5s %-7s dir=%-5s pid=%d(%s) tid=%d fd=%d cookie=%d ret=%d%s  local=%s\n",
-			protoStr(proto), evName(evt), dir,
-			ev.Tgid, comm, ev.Tid, ev.Fd, ev.Cookie, ev.Ret, func() string {
-				if errs == "" { return state }
-				return " err=" + errs + state
-			}(),
-			fmtEndpoint(family, localIP, lport, proto),
-		)
-		return
+	if f.Rport == 0 && rport != 0 {
+		f.Rport = rport
 	}
+	if isAllZero16(f.Remote) && !isAllZero16(remoteIP) {
+		f.Remote = remoteIP
+	}
+}
 
-	fmt.Printf("%-5s %-7s dir=%-5s pid=%d(%s) tid=%d fd=%d cookie=%d ret=%d%s  %s -> %s\n",
-		protoStr(proto), evName(evt), dir,
-		ev.Tgid, comm, ev.Tid, ev.Fd, ev.Cookie, ev.Ret, func() string {
-			if errs == "" { return state }
-			return " err=" + errs + state
-		}(),
-		fmtEndpoint(family, localIP, lport, proto),
-		fmtEndpoint(family, remoteIP, rport, proto),
+func printOpen(f *Flow) {
+	fmt.Printf("OPEN  %-5s pid=%d(%s) cookie=%d  %s -> %s\n",
+		protoStr(f.Key.Proto),
+		f.Key.TGID, f.Comm, f.Key.Cookie,
+		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.Key.Proto),
 	)
 }
 
+func printUpdate(f *Flow) {
+	age := time.Since(f.FirstSeen).Truncate(time.Millisecond)
+	idle := time.Since(f.LastSeen).Truncate(time.Millisecond)
 
+	fmt.Printf("FLOW  %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s idle=%s\n",
+		protoStr(f.Key.Proto),
+		f.Key.TGID, f.Comm, f.Key.Cookie,
+		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.Key.Proto),
+		f.OutBytes, f.OutPkts, f.InBytes, f.InPkts,
+		age, idle,
+	)
+}
+
+func printClose(f *Flow, reason string) {
+	age := time.Since(f.FirstSeen).Truncate(time.Millisecond)
+	fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s reason=%s\n",
+		protoStr(f.Key.Proto),
+		f.Key.TGID, f.Comm, f.Key.Cookie,
+		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.Key.Proto),
+		f.OutBytes, f.OutPkts, f.InBytes, f.InPkts,
+		age, reason,
+	)
+}
+
+func main() {
+	flag.Parse()
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+
+	if err := rlimit.RemoveMemlock(); err != nil {
+		log.Fatalf("failed to remove memlock: %v", err)
+	}
+	if err := loadBpfObjects(&objs, nil); err != nil {
+		log.Fatalf("failed to load bpf objects: %v", err)
+	}
+	defer objs.Close()
+
+	if *flgPprof {
+		go func() {
+			log.Printf("pprof on %s", *flgPprofAddr)
+			_ = http.ListenAndServe(*flgPprofAddr, nil)
+		}()
+	}
+
+	selfName := filepath.Base(os.Args[0])
+
+	// attach tracepoints
+	var links []link.Link
+	defer func() {
+		for _, l := range links {
+			_ = l.Close()
+		}
+	}()
+	attach := func(cat, name string, prog *ebpf.Program) {
+		l, err := link.Tracepoint(cat, name, prog, nil)
+		if err != nil {
+			log.Fatalf("attach %s/%s: %v", cat, name, err)
+		}
+		links = append(links, l)
+	}
+
+	attach("syscalls", "sys_enter_bind", objs.TraceBindEnter)
+	attach("syscalls", "sys_exit_bind", objs.TraceBindExit)
+
+	attach("syscalls", "sys_enter_connect", objs.TraceConnectEnter)
+	attach("syscalls", "sys_exit_connect", objs.TraceConnectExit)
+
+	attach("syscalls", "sys_enter_accept4", objs.TraceAccept4Enter)
+	attach("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit)
+	attach("syscalls", "sys_enter_accept", objs.TraceAcceptEnter)
+	attach("syscalls", "sys_exit_accept", objs.TraceAcceptExit)
+
+	attach("syscalls", "sys_enter_close", objs.TraceCloseEnter)
+
+	attach("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter)
+	attach("syscalls", "sys_exit_sendto", objs.TraceSendtoExit)
+	attach("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter)
+	attach("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit)
+
+	attach("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter)
+	attach("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit)
+	attach("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter)
+	attach("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit)
+
+	perfBytes := *flgPerfMB * 1024 * 1024
+	if perfBytes < 256*1024 {
+		perfBytes = 256 * 1024
+	}
+	rd, err := perf.NewReader(objs.TraceEvents, perfBytes)
+	if err != nil {
+		log.Fatalf("perf.NewReader: %v", err)
+	}
+	defer rd.Close()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	type evWrap struct {
+		ev  bpfTraceInfo
+		now time.Time
+	}
+
+	evCh := make(chan evWrap, 16384)
+
+	var lostTotal uint64
+	go func() {
+		defer close(evCh)
+		for {
+			rec, e := rd.Read()
+			if e != nil {
+				if errors.Is(e, perf.ErrClosed) {
+					return
+				}
+				continue
+			}
+			if rec.LostSamples != 0 {
+				lostTotal += rec.LostSamples
+				log.Printf("WARN lost samples: %d (total=%d)", rec.LostSamples, lostTotal)
+				// continue reading; event stream has gaps
+			}
+			if len(rec.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
+				continue
+			}
+			ev := *(*bpfTraceInfo)(unsafe.Pointer(&rec.RawSample[0]))
+			evCh <- evWrap{ev: ev, now: time.Now()}
+		}
+	}()
+
+	flows := make(map[FlowKey]*Flow, 8192)
+	ticker := time.NewTicker(*flgPrintEvery)
+	defer ticker.Stop()
+
+	log.Println("Flow mode: OPEN/FLOW/CLOSE. Press Ctrl+C to exit")
+
+	shouldKeep := func(pid uint32, comm string) bool {
+		if comm == "" || comm == selfName {
+			return false
+		}
+		if *flgOnlyPID != 0 && int(pid) != *flgOnlyPID {
+			return false
+		}
+		if *flgOnlyComm != "" && !strings.Contains(comm, *flgOnlyComm) {
+			return false
+		}
+		return true
+	}
+
+	// close all flows by (tgid,cookie) — needed for UDP per-peer close
+	closeByCookie := func(tgid uint32, cookie uint64, reason string) {
+		for k, f := range flows {
+			if k.TGID == tgid && k.Cookie == cookie {
+				if !f.OpenedPrinted {
+					printOpen(f)
+					f.OpenedPrinted = true
+				}
+				printClose(f, reason)
+				delete(flows, k)
+			}
+		}
+	}
+
+	for {
+		select {
+		case <-stop:
+			_ = rd.Close()
+			for _, f := range flows {
+				if !f.OpenedPrinted {
+					printOpen(f)
+				}
+				printClose(f, "signal")
+			}
+			log.Println("Exiting...")
+			return
+
+		case <-ticker.C:
+			now := time.Now()
+			for k, f := range flows {
+				if now.Sub(f.LastSeen) > *flgTTL {
+					if !f.OpenedPrinted {
+						printOpen(f)
+						f.OpenedPrinted = true
+					}
+					printClose(f, "idle")
+					delete(flows, k)
+					continue
+				}
+				if f.Dirty {
+					if !f.OpenedPrinted {
+						printOpen(f)
+						f.OpenedPrinted = true
+					}
+					printUpdate(f)
+					f.Dirty = false
+				}
+			}
+
+		case w, ok := <-evCh:
+			if !ok {
+				return
+			}
+
+			ev := w.ev
+			comm := commString(ev.Comm)
+			if !shouldKeep(ev.Tgid, comm) {
+				continue
+			}
+
+			evt := uint8(ev.Event)
+			proto := uint8(ev.Proto)
+			family := uint16(ev.Family)
+
+			// игнорим вообще мусорные/неопределённые
+			if proto == 0 || family == 0 {
+				// EV_CLOSE по несокетам уже отфильтрован в BPF, но оставим защиту
+				continue
+			}
+
+			if *flgRaw {
+				fmt.Printf("%s %-7s pid=%d(%s) tid=%d fd=%d cookie=%d ret=%d\n",
+					protoStr(proto), evName(evt), ev.Tgid, comm, ev.Tid, ev.Fd, ev.Cookie, ev.Ret)
+			}
+
+			// CLOSE: не создаём flow! закрываем по cookie
+			if evt == EV_CLOSE {
+				closeByCookie(ev.Tgid, ev.Cookie, "close()")
+				continue
+			}
+
+			key := makeKey(ev)
+			f := flows[key]
+			if f == nil {
+				f = &Flow{
+					Key:       key,
+					Comm:      comm,
+					FirstSeen: w.now,
+					LastSeen:  w.now,
+				}
+				flows[key] = f
+			}
+
+			f.LastSeen = w.now
+			applyEndpoints(f, ev)
+
+			if isSend(evt) && ev.Ret > 0 {
+				f.OutBytes += uint64(ev.Ret)
+				f.OutPkts++
+				f.Dirty = true
+			} else if isRecv(evt) && ev.Ret > 0 {
+				f.InBytes += uint64(ev.Ret)
+				f.InPkts++
+				f.Dirty = true
+			} else if evt == EV_CONNECT || evt == EV_ACCEPT || evt == EV_BINDOK {
+				f.Dirty = true
+			}
+		}
+	}
+}
 
