@@ -3001,12 +3001,55 @@ func main() {
 }
 
 
-ev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
-./trace.c:382:5: warning: loop not unrolled: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering [-Wpass-failed=transform-warning]
-    for (int i = 0; i < MAX_CMSG; i++) {
-    ^
-./trace.c:382:5: warning: loop not unrolled: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering [-Wpass-failed=transform-warning]
-./trace.c:382:5: warning: loop not unrolled: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering [-Wpass-failed=transform-warning]
-./trace.c:382:5: warning: loop not unrolled: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering [-Wpass-failed=transform-warning]
-4 warnings generated.
 
+
+
+
+static __always_inline void parse_ipv6_pktinfo(struct trace_info *info, __u64 ctrl, __u64 controllen, int set_dst)
+{
+    if (!ctrl || controllen < sizeof(struct user_cmsghdr64))
+        return;
+
+    // only for ICMPv6 over AF_INET6
+    if (info->family != AF_INET6 || info->proto != IPPROTO_ICMPV6)
+        return;
+
+    __u64 p = ctrl;
+    __u64 left = controllen;
+
+#define CMSG_TRY_STEP() do { \
+    if (left < sizeof(struct user_cmsghdr64)) return; \
+    struct user_cmsghdr64 ch = {}; \
+    if (bpf_probe_read_user(&ch, sizeof(ch), (void *)p) != 0) return; \
+    if (ch.cmsg_len < sizeof(struct user_cmsghdr64) || ch.cmsg_len > left) return; \
+    __u64 data = p + sizeof(struct user_cmsghdr64); \
+    __u64 datalen = ch.cmsg_len - sizeof(struct user_cmsghdr64); \
+    if (ch.cmsg_level == SOL_IPV6 && ch.cmsg_type == IPV6_PKTINFO && datalen >= sizeof(struct user_in6_pktinfo)) { \
+        struct user_in6_pktinfo pi = {}; \
+        if (bpf_probe_read_user(&pi, sizeof(pi), (void *)data) == 0) { \
+            if (set_dst) { \
+                __builtin_memcpy(info->dst_ip6, &pi.ipi6_addr, 16); \
+                if (pi.ipi6_ifindex > 0) info->dst_scope = (__u32)pi.ipi6_ifindex; \
+            } else { \
+                __builtin_memcpy(info->src_ip6, &pi.ipi6_addr, 16); \
+                if (pi.ipi6_ifindex > 0) info->src_scope = (__u32)pi.ipi6_ifindex; \
+            } \
+        } \
+        return; \
+    } \
+    __u64 step = CMSG_ALIGN(ch.cmsg_len); \
+    if (step == 0 || step > left) return; \
+    p += step; \
+    left -= step; \
+} while (0)
+
+    // scan up to MAX_CMSG chunks without a loop (verifier-friendly, no unroll warnings)
+    CMSG_TRY_STEP();
+    CMSG_TRY_STEP();
+    CMSG_TRY_STEP();
+    CMSG_TRY_STEP();
+    CMSG_TRY_STEP();
+    CMSG_TRY_STEP();
+
+#undef CMSG_TRY_STEP
+}
