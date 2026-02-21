@@ -663,56 +663,609 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-OPEN  TCP   pid=4131(Socket Thread) cookie=88532  10.0.2.15:60518 -> 151.101.129.91:443
-OPEN  UDP   pid=4131(DNS Res~ver #24) cookie=90226  *:39884 -> 151.101.129.91:0 incomplete=1
-CLOSE UDP   pid=4131(DNS Res~ver #24) cookie=90226  [fd00:0:0:0:f971:c3ee:46ee:9b71]:44627 -> [2a04:4e42:400:0:0:0:0:347]:0  out=0B/0p in=0B/0p  age=47ms reason=close() incomplete=1
-CLOSE UDP   pid=4131(DNS Res~ver #24) cookie=90226  *:39884 -> 151.101.129.91:0  out=0B/0p in=0B/0p  age=7ms reason=close() incomplete=1
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:58315  out=142B/2p in=98B/2p  age=5.241s reason=idle
-CLOSE TCP   pid=4131(Socket Thread) cookie=86882  10.0.2.15:44078 -> 34.120.208.123:443  out=5225B/7p in=1546B/18p  age=5.712s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:58805  out=97B/1p in=40B/1p  age=5.357s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:42963  out=128B/1p in=47B/1p  age=5.753s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:51418  out=278B/2p in=86B/2p  age=5.734s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:59068  out=270B/2p in=94B/2p  age=5.987s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:36224  out=344B/2p in=96B/2p  age=6.01s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:60391  out=331B/2p in=118B/2p  age=6.031s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:56539  out=126B/1p in=46B/1p  age=5.734s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:53427  out=159B/2p in=78B/2p  age=5.691s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:43442  out=136B/1p in=43B/1p  age=5.722s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:45254  out=104B/1p in=39B/1p  age=5.594s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:48323  out=368B/2p in=80B/2p  age=5.352s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:36596  out=145B/1p in=48B/1p  age=6.017s reason=idle
-CLOSE TCP   pid=4131(Socket Thread) cookie=89122  10.0.2.15:56898 -> 140.82.114.22:443  out=10494B/6p in=6386B/22p  age=6.367s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:59596  out=194B/2p in=92B/2p  age=5.748s reason=idle
-CLOSE ICMPv6 pid=669(NetworkManager) cookie=7103  * -> fe80:0:0:0:0:0:0:2  out=0B/0p in=32B/1p  age=5.944s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:52079  out=134B/1p in=59B/1p  age=5.761s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:55555  out=106B/1p in=49B/1p  age=5.249s reason=idle
-CLOSE UDP   pid=4131(Socket Thread) cookie=88439  *:38953 -> 64.233.164.95:443  out=3994B/5p in=0B/0p  age=5.439s reason=idle
-CLOSE UDP   pid=4131(Socket Thread) cookie=88443  *:60371 -> 74.125.205.119:443  out=3973B/4p in=0B/0p  age=5.415s reason=idle
-OPEN  TCP   pid=4131(Socket Thread) cookie=82566  10.0.2.15:42424 -> 140.82.113.25:443
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:49538  out=71B/1p in=46B/1p  age=5.524s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:54527  out=136B/2p in=92B/2p  age=5.534s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:52277  out=98B/1p in=48B/1p  age=5.468s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:49764  out=140B/2p in=96B/2p  age=5.462s reason=idle
-CLOSE UDP   pid=4131(Socket Thread) cookie=87429  *:42389 -> 209.85.233.94:443  out=3997B/5p in=0B/0p  age=5.98s reason=idle
-CLOSE UDP   pid=4131(Socket Thread) cookie=88457  *:45710 -> 209.85.233.94:443  out=4397B/8p in=0B/0p  age=6.371s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:33790  out=294B/2p in=86B/2p  age=5.371s reason=idle
-CLOSE UDP   pid=4131(Socket Thread) cookie=88461  *:43201 -> 74.125.205.84:443  out=6259B/11p in=0B/0p  age=6.364s reason=idle
-CLOSE TCP   pid=4131(Socket Thread) cookie=88465  10.0.2.15:54800 -> 74.125.205.84:443  out=2091B/4p in=4567B/12p  age=6.356s reason=idle
-CLOSE TCP   pid=4131(Socket Thread) cookie=88466  10.0.2.15:39264 -> 209.85.233.94:443  out=2089B/4p in=5867B/12p  age=6.347s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:45099  out=68B/1p in=43B/1p  age=5.367s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:50255  out=292B/2p in=116B/2p  age=5.065s reason=idle
-CLOSE UDP   pid=516(systemd-resolve) cookie=7402  127.0.0.53:53 -> 127.0.0.1:34789  out=122B/1p in=58B/1p  age=5.057s reason=idle
-CLOSE UDP   pid=4131(Socket Thread) cookie=87435  *:45987 -> 108.177.14.103:443  out=4040B/6p in=0B/0p  age=6.253s reason=idle
-CLOSE TCP   pid=4131(Socket Thread) cookie=88532  10.0.2.15:60518 -> 151.101.129.91:443  out=2921B/6p in=5319B/20p  age=5.931s reason=idle
-CLOSE TCP   pid=4131(Socket Thread) cookie=82566  10.0.2.15:42424 -> 140.82.113.25:443  out=29B/1p in=25B/2p  age=5.957s reason=idle
-CLOSE UDP   pid=4131(Socket Thread) cookie=86870  *:41057 -> 64.233.164.198:443  out=18733B/85p in=0B/0p  age=12.8s reason=idle
-OPEN  TCP   pid=4131(Socket Thread) cookie=81421  10.0.2.15:60596 -> 34.107.243.93:443
-CLOSE TCP   pid=4131(Socket Thread) cookie=81421  10.0.2.15:60596 -> 34.107.243.93:443  out=28B/1p in=24B/2p  age=5.644s reason=idle
-OPEN  TCP   pid=4131(Socket Thread) cookie=84750  10.0.2.15:49074 -> 151.101.65.91:443
-CLOSE TCP   pid=4131(Socket Thread) cookie=84750  10.0.2.15:49074 -> 151.101.65.91:443  out=39B/1p in=39B/2p  age=5.79s reason=idle
-OPEN  TCP   pid=4131(Socket Thread) cookie=89122  10.0.2.15:56898 -> 140.82.114.22:443
-OPEN  TCP   pid=4131(Socket Thread) cookie=86882  10.0.2.15:44078 -> 34.120.208.123:443
-OPEN  TCP   pid=4131(Socket Thread) cookie=88466  10.0.2.15:39264 -> 209.85.233.94:443
-OPEN  TCP   pid=4131(Socket Thread) cookie=88465  10.0.2.15:54800 -> 74.125.205.84:443
-OPEN  TCP   pid=4131(Socket Thread) cookie=88532  10.0.2.15:60518 -> 151.101.129.91:443
-CLOSE TCP   pid=4131(Socket Thread) cookie=86882  10.0.2.15:44078 -> 34.120.208.123:443  out=39B/1p in=39B/2p  age=5.74s reason=idle
+package main
+
+import (
+	"bytes"
+	"encoding/binary"
+	"errors"
+	"flag"
+	"fmt"
+	"log"
+	"net/http"
+	_ "net/http/pprof"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"syscall"
+	"time"
+	"unsafe"
+
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/perf"
+	"github.com/cilium/ebpf/rlimit"
+)
+
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target amd64 -type trace_info bpf trace.c -- -I.
+
+var objs bpfObjects
+
+const (
+	AF_INET  = 2
+	AF_INET6 = 10
+
+	IPPROTO_ICMP   = 1
+	IPPROTO_TCP    = 6
+	IPPROTO_UDP    = 17
+	IPPROTO_ICMPV6 = 58
+
+	EV_SENDTO   = 1
+	EV_RECVFROM = 2
+	EV_CONNECT  = 3
+	EV_ACCEPT   = 4
+	EV_BINDOK   = 20
+	EV_SENDMSG  = 11
+	EV_RECVMSG  = 12
+	EV_CLOSE    = 30
+)
+
+var (
+	flgPerfMB    = flag.Int("perfMB", 16, "perf buffer size in MB")
+	flgPprof     = flag.Bool("pprof", true, "enable pprof")
+	flgPprofAddr = flag.String("pprofAddr", ":6060", "pprof listen addr")
+
+	flgTTL   = flag.Duration("ttl", 5*time.Second, "idle TTL for flow close")
+	flgSweep = flag.Duration("print", 1*time.Second, "TTL sweep interval + perf-loss rate logging interval")
+
+	flgOnlyPID  = flag.Int("pid", 0, "only this pid (0=all)")
+	flgOnlyComm = flag.String("comm", "", "only comm containing substring (empty=all)")
+)
+
+func commString(c [32]int8) string {
+	var b [32]byte
+	for i := 0; i < 32; i++ {
+		b[i] = byte(c[i])
+	}
+	n := bytes.IndexByte(b[:], 0)
+	if n < 0 {
+		n = len(b)
+	}
+	return string(b[:n])
+}
+
+func protoAllowed(p uint8) bool {
+	switch p {
+	case IPPROTO_TCP, IPPROTO_UDP, IPPROTO_ICMP, IPPROTO_ICMPV6:
+		return true
+	default:
+		return false
+	}
+}
+
+func protoStr(p uint8) string {
+	switch p {
+	case IPPROTO_TCP:
+		return "TCP"
+	case IPPROTO_UDP:
+		return "UDP"
+	case IPPROTO_ICMP:
+		return "ICMP"
+	case IPPROTO_ICMPV6:
+		return "ICMPv6"
+	default:
+		return fmt.Sprintf("P%d", p)
+	}
+}
+
+func isSend(ev uint8) bool { return ev == EV_SENDTO || ev == EV_SENDMSG }
+func isRecv(ev uint8) bool { return ev == EV_RECVFROM || ev == EV_RECVMSG }
+
+func isAllZero16(b [16]byte) bool {
+	for i := 0; i < 16; i++ {
+		if b[i] != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// IPv4 u32 from kernel is network-order but looks swapped on little-endian.
+func ip4KeyFromU32Net(x uint32) (key [16]byte) {
+	var b4 [4]byte
+	binary.LittleEndian.PutUint32(b4[:], x)
+	copy(key[:4], b4[:])
+	return
+}
+
+func fmtIPv4FromKey(k [16]byte) string {
+	return fmt.Sprintf("%d.%d.%d.%d", k[0], k[1], k[2], k[3])
+}
+
+func fmtIPv6Full(b [16]byte) string {
+	return fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x",
+		uint16(b[0])<<8|uint16(b[1]),
+		uint16(b[2])<<8|uint16(b[3]),
+		uint16(b[4])<<8|uint16(b[5]),
+		uint16(b[6])<<8|uint16(b[7]),
+		uint16(b[8])<<8|uint16(b[9]),
+		uint16(b[10])<<8|uint16(b[11]),
+		uint16(b[12])<<8|uint16(b[13]),
+		uint16(b[14])<<8|uint16(b[15]),
+	)
+}
+
+func fmtEndpoint(family uint16, ip [16]byte, port uint16, proto uint8) string {
+	isICMP := proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6
+	if isICMP {
+		if isAllZero16(ip) {
+			return "*"
+		}
+		if family == AF_INET6 {
+			return fmtIPv6Full(ip)
+		}
+		return fmtIPv4FromKey(ip)
+	}
+
+	if isAllZero16(ip) {
+		return fmt.Sprintf("*:%d", port)
+	}
+	if family == AF_INET6 {
+		return fmt.Sprintf("[%s]:%d", fmtIPv6Full(ip), port)
+	}
+	return fmt.Sprintf("%s:%d", fmtIPv4FromKey(ip), port)
+}
+
+func srcKeyFromEvent(ev bpfTraceInfo) (k [16]byte) {
+	if uint16(ev.Family) == AF_INET {
+		return ip4KeyFromU32Net(ev.SrcIp4)
+	}
+	copy(k[:], ev.SrcIp6[:])
+	return
+}
+
+func dstKeyFromEvent(ev bpfTraceInfo) (k [16]byte) {
+	if uint16(ev.Family) == AF_INET {
+		return ip4KeyFromU32Net(ev.DstIp4)
+	}
+	copy(k[:], ev.DstIp6[:])
+	return
+}
+
+/* ===== FLOW ===== */
+
+type FlowKey struct {
+	TGID   uint32
+	Cookie uint64
+	Proto  uint8
+	Family uint16
+
+	PeerMode uint8 // 0=socket-only, 1=per-peer (UDP/ICMP when enough info)
+	Rport    uint16
+	Remote   [16]byte
+}
+
+type Flow struct {
+	Key  FlowKey
+	Comm string
+
+	Local  [16]byte
+	Lport  uint16
+	Remote [16]byte
+	Rport  uint16
+
+	FirstSeen time.Time
+	LastSeen  time.Time
+
+	InBytes  uint64
+	OutBytes uint64
+	InPkts   uint64
+	OutPkts  uint64
+
+	OpenedPrinted bool
+
+	GenStart uint64 // loss generation at flow creation
+}
+
+func makeKey(ev bpfTraceInfo) FlowKey {
+	k := FlowKey{
+		TGID:   ev.Tgid,
+		Cookie: ev.Cookie,
+		Proto:  uint8(ev.Proto),
+		Family: uint16(ev.Family),
+	}
+
+	switch k.Proto {
+	case IPPROTO_UDP:
+		var remote [16]byte
+		var rport uint16
+		if isRecv(uint8(ev.Event)) {
+			remote = srcKeyFromEvent(ev)
+			rport = uint16(ev.Sport)
+		} else {
+			remote = dstKeyFromEvent(ev)
+			rport = uint16(ev.Dport)
+		}
+		if rport != 0 && !isAllZero16(remote) {
+			k.PeerMode = 1
+			k.Remote = remote
+			k.Rport = rport
+		}
+
+	case IPPROTO_ICMP, IPPROTO_ICMPV6:
+		var remote [16]byte
+		if isRecv(uint8(ev.Event)) {
+			remote = srcKeyFromEvent(ev)
+		} else {
+			remote = dstKeyFromEvent(ev)
+		}
+		if !isAllZero16(remote) {
+			k.PeerMode = 1
+			k.Remote = remote
+		}
+	}
+
+	return k
+}
+
+// normalize to local -> remote
+func applyEndpoints(f *Flow, ev bpfTraceInfo) {
+	evt := uint8(ev.Event)
+
+	var localIP, remoteIP [16]byte
+	var lport, rport uint16
+
+	switch {
+	case isSend(evt) || evt == EV_CONNECT:
+		localIP = srcKeyFromEvent(ev)
+		remoteIP = dstKeyFromEvent(ev)
+		lport = uint16(ev.Sport)
+		rport = uint16(ev.Dport)
+
+	case isRecv(evt):
+		localIP = dstKeyFromEvent(ev)
+		remoteIP = srcKeyFromEvent(ev)
+		lport = uint16(ev.Dport)
+		rport = uint16(ev.Sport)
+
+	case evt == EV_BINDOK:
+		localIP = srcKeyFromEvent(ev)
+		lport = uint16(ev.Sport)
+
+	case evt == EV_ACCEPT:
+		localIP = dstKeyFromEvent(ev)
+		remoteIP = srcKeyFromEvent(ev)
+		lport = uint16(ev.Dport)
+		rport = uint16(ev.Sport)
+	}
+
+	if f.Lport == 0 && lport != 0 {
+		f.Lport = lport
+	}
+	if isAllZero16(f.Local) && !isAllZero16(localIP) {
+		f.Local = localIP
+	}
+	if f.Rport == 0 && rport != 0 {
+		f.Rport = rport
+	}
+	if isAllZero16(f.Remote) && !isAllZero16(remoteIP) {
+		f.Remote = remoteIP
+	}
+}
+
+func flowReadyToOpen(f *Flow) bool {
+	return !isAllZero16(f.Remote)
+}
+
+var lostTotal uint64
+var lostGen uint64
+
+func maybeLostNote(f *Flow) string {
+	if f.InBytes == 0 && f.OutBytes == 0 && f.GenStart != atomic.LoadUint64(&lostGen) {
+		return " maybe_lost=1"
+	}
+	return ""
+}
+
+func incompleteNote(f *Flow) string {
+	switch f.Key.Proto {
+	case IPPROTO_TCP, IPPROTO_UDP:
+		if isAllZero16(f.Remote) || f.Lport == 0 || f.Rport == 0 {
+			return " incomplete=1"
+		}
+	case IPPROTO_ICMP, IPPROTO_ICMPV6:
+		if isAllZero16(f.Remote) {
+			return " incomplete=1"
+		}
+	}
+	return ""
+}
+
+func dropZeroFlow(f *Flow) bool {
+	if f.InBytes != 0 || f.OutBytes != 0 {
+		return false
+	}
+	// UDP/ICMP нулевые режем только если за жизнь флоу не было потерь
+	if f.Key.Proto == IPPROTO_UDP || f.Key.Proto == IPPROTO_ICMP || f.Key.Proto == IPPROTO_ICMPV6 {
+		return f.GenStart == atomic.LoadUint64(&lostGen)
+	}
+	return false
+}
+
+func printOpen(f *Flow) {
+	fmt.Printf("OPEN  %-5s pid=%d(%s) cookie=%d  %s -> %s%s%s\n",
+		protoStr(f.Key.Proto),
+		f.Key.TGID, f.Comm, f.Key.Cookie,
+		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.Key.Proto),
+		incompleteNote(f),
+		maybeLostNote(f),
+	)
+}
+
+func printClose(f *Flow, reason string) {
+	age := time.Since(f.FirstSeen).Truncate(time.Millisecond)
+	fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s reason=%s%s%s\n",
+		protoStr(f.Key.Proto),
+		f.Key.TGID, f.Comm, f.Key.Cookie,
+		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.Key.Proto),
+		f.OutBytes, f.OutPkts, f.InBytes, f.InPkts,
+		age, reason,
+		incompleteNote(f),
+		maybeLostNote(f),
+	)
+}
+
+func main() {
+	flag.Parse()
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+
+	if err := rlimit.RemoveMemlock(); err != nil {
+		log.Fatalf("failed to remove memlock: %v", err)
+	}
+	if err := loadBpfObjects(&objs, nil); err != nil {
+		log.Fatalf("failed to load bpf objects: %v", err)
+	}
+	defer objs.Close()
+
+	if *flgPprof {
+		go func() {
+			log.Printf("pprof on %s", *flgPprofAddr)
+			_ = http.ListenAndServe(*flgPprofAddr, nil)
+		}()
+	}
+
+	selfName := filepath.Base(os.Args[0])
+
+	var links []link.Link
+	defer func() {
+		for _, l := range links {
+			_ = l.Close()
+		}
+	}()
+	attach := func(cat, name string, prog *ebpf.Program) {
+		l, err := link.Tracepoint(cat, name, prog, nil)
+		if err != nil {
+			log.Fatalf("attach %s/%s: %v", cat, name, err)
+		}
+		links = append(links, l)
+	}
+
+	attach("syscalls", "sys_enter_bind", objs.TraceBindEnter)
+	attach("syscalls", "sys_exit_bind", objs.TraceBindExit)
+
+	attach("syscalls", "sys_enter_connect", objs.TraceConnectEnter)
+	attach("syscalls", "sys_exit_connect", objs.TraceConnectExit)
+
+	attach("syscalls", "sys_enter_accept4", objs.TraceAccept4Enter)
+	attach("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit)
+	attach("syscalls", "sys_enter_accept", objs.TraceAcceptEnter)
+	attach("syscalls", "sys_exit_accept", objs.TraceAcceptExit)
+
+	attach("syscalls", "sys_enter_close", objs.TraceCloseEnter)
+
+	attach("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter)
+	attach("syscalls", "sys_exit_sendto", objs.TraceSendtoExit)
+	attach("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter)
+	attach("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit)
+
+	attach("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter)
+	attach("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit)
+	attach("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter)
+	attach("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit)
+
+	perfBytes := *flgPerfMB * 1024 * 1024
+	if perfBytes < 256*1024 {
+		perfBytes = 256 * 1024
+	}
+	rd, err := perf.NewReader(objs.TraceEvents, perfBytes)
+	if err != nil {
+		log.Fatalf("perf.NewReader: %v", err)
+	}
+	defer rd.Close()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	type evWrap struct {
+		ev  bpfTraceInfo
+		now time.Time
+	}
+
+	evCh := make(chan evWrap, 16384)
+
+	go func() {
+		defer close(evCh)
+		for {
+			rec, e := rd.Read()
+			if e != nil {
+				if errors.Is(e, perf.ErrClosed) {
+					return
+				}
+				continue
+			}
+			if rec.LostSamples != 0 {
+				total := atomic.AddUint64(&lostTotal, rec.LostSamples)
+				gen := atomic.AddUint64(&lostGen, 1)
+				log.Printf("PERF_LOST chunk=%d total=%d gen=%d", rec.LostSamples, total, gen)
+			}
+			if len(rec.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
+				continue
+			}
+			ev := *(*bpfTraceInfo)(unsafe.Pointer(&rec.RawSample[0]))
+			evCh <- evWrap{ev: ev, now: time.Now()}
+		}
+	}()
+
+	flows := make(map[FlowKey]*Flow, 8192)
+	ticker := time.NewTicker(*flgSweep)
+	defer ticker.Stop()
+
+	log.Println("OPEN/CLOSE only (TCP/UDP/ICMP) + PERF_LOST generation. Press Ctrl+C to exit")
+
+	shouldKeep := func(pid uint32, comm string) bool {
+		if comm == "" || comm == selfName {
+			return false
+		}
+		if *flgOnlyPID != 0 && int(pid) != *flgOnlyPID {
+			return false
+		}
+		if *flgOnlyComm != "" && !strings.Contains(comm, *flgOnlyComm) {
+			return false
+		}
+		return true
+	}
+
+	closeByCookie := func(tgid uint32, cookie uint64, reason string) {
+		for k, f := range flows {
+			if k.TGID == tgid && k.Cookie == cookie {
+				if dropZeroFlow(f) {
+					delete(flows, k)
+					continue
+				}
+				if !f.OpenedPrinted && flowReadyToOpen(f) {
+					printOpen(f)
+					f.OpenedPrinted = true
+				}
+				if f.OpenedPrinted {
+					printClose(f, reason)
+				}
+				delete(flows, k)
+			}
+		}
+	}
+
+	lastLost := uint64(0)
+	lastTick := time.Now()
+
+	for {
+		select {
+		case <-stop:
+			_ = rd.Close()
+			log.Printf("PERF_LOST_TOTAL total=%d gen=%d", atomic.LoadUint64(&lostTotal), atomic.LoadUint64(&lostGen))
+			for _, f := range flows {
+				if dropZeroFlow(f) {
+					continue
+				}
+				if f.OpenedPrinted {
+					printClose(f, "signal")
+				}
+			}
+			log.Println("Exiting...")
+			return
+
+		case <-ticker.C:
+			now := time.Now()
+
+			total := atomic.LoadUint64(&lostTotal)
+			delta := total - lastLost
+			dt := now.Sub(lastTick)
+			if delta > 0 {
+				log.Printf("PERF_LOST_RATE lost=%d in=%s total=%d gen=%d evCh=%d/%d flows=%d",
+					delta, dt.Truncate(time.Millisecond),
+					total, atomic.LoadUint64(&lostGen),
+					len(evCh), cap(evCh), len(flows),
+				)
+			}
+			lastLost = total
+			lastTick = now
+
+			// TTL sweep
+			for k, f := range flows {
+				if now.Sub(f.LastSeen) > *flgTTL {
+					if dropZeroFlow(f) {
+						delete(flows, k)
+						continue
+					}
+					if !f.OpenedPrinted && flowReadyToOpen(f) {
+						printOpen(f)
+						f.OpenedPrinted = true
+					}
+					if f.OpenedPrinted {
+						printClose(f, "idle")
+					}
+					delete(flows, k)
+				}
+			}
+
+		case w, ok := <-evCh:
+			if !ok {
+				return
+			}
+
+			ev := w.ev
+			comm := commString(ev.Comm)
+			if !shouldKeep(ev.Tgid, comm) {
+				continue
+			}
+
+			evt := uint8(ev.Event)
+			proto := uint8(ev.Proto)
+			family := uint16(ev.Family)
+
+			if !protoAllowed(proto) {
+				continue
+			}
+			if family != AF_INET && family != AF_INET6 {
+				continue
+			}
+
+			if evt == EV_CLOSE {
+				closeByCookie(ev.Tgid, ev.Cookie, "close()")
+				continue
+			}
+
+			key := makeKey(ev)
+			f := flows[key]
+			if f == nil {
+				f = &Flow{
+					Key:       key,
+					Comm:      comm,
+					FirstSeen: w.now,
+					LastSeen:  w.now,
+					GenStart:  atomic.LoadUint64(&lostGen),
+				}
+				flows[key] = f
+			}
+
+			f.LastSeen = w.now
+			applyEndpoints(f, ev)
+
+			if isSend(evt) && ev.Ret > 0 {
+				f.OutBytes += uint64(ev.Ret)
+				f.OutPkts++
+			} else if isRecv(evt) && ev.Ret > 0 {
+				f.InBytes += uint64(ev.Ret)
+				f.InPkts++
+			}
+
+			if !f.OpenedPrinted && flowReadyToOpen(f) {
+				printOpen(f)
+				f.OpenedPrinted = true
+			}
+		}
+	}
+}
