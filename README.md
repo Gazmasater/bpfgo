@@ -687,3 +687,4 @@ CLOSE TCP   pid=669(NetworkManager) cookie=127076  [fd00:0:0:0:f971:c3ee:46ee:9b
 OPEN  TCP   pid=669(NetworkManager) cookie=127078  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4000:1:0:0:0:2b]:80 incomplete=1
 CLOSE TCP   pid=669(NetworkManager) cookie=127077  [fd00:0:0:0:f971:c3ee:46ee:9b71]:33694 -> [2620:2d:4000:1:0:0:0:22]:80  out=0B/0p in=0B/0p  age=2ms reason=close()
 CLOSE TCP   pid=669(NetworkManager) cookie=127078  [fd00:0:0:0:f971:c3ee:46ee:9b71]:0 -> [2620:2d:4000:1:0:0:0:2b]:80  out=0B/0p in=0B/0p  age=1ms reason=close() incomplete=1
+OPEN  ICMPv6 pid=669(NetworkManager) cookie=7103  * -> fe80:0:0:0:0:0:0:2
