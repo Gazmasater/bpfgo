@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -45,13 +46,11 @@ const (
 	EV_BINDOK   = 20
 	EV_SENDMSG  = 11
 	EV_RECVMSG  = 12
-
 	EV_SENDMMSG = 13
 	EV_RECVMMSG = 14
 	EV_READ     = 21
 	EV_WRITE    = 22
-
-	EV_CLOSE = 30
+	EV_CLOSE    = 30
 )
 
 var (
@@ -64,6 +63,9 @@ var (
 
 	flgOnlyPID  = flag.Int("pid", 0, "only this pid (0=all)")
 	flgOnlyComm = flag.String("comm", "", "only comm containing substring (empty=all)")
+
+	flgRW   = flag.Bool("rw", true, "trace read/write on socket fds")
+	flgMmsg = flag.Bool("mmsg", true, "trace sendmmsg/recvmmsg")
 )
 
 func commString(c [32]int8) string {
@@ -105,7 +107,6 @@ func protoStr(p uint8) string {
 func isSend(ev uint8) bool {
 	return ev == EV_SENDTO || ev == EV_SENDMSG || ev == EV_SENDMMSG || ev == EV_WRITE
 }
-
 func isRecv(ev uint8) bool {
 	return ev == EV_RECVFROM || ev == EV_RECVMSG || ev == EV_RECVMMSG || ev == EV_READ
 }
@@ -119,6 +120,7 @@ func isAllZero16(b [16]byte) bool {
 	return true
 }
 
+// IPv4 u32 from kernel is network-order but looks swapped on little-endian.
 func ip4KeyFromU32Net(x uint32) (key [16]byte) {
 	var b4 [4]byte
 	binary.LittleEndian.PutUint32(b4[:], x)
@@ -143,50 +145,61 @@ func fmtIPv6Full(b [16]byte) string {
 	)
 }
 
-/* ===== scope only for ICMPv6 link-local ===== */
-
-func isIPv6LinkLocal(ip [16]byte) bool {
-	return ip[0] == 0xfe && (ip[1]&0xc0) == 0x80 // fe80::/10
+func isIPv6LinkLocalUnicast(ip [16]byte) bool {
+	// fe80::/10 => 0xfe 0x80..0xbf
+	return ip[0] == 0xfe && (ip[1]&0xc0) == 0x80
 }
 
-var ifNameCache = map[uint32]string{}
+func isIPv6LinkLocalMulticast(ip [16]byte) bool {
+	// ff02::/16 => multicast + scope=2 (link-local)
+	return ip[0] == 0xff && (ip[1]&0x0f) == 0x02
+}
 
-func ifName(idx uint32) string {
-	if idx == 0 {
+func needsScope6(ip [16]byte) bool {
+	return isIPv6LinkLocalUnicast(ip) || isIPv6LinkLocalMulticast(ip)
+}
+
+type ifResolver struct {
+	mu sync.Mutex
+	m  map[uint32]string
+}
+
+func (r *ifResolver) name(ifidx uint32) string {
+	if ifidx == 0 {
 		return ""
 	}
-	if s, ok := ifNameCache[idx]; ok {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.m == nil {
+		r.m = make(map[uint32]string, 32)
+	}
+	if s, ok := r.m[ifidx]; ok {
 		return s
 	}
-	ifi, err := net.InterfaceByIndex(int(idx))
-	if err == nil && ifi != nil && ifi.Name != "" {
-		ifNameCache[idx] = ifi.Name
-		return ifi.Name
+	ifi, err := net.InterfaceByIndex(int(ifidx))
+	if err != nil || ifi == nil || ifi.Name == "" {
+		s := fmt.Sprintf("if%d", ifidx)
+		r.m[ifidx] = s
+		return s
 	}
-	s := fmt.Sprintf("%d", idx)
-	ifNameCache[idx] = s
-	return s
+	r.m[ifidx] = ifi.Name
+	return ifi.Name
 }
 
-func fmtIPv6WithScope(ip [16]byte, scope uint32) string {
-	s := fmtIPv6Full(ip)
-	if isIPv6LinkLocal(ip) && scope != 0 {
-		return s + "%" + ifName(scope)
-	}
-	return s
-}
+var ifr ifResolver
 
-func fmtEndpoint(family uint16, ip [16]byte, scope uint32, port uint16, proto uint8) string {
+func fmtEndpoint(family uint16, ip [16]byte, port uint16, scope uint32, proto uint8) string {
 	isICMP := proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6
 	if isICMP {
 		if isAllZero16(ip) {
 			return "*"
 		}
 		if family == AF_INET6 {
-			if proto == IPPROTO_ICMPV6 {
-				return fmtIPv6WithScope(ip, scope)
+			s := fmtIPv6Full(ip)
+			if needsScope6(ip) && scope != 0 {
+				s += "%" + ifr.name(scope)
 			}
-			return fmtIPv6Full(ip)
+			return s
 		}
 		return fmtIPv4FromKey(ip)
 	}
@@ -195,7 +208,11 @@ func fmtEndpoint(family uint16, ip [16]byte, scope uint32, port uint16, proto ui
 		return fmt.Sprintf("*:%d", port)
 	}
 	if family == AF_INET6 {
-		return fmt.Sprintf("[%s]:%d", fmtIPv6Full(ip), port)
+		s := fmtIPv6Full(ip)
+		if needsScope6(ip) && scope != 0 {
+			s += "%" + ifr.name(scope)
+		}
+		return fmt.Sprintf("[%s]:%d", s, port)
 	}
 	return fmt.Sprintf("%s:%d", fmtIPv4FromKey(ip), port)
 }
@@ -207,13 +224,25 @@ func srcKeyFromEvent(ev bpfTraceInfo) (k [16]byte) {
 	copy(k[:], ev.SrcIp6[:])
 	return
 }
-
 func dstKeyFromEvent(ev bpfTraceInfo) (k [16]byte) {
 	if uint16(ev.Family) == AF_INET {
 		return ip4KeyFromU32Net(ev.DstIp4)
 	}
 	copy(k[:], ev.DstIp6[:])
 	return
+}
+
+func srcScopeFromEvent(ev bpfTraceInfo) uint32 {
+	if uint16(ev.Family) == AF_INET6 {
+		return uint32(ev.SrcScope)
+	}
+	return 0
+}
+func dstScopeFromEvent(ev bpfTraceInfo) uint32 {
+	if uint16(ev.Family) == AF_INET6 {
+		return uint32(ev.DstScope)
+	}
+	return 0
 }
 
 /* ===== FLOW ===== */
@@ -227,21 +256,19 @@ type FlowKey struct {
 	PeerMode uint8 // 0=socket-only, 1=per-peer (UDP/ICMP when enough info)
 	Rport    uint16
 	Remote   [16]byte
-
-	// only to disambiguate ICMPv6 link-local peers (fe80 needs ifindex)
-	RemoteScope uint32
+	Rscope   uint32 // only meaningful for IPv6 link-local/mcast peers
 }
 
 type Flow struct {
 	Key  FlowKey
 	Comm string
 
-	Local  [16]byte
-	Lport  uint16
-	Remote [16]byte
-	Rport  uint16
+	Local      [16]byte
+	Lport      uint16
+	LocalScope uint32
 
-	LocalScope  uint32
+	Remote      [16]byte
+	Rport       uint16
 	RemoteScope uint32
 
 	FirstSeen time.Time
@@ -253,7 +280,7 @@ type Flow struct {
 	OutPkts  uint64
 
 	OpenedPrinted bool
-	GenStart      uint64
+	GenStart      uint64 // perf-loss generation at creation
 }
 
 func makeKey(ev bpfTraceInfo) FlowKey {
@@ -264,38 +291,47 @@ func makeKey(ev bpfTraceInfo) FlowKey {
 		Family: uint16(ev.Family),
 	}
 
-	switch k.Proto {
-	case IPPROTO_UDP:
+	evt := uint8(ev.Event)
+	if k.Proto == IPPROTO_UDP {
 		var remote [16]byte
 		var rport uint16
-		if isRecv(uint8(ev.Event)) {
+		var rscope uint32
+
+		if isRecv(evt) {
 			remote = srcKeyFromEvent(ev)
 			rport = uint16(ev.Sport)
+			rscope = srcScopeFromEvent(ev)
 		} else {
 			remote = dstKeyFromEvent(ev)
 			rport = uint16(ev.Dport)
+			rscope = dstScopeFromEvent(ev)
 		}
+
 		if rport != 0 && !isAllZero16(remote) {
 			k.PeerMode = 1
 			k.Remote = remote
 			k.Rport = rport
+			if k.Family == AF_INET6 && needsScope6(remote) && rscope != 0 {
+				k.Rscope = rscope
+			}
 		}
+	}
 
-	case IPPROTO_ICMP, IPPROTO_ICMPV6:
+	if k.Proto == IPPROTO_ICMP || k.Proto == IPPROTO_ICMPV6 {
 		var remote [16]byte
 		var rscope uint32
-		if isRecv(uint8(ev.Event)) {
+		if isRecv(evt) {
 			remote = srcKeyFromEvent(ev)
-			rscope = uint32(ev.SrcScope)
+			rscope = srcScopeFromEvent(ev)
 		} else {
 			remote = dstKeyFromEvent(ev)
-			rscope = uint32(ev.DstScope)
+			rscope = dstScopeFromEvent(ev)
 		}
 		if !isAllZero16(remote) {
 			k.PeerMode = 1
 			k.Remote = remote
-			if k.Proto == IPPROTO_ICMPV6 && isIPv6LinkLocal(remote) && rscope != 0 {
-				k.RemoteScope = rscope
+			if k.Family == AF_INET6 && needsScope6(remote) && rscope != 0 {
+				k.Rscope = rscope
 			}
 		}
 	}
@@ -303,32 +339,13 @@ func makeKey(ev bpfTraceInfo) FlowKey {
 	return k
 }
 
+// normalize to local -> remote
 func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 	evt := uint8(ev.Event)
-	proto := uint8(ev.Proto)
 
 	var localIP, remoteIP [16]byte
 	var lport, rport uint16
-
-	var lscope, rscope uint32
-	if proto == IPPROTO_ICMPV6 {
-		srcScope := uint32(ev.SrcScope)
-		dstScope := uint32(ev.DstScope)
-
-		switch {
-		case isSend(evt) || evt == EV_CONNECT:
-			lscope = srcScope
-			rscope = dstScope
-		case isRecv(evt):
-			lscope = dstScope
-			rscope = srcScope
-		case evt == EV_BINDOK:
-			lscope = srcScope
-		case evt == EV_ACCEPT:
-			lscope = dstScope
-			rscope = srcScope
-		}
-	}
+	var localScope, remoteScope uint32
 
 	switch {
 	case isSend(evt) || evt == EV_CONNECT:
@@ -336,22 +353,29 @@ func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 		remoteIP = dstKeyFromEvent(ev)
 		lport = uint16(ev.Sport)
 		rport = uint16(ev.Dport)
+		localScope = srcScopeFromEvent(ev)
+		remoteScope = dstScopeFromEvent(ev)
 
 	case isRecv(evt):
 		localIP = dstKeyFromEvent(ev)
 		remoteIP = srcKeyFromEvent(ev)
 		lport = uint16(ev.Dport)
 		rport = uint16(ev.Sport)
+		localScope = dstScopeFromEvent(ev)
+		remoteScope = srcScopeFromEvent(ev)
 
 	case evt == EV_BINDOK:
 		localIP = srcKeyFromEvent(ev)
 		lport = uint16(ev.Sport)
+		localScope = srcScopeFromEvent(ev)
 
 	case evt == EV_ACCEPT:
 		localIP = dstKeyFromEvent(ev)
 		remoteIP = srcKeyFromEvent(ev)
 		lport = uint16(ev.Dport)
 		rport = uint16(ev.Sport)
+		localScope = dstScopeFromEvent(ev)
+		remoteScope = srcScopeFromEvent(ev)
 	}
 
 	if f.Lport == 0 && lport != 0 {
@@ -360,20 +384,18 @@ func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 	if isAllZero16(f.Local) && !isAllZero16(localIP) {
 		f.Local = localIP
 	}
+	if f.LocalScope == 0 && localScope != 0 && needsScope6(localIP) {
+		f.LocalScope = localScope
+	}
+
 	if f.Rport == 0 && rport != 0 {
 		f.Rport = rport
 	}
 	if isAllZero16(f.Remote) && !isAllZero16(remoteIP) {
 		f.Remote = remoteIP
 	}
-
-	if proto == IPPROTO_ICMPV6 {
-		if f.LocalScope == 0 && lscope != 0 {
-			f.LocalScope = lscope
-		}
-		if f.RemoteScope == 0 && rscope != 0 {
-			f.RemoteScope = rscope
-		}
+	if f.RemoteScope == 0 && remoteScope != 0 && needsScope6(remoteIP) {
+		f.RemoteScope = remoteScope
 	}
 }
 
@@ -417,6 +439,7 @@ func dropZeroFlow(f *Flow) bool {
 	if f.InBytes != 0 || f.OutBytes != 0 {
 		return false
 	}
+	// UDP/ICMP drop only if no perf-loss happened during flow lifetime
 	if f.Key.Proto == IPPROTO_UDP || f.Key.Proto == IPPROTO_ICMP || f.Key.Proto == IPPROTO_ICMPV6 {
 		return f.GenStart == atomic.LoadUint64(&lostGen)
 	}
@@ -427,8 +450,8 @@ func printOpen(f *Flow) {
 	fmt.Printf("OPEN  %-5s pid=%d(%s) cookie=%d  %s -> %s%s%s\n",
 		protoStr(f.Key.Proto),
 		f.Key.TGID, f.Comm, f.Key.Cookie,
-		fmtEndpoint(f.Key.Family, f.Local, f.LocalScope, f.Lport, f.Key.Proto),
-		fmtEndpoint(f.Key.Family, f.Remote, f.RemoteScope, f.Rport, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.LocalScope, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.RemoteScope, f.Key.Proto),
 		incompleteNote(f),
 		maybeLostNote(f),
 	)
@@ -439,8 +462,8 @@ func printClose(f *Flow, reason string) {
 	fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s reason=%s%s%s\n",
 		protoStr(f.Key.Proto),
 		f.Key.TGID, f.Comm, f.Key.Cookie,
-		fmtEndpoint(f.Key.Family, f.Local, f.LocalScope, f.Lport, f.Key.Proto),
-		fmtEndpoint(f.Key.Family, f.Remote, f.RemoteScope, f.Rport, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.LocalScope, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.RemoteScope, f.Key.Proto),
 		f.OutBytes, f.OutPkts, f.InBytes, f.InPkts,
 		age, reason,
 		incompleteNote(f),
@@ -507,15 +530,18 @@ func main() {
 	attach("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter)
 	attach("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit)
 
-	attach("syscalls", "sys_enter_sendmmsg", objs.TraceSendmmsgEnter)
-	attach("syscalls", "sys_exit_sendmmsg", objs.TraceSendmmsgExit)
-	attach("syscalls", "sys_enter_recvmmsg", objs.TraceRecvmmsgEnter)
-	attach("syscalls", "sys_exit_recvmmsg", objs.TraceRecvmmsgExit)
-
-	attach("syscalls", "sys_enter_write", objs.TraceWriteEnter)
-	attach("syscalls", "sys_exit_write", objs.TraceWriteExit)
-	attach("syscalls", "sys_enter_read", objs.TraceReadEnter)
-	attach("syscalls", "sys_exit_read", objs.TraceReadExit)
+	if *flgMmsg {
+		attach("syscalls", "sys_enter_sendmmsg", objs.TraceSendmmsgEnter)
+		attach("syscalls", "sys_exit_sendmmsg", objs.TraceSendmmsgExit)
+		attach("syscalls", "sys_enter_recvmmsg", objs.TraceRecvmmsgEnter)
+		attach("syscalls", "sys_exit_recvmmsg", objs.TraceRecvmmsgExit)
+	}
+	if *flgRW {
+		attach("syscalls", "sys_enter_write", objs.TraceWriteEnter)
+		attach("syscalls", "sys_exit_write", objs.TraceWriteExit)
+		attach("syscalls", "sys_enter_read", objs.TraceReadEnter)
+		attach("syscalls", "sys_exit_read", objs.TraceReadExit)
+	}
 
 	perfBytes := *flgPerfMB * 1024 * 1024
 	if perfBytes < 256*1024 {
@@ -579,6 +605,7 @@ func main() {
 		return true
 	}
 
+	// upgrade cookie-only UDP/ICMP flow to per-peer when peer becomes known
 	upgradeKeyIfNeeded := func(key FlowKey) (FlowKey, *Flow) {
 		if key.PeerMode != 1 {
 			return key, nil
@@ -589,7 +616,7 @@ func main() {
 		base := key
 		base.PeerMode = 0
 		base.Rport = 0
-		base.RemoteScope = 0
+		base.Rscope = 0
 		for i := range base.Remote {
 			base.Remote[i] = 0
 		}
@@ -656,6 +683,7 @@ func main() {
 			lastLost = total
 			lastTick = now
 
+			// TTL sweep
 			for k, f := range flows {
 				if now.Sub(f.LastSeen) > *flgTTL {
 					if dropZeroFlow(f) {
@@ -722,6 +750,7 @@ func main() {
 			f.LastSeen = w.now
 			applyEndpoints(f, ev)
 
+			// accounting
 			switch evt {
 			case EV_SENDMMSG:
 				if ev.Ret > 0 {
@@ -732,7 +761,6 @@ func main() {
 				} else {
 					f.OutPkts++
 				}
-
 			case EV_RECVMMSG:
 				if ev.Ret > 0 {
 					f.InBytes += uint64(ev.Ret)
@@ -742,7 +770,6 @@ func main() {
 				} else {
 					f.InPkts++
 				}
-
 			default:
 				if isSend(evt) && ev.Ret > 0 {
 					f.OutBytes += uint64(ev.Ret)

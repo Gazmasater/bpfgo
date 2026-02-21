@@ -17,7 +17,7 @@
 #define EINPROGRESS 115
 #define EALREADY    114
 
-// events
+// syscalls events
 #define EV_SENDTO    1
 #define EV_RECVFROM  2
 #define EV_CONNECT   3
@@ -25,29 +25,31 @@
 #define EV_BINDOK    20
 #define EV_SENDMSG   11
 #define EV_RECVMSG   12
-#define EV_CLOSE     30
-
-// extra events
 #define EV_SENDMMSG  13
 #define EV_RECVMMSG  14
 #define EV_READ      21
 #define EV_WRITE     22
+#define EV_CLOSE     30
 
 // socket flags
 #define MSG_PEEK 0x2
 
+// file modes
 #define S_IFMT   0170000
 #define S_IFSOCK 0140000
 
-// bounded loops
+// cmsg constants (Linux)
+#define SOL_IP     0
+#define SOL_IPV6   41
+#define IP_PKTINFO 8
+#define IPV6_PKTINFO 50
+
+// bounded parsing limits
 #define MAX_MMSG 16
 #define MAX_IOV  4
-#define MAX_CMSG 6
+#define MAX_CMSG_STEPS 6
 
-// cmsg parsing (x86_64)
-#define SOL_IPV6      41
-#define IPV6_PKTINFO  50
-#define CMSG_ALIGN(len) (((len) + 7) & ~7ULL)
+#define CMSG_ALIGN(len) (((len) + sizeof(__u64) - 1) & ~(sizeof(__u64) - 1))
 
 /* ====== types ====== */
 
@@ -92,7 +94,7 @@ struct trace_info {
     __u32 fd;
     __s32 _pad0;
 
-    __s64 ret;     // bytes (for mmsg: summed best-effort)
+    __s64 ret;     // bytes (mmsg: best-effort sum)
 
     __u16 family;
     __u16 sport;
@@ -100,7 +102,7 @@ struct trace_info {
 
     __u8  proto;
     __u8  event;
-    __u8  state;   // for mmsg: packets count (clamped to 255)
+    __u8  state;   // mmsg: packets count (clamped to 255); connect: 0/1
     __u8  _pad1;
 
     __u32 src_ip4; // net order
@@ -108,14 +110,60 @@ struct trace_info {
     __u8  src_ip6[16];
     __u8  dst_ip6[16];
 
-    // scope for ICMPv6 link-local (fe80::/10) + also from IPV6_PKTINFO
-    __u32 src_scope; // ifindex
-    __u32 dst_scope; // ifindex
+    __u32 src_scope; // ifindex for IPv6 link-local/mcast when known
+    __u32 dst_scope; // ifindex for IPv6 link-local/mcast when known
 
     char  comm[32];
 };
 
 const struct trace_info *unused __attribute__((unused));
+
+/* ---- userspace ABI (amd64) ---- */
+
+struct user_msghdr64 {
+    __u64 msg_name;       // void*
+    __u32 msg_namelen;    // socklen_t (fits)
+    __u32 _pad0;
+
+    __u64 msg_iov;        // struct iovec*
+    __u64 msg_iovlen;     // size_t
+
+    __u64 msg_control;    // void*
+    __u64 msg_controllen; // size_t
+
+    __u32 msg_flags;      // int
+    __u32 _pad1;
+};
+
+struct user_cmsghdr64 {
+    __u64 cmsg_len;   // size_t
+    __s32 cmsg_level; // int
+    __s32 cmsg_type;  // int
+};
+
+struct user_in6_pktinfo {
+    __u8  ipi6_addr[16];
+    __u32 ipi6_ifindex;
+};
+
+struct user_in_pktinfo {
+    __s32 ipi_ifindex;
+    __u32 ipi_spec_dst; // local address of packet
+    __u32 ipi_addr;     // dst address in IP header (see ip(7))
+};
+
+/* ---- mmsg (amd64) ---- */
+
+struct user_iovec64 {
+    __u64 iov_base;
+    __u64 iov_len;
+};
+
+struct user_mmsghdr64 {
+    struct user_msghdr64 msg_hdr;
+    __u32 msg_len;  // recv: filled by kernel; send: often 0
+    __u32 _pad;
+};
 
 struct addr_ptrlen_t {
     __u64 addr;   // user sockaddr*
@@ -136,52 +184,11 @@ struct msg_ptrflags_t {
     __u32 _pad;
 };
 
-/* ---- mmsg (x86_64 userspace ABI) ---- */
-
-struct user_iovec64 {
-    __u64 iov_base;
-    __u64 iov_len;
-};
-
-struct user_msghdr64 {
-    __u64 msg_name;       // void*
-    __u32 msg_namelen;    // int
-    __u32 _pad0;
-
-    __u64 msg_iov;        // struct iovec*
-    __u64 msg_iovlen;     // size_t
-
-    __u64 msg_control;    // void*
-    __u64 msg_controllen; // size_t
-
-    __u32 msg_flags;      // int/uint
-    __u32 _pad1;
-};
-
-struct user_mmsghdr64 {
-    struct user_msghdr64 msg_hdr;
-    __u32 msg_len;        // recv: filled by kernel; send: often 0
-    __u32 _pad;
-};
-
 struct mmsg_ptrvlen_t {
     __u64 vec;    // user mmsghdr*
     __u32 vlen;
     __u32 flags;
 };
-
-/* ---- cmsg ---- */
-
-struct user_cmsghdr64 {
-    __u64 cmsg_len;    // size_t
-    __s32 cmsg_level;
-    __s32 cmsg_type;
-};
-
-struct user_in6_pktinfo {
-    struct in6_addr ipi6_addr;
-    __s32 ipi6_ifindex;
-} __attribute__((packed));
 
 /* ====== maps ====== */
 
@@ -269,7 +276,7 @@ struct {
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
-/* ====== helpers ====== */
+/* ====== small helpers ====== */
 
 static __always_inline __u32 min_u32(__u32 a, __u32 b) { return a < b ? a : b; }
 
@@ -289,7 +296,7 @@ static __always_inline int read_msghdr64(__u64 msg_u, struct user_msghdr64 *h)
     return 0;
 }
 
-static __always_inline int read_mmsg0(__u64 vec_u, struct user_mmsghdr64 *out)
+static __always_inline int read_mmsghdr0(__u64 vec_u, struct user_mmsghdr64 *out)
 {
     if (!vec_u)
         return -1;
@@ -298,7 +305,7 @@ static __always_inline int read_mmsg0(__u64 vec_u, struct user_mmsghdr64 *out)
     return 0;
 }
 
-// recv: sum msg_len (kernel fills it)
+/* recv: sum msg_len (kernel fills it) */
 static __always_inline __s64 sum_mmsg_len(__u64 vec_u, __u32 n)
 {
     __s64 total = 0;
@@ -307,17 +314,15 @@ static __always_inline __s64 sum_mmsg_len(__u64 vec_u, __u32 n)
     for (int i = 0; i < MAX_MMSG; i++) {
         if ((__u32)i >= n)
             continue;
-
         struct user_mmsghdr64 mh = {};
         __u64 p = vec_u + (__u64)i * (__u64)sizeof(struct user_mmsghdr64);
-        if (bpf_probe_read_user(&mh, sizeof(mh), (void *)p) == 0) {
+        if (bpf_probe_read_user(&mh, sizeof(mh), (void *)p) == 0)
             total += (__s64)mh.msg_len;
-        }
     }
     return total;
 }
 
-// send: best-effort sum iov_len (common case iovlen=1)
+/* send: best-effort sum iov_len (clamped) */
 static __always_inline __s64 sum_mmsg_iov_bytes(__u64 vec_u, __u32 n)
 {
     __s64 total = 0;
@@ -342,77 +347,13 @@ static __always_inline __s64 sum_mmsg_iov_bytes(__u64 vec_u, __u32 n)
         for (int j = 0; j < MAX_IOV; j++) {
             if ((__u32)j >= iovcnt)
                 continue;
-
             struct user_iovec64 iv = {};
             __u64 ip = mh.msg_hdr.msg_iov + (__u64)j * (__u64)sizeof(struct user_iovec64);
-            if (bpf_probe_read_user(&iv, sizeof(iv), (void *)ip) == 0) {
+            if (bpf_probe_read_user(&iv, sizeof(iv), (void *)ip) == 0)
                 total += (__s64)iv.iov_len;
-            }
         }
     }
     return total;
-}
-
-static __always_inline int is_all_zero6(const __u8 a[16])
-{
-#pragma clang loop unroll(full)
-    for (int i = 0; i < 16; i++) {
-        if (a[i] != 0)
-            return 0;
-    }
-    return 1;
-}
-
-// Parse IPV6_PKTINFO from user msghdr control buffer and set local endpoint.
-// set_dst=1 => write into dst_ip6/dst_scope (recv direction local)
-// set_dst=0 => write into src_ip6/src_scope (send direction local)
-static __always_inline void parse_ipv6_pktinfo(struct trace_info *info, __u64 ctrl, __u64 controllen, int set_dst)
-{
-    if (!ctrl || controllen < sizeof(struct user_cmsghdr64))
-        return;
-
-    // only for ICMPv6 over AF_INET6
-    if (info->family != AF_INET6 || info->proto != IPPROTO_ICMPV6)
-        return;
-
-    __u64 p = ctrl;
-    __u64 left = controllen;
-
-#define CMSG_TRY_STEP() do { \
-    if (left < sizeof(struct user_cmsghdr64)) return; \
-    struct user_cmsghdr64 ch = {}; \
-    if (bpf_probe_read_user(&ch, sizeof(ch), (void *)p) != 0) return; \
-    if (ch.cmsg_len < sizeof(struct user_cmsghdr64) || ch.cmsg_len > left) return; \
-    __u64 data = p + sizeof(struct user_cmsghdr64); \
-    __u64 datalen = ch.cmsg_len - sizeof(struct user_cmsghdr64); \
-    if (ch.cmsg_level == SOL_IPV6 && ch.cmsg_type == IPV6_PKTINFO && datalen >= sizeof(struct user_in6_pktinfo)) { \
-        struct user_in6_pktinfo pi = {}; \
-        if (bpf_probe_read_user(&pi, sizeof(pi), (void *)data) == 0) { \
-            if (set_dst) { \
-                __builtin_memcpy(info->dst_ip6, &pi.ipi6_addr, 16); \
-                if (pi.ipi6_ifindex > 0) info->dst_scope = (__u32)pi.ipi6_ifindex; \
-            } else { \
-                __builtin_memcpy(info->src_ip6, &pi.ipi6_addr, 16); \
-                if (pi.ipi6_ifindex > 0) info->src_scope = (__u32)pi.ipi6_ifindex; \
-            } \
-        } \
-        return; \
-    } \
-    __u64 step = CMSG_ALIGN(ch.cmsg_len); \
-    if (step == 0 || step > left) return; \
-    p += step; \
-    left -= step; \
-} while (0)
-
-    // scan up to MAX_CMSG chunks without a loop (verifier-friendly, no unroll warnings)
-    CMSG_TRY_STEP();
-    CMSG_TRY_STEP();
-    CMSG_TRY_STEP();
-    CMSG_TRY_STEP();
-    CMSG_TRY_STEP();
-    CMSG_TRY_STEP();
-
-#undef CMSG_TRY_STEP
 }
 
 /* ---- fd->file helpers ---- */
@@ -503,11 +444,12 @@ static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
     if (bpf_probe_read_user(&family, sizeof(family), uaddr) < 0)
         return -1;
 
-    // if family fixed already — do not jump (except v4->v6 mapped)
+    /* don't allow family to "jump" once fixed (except v4-mapped on v6 socket) */
     if (info->family != 0 && family != info->family) {
         if (info->family == AF_INET6 && family == AF_INET) {
             if (addrlen < sizeof(struct sockaddr_in))
                 return -1;
+
             struct sockaddr_in sa = {};
             if (bpf_probe_read_user(&sa, sizeof(sa), uaddr) < 0)
                 return -1;
@@ -540,6 +482,7 @@ static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
         struct sockaddr_in sa = {};
         if (bpf_probe_read_user(&sa, sizeof(sa), uaddr) < 0)
             return -1;
+
         __u16 port = bpf_ntohs(sa.sin_port);
 
         if (fill_dst) {
@@ -559,16 +502,16 @@ static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
         if (bpf_probe_read_user(&sa6, sizeof(sa6), uaddr) < 0)
             return -1;
 
-        __u16 port  = bpf_ntohs(sa6.sin6_port);
+        __u16 port = bpf_ntohs(sa6.sin6_port);
         __u32 scope = sa6.sin6_scope_id;
 
         if (fill_dst) {
             __builtin_memcpy(info->dst_ip6, &sa6.sin6_addr, 16);
-            if (port)  info->dport = port;
+            if (port) info->dport = port;
             if (scope) info->dst_scope = scope;
         } else {
             __builtin_memcpy(info->src_ip6, &sa6.sin6_addr, 16);
-            if (port)  info->sport = port;
+            if (port) info->sport = port;
             if (scope) info->src_scope = scope;
         }
         return 0;
@@ -612,15 +555,17 @@ static __always_inline void loopback_fallback(struct trace_info *info, int is_se
     if (info->family == AF_INET) {
         if (is_send_dir) {
             if (info->src_ip4 == 0 && is_ipv4_loopback(info->dst_ip4))
-                info->src_ip4 = bpf_htonl(0x7f000001);
+                info->src_ip4 = bpf_htonl(0x7f000001); // 127.0.0.1
         } else {
             if (info->dst_ip4 == 0 && is_ipv4_loopback(info->src_ip4))
                 info->dst_ip4 = bpf_htonl(0x7f000001);
         }
     } else if (info->family == AF_INET6) {
         if (is_send_dir) {
-            if (is_ipv6_loopback(info->dst_ip6) && !is_ipv6_loopback(info->src_ip6)) {
-                int all0 = is_all_zero6(info->src_ip6);
+            if (is_ipv6_loopback(info->dst_ip6)) {
+                int all0 = 1;
+#pragma clang loop unroll(full)
+                for (int i = 0; i < 16; i++) if (info->src_ip6[i] != 0) all0 = 0;
                 if (all0) {
 #pragma clang loop unroll(full)
                     for (int i = 0; i < 15; i++) info->src_ip6[i] = 0;
@@ -628,7 +573,9 @@ static __always_inline void loopback_fallback(struct trace_info *info, int is_se
                 }
             }
         } else {
-            int all0 = is_all_zero6(info->dst_ip6);
+            int all0 = 1;
+#pragma clang loop unroll(full)
+            for (int i = 0; i < 16; i++) if (info->dst_ip6[i] != 0) all0 = 0;
             if (all0 && is_ipv6_loopback(info->src_ip6)) {
 #pragma clang loop unroll(full)
                 for (int i = 0; i < 15; i++) info->dst_ip6[i] = 0;
@@ -671,6 +618,7 @@ static __always_inline int fill_fd_state(int fd, struct fd_state_t *st)
     return -1;
 }
 
+/* cache + self-heal */
 static __always_inline int fill_from_fd_state_map(struct trace_info *info, __u32 tgid, int fd, int is_send_dir)
 {
     struct fd_key_t k = { .tgid = tgid, .fd = fd };
@@ -742,6 +690,60 @@ static __always_inline void fill_ids_comm_cookie(struct trace_info *info, __u64 
     } else {
         bpf_get_current_comm(info->comm, sizeof(info->comm));
     }
+}
+
+/* ---- parse pktinfo cmsg (NO LOOPS) ---- */
+
+static __always_inline void parse_pktinfo_cmsg(struct trace_info *info, __u64 ctrl, __u64 controllen, int set_dst)
+{
+    if (!ctrl || controllen < sizeof(struct user_cmsghdr64))
+        return;
+
+    __u64 p = ctrl;
+    __u64 left = controllen;
+
+#define CMSG_TRY_STEP() do { \
+    if (left < sizeof(struct user_cmsghdr64)) return; \
+    struct user_cmsghdr64 ch = {}; \
+    if (bpf_probe_read_user(&ch, sizeof(ch), (void *)p) != 0) return; \
+    if (ch.cmsg_len < sizeof(struct user_cmsghdr64) || ch.cmsg_len > left) return; \
+    __u64 data = p + sizeof(struct user_cmsghdr64); \
+    __u64 datalen = ch.cmsg_len - sizeof(struct user_cmsghdr64); \
+    if (info->family == AF_INET6 && ch.cmsg_level == SOL_IPV6 && ch.cmsg_type == IPV6_PKTINFO && datalen >= sizeof(struct user_in6_pktinfo)) { \
+        struct user_in6_pktinfo pi6 = {}; \
+        if (bpf_probe_read_user(&pi6, sizeof(pi6), (void *)data) == 0) { \
+            if (set_dst) { \
+                __builtin_memcpy(info->dst_ip6, &pi6.ipi6_addr, 16); \
+                if (pi6.ipi6_ifindex) info->dst_scope = pi6.ipi6_ifindex; \
+            } else { \
+                __builtin_memcpy(info->src_ip6, &pi6.ipi6_addr, 16); \
+                if (pi6.ipi6_ifindex) info->src_scope = pi6.ipi6_ifindex; \
+            } \
+        } \
+        return; \
+    } \
+    if (info->family == AF_INET && ch.cmsg_level == SOL_IP && ch.cmsg_type == IP_PKTINFO && datalen >= sizeof(struct user_in_pktinfo)) { \
+        struct user_in_pktinfo pi4 = {}; \
+        if (bpf_probe_read_user(&pi4, sizeof(pi4), (void *)data) == 0) { \
+            __u32 local = pi4.ipi_spec_dst; /* ip(7): local address of packet */ \
+            if (set_dst) info->dst_ip4 = local; else info->src_ip4 = local; \
+        } \
+        return; \
+    } \
+    __u64 step = CMSG_ALIGN(ch.cmsg_len); \
+    if (step == 0 || step > left) return; \
+    p += step; \
+    left -= step; \
+} while (0)
+
+    CMSG_TRY_STEP();
+    CMSG_TRY_STEP();
+    CMSG_TRY_STEP();
+    CMSG_TRY_STEP();
+    CMSG_TRY_STEP();
+    CMSG_TRY_STEP();
+
+#undef CMSG_TRY_STEP
 }
 
 /* ====== connect ====== */
@@ -844,7 +846,7 @@ static __always_inline int accept_enter_common(struct trace_event_raw_sys_enter 
 
     struct conn_info_t ci = {};
     ci.tgid = tgid;
-    ci.fd   = (__u32)ctx->args[0];
+    ci.fd   = (__u32)ctx->args[0]; // listen fd
     bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
     bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
     return 0;
@@ -871,7 +873,7 @@ static __always_inline int accept_exit_common(struct trace_event_raw_sys_exit *c
     struct trace_info info = {};
     info.event = EV_ACCEPT;
 
-    info.fd  = conn ? conn->fd : 0;
+    info.fd  = conn ? conn->fd : 0; // listen fd
     info.ret = newfd;
 
     info.ts_ns  = bpf_ktime_get_ns();
@@ -887,6 +889,7 @@ static __always_inline int accept_exit_common(struct trace_event_raw_sys_exit *c
     info.proto  = st.proto;
     info.family = st.family;
 
+    // accept: peer -> local
     info.sport = st.rport;
     info.dport = st.lport;
 
@@ -974,6 +977,7 @@ int trace_bind_exit(struct trace_event_raw_sys_exit *ctx)
     info.proto  = st.proto;
     info.family = st.family;
 
+    // bind = local -> put in src
     info.sport = st.lport;
     if (st.family == AF_INET) {
         info.src_ip4 = st.lip;
@@ -1111,6 +1115,7 @@ int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
         goto cleanup;
 
+    // peer addr written by kernel
     if (m && m->addr && m->lenp) {
         __u32 addrlen = 0;
         if (bpf_probe_read_user(&addrlen, sizeof(addrlen), (void *)m->lenp) == 0) {
@@ -1160,7 +1165,6 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
         goto cleanup;
 
     struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    __u64 *msgp = bpf_map_lookup_elem(&msgSend_map, &id);
     if (!ci)
         goto cleanup;
 
@@ -1174,14 +1178,15 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
         goto cleanup;
 
+    __u64 *msgp = bpf_map_lookup_elem(&msgSend_map, &id);
     if (msgp && *msgp) {
         struct user_msghdr64 mh = {};
         if (read_msghdr64(*msgp, &mh) == 0) {
-            if (mh.msg_name && mh.msg_namelen >= sizeof(__u16)) {
+            if (mh.msg_name && mh.msg_namelen >= sizeof(__u16))
                 (void)fill_from_sockaddr_user(&info, (void *)mh.msg_name, mh.msg_namelen, 1);
-            }
-            // for ICMPv6: allow src from IPV6_PKTINFO (if app sets it)
-            parse_ipv6_pktinfo(&info, mh.msg_control, mh.msg_controllen, 0 /*src*/);
+
+            if (mh.msg_control && mh.msg_controllen >= sizeof(struct user_cmsghdr64))
+                parse_pktinfo_cmsg(&info, mh.msg_control, mh.msg_controllen, 0 /* set SRC */);
         }
     }
 
@@ -1233,7 +1238,7 @@ int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx)
         goto cleanup;
 
     struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci || !pv || !pv->msg)
+    if (!ci)
         goto cleanup;
 
     struct trace_info info = {};
@@ -1246,14 +1251,15 @@ int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
         goto cleanup;
 
-    struct user_msghdr64 mh = {};
-    if (read_msghdr64(pv->msg, &mh) == 0) {
-        // peer from msg_name
-        if (mh.msg_name && mh.msg_namelen >= sizeof(__u16)) {
-            (void)fill_from_sockaddr_user(&info, (void *)mh.msg_name, mh.msg_namelen, 0);
+    if (pv && pv->msg) {
+        struct user_msghdr64 mh = {};
+        if (read_msghdr64(pv->msg, &mh) == 0) {
+            if (mh.msg_name && mh.msg_namelen >= sizeof(__u16))
+                (void)fill_from_sockaddr_user(&info, (void *)mh.msg_name, mh.msg_namelen, 0);
+
+            if (mh.msg_control && mh.msg_controllen >= sizeof(struct user_cmsghdr64))
+                parse_pktinfo_cmsg(&info, mh.msg_control, mh.msg_controllen, 1 /* set DST (local) */);
         }
-        // for ICMPv6: local dst from IPV6_PKTINFO -> убирает '*' слева
-        parse_ipv6_pktinfo(&info, mh.msg_control, mh.msg_controllen, 1 /*dst*/);
     }
 
     loopback_fallback(&info, 0);
@@ -1320,13 +1326,14 @@ int trace_sendmmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
         goto cleanup;
 
-    // dst + optional pktinfo from first mmsghdr
+    // prefer dst from first mmsghdr
     struct user_mmsghdr64 m0 = {};
-    if (read_mmsg0(pv->vec, &m0) == 0) {
-        if (m0.msg_hdr.msg_name && m0.msg_hdr.msg_namelen >= sizeof(__u16)) {
+    if (read_mmsghdr0(pv->vec, &m0) == 0) {
+        if (m0.msg_hdr.msg_name && m0.msg_hdr.msg_namelen >= sizeof(__u16))
             (void)fill_from_sockaddr_user(&info, (void *)m0.msg_hdr.msg_name, m0.msg_hdr.msg_namelen, 1);
-        }
-        parse_ipv6_pktinfo(&info, m0.msg_hdr.msg_control, m0.msg_hdr.msg_controllen, 0 /*src*/);
+
+        if (m0.msg_hdr.msg_control && m0.msg_hdr.msg_controllen >= sizeof(struct user_cmsghdr64))
+            parse_pktinfo_cmsg(&info, m0.msg_hdr.msg_control, m0.msg_hdr.msg_controllen, 0 /* set SRC */);
     }
 
     loopback_fallback(&info, 1);
@@ -1396,14 +1403,14 @@ int trace_recvmmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
         goto cleanup;
 
-    // peer + local from first mmsghdr
+    // peer + pktinfo from first mmsghdr
     struct user_mmsghdr64 m0 = {};
-    if (read_mmsg0(pv->vec, &m0) == 0) {
-        if (m0.msg_hdr.msg_name && m0.msg_hdr.msg_namelen >= sizeof(__u16)) {
+    if (read_mmsghdr0(pv->vec, &m0) == 0) {
+        if (m0.msg_hdr.msg_name && m0.msg_hdr.msg_namelen >= sizeof(__u16))
             (void)fill_from_sockaddr_user(&info, (void *)m0.msg_hdr.msg_name, m0.msg_hdr.msg_namelen, 0);
-        }
-        // local dst from pktinfo -> убирает '*'
-        parse_ipv6_pktinfo(&info, m0.msg_hdr.msg_control, m0.msg_hdr.msg_controllen, 1 /*dst*/);
+
+        if (m0.msg_hdr.msg_control && m0.msg_hdr.msg_controllen >= sizeof(struct user_cmsghdr64))
+            parse_pktinfo_cmsg(&info, m0.msg_hdr.msg_control, m0.msg_hdr.msg_controllen, 1 /* set DST(local) */);
     }
 
     loopback_fallback(&info, 0);
@@ -1528,7 +1535,7 @@ int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
     __u32 tgid = id >> 32;
     int fd = (int)ctx->args[0];
 
-    // cleanup cached state always
+    // always drop cached fd state
     struct fd_key_t k = { .tgid = tgid, .fd = fd };
     bpf_map_delete_elem(&fd_state_map, &k);
 
@@ -1556,6 +1563,7 @@ int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
             __builtin_memcpy(info.src_ip6, &st.lip6, 16);
             __builtin_memcpy(info.dst_ip6, &st.rip6, 16);
         }
+
         loopback_fallback(&info, 1);
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
     }
