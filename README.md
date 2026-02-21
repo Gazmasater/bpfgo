@@ -726,13 +726,14 @@ var (
 	flgPprof     = flag.Bool("pprof", true, "enable pprof")
 	flgPprofAddr = flag.String("pprofAddr", ":6060", "pprof listen addr")
 
-	flgTTL        = flag.Duration("ttl", 5*time.Second, "idle TTL for flow close")
-	flgPrintEvery = flag.Duration("print", 1*time.Second, "print interval for active flows")
+	// TTL: если по flow не было событий дольше ttl — закрываем
+	flgTTL = flag.Duration("ttl", 5*time.Second, "idle TTL for flow close")
+
+	// sweep interval (раньше был -print; теперь только sweeping TTL, без FLOW-печати)
+	flgSweep = flag.Duration("print", 1*time.Second, "TTL sweep interval (no periodic FLOW printing)")
 
 	flgOnlyPID  = flag.Int("pid", 0, "only this pid (0=all)")
 	flgOnlyComm = flag.String("comm", "", "only comm containing substring (empty=all)")
-
-	flgRaw = flag.Bool("raw", false, "also print raw events (very noisy)")
 )
 
 func commString(c [32]int8) string {
@@ -745,6 +746,15 @@ func commString(c [32]int8) string {
 		n = len(b)
 	}
 	return string(b[:n])
+}
+
+func protoAllowed(p uint8) bool {
+	switch p {
+	case IPPROTO_TCP, IPPROTO_UDP, IPPROTO_ICMP, IPPROTO_ICMPV6:
+		return true
+	default:
+		return false
+	}
 }
 
 func protoStr(p uint8) string {
@@ -762,29 +772,6 @@ func protoStr(p uint8) string {
 	}
 }
 
-func evName(code uint8) string {
-	switch code {
-	case EV_SENDTO:
-		return "SENDTO"
-	case EV_RECVFROM:
-		return "RECVFROM"
-	case EV_SENDMSG:
-		return "SENDMSG"
-	case EV_RECVMSG:
-		return "RECVMSG"
-	case EV_CONNECT:
-		return "CONNECT"
-	case EV_ACCEPT:
-		return "ACCEPT"
-	case EV_BINDOK:
-		return "BIND"
-	case EV_CLOSE:
-		return "CLOSE"
-	default:
-		return fmt.Sprintf("EV%d", code)
-	}
-}
-
 func isSend(ev uint8) bool { return ev == EV_SENDTO || ev == EV_SENDMSG }
 func isRecv(ev uint8) bool { return ev == EV_RECVFROM || ev == EV_RECVMSG }
 
@@ -798,7 +785,6 @@ func isAllZero16(b [16]byte) bool {
 }
 
 // IPv4 u32 from kernel is network-order but looks swapped on little-endian.
-// Keep your proven trick.
 func ip4KeyFromU32Net(x uint32) (key [16]byte) {
 	var b4 [4]byte
 	binary.LittleEndian.PutUint32(b4[:], x)
@@ -868,7 +854,7 @@ type FlowKey struct {
 	Proto  uint8
 	Family uint16
 
-	PeerMode uint8 // 0=socket-only, 1=per-peer (UDP when peer known)
+	PeerMode uint8 // 0=socket-only, 1=per-peer (UDP/ICMP when enough info)
 	Rport    uint16
 	Remote   [16]byte
 }
@@ -891,9 +877,9 @@ type Flow struct {
 	OutPkts  uint64
 
 	OpenedPrinted bool
-	Dirty         bool
 }
 
+// ключ: TCP всегда socket-only; UDP per-peer только если есть remote+port; ICMP per-peer если есть remote
 func makeKey(ev bpfTraceInfo) FlowKey {
 	k := FlowKey{
 		TGID:   ev.Tgid,
@@ -902,11 +888,10 @@ func makeKey(ev bpfTraceInfo) FlowKey {
 		Family: uint16(ev.Family),
 	}
 
-	// UDP: если есть peer — делаем per-peer
-	if k.Proto == IPPROTO_UDP {
+	switch k.Proto {
+	case IPPROTO_UDP:
 		var remote [16]byte
 		var rport uint16
-
 		if isRecv(uint8(ev.Event)) {
 			remote = srcKeyFromEvent(ev)
 			rport = uint16(ev.Sport)
@@ -914,18 +899,29 @@ func makeKey(ev bpfTraceInfo) FlowKey {
 			remote = dstKeyFromEvent(ev)
 			rport = uint16(ev.Dport)
 		}
-
 		if rport != 0 && !isAllZero16(remote) {
 			k.PeerMode = 1
 			k.Remote = remote
 			k.Rport = rport
+		}
+
+	case IPPROTO_ICMP, IPPROTO_ICMPV6:
+		var remote [16]byte
+		if isRecv(uint8(ev.Event)) {
+			remote = srcKeyFromEvent(ev)
+		} else {
+			remote = dstKeyFromEvent(ev)
+		}
+		if !isAllZero16(remote) {
+			k.PeerMode = 1
+			k.Remote = remote
 		}
 	}
 
 	return k
 }
 
-// normalize to local -> remote (stable flow printing)
+// normalize to local -> remote (stable printing)
 func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 	evt := uint8(ev.Event)
 
@@ -940,7 +936,7 @@ func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 		rport = uint16(ev.Dport)
 
 	case isRecv(evt):
-		// recv: src=peer, dst=local
+		// recv: src=peer, dst=local  -> печатаем local->peer
 		localIP = dstKeyFromEvent(ev)
 		remoteIP = srcKeyFromEvent(ev)
 		lport = uint16(ev.Dport)
@@ -951,12 +947,14 @@ func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 		lport = uint16(ev.Sport)
 
 	case evt == EV_ACCEPT:
+		// accept: peer->local -> печатаем local->peer
 		localIP = dstKeyFromEvent(ev)
 		remoteIP = srcKeyFromEvent(ev)
 		lport = uint16(ev.Dport)
 		rport = uint16(ev.Sport)
 	}
 
+	// самовосстановление: не затираем уже известное нулями
 	if f.Lport == 0 && lport != 0 {
 		f.Lport = lport
 	}
@@ -972,38 +970,68 @@ func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 	}
 }
 
-func printOpen(f *Flow) {
-	fmt.Printf("OPEN  %-5s pid=%d(%s) cookie=%d  %s -> %s\n",
-		protoStr(f.Key.Proto),
-		f.Key.TGID, f.Comm, f.Key.Cookie,
-		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.Key.Proto),
-		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.Key.Proto),
-	)
+// “готовность” к OPEN: по IP (порт может быть 0 из-за багов/гонок — OPEN всё равно нужен)
+func flowReadyToOpen(f *Flow) bool {
+	switch f.Key.Proto {
+	case IPPROTO_TCP:
+		return !isAllZero16(f.Remote)
+	case IPPROTO_UDP:
+		return !isAllZero16(f.Remote)
+	case IPPROTO_ICMP, IPPROTO_ICMPV6:
+		return !isAllZero16(f.Remote)
+	default:
+		return false
+	}
 }
 
-func printUpdate(f *Flow) {
-	age := time.Since(f.FirstSeen).Truncate(time.Millisecond)
-	idle := time.Since(f.LastSeen).Truncate(time.Millisecond)
+// чтобы не печатать мусор *:0 -> *:0 если вообще ничего не известно и трафика не было
+func flowHasAnySignal(f *Flow) bool {
+	if f.InBytes > 0 || f.OutBytes > 0 || f.InPkts > 0 || f.OutPkts > 0 {
+		return true
+	}
+	if !isAllZero16(f.Local) || !isAllZero16(f.Remote) {
+		return true
+	}
+	if f.Lport != 0 || f.Rport != 0 {
+		return true
+	}
+	return false
+}
 
-	fmt.Printf("FLOW  %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s idle=%s\n",
+func incompleteNote(f *Flow) string {
+	switch f.Key.Proto {
+	case IPPROTO_TCP, IPPROTO_UDP:
+		if isAllZero16(f.Remote) || f.Rport == 0 || f.Lport == 0 {
+			return " incomplete=1"
+		}
+	case IPPROTO_ICMP, IPPROTO_ICMPV6:
+		if isAllZero16(f.Remote) {
+			return " incomplete=1"
+		}
+	}
+	return ""
+}
+
+func printOpen(f *Flow) {
+	fmt.Printf("OPEN  %-5s pid=%d(%s) cookie=%d  %s -> %s%s\n",
 		protoStr(f.Key.Proto),
 		f.Key.TGID, f.Comm, f.Key.Cookie,
 		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.Key.Proto),
 		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.Key.Proto),
-		f.OutBytes, f.OutPkts, f.InBytes, f.InPkts,
-		age, idle,
+		incompleteNote(f),
 	)
 }
 
 func printClose(f *Flow, reason string) {
 	age := time.Since(f.FirstSeen).Truncate(time.Millisecond)
-	fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s reason=%s\n",
+	fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s reason=%s%s\n",
 		protoStr(f.Key.Proto),
 		f.Key.TGID, f.Comm, f.Key.Cookie,
 		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.Key.Proto),
 		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.Key.Proto),
 		f.OutBytes, f.OutPkts, f.InBytes, f.InPkts,
 		age, reason,
+		incompleteNote(f),
 	)
 }
 
@@ -1100,7 +1128,6 @@ func main() {
 			if rec.LostSamples != 0 {
 				lostTotal += rec.LostSamples
 				log.Printf("WARN lost samples: %d (total=%d)", rec.LostSamples, lostTotal)
-				// continue reading; event stream has gaps
 			}
 			if len(rec.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
 				continue
@@ -1111,10 +1138,10 @@ func main() {
 	}()
 
 	flows := make(map[FlowKey]*Flow, 8192)
-	ticker := time.NewTicker(*flgPrintEvery)
+	ticker := time.NewTicker(*flgSweep)
 	defer ticker.Stop()
 
-	log.Println("Flow mode: OPEN/FLOW/CLOSE. Press Ctrl+C to exit")
+	log.Println("OPEN/CLOSE only (TCP/UDP/ICMP). Press Ctrl+C to exit")
 
 	shouldKeep := func(pid uint32, comm string) bool {
 		if comm == "" || comm == selfName {
@@ -1129,15 +1156,28 @@ func main() {
 		return true
 	}
 
-	// close all flows by (tgid,cookie) — needed for UDP per-peer close
+	// close all flows by (tgid,cookie) — UDP/ICMP may have multiple keys per cookie
 	closeByCookie := func(tgid uint32, cookie uint64, reason string) {
 		for k, f := range flows {
 			if k.TGID == tgid && k.Cookie == cookie {
-				if !f.OpenedPrinted {
-					printOpen(f)
-					f.OpenedPrinted = true
+				// если совсем пусто — убираем молча
+				if !f.OpenedPrinted && !flowHasAnySignal(f) {
+					delete(flows, k)
+					continue
 				}
-				printClose(f, reason)
+				// если OPEN ещё не печатали — печатаем сейчас (даже если порты 0)
+				if !f.OpenedPrinted {
+					// если remote вообще неизвестен — тоже можно молча выкинуть,
+					// но ты просил не терять из-за портов 0 — поэтому печатаем только если remote есть
+					if flowReadyToOpen(f) {
+						printOpen(f)
+						f.OpenedPrinted = true
+					}
+				}
+				// CLOSE печатаем, только если хотя бы OPEN был
+				if f.OpenedPrinted {
+					printClose(f, reason)
+				}
 				delete(flows, k)
 			}
 		}
@@ -1148,10 +1188,9 @@ func main() {
 		case <-stop:
 			_ = rd.Close()
 			for _, f := range flows {
-				if !f.OpenedPrinted {
-					printOpen(f)
+				if f.OpenedPrinted {
+					printClose(f, "signal")
 				}
-				printClose(f, "signal")
 			}
 			log.Println("Exiting...")
 			return
@@ -1160,21 +1199,20 @@ func main() {
 			now := time.Now()
 			for k, f := range flows {
 				if now.Sub(f.LastSeen) > *flgTTL {
-					if !f.OpenedPrinted {
+					// если никогда не было смысла — выкидываем молча
+					if !f.OpenedPrinted && !flowHasAnySignal(f) {
+						delete(flows, k)
+						continue
+					}
+					// если OPEN ещё не печатали — печатаем сейчас, если remote известен
+					if !f.OpenedPrinted && flowReadyToOpen(f) {
 						printOpen(f)
 						f.OpenedPrinted = true
 					}
-					printClose(f, "idle")
+					if f.OpenedPrinted {
+						printClose(f, "idle")
+					}
 					delete(flows, k)
-					continue
-				}
-				if f.Dirty {
-					if !f.OpenedPrinted {
-						printOpen(f)
-						f.OpenedPrinted = true
-					}
-					printUpdate(f)
-					f.Dirty = false
 				}
 			}
 
@@ -1193,18 +1231,14 @@ func main() {
 			proto := uint8(ev.Proto)
 			family := uint16(ev.Family)
 
-			// игнорим вообще мусорные/неопределённые
-			if proto == 0 || family == 0 {
-				// EV_CLOSE по несокетам уже отфильтрован в BPF, но оставим защиту
+			if !protoAllowed(proto) {
+				continue
+			}
+			if family != AF_INET && family != AF_INET6 {
 				continue
 			}
 
-			if *flgRaw {
-				fmt.Printf("%s %-7s pid=%d(%s) tid=%d fd=%d cookie=%d ret=%d\n",
-					protoStr(proto), evName(evt), ev.Tgid, comm, ev.Tid, ev.Fd, ev.Cookie, ev.Ret)
-			}
-
-			// CLOSE: не создаём flow! закрываем по cookie
+			// CLOSE: закрываем все flows по cookie
 			if evt == EV_CLOSE {
 				closeByCookie(ev.Tgid, ev.Cookie, "close()")
 				continue
@@ -1225,19 +1259,20 @@ func main() {
 			f.LastSeen = w.now
 			applyEndpoints(f, ev)
 
+			// счётчики трафика
 			if isSend(evt) && ev.Ret > 0 {
 				f.OutBytes += uint64(ev.Ret)
 				f.OutPkts++
-				f.Dirty = true
 			} else if isRecv(evt) && ev.Ret > 0 {
 				f.InBytes += uint64(ev.Ret)
 				f.InPkts++
-				f.Dirty = true
-			} else if evt == EV_CONNECT || evt == EV_ACCEPT || evt == EV_BINDOK {
-				f.Dirty = true
+			}
+
+			// OPEN печатаем один раз, как только появился remote IP (порт может быть 0)
+			if !f.OpenedPrinted && flowReadyToOpen(f) {
+				printOpen(f)
+				f.OpenedPrinted = true
 			}
 		}
 	}
 }
-
-
