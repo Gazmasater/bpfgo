@@ -663,8 +663,8 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
 
-OPEN  ICMPv6 pid=676(NetworkManager) cookie=6971  * -> fe80:0:0:0:0:0:0:2%enp0s3
-
+OPEN  UDP   pid=3702(Socket Thread) cookie=73777  *:35910 -> 74.125.205.104:443
+CLOSE UDP   pid=3702(Socket Thread) cookie=70706  *:38052 -> 142.251.1.119:443  out=3952B/6p in=0B/0p  age=2.51s reason=close()
 
 
 
