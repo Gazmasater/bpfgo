@@ -56,11 +56,14 @@ const (
 	EV_READ     = 21
 	EV_WRITE    = 22
 	EV_CLOSE    = 30
+
+	// new: skb-derived L3 hint (real selected src IP)
+	EV_SKB_OUT = 40
 )
 
 var (
-	// perfMB трактуем как общий бюджет (не per-CPU). Внутри делим на NumCPU() и делаем fallback.
-	flgPerfMB    = flag.Int("perfMB", 16, "perf buffer total budget in MB (will be divided per-CPU)")
+	// perfMB = общий бюджет, делим на CPU + fallback.
+	flgPerfMB    = flag.Int("perfMB", 8, "perf buffer total budget in MB (divided per-CPU with fallback)")
 	flgPprof     = flag.Bool("pprof", true, "enable pprof")
 	flgPprofAddr = flag.String("pprofAddr", ":6060", "pprof listen addr")
 
@@ -73,29 +76,31 @@ var (
 	flgRW   = flag.Bool("rw", true, "trace read/write on socket fds")
 	flgMmsg = flag.Bool("mmsg", true, "trace sendmmsg/recvmmsg")
 
-	// ===== RESOLVE (PTR) =====
-	flgResolve        = flag.Bool("resolve", true, "reverse DNS resolve remote IPs (async, best-effort)")
-	flgResolveTTL     = flag.Duration("resolveTTL", 30*time.Minute, "DNS cache TTL (positive)")
-	flgResolveNegTTL  = flag.Duration("resolveNegTTL", 5*time.Minute, "DNS negative cache TTL (NXDOMAIN only)")
-	flgResolveWorkers = flag.Int("resolveWorkers", 4, "DNS resolver worker count")
-	flgResolveTimeout = flag.Duration("resolveTimeout", 2*time.Second, "DNS resolve timeout")
-	flgResolveQ       = flag.Int("resolveQ", 4096, "DNS resolve queue size")
+	// PTR resolve
+	flgResolve        = flag.Bool("resolve", true, "reverse DNS resolve IPs (PTR) async")
+	flgResolveTTL     = flag.Duration("resolveTTL", 30*time.Minute, "PTR cache TTL (positive)")
+	flgResolveNegTTL  = flag.Duration("resolveNegTTL", 5*time.Minute, "PTR negative TTL (NXDOMAIN only)")
+	flgResolveWorkers = flag.Int("resolveWorkers", 4, "PTR workers")
+	flgResolveTimeout = flag.Duration("resolveTimeout", 2*time.Second, "PTR timeout")
+	flgResolveQ       = flag.Int("resolveQ", 4096, "PTR queue size")
+	flgHostState      = flag.Bool("hostState", true, "show alias state: pending/miss/no-ptr/skip")
 
-	// печатать статус в alias: pending/miss/no-ptr/skip
-	flgHostState = flag.Bool("hostState", true, "always print alias state: pending/miss/no-ptr/skip")
-
-	// prefill known names from /etc/hosts
-	flgHostsPrefill = flag.Bool("hostsPrefill", true, "prefill known IP->name from /etc/hosts (no DNS)")
-	flgHostsFile    = flag.String("hostsFile", "/etc/hosts", "hosts file for prefill")
-	flgHostsTTL     = flag.Duration("hostsTTL", 24*time.Hour, "TTL for /etc/hosts prefilled names")
+	// known names from /etc/hosts
+	flgHostsPrefill = flag.Bool("hostsPrefill", true, "prefill names from /etc/hosts")
+	flgHostsFile    = flag.String("hostsFile", "/etc/hosts", "hosts file")
+	flgHostsTTL     = flag.Duration("hostsTTL", 24*time.Hour, "hosts prefill TTL")
 
 	// dns cache sweep
-	flgResolveSweepEach = flag.Int("resolveSweepEach", 500, "max dns cache entries to sweep per tick (0=disable)")
-	// poke flows to resolve before CLOSE
-	flgResolvePokeEach = flag.Int("resolvePokeEach", 256, "max flows to poke for resolve per tick (0=disable)")
+	flgResolveSweepEach = flag.Int("resolveSweepEach", 500, "dns cache sweep per tick")
+	flgResolvePokeEach  = flag.Int("resolvePokeEach", 256, "poke flows per tick to resolve alias")
+
+	// L3-hint cache ttl + OPEN delay to wait for skb-hint (to avoid *(any))
+	flgL3TTL       = flag.Duration("l3ttl", 10*time.Second, "TTL for skb-derived L3 hints (cookie->src/dst)")
+	flgOpenDelay   = flag.Duration("openDelay", 200*time.Millisecond, "delay OPEN print (max) to wait for skb hint to fill src ip")
+	flgL3SweepEach = flag.Int("l3SweepEach", 500, "l3 hint sweep per tick")
 )
 
-/* ===================== helpers ===================== */
+/* ===== basic helpers ===== */
 
 func commString(c [32]int8) string {
 	var b [32]byte
@@ -174,14 +179,11 @@ func fmtIPv6Full(b [16]byte) string {
 	)
 }
 
-func isIPv6LinkLocalUnicast(ip [16]byte) bool { return ip[0] == 0xfe && (ip[1]&0xc0) == 0x80 } // fe80::/10
+func isIPv6LinkLocalUnicast(ip [16]byte) bool { return ip[0] == 0xfe && (ip[1]&0xc0) == 0x80 }
 func isIPv6LinkLocalMulticast(ip [16]byte) bool {
-	return ip[0] == 0xff && (ip[1]&0x0f) == 0x02 // ff02::/16
+	return ip[0] == 0xff && (ip[1]&0x0f) == 0x02
 }
 func needsScope6(ip [16]byte) bool { return isIPv6LinkLocalUnicast(ip) || isIPv6LinkLocalMulticast(ip) }
-
-func isIPv4Localhost(ip [16]byte) bool { return ip[0] == 127 && ip[1] == 0 && ip[2] == 0 && ip[3] == 1 }
-func isIPv4DNSStub(ip [16]byte) bool   { return ip[0] == 127 && ip[1] == 0 && ip[2] == 0 && ip[3] == 53 }
 
 func isIPv6Loopback(ip [16]byte) bool {
 	for i := 0; i < 15; i++ {
@@ -249,7 +251,7 @@ func dstScopeFromEvent(ev bpfTraceInfo) uint32 {
 	return 0
 }
 
-/* ===================== .env loader + env->flags ===================== */
+/* ===== .env loader (no deps) ===== */
 
 func fileExists(path string) bool {
 	st, err := os.Stat(path)
@@ -302,10 +304,6 @@ func loadDotEnvReader(r io.Reader, override bool) error {
 	return sc.Err()
 }
 
-// load .env:
-// 1) BPFGO_DOTENV
-// 2) ./.env
-// 3) <dir-of-exe>/.env
 func loadDotEnvAuto() (string, error) {
 	if p, ok := os.LookupEnv("BPFGO_DOTENV"); ok && strings.TrimSpace(p) != "" {
 		p = strings.TrimSpace(p)
@@ -334,7 +332,6 @@ func applyEnvToFlags() {
 		}
 	}
 
-	// base
 	set("perfMB", "BPFGO_PERF_MB")
 	set("pprof", "BPFGO_PPROF")
 	set("pprofAddr", "BPFGO_PPROF_ADDR")
@@ -345,7 +342,6 @@ func applyEnvToFlags() {
 	set("rw", "BPFGO_RW")
 	set("mmsg", "BPFGO_MMSG")
 
-	// resolve
 	set("resolve", "BPFGO_RESOLVE")
 	set("resolveTTL", "BPFGO_RESOLVE_TTL")
 	set("resolveNegTTL", "BPFGO_RESOLVE_NEG_TTL")
@@ -353,16 +349,20 @@ func applyEnvToFlags() {
 	set("resolveTimeout", "BPFGO_RESOLVE_TIMEOUT")
 	set("resolveQ", "BPFGO_RESOLVE_Q")
 	set("hostState", "BPFGO_HOST_STATE")
-	set("resolveSweepEach", "BPFGO_RESOLVE_SWEEP_EACH")
-	set("resolvePokeEach", "BPFGO_RESOLVE_POKE_EACH")
 
-	// hosts
 	set("hostsPrefill", "BPFGO_HOSTS_PREFILL")
 	set("hostsFile", "BPFGO_HOSTS_FILE")
 	set("hostsTTL", "BPFGO_HOSTS_TTL")
+
+	set("resolveSweepEach", "BPFGO_RESOLVE_SWEEP_EACH")
+	set("resolvePokeEach", "BPFGO_RESOLVE_POKE_EACH")
+
+	set("l3ttl", "BPFGO_L3_TTL")
+	set("openDelay", "BPFGO_OPEN_DELAY")
+	set("l3SweepEach", "BPFGO_L3_SWEEP_EACH")
 }
 
-/* ===================== DNS RESOLVER (PTR) + CACHE ===================== */
+/* ===== PTR resolver cache ===== */
 
 type dnsKey struct {
 	Family uint16
@@ -386,7 +386,7 @@ type dnsResolver struct {
 	wg     sync.WaitGroup
 }
 
-func newDNSResolver(qsize int, workers int, ttl, negTtl, timeout time.Duration) *dnsResolver {
+func newDNSResolver(qsize, workers int, ttl, negTtl, timeout time.Duration) *dnsResolver {
 	if workers < 1 {
 		workers = 1
 	}
@@ -402,18 +402,12 @@ func newDNSResolver(qsize int, workers int, ttl, negTtl, timeout time.Duration) 
 	}
 	r.wg.Add(workers)
 	for i := 0; i < workers; i++ {
-		go func() {
-			defer r.wg.Done()
-			r.worker()
-		}()
+		go func() { defer r.wg.Done(); r.worker() }()
 	}
 	return r
 }
 
-func (r *dnsResolver) Close() {
-	close(r.q)
-	r.wg.Wait()
-}
+func (r *dnsResolver) Close() { close(r.q); r.wg.Wait() }
 
 func ipToNetIP(family uint16, ip [16]byte) net.IP {
 	if family == AF_INET {
@@ -424,7 +418,6 @@ func ipToNetIP(family uint16, ip [16]byte) net.IP {
 	return net.IP(b)
 }
 
-// решаем только то, что имеет смысл для PTR (не loopback/unspecified/mcast + не IPv6 link-local)
 func shouldResolveIP(family uint16, ip [16]byte) bool {
 	if isAllZero16(ip) {
 		return false
@@ -457,12 +450,7 @@ func (r *dnsResolver) SetKnown(family uint16, ip [16]byte, name string, ttl time
 	}
 	k := dnsKey{Family: family, IP: ip}
 	r.mu.Lock()
-	r.m[k] = &dnsEntry{
-		Name:    name,
-		Neg:     false,
-		Pending: false,
-		Exp:     time.Now().Add(ttl),
-	}
+	r.m[k] = &dnsEntry{Name: name, Exp: time.Now().Add(ttl)}
 	r.mu.Unlock()
 }
 
@@ -520,11 +508,7 @@ func (r *dnsResolver) Ensure(family uint16, ip [16]byte) {
 
 	r.mu.Lock()
 	if e := r.m[k]; e != nil {
-		if e.Pending {
-			r.mu.Unlock()
-			return
-		}
-		if now.Before(e.Exp) {
+		if e.Pending || now.Before(e.Exp) {
 			r.mu.Unlock()
 			return
 		}
@@ -540,7 +524,6 @@ func (r *dnsResolver) Ensure(family uint16, ip [16]byte) {
 	select {
 	case r.q <- k:
 	default:
-		// очередь забита — не залипаем, пробуем позже
 		r.mu.Lock()
 		if e := r.m[k]; e != nil {
 			e.Pending = false
@@ -553,7 +536,6 @@ func (r *dnsResolver) Ensure(family uint16, ip [16]byte) {
 func (r *dnsResolver) worker() {
 	for k := range r.q {
 		ip := ipToNetIP(k.Family, k.IP)
-
 		name := ""
 		neg := false
 		retrySoon := false
@@ -654,7 +636,6 @@ func parseHostsPrefill(path string, ttl time.Duration, r *dnsResolver) {
 		}
 		ipStr := fields[0]
 		name := fields[1]
-
 		ip := net.ParseIP(ipStr)
 		if ip == nil {
 			continue
@@ -681,15 +662,42 @@ func parseHostsPrefill(path string, ttl time.Duration, r *dnsResolver) {
 
 var dnsr *dnsResolver
 
-/* ===================== unified endpoint printing: ip(alias):port ===================== */
+/* ===== L3 hint cache (cookie -> real src/dst) ===== */
+
+type l3Info struct {
+	Family uint16
+	Proto  uint8
+	Src    [16]byte
+	Sport  uint16
+	SrcSc  uint32
+	Dst    [16]byte
+	Dport  uint16
+	DstSc  uint32
+	Seen   time.Time
+}
+
+func (l l3Info) expired(now time.Time, ttl time.Duration) bool {
+	return now.Sub(l.Seen) > ttl
+}
+
+/* ===== unified endpoint printing: ip(alias):port ===== */
 
 func specialAlias(family uint16, ip [16]byte) (string, bool) {
 	if family == AF_INET {
-		if isIPv4Localhost(ip) {
+		// localhost
+		if ip[0] == 127 && ip[1] == 0 && ip[2] == 0 && ip[3] == 1 {
 			return "localhost", true
 		}
-		if isIPv4DNSStub(ip) {
+		// systemd-resolved stub
+		if ip[0] == 127 && ip[1] == 0 && ip[2] == 0 && ip[3] == 53 {
 			return "dnsstub", true
+		}
+		// VirtualBox NAT defaults
+		if ip[0] == 10 && ip[1] == 0 && ip[2] == 2 && ip[3] == 2 {
+			return "vboxgw", true
+		}
+		if ip[0] == 10 && ip[1] == 0 && ip[2] == 2 && ip[3] == 3 {
+			return "vboxdns", true
 		}
 	}
 	if family == AF_INET6 && isIPv6Loopback(ip) {
@@ -712,7 +720,7 @@ func addrStr(family uint16, ip [16]byte, scope uint32) string {
 	return fmtIPv4FromKey(ip)
 }
 
-// aliasForIP: возвращает alias (или состояние). Может поставить Ensure() в очередь.
+// aliasForIP: всегда возвращает alias (или состояние), может дернуть Ensure().
 func aliasForIP(family uint16, ip [16]byte) string {
 	if isAllZero16(ip) {
 		return "any"
@@ -720,19 +728,15 @@ func aliasForIP(family uint16, ip [16]byte) string {
 	if a, ok := specialAlias(family, ip); ok {
 		return a
 	}
-
 	if dnsr == nil {
 		return "?"
 	}
-
 	if !shouldResolveIP(family, ip) {
 		return "skip"
 	}
-
 	if h, ok := dnsr.Get(family, ip); ok && h != "" {
 		return h
 	}
-
 	if name, pending, neg, ok := dnsr.Peek(family, ip); ok {
 		if name != "" && !neg {
 			return name
@@ -750,9 +754,9 @@ func aliasForIP(family uint16, ip [16]byte) string {
 			return "?"
 		}
 	}
-
 	dnsr.Ensure(family, ip)
 	if *flgHostState {
+		// чтобы "miss" не залипал — можно сразу peek; но достаточно так
 		return "miss"
 	}
 	return "?"
@@ -761,24 +765,19 @@ func aliasForIP(family uint16, ip [16]byte) string {
 func fmtEndpointAll(family uint16, ip [16]byte, port uint16, scope uint32, proto uint8, alias string) string {
 	isICMP := proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6
 	a := addrStr(family, ip, scope)
-
 	if alias == "" {
 		alias = "?"
 	}
-
 	if isICMP {
-		// ICMP без портов
 		return fmt.Sprintf("%s(%s)", a, alias)
 	}
-
-	// TCP/UDP
 	if family == AF_INET6 && !isAllZero16(ip) {
 		return fmt.Sprintf("[%s](%s):%d", a, alias, port)
 	}
 	return fmt.Sprintf("%s(%s):%d", a, alias, port)
 }
 
-/* ===================== FLOW ===================== */
+/* ===== FLOW ===== */
 
 type FlowKey struct {
 	TGID   uint32
@@ -815,7 +814,7 @@ type Flow struct {
 	OpenedPrinted bool
 	GenStart      uint64
 
-	RemoteHost string // per-flow cache (только реальное имя)
+	RemoteHost string // per-flow cache for real resolved name (not miss/pending/no-ptr)
 }
 
 func makeKey(ev bpfTraceInfo) FlowKey {
@@ -934,7 +933,49 @@ func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 	}
 }
 
-func flowReadyToOpen(f *Flow) bool {
+// apply skb-hint to fill missing local ip (and sometimes remote too)
+func applyL3HintToFlow(f *Flow, h l3Info) {
+	if h.Family != f.Key.Family || h.Proto != f.Key.Proto {
+		return
+	}
+
+	// If we already know remote, try to match either direction
+	if !isAllZero16(f.Remote) {
+		// send direction: remote == dst
+		if f.Rport != 0 && f.Rport == h.Dport && bytes.Equal(f.Remote[:], h.Dst[:]) {
+			if isAllZero16(f.Local) && !isAllZero16(h.Src) {
+				f.Local = h.Src
+				f.LocalScope = h.SrcSc
+			}
+			if f.Lport == 0 && h.Sport != 0 {
+				f.Lport = h.Sport
+			}
+			return
+		}
+		// recv direction: remote == src
+		if f.Rport != 0 && f.Rport == h.Sport && bytes.Equal(f.Remote[:], h.Src[:]) {
+			if isAllZero16(f.Local) && !isAllZero16(h.Dst) {
+				f.Local = h.Dst
+				f.LocalScope = h.DstSc
+			}
+			if f.Lport == 0 && h.Dport != 0 {
+				f.Lport = h.Dport
+			}
+			return
+		}
+	}
+
+	// If remote is unknown, we can still fill local from src (best effort)
+	if isAllZero16(f.Local) && !isAllZero16(h.Src) {
+		f.Local = h.Src
+		f.LocalScope = h.SrcSc
+		if f.Lport == 0 && h.Sport != 0 {
+			f.Lport = h.Sport
+		}
+	}
+}
+
+func flowReadyToOpenBase(f *Flow) bool {
 	if isAllZero16(f.Remote) {
 		return false
 	}
@@ -944,6 +985,17 @@ func flowReadyToOpen(f *Flow) bool {
 	default:
 		return true
 	}
+}
+
+func flowReadyToPrintOpen(f *Flow) bool {
+	if !flowReadyToOpenBase(f) {
+		return false
+	}
+	// if local ip still unknown, wait a bit for skb-hint
+	if isAllZero16(f.Local) && time.Since(f.FirstSeen) < *flgOpenDelay {
+		return false
+	}
+	return true
 }
 
 var lostTotal uint64
@@ -980,7 +1032,6 @@ func dropZeroFlow(f *Flow) bool {
 	return false
 }
 
-// пер-flow cache: если уже получили реальный host (не pending/miss/no-ptr) — используем.
 func remoteAliasCached(f *Flow) string {
 	if f.RemoteHost != "" {
 		return f.RemoteHost
@@ -994,8 +1045,6 @@ func remoteAliasCached(f *Flow) string {
 		return a
 	}
 }
-
-/* ===================== printing ===================== */
 
 func printOpen(f *Flow) {
 	lAlias := aliasForIP(f.Key.Family, f.Local)
@@ -1028,7 +1077,7 @@ func printClose(f *Flow, reason string) {
 	)
 }
 
-/* ===================== perf reader: total budget -> per-CPU + fallback ===================== */
+/* ===== perf reader: total budget -> per-CPU + fallback ===== */
 
 func openPerfReaderTotalBudget(events *ebpf.Map, totalMB int) (*perf.Reader, int, error) {
 	totalBytes := totalMB * 1024 * 1024
@@ -1047,7 +1096,7 @@ func openPerfReaderTotalBudget(events *ebpf.Map, totalMB int) (*perf.Reader, int
 	if pages < 8 {
 		pages = 8
 	}
-	p2 := 1 << (bits.Len(uint(pages)) - 1) // floor pow2
+	p2 := 1 << (bits.Len(uint(pages)) - 1)
 	try := p2 * page
 
 	var rd *perf.Reader
@@ -1066,40 +1115,26 @@ func openPerfReaderTotalBudget(events *ebpf.Map, totalMB int) (*perf.Reader, int
 	return nil, 0, err
 }
 
-/* ===================== main ===================== */
+/* ===== main ===== */
 
 func main() {
-	// 1) читаем .env
 	if p, err := loadDotEnvAuto(); err != nil {
 		log.Printf("dotenv: %v", err)
 	} else if p != "" {
 		log.Printf("dotenv loaded: %s", p)
 	}
 
-	// 2) env -> flags
 	applyEnvToFlags()
-
-	// 3) CLI имеет приоритет
 	flag.Parse()
 
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
-	// init resolver
 	if *flgResolve {
 		dnsr = newDNSResolver(*flgResolveQ, *flgResolveWorkers, *flgResolveTTL, *flgResolveNegTTL, *flgResolveTimeout)
 		defer dnsr.Close()
-
 		if *flgHostsPrefill {
 			parseHostsPrefill(*flgHostsFile, *flgHostsTTL, dnsr)
 		}
-
-		log.Printf("cfg: resolve=%v workers=%d q=%d ttl=%s negTTL=%s timeout=%s hostState=%v hostsPrefill=%v hostsFile=%s sweepEach=%d pokeEach=%d",
-			*flgResolve, *flgResolveWorkers, *flgResolveQ,
-			flgResolveTTL.String(), flgResolveNegTTL.String(), flgResolveTimeout.String(),
-			*flgHostState, *flgHostsPrefill, *flgHostsFile, *flgResolveSweepEach, *flgResolvePokeEach,
-		)
-	} else {
-		log.Printf("cfg: resolve=false")
 	}
 
 	if err := rlimit.RemoveMemlock(); err != nil {
@@ -1170,6 +1205,9 @@ func main() {
 		attach("syscalls", "sys_exit_read", objs.TraceReadExit)
 	}
 
+	// NEW: attach skb-out hint
+	attach("net", "net_dev_queue", objs.TraceNetDevQueue)
+
 	rd, perCPUBytes, err := openPerfReaderTotalBudget(objs.TraceEvents, *flgPerfMB)
 	if err != nil {
 		log.Fatalf("perf.NewReader: %v", err)
@@ -1213,10 +1251,12 @@ func main() {
 	}()
 
 	flows := make(map[FlowKey]*Flow, 8192)
+	l3ByCookie := make(map[uint64]l3Info, 8192)
+
 	ticker := time.NewTicker(*flgSweep)
 	defer ticker.Stop()
 
-	log.Println("OPEN/CLOSE only (TCP/UDP/ICMP) + PERF_LOST generation. Press Ctrl+C to exit")
+	log.Println("OPEN/CLOSE (TCP/UDP/ICMP) + PTR + skb-hint. Ctrl+C to exit")
 
 	shouldKeep := func(pid uint32, comm string) bool {
 		if comm == "" || comm == selfName {
@@ -1231,7 +1271,6 @@ func main() {
 		return true
 	}
 
-	// upgrade cookie-only UDP/ICMP flow to per-peer when peer becomes known
 	upgradeKeyIfNeeded := func(key FlowKey) (FlowKey, *Flow) {
 		if key.PeerMode != 1 {
 			return key, nil
@@ -1258,11 +1297,16 @@ func main() {
 	closeByCookie := func(tgid uint32, cookie uint64, reason string) {
 		for k, f := range flows {
 			if k.TGID == tgid && k.Cookie == cookie {
+				// try l3 fill before printing
+				if h, ok := l3ByCookie[cookie]; ok {
+					applyL3HintToFlow(f, h)
+				}
+
 				if dropZeroFlow(f) {
 					delete(flows, k)
 					continue
 				}
-				if !f.OpenedPrinted && flowReadyToOpen(f) {
+				if !f.OpenedPrinted && flowReadyToPrintOpen(f) {
 					printOpen(f)
 					f.OpenedPrinted = true
 				}
@@ -1309,21 +1353,35 @@ func main() {
 			lastLost = total
 			lastTick = now
 
-			// sweep dns cache
 			if dnsr != nil && *flgResolveSweepEach > 0 {
 				dnsr.SweepExpired(*flgResolveSweepEach)
 			}
 
-			// poke some flows for resolve
-			if dnsr != nil && *flgResolvePokeEach > 0 {
+			// sweep L3 hints
+			if *flgL3SweepEach > 0 {
 				n := 0
-				for _, f := range flows {
-					if f.RemoteHost == "" && !isAllZero16(f.Remote) {
-						_ = remoteAliasCached(f) // поставит Ensure()/подхватит готовое
+				for c, h := range l3ByCookie {
+					if h.expired(now, *flgL3TTL) {
+						delete(l3ByCookie, c)
 						n++
-						if n >= *flgResolvePokeEach {
+						if n >= *flgL3SweepEach {
 							break
 						}
+					}
+				}
+			}
+
+			// poke some flows for resolve + l3 fill
+			if *flgResolvePokeEach > 0 {
+				n := 0
+				for _, f := range flows {
+					if h, ok := l3ByCookie[f.Key.Cookie]; ok {
+						applyL3HintToFlow(f, h)
+					}
+					_ = remoteAliasCached(f)
+					n++
+					if n >= *flgResolvePokeEach {
+						break
 					}
 				}
 			}
@@ -1331,11 +1389,14 @@ func main() {
 			// TTL sweep flows
 			for k, f := range flows {
 				if now.Sub(f.LastSeen) > *flgTTL {
+					if h, ok := l3ByCookie[f.Key.Cookie]; ok {
+						applyL3HintToFlow(f, h)
+					}
 					if dropZeroFlow(f) {
 						delete(flows, k)
 						continue
 					}
-					if !f.OpenedPrinted && flowReadyToOpen(f) {
+					if !f.OpenedPrinted && flowReadyToPrintOpen(f) {
 						printOpen(f)
 						f.OpenedPrinted = true
 					}
@@ -1352,14 +1413,40 @@ func main() {
 			}
 
 			ev := w.ev
+			evt := uint8(ev.Event)
+			proto := uint8(ev.Proto)
+			family := uint16(ev.Family)
+
+			// handle skb-out hint first (no printing, no comm filtering)
+			if evt == EV_SKB_OUT {
+				if !protoAllowed(proto) || (family != AF_INET && family != AF_INET6) || ev.Cookie == 0 {
+					continue
+				}
+				h := l3Info{
+					Family: family,
+					Proto:  proto,
+					Src:    srcKeyFromEvent(ev),
+					Sport:  uint16(ev.Sport),
+					SrcSc:  srcScopeFromEvent(ev),
+					Dst:    dstKeyFromEvent(ev),
+					Dport:  uint16(ev.Dport),
+					DstSc:  dstScopeFromEvent(ev),
+					Seen:   w.now,
+				}
+				l3ByCookie[ev.Cookie] = h
+				// also try to update existing flows with same cookie
+				for _, f := range flows {
+					if f.Key.Cookie == ev.Cookie {
+						applyL3HintToFlow(f, h)
+					}
+				}
+				continue
+			}
+
 			comm := commString(ev.Comm)
 			if !shouldKeep(ev.Tgid, comm) {
 				continue
 			}
-
-			evt := uint8(ev.Event)
-			proto := uint8(ev.Proto)
-			family := uint16(ev.Family)
 
 			if !protoAllowed(proto) {
 				continue
@@ -1395,6 +1482,11 @@ func main() {
 			f.LastSeen = w.now
 			applyEndpoints(f, ev)
 
+			// try fill local ip from skb hints
+			if h, ok := l3ByCookie[f.Key.Cookie]; ok {
+				applyL3HintToFlow(f, h)
+			}
+
 			// accounting
 			switch evt {
 			case EV_SENDMMSG:
@@ -1425,7 +1517,7 @@ func main() {
 				}
 			}
 
-			if !f.OpenedPrinted && flowReadyToOpen(f) {
+			if !f.OpenedPrinted && flowReadyToPrintOpen(f) {
 				printOpen(f)
 				f.OpenedPrinted = true
 			}

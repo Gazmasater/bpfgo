@@ -139,6 +139,7 @@ type bpfProgramSpecs struct {
 	TraceCloseEnter    *ebpf.ProgramSpec `ebpf:"trace_close_enter"`
 	TraceConnectEnter  *ebpf.ProgramSpec `ebpf:"trace_connect_enter"`
 	TraceConnectExit   *ebpf.ProgramSpec `ebpf:"trace_connect_exit"`
+	TraceNetDevQueue   *ebpf.ProgramSpec `ebpf:"trace_net_dev_queue"`
 	TraceReadEnter     *ebpf.ProgramSpec `ebpf:"trace_read_enter"`
 	TraceReadExit      *ebpf.ProgramSpec `ebpf:"trace_read_exit"`
 	TraceRecvfromEnter *ebpf.ProgramSpec `ebpf:"trace_recvfrom_enter"`
@@ -253,6 +254,7 @@ type bpfPrograms struct {
 	TraceCloseEnter    *ebpf.Program `ebpf:"trace_close_enter"`
 	TraceConnectEnter  *ebpf.Program `ebpf:"trace_connect_enter"`
 	TraceConnectExit   *ebpf.Program `ebpf:"trace_connect_exit"`
+	TraceNetDevQueue   *ebpf.Program `ebpf:"trace_net_dev_queue"`
 	TraceReadEnter     *ebpf.Program `ebpf:"trace_read_enter"`
 	TraceReadExit      *ebpf.Program `ebpf:"trace_read_exit"`
 	TraceRecvfromEnter *ebpf.Program `ebpf:"trace_recvfrom_enter"`
@@ -282,6 +284,7 @@ func (p *bpfPrograms) Close() error {
 		p.TraceCloseEnter,
 		p.TraceConnectEnter,
 		p.TraceConnectExit,
+		p.TraceNetDevQueue,
 		p.TraceReadEnter,
 		p.TraceReadExit,
 		p.TraceRecvfromEnter,
