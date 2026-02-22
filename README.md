@@ -667,3 +667,8 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 13.107.253.44(no-ptr)
 151.101.193.91(no-ptr):
 142.251.1.119(miss)
+
+
+dig -x 13.107.253.44 +short
+dig -x 151.101.193.91 +short
+dig -x 142.251.1.119 +short
