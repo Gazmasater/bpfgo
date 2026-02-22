@@ -2098,6 +2098,3 @@ func main() {
 		}
 	}
 }
-OPEN  UDP   pid=506(systemd-resolve) cookie=1019  127.0.0.53:53 -> 127.0.0.1:50007 host_miss=1
-CLOSE TCP   pid=3702(Socket Thread) cookie=277402  10.0.2.15:39162 -> 185.199.110.154:443  out=63B/2p in=0B/0p  age=15ms reason=close() host_pending=1
-OPEN  UDP   pid=506(systemd-resolve) cookie=278157  10.0.2.15:50750 -> 10.0.2.3:53 host_neg=1
