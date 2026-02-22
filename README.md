@@ -665,8 +665,24 @@ gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 dig -x 13.107.253.44 +short
 dig -x 151.101.193.91 +short
 dig -x 142.251.1.119 +short
-
-
-
-
 sudo ./bpfgo 2>&1 | grep -F -C2 '*(any)'
+
+
+
+func printClose(f *Flow, reason string) {
+    lAlias := aliasForIP(f.Key.Family, f.Local)
+    rAlias := remoteAliasCached(f)
+
+    age := time.Since(f.FirstSeen).Truncate(time.Millisecond)
+-   fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s reason=%s%s%s\n",
++   fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  →out=%dB/%dp ←in=%dB/%dp  age=%s reason=%s%s%s\n",
+        protoStr(f.Key.Proto),
+        f.Key.TGID, f.Comm, f.Key.Cookie,
+        fmtEndpointAll(f.Key.Family, f.Local, f.Lport, f.LocalScope, f.Key.Proto, lAlias),
+        fmtEndpointAll(f.Key.Family, f.Remote, f.Rport, f.RemoteScope, f.Key.Proto, rAlias),
+        f.OutBytes, f.OutPkts, f.InBytes, f.InPkts,
+        age, reason,
+        incompleteNote(f),
+        maybeLostNote(f),
+    )
+}
