@@ -662,13 +662,11 @@ gcc -O2 -Wall -Wextra -o udp_server udp_server.c
 gcc -O2 -Wall -Wextra -o udp_client udp_client.c
 
 
-
-
-13.107.253.44(no-ptr)
-151.101.193.91(no-ptr):
-142.251.1.119(miss)
-
-
 dig -x 13.107.253.44 +short
 dig -x 151.101.193.91 +short
 dig -x 142.251.1.119 +short
+
+
+OPEN  UDP   pid=508(systemd-timesyn) cookie=374882  *(any):52161 -> 91.189.91.157(miss):123
+OPEN  UDP   pid=506(systemd-resolve) cookie=1019  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):46999
+CLOSE UDP   pid=508(systemd-timesyn) cookie=374882  *(any):52161 -> 91.189.91.157(alphyn.canonical.com):123  out=48B/1p in=48B/1p  age=178ms reason=close()
