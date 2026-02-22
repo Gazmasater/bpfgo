@@ -669,20 +669,4 @@ sudo ./bpfgo 2>&1 | grep -F -C2 '*(any)'
 
 
 
-func printClose(f *Flow, reason string) {
-    lAlias := aliasForIP(f.Key.Family, f.Local)
-    rAlias := remoteAliasCached(f)
-
-    age := time.Since(f.FirstSeen).Truncate(time.Millisecond)
--   fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s reason=%s%s%s\n",
-+   fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  →out=%dB/%dp ←in=%dB/%dp  age=%s reason=%s%s%s\n",
-        protoStr(f.Key.Proto),
-        f.Key.TGID, f.Comm, f.Key.Cookie,
-        fmtEndpointAll(f.Key.Family, f.Local, f.Lport, f.LocalScope, f.Key.Proto, lAlias),
-        fmtEndpointAll(f.Key.Family, f.Remote, f.Rport, f.RemoteScope, f.Key.Proto, rAlias),
-        f.OutBytes, f.OutPkts, f.InBytes, f.InPkts,
-        age, reason,
-        incompleteNote(f),
-        maybeLostNote(f),
-    )
-}
+CLOSE UDP   pid=514(systemd-resolve) cookie=7265  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):50119  →out=110B/1p ←in=56B/1p  age=5.734s reason=idle
