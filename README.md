@@ -667,30 +667,13 @@ dig -x 151.101.193.91 +short
 dig -x 142.251.1.119 +short
 
 
-#ifndef IFNAMSIZ
-#define IFNAMSIZ 16
-#endif
-
-struct tp_net_dev_queue {
-    __u16 common_type;
-    __u8  common_flags;
-    __u8  common_preempt_count;
-    __s32 common_pid;
-
-    __u64 skbaddr;     // <-- то, что нам нужно
-    __u32 len;
-    char  name[IFNAMSIZ];
-};
-
-
-
-SEC("tracepoint/net/net_dev_queue")
-int trace_net_dev_queue(struct tp_net_dev_queue *ctx)
-{
-    struct sk_buff *skb = (struct sk_buff *)(unsigned long)ctx->skbaddr;
-    if (!skb) return 0;
-
-    // дальше твой код
-}
-
+lev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+/home/lev/bpfgo/trace.c:1650:48: error: no member named 's6_addr' in 'struct in6_addr'
+        __builtin_memcpy(e.src_ip6, ip6h.saddr.s6_addr, 16);
+                                    ~~~~~~~~~~ ^
+/home/lev/bpfgo/trace.c:1651:48: error: no member named 's6_addr' in 'struct in6_addr'
+        __builtin_memcpy(e.dst_ip6, ip6h.daddr.s6_addr, 16);
+                                    ~~~~~~~~~~ ^
+2 errors generated.
+Error: compile: exit status 1
 
