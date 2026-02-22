@@ -667,13 +667,6 @@ dig -x 151.101.193.91 +short
 dig -x 142.251.1.119 +short
 
 
-lev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
-/home/lev/bpfgo/trace.c:1650:48: error: no member named 's6_addr' in 'struct in6_addr'
-        __builtin_memcpy(e.src_ip6, ip6h.saddr.s6_addr, 16);
-                                    ~~~~~~~~~~ ^
-/home/lev/bpfgo/trace.c:1651:48: error: no member named 's6_addr' in 'struct in6_addr'
-        __builtin_memcpy(e.dst_ip6, ip6h.daddr.s6_addr, 16);
-                                    ~~~~~~~~~~ ^
-2 errors generated.
-Error: compile: exit status 1
+__builtin_memcpy(e.src_ip6, &ip6h.saddr, sizeof(e.src_ip6));
+__builtin_memcpy(e.dst_ip6, &ip6h.daddr, sizeof(e.dst_ip6));
 
