@@ -669,21 +669,5 @@ dig -x 142.251.1.119 +short
 
 
 
-lev@lev-VirtualBox:~/bpfgo$ grep -n "sk_cookie" -n vmlinux.h | head
-grep -n "skc_cookie" -n vmlinux.h | head
-44121:  atomic64_t skc_cookie;
-
-[{
-	"resource": "/home/lev/bpfgo/trace.c",
-	"owner": "C/C++: IntelliSense",
-	"code": "513",
-	"severity": 8,
-	"message": "a value of type \"atomic64_t\" cannot be assigned to an entity of type \"__u64\" (aka \"unsigned long long\")",
-	"source": "C/C++",
-	"startLineNumber": 1604,
-	"startColumn": 26,
-	"endLineNumber": 1604,
-	"endColumn": 27,
-	"modelVersionId": 69,
-	"origin": "extHost1"
-}]
+__u64 cookie = BPF_CORE_READ(sk, __sk_common.skc_cookie.counter);
+if (!cookie) return 0;
