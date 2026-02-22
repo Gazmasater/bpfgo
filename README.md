@@ -2291,3 +2291,20 @@ int trace_net_dev_queue(struct trace_event_raw_net_dev_queue *ctx)
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &e, sizeof(e));
     return 0;
 }
+
+
+
+[{
+	"resource": "/home/lev/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "833",
+	"severity": 8,
+	"message": "pointer or reference to incomplete type \"struct trace_event_raw_net_dev_queue\" is not allowed",
+	"source": "C/C++",
+	"startLineNumber": 1585,
+	"startColumn": 45,
+	"endLineNumber": 1585,
+	"endColumn": 48,
+	"modelVersionId": 9,
+	"origin": "extHost1"
+}]
