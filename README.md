@@ -669,38 +669,21 @@ dig -x 142.251.1.119 +short
 
 
 
-1) Почини trace_net_dev_queue: убери bpf_get_socket_cookie()
-
-В trace.c в trace_net_dev_queue() замени:
-
-__u64 cookie = bpf_get_socket_cookie(sk);
-if (!cookie) return 0;
-
-на CO-RE чтение cookie из структуры сокета (с автоподбором поля):
-
-__u64 cookie = 0;
-
-if (bpf_core_field_exists(((struct sock *)0)->sk_cookie)) {
-    cookie = BPF_CORE_READ(sk, sk_cookie);
-} else if (bpf_core_field_exists(((struct sock_common *)0)->skc_cookie)) {
-    cookie = BPF_CORE_READ(sk, __sk_common.skc_cookie);
-} else if (bpf_core_field_exists(((struct sock *)0)->__sk_common.skc_cookie)) {
-    cookie = BPF_CORE_READ(sk, __sk_common.skc_cookie);
-}
-
-if (!cookie)
-    return 0;
-
-Это убирает зависимость от helper’а и обычно работает на большинстве ядер с BTF.
-
-2) Быстро проверить, какое поле реально есть у тебя
-grep -n "sk_cookie" -n vmlinux.h | head
+lev@lev-VirtualBox:~/bpfgo$ grep -n "sk_cookie" -n vmlinux.h | head
 grep -n "skc_cookie" -n vmlinux.h | head
+44121:  atomic64_t skc_cookie;
 
-Если sk_cookie есть — можно упростить до:
-
-__u64 cookie = BPF_CORE_READ(sk, sk_cookie);
-
-Если есть только skc_cookie — тогда:
-
-__u64 cookie = BPF_CORE_READ(sk, __sk_common.skc_cookie);
+[{
+	"resource": "/home/lev/bpfgo/trace.c",
+	"owner": "C/C++: IntelliSense",
+	"code": "513",
+	"severity": 8,
+	"message": "a value of type \"atomic64_t\" cannot be assigned to an entity of type \"__u64\" (aka \"unsigned long long\")",
+	"source": "C/C++",
+	"startLineNumber": 1604,
+	"startColumn": 26,
+	"endLineNumber": 1604,
+	"endColumn": 27,
+	"modelVersionId": 69,
+	"origin": "extHost1"
+}]
