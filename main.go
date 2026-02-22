@@ -10,12 +10,14 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/bits"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -57,7 +59,8 @@ const (
 )
 
 var (
-	flgPerfMB    = flag.Int("perfMB", 16, "perf buffer size in MB")
+	// perfMB трактуем как общий бюджет (не per-CPU). Внутри делим на NumCPU() и делаем fallback.
+	flgPerfMB    = flag.Int("perfMB", 16, "perf buffer total budget in MB (will be divided per-CPU)")
 	flgPprof     = flag.Bool("pprof", true, "enable pprof")
 	flgPprofAddr = flag.String("pprofAddr", ":6060", "pprof listen addr")
 
@@ -73,10 +76,13 @@ var (
 	// ===== RESOLVE (PTR) =====
 	flgResolve        = flag.Bool("resolve", true, "reverse DNS resolve remote IPs (async, best-effort)")
 	flgResolveTTL     = flag.Duration("resolveTTL", 30*time.Minute, "DNS cache TTL (positive)")
-	flgResolveNegTTL  = flag.Duration("resolveNegTTL", 5*time.Minute, "DNS negative cache TTL")
+	flgResolveNegTTL  = flag.Duration("resolveNegTTL", 5*time.Minute, "DNS negative cache TTL (NXDOMAIN only)")
 	flgResolveWorkers = flag.Int("resolveWorkers", 4, "DNS resolver worker count")
 	flgResolveTimeout = flag.Duration("resolveTimeout", 2*time.Second, "DNS resolve timeout")
 	flgResolveQ       = flag.Int("resolveQ", 4096, "DNS resolve queue size")
+
+	// печатать статус в alias: pending/miss/no-ptr/skip
+	flgHostState = flag.Bool("hostState", true, "always print alias state: pending/miss/no-ptr/skip")
 
 	// prefill known names from /etc/hosts
 	flgHostsPrefill = flag.Bool("hostsPrefill", true, "prefill known IP->name from /etc/hosts (no DNS)")
@@ -85,6 +91,8 @@ var (
 
 	// dns cache sweep
 	flgResolveSweepEach = flag.Int("resolveSweepEach", 500, "max dns cache entries to sweep per tick (0=disable)")
+	// poke flows to resolve before CLOSE
+	flgResolvePokeEach = flag.Int("resolvePokeEach", 256, "max flows to poke for resolve per tick (0=disable)")
 )
 
 /* ===================== helpers ===================== */
@@ -166,18 +174,22 @@ func fmtIPv6Full(b [16]byte) string {
 	)
 }
 
-func isIPv6LinkLocalUnicast(ip [16]byte) bool {
-	// fe80::/10 => 0xfe 0x80..0xbf
-	return ip[0] == 0xfe && (ip[1]&0xc0) == 0x80
-}
-
+func isIPv6LinkLocalUnicast(ip [16]byte) bool { return ip[0] == 0xfe && (ip[1]&0xc0) == 0x80 } // fe80::/10
 func isIPv6LinkLocalMulticast(ip [16]byte) bool {
-	// ff02::/16 => multicast + scope=2 (link-local)
-	return ip[0] == 0xff && (ip[1]&0x0f) == 0x02
+	return ip[0] == 0xff && (ip[1]&0x0f) == 0x02 // ff02::/16
 }
+func needsScope6(ip [16]byte) bool { return isIPv6LinkLocalUnicast(ip) || isIPv6LinkLocalMulticast(ip) }
 
-func needsScope6(ip [16]byte) bool {
-	return isIPv6LinkLocalUnicast(ip) || isIPv6LinkLocalMulticast(ip)
+func isIPv4Localhost(ip [16]byte) bool { return ip[0] == 127 && ip[1] == 0 && ip[2] == 0 && ip[3] == 1 }
+func isIPv4DNSStub(ip [16]byte) bool   { return ip[0] == 127 && ip[1] == 0 && ip[2] == 0 && ip[3] == 53 }
+
+func isIPv6Loopback(ip [16]byte) bool {
+	for i := 0; i < 15; i++ {
+		if ip[i] != 0 {
+			return false
+		}
+	}
+	return ip[15] == 1 // ::1
 }
 
 type ifResolver struct {
@@ -209,35 +221,6 @@ func (r *ifResolver) name(ifidx uint32) string {
 
 var ifr ifResolver
 
-func fmtEndpoint(family uint16, ip [16]byte, port uint16, scope uint32, proto uint8) string {
-	isICMP := proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6
-	if isICMP {
-		if isAllZero16(ip) {
-			return "*"
-		}
-		if family == AF_INET6 {
-			s := fmtIPv6Full(ip)
-			if needsScope6(ip) && scope != 0 {
-				s += "%" + ifr.name(scope)
-			}
-			return s
-		}
-		return fmtIPv4FromKey(ip)
-	}
-
-	if isAllZero16(ip) {
-		return fmt.Sprintf("*:%d", port)
-	}
-	if family == AF_INET6 {
-		s := fmtIPv6Full(ip)
-		if needsScope6(ip) && scope != 0 {
-			s += "%" + ifr.name(scope)
-		}
-		return fmt.Sprintf("[%s]:%d", s, port)
-	}
-	return fmt.Sprintf("%s:%d", fmtIPv4FromKey(ip), port)
-}
-
 func srcKeyFromEvent(ev bpfTraceInfo) (k [16]byte) {
 	if uint16(ev.Family) == AF_INET {
 		return ip4KeyFromU32Net(ev.SrcIp4)
@@ -268,8 +251,8 @@ func dstScopeFromEvent(ev bpfTraceInfo) uint32 {
 
 /* ===================== .env loader + env->flags ===================== */
 
-func fileExists(p string) bool {
-	st, err := os.Stat(p)
+func fileExists(path string) bool {
+	st, err := os.Stat(path)
 	return err == nil && !st.IsDir()
 }
 
@@ -289,11 +272,9 @@ func loadDotEnvReader(r io.Reader, override bool) error {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		// remove inline comment: key=val # comment  (только если есть пробел перед #)
 		if i := strings.Index(line, " #"); i >= 0 {
 			line = strings.TrimSpace(line[:i])
 		}
-		// allow: export KEY=VAL
 		if strings.HasPrefix(line, "export ") {
 			line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
 		}
@@ -303,14 +284,11 @@ func loadDotEnvReader(r io.Reader, override bool) error {
 		}
 		key := strings.TrimSpace(line[:i])
 		val := strings.TrimSpace(line[i+1:])
-
-		// strip quotes
 		if len(val) >= 2 {
 			if (val[0] == '"' && val[len(val)-1] == '"') || (val[0] == '\'' && val[len(val)-1] == '\'') {
 				val = val[1 : len(val)-1]
 			}
 		}
-
 		if key == "" {
 			continue
 		}
@@ -324,10 +302,10 @@ func loadDotEnvReader(r io.Reader, override bool) error {
 	return sc.Err()
 }
 
-// load .env from:
-// 1) BPFGO_DOTENV (if set)
-// 2) ./ .env
-// 3) рядом с бинарём
+// load .env:
+// 1) BPFGO_DOTENV
+// 2) ./.env
+// 3) <dir-of-exe>/.env
 func loadDotEnvAuto() (string, error) {
 	if p, ok := os.LookupEnv("BPFGO_DOTENV"); ok && strings.TrimSpace(p) != "" {
 		p = strings.TrimSpace(p)
@@ -336,11 +314,9 @@ func loadDotEnvAuto() (string, error) {
 		}
 		return p, fmt.Errorf("BPFGO_DOTENV set but file not found: %s", p)
 	}
-
 	if fileExists(".env") {
 		return ".env", loadDotEnvFile(".env", false)
 	}
-
 	if exe, err := os.Executable(); err == nil {
 		dir := filepath.Dir(exe)
 		p := filepath.Join(dir, ".env")
@@ -348,12 +324,9 @@ func loadDotEnvAuto() (string, error) {
 			return p, loadDotEnvFile(p, false)
 		}
 	}
-
 	return "", nil
 }
 
-// apply env vars to flags BEFORE flag.Parse()
-// CLI args still override after Parse.
 func applyEnvToFlags() {
 	set := func(flagName, envName string) {
 		if v, ok := os.LookupEnv(envName); ok && strings.TrimSpace(v) != "" {
@@ -365,13 +338,10 @@ func applyEnvToFlags() {
 	set("perfMB", "BPFGO_PERF_MB")
 	set("pprof", "BPFGO_PPROF")
 	set("pprofAddr", "BPFGO_PPROF_ADDR")
-
 	set("ttl", "BPFGO_TTL")
 	set("print", "BPFGO_SWEEP")
-
 	set("pid", "BPFGO_ONLY_PID")
 	set("comm", "BPFGO_ONLY_COMM")
-
 	set("rw", "BPFGO_RW")
 	set("mmsg", "BPFGO_MMSG")
 
@@ -382,14 +352,14 @@ func applyEnvToFlags() {
 	set("resolveWorkers", "BPFGO_RESOLVE_WORKERS")
 	set("resolveTimeout", "BPFGO_RESOLVE_TIMEOUT")
 	set("resolveQ", "BPFGO_RESOLVE_Q")
+	set("hostState", "BPFGO_HOST_STATE")
+	set("resolveSweepEach", "BPFGO_RESOLVE_SWEEP_EACH")
+	set("resolvePokeEach", "BPFGO_RESOLVE_POKE_EACH")
 
-	// known names prefill
+	// hosts
 	set("hostsPrefill", "BPFGO_HOSTS_PREFILL")
 	set("hostsFile", "BPFGO_HOSTS_FILE")
 	set("hostsTTL", "BPFGO_HOSTS_TTL")
-
-	// sweep cache
-	set("resolveSweepEach", "BPFGO_RESOLVE_SWEEP_EACH")
 }
 
 /* ===================== DNS RESOLVER (PTR) + CACHE ===================== */
@@ -454,6 +424,7 @@ func ipToNetIP(family uint16, ip [16]byte) net.IP {
 	return net.IP(b)
 }
 
+// решаем только то, что имеет смысл для PTR (не loopback/unspecified/mcast + не IPv6 link-local)
 func shouldResolveIP(family uint16, ip [16]byte) bool {
 	if isAllZero16(ip) {
 		return false
@@ -462,11 +433,10 @@ func shouldResolveIP(family uint16, ip [16]byte) bool {
 	if nip == nil {
 		return false
 	}
-	if nip.IsUnspecified() || nip.IsLoopback() || nip.IsMulticast() {
+	if nip.IsLoopback() || nip.IsMulticast() || nip.IsUnspecified() {
 		return false
 	}
 	if family == AF_INET6 && needsScope6(ip) {
-		// link-local обычно без PTR + требует scope — не забиваем очередь
 		return false
 	}
 	return true
@@ -506,19 +476,41 @@ func (r *dnsResolver) Get(family uint16, ip [16]byte) (string, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if e := r.m[k]; e != nil {
-		if now.Before(e.Exp) {
-			if e.Neg || e.Name == "" {
-				return "", false
-			}
-			return e.Name, true
-		}
-		delete(r.m, k) // expired
+	e := r.m[k]
+	if e == nil {
+		return "", false
 	}
-	return "", false
+	if now.After(e.Exp) && !e.Pending {
+		delete(r.m, k)
+		return "", false
+	}
+	if e.Neg || e.Name == "" {
+		return "", false
+	}
+	return e.Name, true
 }
 
-// Ensure: ставим резолв в очередь только если нет свежего кэша и не Pending
+func (r *dnsResolver) Peek(family uint16, ip [16]byte) (name string, pending bool, neg bool, ok bool) {
+	if !shouldResolveIP(family, ip) {
+		return "", false, false, false
+	}
+	k := dnsKey{Family: family, IP: ip}
+	now := time.Now()
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	e := r.m[k]
+	if e == nil {
+		return "", false, false, false
+	}
+	if now.After(e.Exp) && !e.Pending {
+		delete(r.m, k)
+		return "", false, false, false
+	}
+	return e.Name, e.Pending, e.Neg, true
+}
+
 func (r *dnsResolver) Ensure(family uint16, ip [16]byte) {
 	if !shouldResolveIP(family, ip) {
 		return
@@ -528,7 +520,11 @@ func (r *dnsResolver) Ensure(family uint16, ip [16]byte) {
 
 	r.mu.Lock()
 	if e := r.m[k]; e != nil {
-		if e.Pending || now.Before(e.Exp) {
+		if e.Pending {
+			r.mu.Unlock()
+			return
+		}
+		if now.Before(e.Exp) {
 			r.mu.Unlock()
 			return
 		}
@@ -544,7 +540,7 @@ func (r *dnsResolver) Ensure(family uint16, ip [16]byte) {
 	select {
 	case r.q <- k:
 	default:
-		// очередь забита — снимаем Pending и ставим короткий backoff
+		// очередь забита — не залипаем, пробуем позже
 		r.mu.Lock()
 		if e := r.m[k]; e != nil {
 			e.Pending = false
@@ -557,20 +553,47 @@ func (r *dnsResolver) Ensure(family uint16, ip [16]byte) {
 func (r *dnsResolver) worker() {
 	for k := range r.q {
 		ip := ipToNetIP(k.Family, k.IP)
+
 		name := ""
 		neg := false
+		retrySoon := false
 
 		ctx, cancel := context.WithTimeout(context.Background(), r.to)
 		names, err := net.DefaultResolver.LookupAddr(ctx, ip.String())
 		cancel()
 
-		if err != nil || len(names) == 0 {
-			neg = true
-		} else {
+		if err != nil {
+			// ВАЖНО: timeout/temporary НЕ кэшируем как neg на 5 минут
+			if dnsErr, ok := err.(*net.DNSError); ok {
+				if dnsErr.IsNotFound {
+					neg = true
+				} else if dnsErr.IsTimeout || dnsErr.IsTemporary {
+					retrySoon = true
+				} else {
+					retrySoon = true
+				}
+			} else {
+				retrySoon = true
+			}
+		}
+
+		if len(names) > 0 {
 			name = trimDot(names[0])
 			if name == "" {
 				neg = true
+				retrySoon = false
 			}
+		} else {
+			if !retrySoon {
+				neg = true
+			}
+		}
+
+		exp := time.Now().Add(r.ttl)
+		if neg {
+			exp = time.Now().Add(r.negTtl)
+		} else if retrySoon {
+			exp = time.Now().Add(2 * time.Second)
 		}
 
 		r.mu.Lock()
@@ -582,11 +605,7 @@ func (r *dnsResolver) worker() {
 		e.Pending = false
 		e.Neg = neg
 		e.Name = name
-		if neg {
-			e.Exp = time.Now().Add(r.negTtl)
-		} else {
-			e.Exp = time.Now().Add(r.ttl)
-		}
+		e.Exp = exp
 		r.mu.Unlock()
 	}
 }
@@ -610,7 +629,6 @@ func (r *dnsResolver) SweepExpired(limit int) {
 	r.mu.Unlock()
 }
 
-// prefill known IP->name from hosts file
 func parseHostsPrefill(path string, ttl time.Duration, r *dnsResolver) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -663,6 +681,103 @@ func parseHostsPrefill(path string, ttl time.Duration, r *dnsResolver) {
 
 var dnsr *dnsResolver
 
+/* ===================== unified endpoint printing: ip(alias):port ===================== */
+
+func specialAlias(family uint16, ip [16]byte) (string, bool) {
+	if family == AF_INET {
+		if isIPv4Localhost(ip) {
+			return "localhost", true
+		}
+		if isIPv4DNSStub(ip) {
+			return "dnsstub", true
+		}
+	}
+	if family == AF_INET6 && isIPv6Loopback(ip) {
+		return "localhost", true
+	}
+	return "", false
+}
+
+func addrStr(family uint16, ip [16]byte, scope uint32) string {
+	if isAllZero16(ip) {
+		return "*"
+	}
+	if family == AF_INET6 {
+		s := fmtIPv6Full(ip)
+		if needsScope6(ip) && scope != 0 {
+			s += "%" + ifr.name(scope)
+		}
+		return s
+	}
+	return fmtIPv4FromKey(ip)
+}
+
+// aliasForIP: возвращает alias (или состояние). Может поставить Ensure() в очередь.
+func aliasForIP(family uint16, ip [16]byte) string {
+	if isAllZero16(ip) {
+		return "any"
+	}
+	if a, ok := specialAlias(family, ip); ok {
+		return a
+	}
+
+	if dnsr == nil {
+		return "?"
+	}
+
+	if !shouldResolveIP(family, ip) {
+		return "skip"
+	}
+
+	if h, ok := dnsr.Get(family, ip); ok && h != "" {
+		return h
+	}
+
+	if name, pending, neg, ok := dnsr.Peek(family, ip); ok {
+		if name != "" && !neg {
+			return name
+		}
+		if pending {
+			if *flgHostState {
+				return "pending"
+			}
+			return "?"
+		}
+		if neg {
+			if *flgHostState {
+				return "no-ptr"
+			}
+			return "?"
+		}
+	}
+
+	dnsr.Ensure(family, ip)
+	if *flgHostState {
+		return "miss"
+	}
+	return "?"
+}
+
+func fmtEndpointAll(family uint16, ip [16]byte, port uint16, scope uint32, proto uint8, alias string) string {
+	isICMP := proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6
+	a := addrStr(family, ip, scope)
+
+	if alias == "" {
+		alias = "?"
+	}
+
+	if isICMP {
+		// ICMP без портов
+		return fmt.Sprintf("%s(%s)", a, alias)
+	}
+
+	// TCP/UDP
+	if family == AF_INET6 && !isAllZero16(ip) {
+		return fmt.Sprintf("[%s](%s):%d", a, alias, port)
+	}
+	return fmt.Sprintf("%s(%s):%d", a, alias, port)
+}
+
 /* ===================== FLOW ===================== */
 
 type FlowKey struct {
@@ -671,10 +786,10 @@ type FlowKey struct {
 	Proto  uint8
 	Family uint16
 
-	PeerMode uint8 // 0=socket-only, 1=per-peer (UDP/ICMP when enough info)
+	PeerMode uint8
 	Rport    uint16
 	Remote   [16]byte
-	Rscope   uint32 // only meaningful for IPv6 link-local/mcast peers
+	Rscope   uint32
 }
 
 type Flow struct {
@@ -698,11 +813,9 @@ type Flow struct {
 	OutPkts  uint64
 
 	OpenedPrinted bool
-	GenStart      uint64 // perf-loss generation at creation
+	GenStart      uint64
 
-	// resolve cache (per-flow)
-	RemoteHost    string
-	ResolveQueued bool
+	RemoteHost string // per-flow cache (только реальное имя)
 }
 
 func makeKey(ev bpfTraceInfo) FlowKey {
@@ -762,7 +875,6 @@ func makeKey(ev bpfTraceInfo) FlowKey {
 	return k
 }
 
-// normalize to local -> remote
 func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 	evt := uint8(ev.Event)
 
@@ -862,99 +974,117 @@ func dropZeroFlow(f *Flow) bool {
 	if f.InBytes != 0 || f.OutBytes != 0 {
 		return false
 	}
-	// UDP/ICMP drop only if no perf-loss happened during flow lifetime
 	if f.Key.Proto == IPPROTO_UDP || f.Key.Proto == IPPROTO_ICMP || f.Key.Proto == IPPROTO_ICMPV6 {
 		return f.GenStart == atomic.LoadUint64(&lostGen)
 	}
 	return false
 }
 
-/* ===================== resolve hooks (per-flow + shared cache) ===================== */
-
-func maybeQueueResolve(f *Flow) {
-	if dnsr == nil || f.ResolveQueued || f.RemoteHost != "" {
-		return
-	}
-	if isAllZero16(f.Remote) {
-		return
-	}
-	dnsr.Ensure(f.Key.Family, f.Remote)
-	f.ResolveQueued = true
-}
-
-func maybeUpdateHost(f *Flow) {
-	if dnsr == nil || f.RemoteHost != "" {
-		return
-	}
-	if isAllZero16(f.Remote) {
-		return
-	}
-	if h, ok := dnsr.Get(f.Key.Family, f.Remote); ok && h != "" {
-		f.RemoteHost = h
-		return
-	}
-	maybeQueueResolve(f)
-}
-
-func hostNote(f *Flow) string {
+// пер-flow cache: если уже получили реальный host (не pending/miss/no-ptr) — используем.
+func remoteAliasCached(f *Flow) string {
 	if f.RemoteHost != "" {
-		return " host=" + f.RemoteHost
+		return f.RemoteHost
 	}
-	maybeUpdateHost(f)
-	if f.RemoteHost != "" {
-		return " host=" + f.RemoteHost
+	a := aliasForIP(f.Key.Family, f.Remote)
+	switch a {
+	case "", "?", "any", "skip", "pending", "no-ptr", "miss":
+		return a
+	default:
+		f.RemoteHost = a
+		return a
 	}
-	return ""
 }
 
 /* ===================== printing ===================== */
 
 func printOpen(f *Flow) {
-	fmt.Printf("OPEN  %-5s pid=%d(%s) cookie=%d  %s -> %s%s%s%s\n",
+	lAlias := aliasForIP(f.Key.Family, f.Local)
+	rAlias := remoteAliasCached(f)
+
+	fmt.Printf("OPEN  %-5s pid=%d(%s) cookie=%d  %s -> %s%s%s\n",
 		protoStr(f.Key.Proto),
 		f.Key.TGID, f.Comm, f.Key.Cookie,
-		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.LocalScope, f.Key.Proto),
-		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.RemoteScope, f.Key.Proto),
+		fmtEndpointAll(f.Key.Family, f.Local, f.Lport, f.LocalScope, f.Key.Proto, lAlias),
+		fmtEndpointAll(f.Key.Family, f.Remote, f.Rport, f.RemoteScope, f.Key.Proto, rAlias),
 		incompleteNote(f),
 		maybeLostNote(f),
-		hostNote(f),
 	)
 }
 
 func printClose(f *Flow, reason string) {
+	lAlias := aliasForIP(f.Key.Family, f.Local)
+	rAlias := remoteAliasCached(f)
+
 	age := time.Since(f.FirstSeen).Truncate(time.Millisecond)
-	fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s reason=%s%s%s%s\n",
+	fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s reason=%s%s%s\n",
 		protoStr(f.Key.Proto),
 		f.Key.TGID, f.Comm, f.Key.Cookie,
-		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.LocalScope, f.Key.Proto),
-		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.RemoteScope, f.Key.Proto),
+		fmtEndpointAll(f.Key.Family, f.Local, f.Lport, f.LocalScope, f.Key.Proto, lAlias),
+		fmtEndpointAll(f.Key.Family, f.Remote, f.Rport, f.RemoteScope, f.Key.Proto, rAlias),
 		f.OutBytes, f.OutPkts, f.InBytes, f.InPkts,
 		age, reason,
 		incompleteNote(f),
 		maybeLostNote(f),
-		hostNote(f),
 	)
+}
+
+/* ===================== perf reader: total budget -> per-CPU + fallback ===================== */
+
+func openPerfReaderTotalBudget(events *ebpf.Map, totalMB int) (*perf.Reader, int, error) {
+	totalBytes := totalMB * 1024 * 1024
+	if totalBytes < 256*1024 {
+		totalBytes = 256 * 1024
+	}
+
+	nCPU := runtime.NumCPU()
+	perCPU := totalBytes / nCPU
+	if perCPU < 256*1024 {
+		perCPU = 256 * 1024
+	}
+
+	page := os.Getpagesize()
+	pages := perCPU / page
+	if pages < 8 {
+		pages = 8
+	}
+	p2 := 1 << (bits.Len(uint(pages)) - 1) // floor pow2
+	try := p2 * page
+
+	var rd *perf.Reader
+	var err error
+	for try >= 256*1024 {
+		rd, err = perf.NewReader(events, try)
+		if err == nil {
+			return rd, try, nil
+		}
+		if strings.Contains(err.Error(), "cannot allocate memory") || strings.Contains(err.Error(), "can't mmap") {
+			try /= 2
+			continue
+		}
+		break
+	}
+	return nil, 0, err
 }
 
 /* ===================== main ===================== */
 
 func main() {
-	// 1) читаем .env (если есть)
+	// 1) читаем .env
 	if p, err := loadDotEnvAuto(); err != nil {
 		log.Printf("dotenv: %v", err)
 	} else if p != "" {
 		log.Printf("dotenv loaded: %s", p)
 	}
 
-	// 2) применяем env к флагам (как дефолты)
+	// 2) env -> flags
 	applyEnvToFlags()
 
-	// 3) CLI всё равно имеет приоритет
+	// 3) CLI имеет приоритет
 	flag.Parse()
 
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
-	// init resolver (after Parse, because flags/env are applied now)
+	// init resolver
 	if *flgResolve {
 		dnsr = newDNSResolver(*flgResolveQ, *flgResolveWorkers, *flgResolveTTL, *flgResolveNegTTL, *flgResolveTimeout)
 		defer dnsr.Close()
@@ -962,6 +1092,14 @@ func main() {
 		if *flgHostsPrefill {
 			parseHostsPrefill(*flgHostsFile, *flgHostsTTL, dnsr)
 		}
+
+		log.Printf("cfg: resolve=%v workers=%d q=%d ttl=%s negTTL=%s timeout=%s hostState=%v hostsPrefill=%v hostsFile=%s sweepEach=%d pokeEach=%d",
+			*flgResolve, *flgResolveWorkers, *flgResolveQ,
+			flgResolveTTL.String(), flgResolveNegTTL.String(), flgResolveTimeout.String(),
+			*flgHostState, *flgHostsPrefill, *flgHostsFile, *flgResolveSweepEach, *flgResolvePokeEach,
+		)
+	} else {
+		log.Printf("cfg: resolve=false")
 	}
 
 	if err := rlimit.RemoveMemlock(); err != nil {
@@ -1032,15 +1170,14 @@ func main() {
 		attach("syscalls", "sys_exit_read", objs.TraceReadExit)
 	}
 
-	perfBytes := *flgPerfMB * 1024 * 1024
-	if perfBytes < 256*1024 {
-		perfBytes = 256 * 1024
-	}
-	rd, err := perf.NewReader(objs.TraceEvents, perfBytes)
+	rd, perCPUBytes, err := openPerfReaderTotalBudget(objs.TraceEvents, *flgPerfMB)
 	if err != nil {
 		log.Fatalf("perf.NewReader: %v", err)
 	}
 	defer rd.Close()
+
+	log.Printf("perf ring per-cpu=%dKB total~=%dMB cpus=%d",
+		perCPUBytes/1024, (perCPUBytes*runtime.NumCPU())/(1024*1024), runtime.NumCPU())
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -1126,12 +1263,10 @@ func main() {
 					continue
 				}
 				if !f.OpenedPrinted && flowReadyToOpen(f) {
-					maybeUpdateHost(f)
 					printOpen(f)
 					f.OpenedPrinted = true
 				}
 				if f.OpenedPrinted {
-					maybeUpdateHost(f)
 					printClose(f, reason)
 				}
 				delete(flows, k)
@@ -1152,7 +1287,6 @@ func main() {
 					continue
 				}
 				if f.OpenedPrinted {
-					maybeUpdateHost(f)
 					printClose(f, "signal")
 				}
 			}
@@ -1180,6 +1314,20 @@ func main() {
 				dnsr.SweepExpired(*flgResolveSweepEach)
 			}
 
+			// poke some flows for resolve
+			if dnsr != nil && *flgResolvePokeEach > 0 {
+				n := 0
+				for _, f := range flows {
+					if f.RemoteHost == "" && !isAllZero16(f.Remote) {
+						_ = remoteAliasCached(f) // поставит Ensure()/подхватит готовое
+						n++
+						if n >= *flgResolvePokeEach {
+							break
+						}
+					}
+				}
+			}
+
 			// TTL sweep flows
 			for k, f := range flows {
 				if now.Sub(f.LastSeen) > *flgTTL {
@@ -1188,12 +1336,10 @@ func main() {
 						continue
 					}
 					if !f.OpenedPrinted && flowReadyToOpen(f) {
-						maybeUpdateHost(f)
 						printOpen(f)
 						f.OpenedPrinted = true
 					}
 					if f.OpenedPrinted {
-						maybeUpdateHost(f)
 						printClose(f, "idle")
 					}
 					delete(flows, k)
@@ -1249,11 +1395,6 @@ func main() {
 			f.LastSeen = w.now
 			applyEndpoints(f, ev)
 
-			// schedule/update host once remote becomes known (cache->flow)
-			if !isAllZero16(f.Remote) {
-				maybeUpdateHost(f)
-			}
-
 			// accounting
 			switch evt {
 			case EV_SENDMMSG:
@@ -1285,7 +1426,6 @@ func main() {
 			}
 
 			if !f.OpenedPrinted && flowReadyToOpen(f) {
-				maybeUpdateHost(f)
 				printOpen(f)
 				f.OpenedPrinted = true
 			}
