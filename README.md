@@ -669,4 +669,4 @@ sudo ./bpfgo 2>&1 | grep -F -C2 '*(any)'
 
 
 
-CLOSE UDP   pid=514(systemd-resolve) cookie=7265  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):50119  →out=110B/1p ←in=56B/1p  age=5.734s reason=idle
+LOSE TCP   pid=2776(Chrome_ChildIOT) cookie=77482  10.0.2.15(lev-VirtualBox):41862 -> 150.171.109.53(no-ptr):443  →out=0B/0p ←in=63B/1p  age=0s reason=close()
