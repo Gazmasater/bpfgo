@@ -667,8 +667,40 @@ dig -x 151.101.193.91 +short
 dig -x 142.251.1.119 +short
 
 
-lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
-[sudo] password for lev: 
-2026/02/22 20:29:16 dotenv loaded: .env
-2026/02/22 20:29:16.551481 hostsPrefill: added=7 from /etc/hosts
-2026/02/22 20:29:16.788180 failed to load bpf objects: field TraceNetDevQueue: program trace_net_dev_queue: load program: invalid argument: unknown func bpf_get_socket_cookie#46 (24 line(s) omitted)
+
+
+1) Почини trace_net_dev_queue: убери bpf_get_socket_cookie()
+
+В trace.c в trace_net_dev_queue() замени:
+
+__u64 cookie = bpf_get_socket_cookie(sk);
+if (!cookie) return 0;
+
+на CO-RE чтение cookie из структуры сокета (с автоподбором поля):
+
+__u64 cookie = 0;
+
+if (bpf_core_field_exists(((struct sock *)0)->sk_cookie)) {
+    cookie = BPF_CORE_READ(sk, sk_cookie);
+} else if (bpf_core_field_exists(((struct sock_common *)0)->skc_cookie)) {
+    cookie = BPF_CORE_READ(sk, __sk_common.skc_cookie);
+} else if (bpf_core_field_exists(((struct sock *)0)->__sk_common.skc_cookie)) {
+    cookie = BPF_CORE_READ(sk, __sk_common.skc_cookie);
+}
+
+if (!cookie)
+    return 0;
+
+Это убирает зависимость от helper’а и обычно работает на большинстве ядер с BTF.
+
+2) Быстро проверить, какое поле реально есть у тебя
+grep -n "sk_cookie" -n vmlinux.h | head
+grep -n "skc_cookie" -n vmlinux.h | head
+
+Если sk_cookie есть — можно упростить до:
+
+__u64 cookie = BPF_CORE_READ(sk, sk_cookie);
+
+Если есть только skc_cookie — тогда:
+
+__u64 cookie = BPF_CORE_READ(sk, __sk_common.skc_cookie);
