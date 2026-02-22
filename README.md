@@ -667,6 +667,8 @@ dig -x 151.101.193.91 +short
 dig -x 142.251.1.119 +short
 
 
-__builtin_memcpy(e.src_ip6, &ip6h.saddr, sizeof(e.src_ip6));
-__builtin_memcpy(e.dst_ip6, &ip6h.daddr, sizeof(e.dst_ip6));
-
+lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
+[sudo] password for lev: 
+2026/02/22 20:29:16 dotenv loaded: .env
+2026/02/22 20:29:16.551481 hostsPrefill: added=7 from /etc/hosts
+2026/02/22 20:29:16.788180 failed to load bpf objects: field TraceNetDevQueue: program trace_net_dev_queue: load program: invalid argument: unknown func bpf_get_socket_cookie#46 (24 line(s) omitted)
