@@ -685,40 +685,15 @@ echo -n "ping" | nc -u -w1 127.0.0.1 9999
 sudo ./bpfgo -resolve=false | stdbuf -oL egrep --line-buffered 'python3|nc'
 
 
-strace -f -e trace=recvfrom,recvmsg,recvmmsg,read,sendto,sendmsg,sendmmsg -s 0 \
-python3 - <<'PY'
-import socket
-s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-s.bind(("127.0.0.1",9999))
-while True:
-    data,addr=s.recvfrom(65535)
-    s.sendto(data,addr)
-PY
-
-echo -n "ping" | nc -u -w1 127.0.0.1 9999
-
-
-
-python3 - <<'PY'
-import socket
-s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-s.bind(("127.0.0.1", 9999))
-while True:
-    data, anc, flags, addr = s.recvmsg(65535)
-    s.sendmsg([data], [], 0, addr)
-PY
-
-
 python3 - <<'PY'
 import socket
 c=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-c.sendmsg([b"ping"], [], 0, ("127.0.0.1", 9999))
+c.connect(("127.0.0.1", 9999))
+c.send(b"ping")
+# если сервер эхо — получим ответ
+c.settimeout(1)
+try:
+    print(c.recv(65535))
+except Exception as e:
+    print("no reply:", e)
 PY
-
-
-2026/02/23 05:00:07.685270 OPEN/CLOSE (TCP/UDP/ICMP) + PTR + skb-hint. Ctrl+C to exit
-OPEN  UDP   pid=55622(python3) cookie=147245  127.0.0.1(localhost):57930 -> 127.0.0.1(localhost):9999
-OPEN  UDP   pid=55586(python3) cookie=149108  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):57930
-CLOSE UDP   pid=55622(python3) cookie=147245  127.0.0.1(localhost):57930 -> 127.0.0.1(localhost):9999  out=4B/1p in=0B/0p  age=5ms reason=close()
-CLOSE UDP   pid=55586(python3) cookie=149108  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):57930  out=4B/1p in=4B/1p  age=5.413s reason=idle
-
