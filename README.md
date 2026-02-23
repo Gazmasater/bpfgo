@@ -748,6 +748,6 @@ cleanup:
 
 
 
-
+wc -c trace.c main.go
 
 
