@@ -685,22 +685,7 @@ echo -n "ping" | nc -u -w1 127.0.0.1 9999
 sudo ./bpfgo -resolve=false | stdbuf -oL egrep --line-buffered 'python3|nc'
 
 
-python3 - <<'PY'
-import socket
-s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-s.bind(("127.0.0.1", 9999))
-while True:
-    data, addr = s.recvfrom(65535)
-    s.sendto(data, addr)
-PY
-
-
-python3 - <<'PY'
-import socket
-c=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-c.settimeout(1)
-c.connect(("127.0.0.1", 9999))   # ключевое для теста 7
-c.send(b"ping")                  # пойдёт без sockaddr
-data = c.recv(65535)             # чтобы появился in
-print("got:", data)
-PY
+OPEN  UDP   pid=56635(python3) cookie=151829  127.0.0.1(localhost):44922 -> 127.0.0.1(localhost):9999
+OPEN  UDP   pid=56552(python3) cookie=151761  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):44922
+CLOSE UDP   pid=56635(python3) cookie=151829  127.0.0.1(localhost):44922 -> 127.0.0.1(localhost):9999  out=4B/1p in=4B/1p  age=10ms reason=close()
+CLOSE UDP   pid=56552(python3) cookie=151761  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):44922  out=4B/1p in=4B/1p  age=5.598s reason=idle
