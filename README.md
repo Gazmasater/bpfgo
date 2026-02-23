@@ -3209,3 +3209,12 @@ func main() {
 		}
 	}
 }
+
+
+
+
+
+
+ev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
+[sudo] password for lev: 
+2026/02/23 02:50:32.352112 load bpf objects: field TraceBindExit: program trace_bind_exit: load program: permission denied: 503: (07) r9 += 2: R9 pointer arithmetic on map_value_or_null prohibited, null-check it first (604 line(s) omitted)
