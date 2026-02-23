@@ -685,3 +685,21 @@ echo -n "ping" | nc -u -w1 127.0.0.1 9999
 sudo ./bpfgo -resolve=false -comm 'python|nc'
 
 
+OPEN  UDP   pid=53297(nc) cookie=144138  127.0.0.1(localhost):59109 -> 127.0.0.1(localhost):9999
+OPEN  UDP   pid=52886(python3) cookie=142118  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):59109
+OPEN  UDP   pid=511(systemd-resolve) cookie=142274  10.0.2.15(miss):58589 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=511(systemd-resolve) cookie=8240  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):43357
+OPEN  UDP   pid=511(systemd-resolve) cookie=142275  10.0.2.15(pending):57538 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=511(systemd-resolve) cookie=142274  10.0.2.15(pending):58589 -> 10.0.2.3(vboxdns):53  out=58B/1p in=598B/1p  age=53ms reason=close()
+OPEN  TCP   pid=674(NetworkManager) cookie=142279  10.0.2.15(pending):33716 -> 91.189.91.49(miss):80
+OPEN  UDP   pid=511(systemd-resolve) cookie=8240  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):58015
+OPEN  UDP   pid=511(systemd-resolve) cookie=142280  10.0.2.15(pending):52260 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=511(systemd-resolve) cookie=142275  10.0.2.15(pending):57538 -> 10.0.2.3(vboxdns):53  out=91B/2p in=91B/2p  age=72ms reason=close()
+CLOSE UDP   pid=511(systemd-resolve) cookie=142280  10.0.2.15(lev-VirtualBox):52260 -> 10.0.2.3(vboxdns):53  out=54B/1p in=115B/1p  age=33ms reason=close()
+CLOSE TCP   pid=674(NetworkManager) cookie=142279  10.0.2.15(lev-VirtualBox):33716 -> 91.189.91.49(blackcat.canonical.com):80  out=87B/1p in=185B/1p  age=132ms reason=close()
+CLOSE UDP   pid=53297(nc) cookie=144138  127.0.0.1(localhost):59109 -> 127.0.0.1(localhost):9999  out=4B/1p in=4B/1p  age=1.007s reason=close()
+CLOSE UDP   pid=52886(python3) cookie=142118  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):59109  out=4B/1p in=0B/0p  age=5.418s reason=idle
+CLOSE UDP   pid=511(systemd-resolve) cookie=8240  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):58015  out=90B/1p in=54B/1p  age=5.6s reason=idle
+CLOSE UDP   pid=511(systemd-resolve) cookie=8240  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):43357  out=113B/1p in=51B/1p  age=5.659s reason=idle
+
+
