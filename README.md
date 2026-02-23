@@ -672,9 +672,4 @@ ncat -u -l 127.0.0.1 9999 >/dev/null
 echo -n "ping" | ncat -u -w1 127.0.0.1 9999
 
 
-sudo dpkg --configure -a
-sudo apt -f install
-
-sudo apt update
-sudo apt install -y ncat
 
