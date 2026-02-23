@@ -667,11 +667,21 @@ dig -x 151.101.193.91 +short
 dig -x 142.251.1.119 +short
 sudo ./bpfgo 2>&1 | grep -F -C2 '*(any)'
 
-
 ncat -u -l 127.0.0.1 9999 >/dev/null
 echo -n "ping" | ncat -u -w1 127.0.0.1 9999
-
-
 curl -I https://github.com --max-time 5
+
+python3 - <<'PY'
+import socket
+s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.bind(("127.0.0.1",9999))
+while True:
+    data,addr=s.recvfrom(65535)
+    s.sendto(data,addr)
+PY
+
+echo -n "ping" | nc -u -w1 127.0.0.1 9999
+
+sudo ./bpfgo -resolve=false -comm 'python|nc'
 
 
