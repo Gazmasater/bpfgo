@@ -845,3 +845,10 @@ gcc -O2 -Wall -o udp_mmsg_client udp_mmsg_client.c
 ./udp_mmsg_client
 
 sudo ./bpfgo -resolve=false | stdbuf -oL egrep --line-buffered 'udp_mmsg|python3|nc|mmsg'
+
+
+OPEN  UDP   pid=7662(udp_mmsg_client) cookie=43980  127.0.0.1(localhost):50559 -> 127.0.0.1(localhost):9999
+OPEN  UDP   pid=7631(udp_mmsg_server) cookie=45493  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):50559
+CLOSE UDP   pid=7631(udp_mmsg_server) cookie=45493  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):50559  out=48B/16p in=48B/16p  age=5.952s reason=idle
+CLOSE UDP   pid=7662(udp_mmsg_client) cookie=43980  127.0.0.1(localhost):50559 -> 127.0.0.1(localhost):9999  out=48B/16p in=48B/16p  age=5.954s reason=idle
+
