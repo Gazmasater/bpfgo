@@ -684,8 +684,6 @@ echo -n "ping" | nc -u -w1 127.0.0.1 9999
 
 sudo ./bpfgo -resolve=false | stdbuf -oL egrep --line-buffered 'python3|nc'
 
-
-OPEN  UDP   pid=56635(python3) cookie=151829  127.0.0.1(localhost):44922 -> 127.0.0.1(localhost):9999
-OPEN  UDP   pid=56552(python3) cookie=151761  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):44922
-CLOSE UDP   pid=56635(python3) cookie=151829  127.0.0.1(localhost):44922 -> 127.0.0.1(localhost):9999  out=4B/1p in=4B/1p  age=10ms reason=close()
-CLOSE UDP   pid=56552(python3) cookie=151761  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):44922  out=4B/1p in=4B/1p  age=5.598s reason=idle
+sudo ./bpfgo -resolve=false | stdbuf -oL egrep --line-buffered 'python3|curl|nc'
+python3 -m http.server 18080 --bind 127.0.0.1
+curl -s http://127.0.0.1:18080/ >/dev/null
