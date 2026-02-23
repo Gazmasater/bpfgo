@@ -672,4 +672,9 @@ ncat -u -l 127.0.0.1 9999 >/dev/null
 echo -n "ping" | ncat -u -w1 127.0.0.1 9999
 
 
+OPEN  UDP   pid=39256(ncat) cookie=124350  127.0.0.1(localhost):37258 -> 127.0.0.1(localhost):9999
+OPEN  UDP   pid=38958(ncat) cookie=124132  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):37258
+CLOSE UDP   pid=39256(ncat) cookie=124350  127.0.0.1(localhost):37258 -> 127.0.0.1(localhost):9999  out=4B/1p in=0B/0p  age=6ms reason=close()
+
+
 
