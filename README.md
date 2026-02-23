@@ -3563,5 +3563,11 @@ func main() {
 
 
 
+lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
+2026/02/23 03:03:34.466112 load bpf objects: field TraceConnectExit: program trace_connect_exit: load program: permission denied: 349: (61) r2 = *(u32 *)(r9 +28): R9 invalid mem access 'scalar' (472 line(s) omitted)
+lev@lev-VirtualBox:~/bpfgo$ 
+
+
+
 
 
