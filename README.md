@@ -843,3 +843,5 @@ gcc -O2 -Wall -o udp_mmsg_server udp_mmsg_server.c
 
 gcc -O2 -Wall -o udp_mmsg_client udp_mmsg_client.c
 ./udp_mmsg_client
+
+sudo ./bpfgo -resolve=false | stdbuf -oL egrep --line-buffered 'udp_mmsg|python3|nc|mmsg'
