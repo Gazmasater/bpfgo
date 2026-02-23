@@ -671,11 +671,7 @@ sudo ./bpfgo 2>&1 | grep -F -C2 '*(any)'
 
 
 
-OPEN  UDP   pid=12132(nc) cookie=53228  127.0.0.1(localhost):37360 -> 127.0.0.1(localhost):9999
-OPEN  UDP   pid=11386(nc) cookie=52836  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):37360
-CLOSE TCP   pid=3008(Socket Thread) cookie=44841  10.0.2.15(lev-VirtualBox):38576 -> 140.82.113.26(lb-140-82-113-26-iad.github.com):443  out=30B/1p in=26B/2p  age=5.826s reason=idle
-CLOSE UDP   pid=12132(nc) cookie=53228  127.0.0.1(localhost):37360 -> 127.0.0.1(localhost):9999  out=4B/1p in=0B/0p  age=1.004s reason=close()
-CLOSE UDP   pid=11386(nc) cookie=52836  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):37360  out=0B/0p in=4B/1p  age=5.171s reason=idle
-
+ncat -u -lk 127.0.0.1 9999 --exec "/bin/cat"
+echo -n "ping" | ncat -u -w1 127.0.0.1 9999
 
 
