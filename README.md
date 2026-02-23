@@ -668,15 +668,8 @@ dig -x 142.251.1.119 +short
 sudo ./bpfgo 2>&1 | grep -F -C2 '*(any)'
 
 
-sudo apt update
-sudo apt install -y ncat
-
-
-
-ncat -u -lk 127.0.0.1 9999 --exec "/bin/cat"
+ncat -u -l 127.0.0.1 9999 >/dev/null
 echo -n "ping" | ncat -u -w1 127.0.0.1 9999
-
-
 
 
 sudo dpkg --configure -a
