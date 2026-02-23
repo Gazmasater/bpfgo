@@ -699,102 +699,20 @@ echo -n "ping" | nc -u -w1 127.0.0.1 9999
 
 
 
-ev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo -resolve=false | stdbuf -oL egrep --line-buffered 'python3|nc'
-2026/02/23 04:47:50 dotenv loaded: .env
-2026/02/23 04:47:50.929789 pprof on :6060
-2026/02/23 04:47:50.937770 perf ring per-cpu=512KB total~=2MB cpus=4
-2026/02/23 04:47:50.940243 OPEN/CLOSE (TCP/UDP/ICMP) + PTR + skb-hint. Ctrl+C to exit
-OPEN  UDP   pid=54296(python3) cookie=147739  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):56373
-OPEN  UDP   pid=54392(nc) cookie=148540  127.0.0.1(localhost):56373 -> 127.0.0.1(localhost):9999
-CLOSE UDP   pid=54392(nc) cookie=148540  127.0.0.1(localhost):56373 -> 127.0.0.1(localhost):9999  out=4B/1p in=4B/1p  age=1.013s reason=close()
-CLOSE UDP   pid=54296(python3) cookie=147739  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):56373  out=4B/1p in=4B/1p  age=5.669s reason=idle
-
-
-
-
-lev@lev-VirtualBox:~/bpfgo$ strace -f -e trace=recvfrom,recvmsg,recvmmsg,read,sendto,sendmsg,sendmmsg -s 0 \
 python3 - <<'PY'
 import socket
 s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-s.bind(("127.0.0.1",9999))
+s.bind(("127.0.0.1", 9999))
 while True:
-    data,addr=s.recvfrom(65535)
-    s.sendto(data,addr)
+    data, anc, flags, addr = s.recvmsg(65535)
+    s.sendmsg([data], [], 0, addr)
 PY
-read(3, ""..., 832)                     = 832
-read(3, ""..., 832)                     = 832
-read(3, ""..., 832)                     = 832
-read(3, ""..., 832)                     = 832
-read(3, ""..., 4096)                    = 2996
-read(3, "", 4096)                       = 0
-read(3, ""..., 4096)                    = 2184
-read(3, ""..., 4096)                    = 1379
-read(3, ""..., 3876)                    = 3875
-read(3, "", 1)                          = 0
-read(3, ""..., 33220)                   = 33219
-read(3, "", 1)                          = 0
-read(3, ""..., 10922)                   = 10921
-read(3, "", 1)                          = 0
-read(3, ""..., 1598)                    = 1597
-read(3, "", 1)                          = 0
-read(3, ""..., 3664)                    = 3663
-read(3, "", 1)                          = 0
-read(3, ""..., 6752)                    = 6751
-read(3, "", 1)                          = 0
-read(3, ""..., 17923)                   = 17922
-read(3, "", 1)                          = 0
-read(3, ""..., 31600)                   = 31599
-read(3, "", 1)                          = 0
-read(3, ""..., 4274)                    = 4273
-read(3, "", 1)                          = 0
-read(3, ""..., 32926)                   = 32925
-read(3, "", 1)                          = 0
-read(3, ""..., 10561)                   = 10560
-read(3, "", 1)                          = 0
-read(3, ""..., 3908)                    = 3907
-read(3, "", 1)                          = 0
-read(3, ""..., 3548)                    = 3547
-read(3, "", 1)                          = 0
-read(3, ""..., 226)                     = 225
-read(3, "", 1)                          = 0
-read(3, ""..., 4662)                    = 4661
-read(3, "", 1)                          = 0
-read(0, ""..., 4096)                    = 160
-read(0, "", 4096)                       = 0
-read(3, ""..., 28964)                   = 28963
-read(3, "", 1)                          = 0
-read(3, ""..., 17106)                   = 17105
-read(3, "", 1)                          = 0
-read(3, ""..., 48454)                   = 48453
-read(3, "", 1)                          = 0
-read(3, ""..., 928)                     = 927
-read(3, "", 1)                          = 0
-read(3, ""..., 13509)                   = 13508
-read(3, "", 1)                          = 0
-read(3, ""..., 5251)                    = 5250
-read(3, "", 1)                          = 0
-read(3, ""..., 239)                     = 238
-read(3, "", 1)                          = 0
-read(3, ""..., 26064)                   = 26063
-read(3, "", 1)                          = 0
-read(3, ""..., 9526)                    = 9525
-read(3, "", 1)                          = 0
-recvfrom(3, 0x63a706b29280, 65535, 0, 0x7ffd1f108c50, [16]) = ? ERESTARTSYS (To be restarted if SA_RESTART is set)
---- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
-recvfrom(3, 0x63a706b29280, 65535, 0, 0x7ffd1f108c50, [16]) = ? ERESTARTSYS (To be restarted if SA_RESTART is set)
---- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
-recvfrom(3, 0x63a706b29280, 65535, 0, 0x7ffd1f108c50, [16]) = ? ERESTARTSYS (To be restarted if SA_RESTART is set)
---- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
-recvfrom(3, 0x63a706b29280, 65535, 0, 0x7ffd1f108c50, [16]) = ? ERESTARTSYS (To be restarted if SA_RESTART is set)
---- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
-recvfrom(3, 0x63a706b29280, 65535, 0, 0x7ffd1f108c50, [16]) = ? ERESTARTSYS (To be restarted if SA_RESTART is set)
---- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
-recvfrom(3, 0x63a706b29280, 65535, 0, 0x7ffd1f108c50, [16]) = ? ERESTARTSYS (To be restarted if SA_RESTART is set)
---- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
-recvfrom(3, ""..., 65535, 0, {sa_family=AF_INET, sin_port=htons(56373), sin_addr=inet_addr("127.0.0.1")}, [16]) = 4
-sendto(3, ""..., 4, 0, {sa_family=AF_INET, sin_port=htons(56373), sin_addr=inet_addr("127.0.0.1")}, 16) = 4
-recvfrom(3, 
 
 
+python3 - <<'PY'
+import socket
+c=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+c.sendmsg([b"ping"], [], 0, ("127.0.0.1", 9999))
+PY
 
 
