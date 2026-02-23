@@ -716,3 +716,9 @@ c.sendmsg([b"ping"], [], 0, ("127.0.0.1", 9999))
 PY
 
 
+2026/02/23 05:00:07.685270 OPEN/CLOSE (TCP/UDP/ICMP) + PTR + skb-hint. Ctrl+C to exit
+OPEN  UDP   pid=55622(python3) cookie=147245  127.0.0.1(localhost):57930 -> 127.0.0.1(localhost):9999
+OPEN  UDP   pid=55586(python3) cookie=149108  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):57930
+CLOSE UDP   pid=55622(python3) cookie=147245  127.0.0.1(localhost):57930 -> 127.0.0.1(localhost):9999  out=4B/1p in=0B/0p  age=5ms reason=close()
+CLOSE UDP   pid=55586(python3) cookie=149108  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):57930  out=4B/1p in=4B/1p  age=5.413s reason=idle
+
