@@ -687,3 +687,8 @@ sudo ./bpfgo -resolve=false | stdbuf -oL egrep --line-buffered 'python3|nc'
 sudo ./bpfgo -resolve=false | stdbuf -oL egrep --line-buffered 'python3|curl|nc'
 python3 -m http.server 18080 --bind 127.0.0.1
 curl -s http://127.0.0.1:18080/ >/dev/null
+
+OPEN  TCP   pid=6565(curl) cookie=44186  127.0.0.1(localhost):44214 -> 127.0.0.1(localhost):18080
+OPEN  TCP   pid=6510(python3) cookie=41844  127.0.0.1(localhost):18080 -> 127.0.0.1(localhost):44214
+CLOSE TCP   pid=6510(python3) cookie=41844  127.0.0.1(localhost):18080 -> 127.0.0.1(localhost):44214  out=1363B/2p in=79B/1p  age=4ms reason=close()
+CLOSE TCP   pid=6565(curl) cookie=44186  127.0.0.1(localhost):44214 -> 127.0.0.1(localhost):18080  out=79B/1p in=1363B/2p  age=6ms reason=close()
