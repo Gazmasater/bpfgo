@@ -687,18 +687,20 @@ sudo ./bpfgo -resolve=false | stdbuf -oL egrep --line-buffered 'python3|nc'
 
 python3 - <<'PY'
 import socket
-c=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-c.connect(("127.0.0.1", 9999))
-c.send(b"ping")
-# если сервер эхо — получим ответ
-c.settimeout(1)
-try:
-    print(c.recv(65535))
-except Exception as e:
-    print("no reply:", e)
+s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.bind(("127.0.0.1", 9999))
+while True:
+    data, addr = s.recvfrom(65535)
+    s.sendto(data, addr)
 PY
 
 
-
-OPEN  UDP   pid=56115(python3) cookie=150734  127.0.0.1(localhost):47857 -> 127.0.0.1(localhost):9999
-CLOSE UDP   pid=56115(python3) cookie=150734  127.0.0.1(localhost):47857 -> 127.0.0.1(localhost):9999  out=4B/1p in=0B/0p  age=1.004s reason=close()
+python3 - <<'PY'
+import socket
+c=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+c.settimeout(1)
+c.connect(("127.0.0.1", 9999))   # ключевое для теста 7
+c.send(b"ping")                  # пойдёт без sockaddr
+data = c.recv(65535)             # чтобы появился in
+print("got:", data)
+PY
