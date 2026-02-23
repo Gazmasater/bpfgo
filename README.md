@@ -697,3 +697,8 @@ try:
 except Exception as e:
     print("no reply:", e)
 PY
+
+
+
+OPEN  UDP   pid=56115(python3) cookie=150734  127.0.0.1(localhost):47857 -> 127.0.0.1(localhost):9999
+CLOSE UDP   pid=56115(python3) cookie=150734  127.0.0.1(localhost):47857 -> 127.0.0.1(localhost):9999  out=4B/1p in=0B/0p  age=1.004s reason=close()
