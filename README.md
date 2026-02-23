@@ -668,10 +668,8 @@ dig -x 142.251.1.119 +short
 sudo ./bpfgo 2>&1 | grep -F -C2 '*(any)'
 
 
-lev@lev-VirtualBox:~/bpfgo$ ncat -u -lk 127.0.0.1 9999 --exec "/bin/cat"
-Command 'ncat' not found, but can be installed with:
-sudo apt install ncat
-
+sudo apt update
+sudo apt install -y ncat
 
 
 
