@@ -679,17 +679,9 @@ echo -n "ping" | ncat -u -w1 127.0.0.1 9999
 
 
 
-lev@lev-VirtualBox:~/bpfgo$ sudo apt update
-sudo apt install -y ncat
-Hit:1 http://security.ubuntu.com/ubuntu jammy-security InRelease
-Hit:2 http://ro.archive.ubuntu.com/ubuntu jammy InRelease
-Hit:3 http://ro.archive.ubuntu.com/ubuntu jammy-updates InRelease
-Hit:4 http://ro.archive.ubuntu.com/ubuntu jammy-backports InRelease
-Reading package lists... Done
-Building dependency tree... Done
-Reading state information... Done
-254 packages can be upgraded. Run 'apt list --upgradable' to see them.
-E: dpkg was interrupted, you must manually run 'sudo dpkg --configure -a' to correct the problem. 
-lev@lev-VirtualBox:~/bpfgo$ 
+sudo dpkg --configure -a
+sudo apt -f install
 
+sudo apt update
+sudo apt install -y ncat
 
