@@ -685,4 +685,17 @@ echo -n "ping" | nc -u -w1 127.0.0.1 9999
 sudo ./bpfgo -resolve=false | stdbuf -oL egrep --line-buffered 'python3|nc'
 
 
+strace -f -e trace=recvfrom,recvmsg,recvmmsg,read,sendto,sendmsg,sendmmsg -s 0 \
+python3 - <<'PY'
+import socket
+s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.bind(("127.0.0.1",9999))
+while True:
+    data,addr=s.recvfrom(65535)
+    s.sendto(data,addr)
+PY
+
+echo -n "ping" | nc -u -w1 127.0.0.1 9999
+
+
 
