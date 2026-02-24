@@ -896,26 +896,5 @@ ip -6 addr show dev enp0s3 scope link
 
 sudo ./bpfgo -resolve=false | stdbuf -oL egrep --line-buffered 'python3|nc|udp_|curl'
 
-python3 - <<'PY'
-import socket
-s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-s.bind(("127.0.0.1",9999))
-while True:
-    d,a=s.recvfrom(65535)
-    s.sendto(d,a)
-PY
-
-python3 - <<'PY'
-import socket, time
-c=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-c.connect(("127.0.0.1",9999))
-c.send(b"ping")
-print(c.recv(65535))
-time.sleep(0.2)
-PY
-
-
-OPEN  UDP   pid=20491(python3) cookie=78104  127.0.0.1(localhost):48717 -> 127.0.0.1(localhost):9999
-OPEN  UDP   pid=20459(python3) cookie=76391  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):48717
-CLOSE UDP   pid=20491(python3) cookie=78104  127.0.0.1(localhost):48717 -> 127.0.0.1(localhost):9999  out=4B/1p in=4B/1p  age=207ms reason=close()
-CLOSE UDP   pid=20459(python3) cookie=76391  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):48717  out=4B/1p in=4B/1p  age=5.087s reason=idle
+nc -l 127.0.0.1 18081 > /dev/null
+dd if=/dev/zero bs=1M count=10 | nc 127.0.0.1 18081
