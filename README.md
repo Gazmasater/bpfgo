@@ -913,3 +913,9 @@ c.send(b"ping")
 print(c.recv(65535))
 time.sleep(0.2)
 PY
+
+
+OPEN  UDP   pid=20491(python3) cookie=78104  127.0.0.1(localhost):48717 -> 127.0.0.1(localhost):9999
+OPEN  UDP   pid=20459(python3) cookie=76391  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):48717
+CLOSE UDP   pid=20491(python3) cookie=78104  127.0.0.1(localhost):48717 -> 127.0.0.1(localhost):9999  out=4B/1p in=4B/1p  age=207ms reason=close()
+CLOSE UDP   pid=20459(python3) cookie=76391  127.0.0.1(localhost):9999 -> 127.0.0.1(localhost):48717  out=4B/1p in=4B/1p  age=5.087s reason=idle
