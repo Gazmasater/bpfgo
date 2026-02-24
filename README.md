@@ -894,188 +894,22 @@ ip -6 addr show dev enp0s3 scope link
 
 
 
-lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
-2026/02/24 04:20:01 dotenv loaded: .env
-2026/02/24 04:20:01.363692 hostsPrefill: added=7 from /etc/hosts
-2026/02/24 04:20:01.871953 pprof on :6060
-2026/02/24 04:20:01.873130 perf ring per-cpu=512KB total~=2MB cpus=4
-2026/02/24 04:20:01.878339 OPEN/CLOSE (TCP/UDP/ICMP) + PTR + skb-hint. Ctrl+C to exit
-OPEN  UDP   pid=2831(Chrome_ChildIOT) cookie=70772  [fd00:0:0:0:63c4:dda4:4be2:b7c7](miss):57907 -> [2001:4860:4860:0:0:0:0:8888](miss):443
-OPEN  UDP   pid=2831(Chrome_ChildIOT) cookie=70773  127.0.0.1(localhost):27382 -> 127.0.0.53(dnsstub):53
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):27382
-OPEN  UDP   pid=534(systemd-resolve) cookie=68156  10.0.2.15(miss):39105 -> 10.0.2.3(vboxdns):53
-OPEN  UDP   pid=2831(Chrome_ChildIOT) cookie=70774  127.0.0.1(localhost):19672 -> 127.0.0.53(dnsstub):53
-OPEN  UDP   pid=2831(Chrome_ChildIOT) cookie=70775  127.0.0.1(localhost):57687 -> 127.0.0.53(dnsstub):53
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):33811
-OPEN  UDP   pid=534(systemd-resolve) cookie=70071  10.0.2.15(pending):39193 -> 10.0.2.3(vboxdns):53
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):19672
-OPEN  UDP   pid=534(systemd-resolve) cookie=70072  10.0.2.15(pending):49220 -> 10.0.2.3(vboxdns):53
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):48861
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):51953
-OPEN  UDP   pid=534(systemd-resolve) cookie=70073  10.0.2.15(pending):47457 -> 10.0.2.3(vboxdns):53
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):57687
-OPEN  UDP   pid=534(systemd-resolve) cookie=70074  10.0.2.15(pending):36286 -> 10.0.2.3(vboxdns):53
-CLOSE UDP   pid=534(systemd-resolve) cookie=70071  10.0.2.15(pending):39193 -> 10.0.2.3(vboxdns):53  out=191B/2p in=362B/2p  age=17ms reason=close()
-CLOSE UDP   pid=534(systemd-resolve) cookie=70072  10.0.2.15(pending):49220 -> 10.0.2.3(vboxdns):53  out=48B/1p in=217B/1p  age=48ms reason=close()
-CLOSE UDP   pid=2831(Chrome_ChildIOT) cookie=70774  127.0.0.1(localhost):19672 -> 127.0.0.53(dnsstub):53  out=37B/1p in=134B/1p  age=56ms reason=close()
-CLOSE UDP   pid=534(systemd-resolve) cookie=68156  10.0.2.15(pending):39105 -> 10.0.2.3(vboxdns):53  out=48B/1p in=168B/1p  age=58ms reason=close()
-OPEN  UDP   pid=534(systemd-resolve) cookie=70075  10.0.2.15(pending):46890 -> 10.0.2.3(vboxdns):53
-CLOSE UDP   pid=534(systemd-resolve) cookie=70074  10.0.2.15(pending):36286 -> 10.0.2.3(vboxdns):53  out=48B/1p in=419B/1p  age=47ms reason=close()
-CLOSE UDP   pid=2831(Chrome_ChildIOT) cookie=70775  127.0.0.1(localhost):57687 -> 127.0.0.53(dnsstub):53  out=37B/1p in=200B/1p  age=61ms reason=close()
-CLOSE UDP   pid=534(systemd-resolve) cookie=70073  10.0.2.15(pending):47457 -> 10.0.2.3(vboxdns):53  out=91B/2p in=91B/2p  age=62ms reason=close()
-CLOSE UDP   pid=2831(Chrome_ChildIOT) cookie=70773  127.0.0.1(localhost):27382 -> 127.0.0.53(dnsstub):53  out=37B/1p in=0B/0p  age=79ms reason=close()
-OPEN  UDP   pid=2831(Chrome_ChildIOT) cookie=68159  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):49411 -> [2603:1061:14:32:0:0:0:1](miss):80
-OPEN  UDP   pid=2831(Chrome_ChildIOT) cookie=68160  10.0.2.15(lev-VirtualBox):54280 -> 13.107.253.44(miss):80
-OPEN  UDP   pid=2831(Chrome_ChildIOT) cookie=68161  10.0.2.15(lev-VirtualBox):38601 -> 13.107.226.44(miss):80
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):58973
-OPEN  UDP   pid=534(systemd-resolve) cookie=68163  10.0.2.15(lev-VirtualBox):55379 -> 10.0.2.3(vboxdns):53
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):47577
-OPEN  UDP   pid=534(systemd-resolve) cookie=68164  10.0.2.15(lev-VirtualBox):38723 -> 10.0.2.3(vboxdns):53
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):42871
-OPEN  UDP   pid=534(systemd-resolve) cookie=68165  10.0.2.15(lev-VirtualBox):52453 -> 10.0.2.3(vboxdns):53
-OPEN  TCP   pid=2831(Chrome_ChildIOT) cookie=70076  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):36740 -> [2603:1061:14:32:0:0:0:1](pending):443
-CLOSE UDP   pid=534(systemd-resolve) cookie=68165  10.0.2.15(lev-VirtualBox):52453 -> 10.0.2.3(vboxdns):53  out=99B/2p in=326B/2p  age=8ms reason=close()
-CLOSE TCP   pid=2831(Chrome_ChildIOT) cookie=70076  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):36740 -> [2603:1061:14:32:0:0:0:1](pending):443  out=0B/0p in=0B/0p  age=3ms reason=close()
-OPEN  TCP   pid=2831(Chrome_ChildIOT) cookie=70077  10.0.2.15(lev-VirtualBox):39416 -> 13.107.253.44(pending):443
-CLOSE UDP   pid=534(systemd-resolve) cookie=70075  10.0.2.15(lev-VirtualBox):46890 -> 10.0.2.3(vboxdns):53  out=50B/1p in=50B/1p  age=44ms reason=close()
-CLOSE UDP   pid=534(systemd-resolve) cookie=68164  10.0.2.15(lev-VirtualBox):38723 -> 10.0.2.3(vboxdns):53  out=99B/2p in=326B/2p  age=28ms reason=close()
-CLOSE UDP   pid=534(systemd-resolve) cookie=68163  10.0.2.15(lev-VirtualBox):55379 -> 10.0.2.3(vboxdns):53  out=191B/2p in=420B/2p  age=48ms reason=close()
-OPEN  ICMPv6 pid=675(NetworkManager) cookie=9698  fe80:0:0:0:7d27:9ada:6974:f568%enp0s3(skip) -> fe80:0:0:0:0:0:0:2%enp0s3(skip)
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):57687  out=200B/1p in=37B/1p  age=5.533s reason=idle
-CLOSE TCP   pid=2831(Chrome_ChildIOT) cookie=70077  10.0.2.15(lev-VirtualBox):39416 -> 13.107.253.44(no-ptr):443  out=3404B/6p in=67056B/17p  age=5.446s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):58973  out=187B/1p in=101B/1p  age=5.467s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):42871  out=141B/1p in=55B/1p  age=5.462s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):19672  out=134B/1p in=37B/1p  age=5.54s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):51953  out=113B/1p in=51B/1p  age=5.535s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):47577  out=141B/1p in=55B/1p  age=5.463s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):48861  out=125B/1p in=101B/1p  age=5.539s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):27382  out=106B/1p in=37B/1p  age=5.547s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):33811  out=163B/1p in=101B/1p  age=5.546s reason=idle
-CLOSE ICMPv6 pid=675(NetworkManager) cookie=9698  fe80:0:0:0:7d27:9ada:6974:f568%enp0s3(skip) -> fe80:0:0:0:0:0:0:2%enp0s3(skip)  out=0B/0p in=32B/1p  age=5.439s reason=idle
-OPEN  UDP   pid=3337(DNS Res~ver #23) cookie=70865  127.0.0.1(localhost):56652 -> 127.0.0.53(dnsstub):53
-OPEN  UDP   pid=3337(DNS Res~ver #24) cookie=70145  127.0.0.1(localhost):36471 -> 127.0.0.53(dnsstub):53
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):36471
-OPEN  UDP   pid=534(systemd-resolve) cookie=68218  10.0.2.15(lev-VirtualBox):39471 -> 10.0.2.3(vboxdns):53
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):56652
-OPEN  UDP   pid=534(systemd-resolve) cookie=68219  10.0.2.15(lev-VirtualBox):59530 -> 10.0.2.3(vboxdns):53
-CLOSE UDP   pid=534(systemd-resolve) cookie=68219  10.0.2.15(lev-VirtualBox):59530 -> 10.0.2.3(vboxdns):53  out=44B/1p in=295B/1p  age=43ms reason=close()
-CLOSE UDP   pid=534(systemd-resolve) cookie=68218  10.0.2.15(lev-VirtualBox):39471 -> 10.0.2.3(vboxdns):53  out=44B/1p in=247B/1p  age=47ms reason=close()
-CLOSE UDP   pid=3337(DNS Res~ver #24) cookie=70145  127.0.0.1(localhost):36471 -> 127.0.0.53(dnsstub):53  out=44B/1p in=144B/1p  age=55ms reason=close()
-CLOSE UDP   pid=3337(DNS Res~ver #23) cookie=70865  127.0.0.1(localhost):56652 -> 127.0.0.53(dnsstub):53  out=88B/2p in=336B/2p  age=57ms reason=close()
-OPEN  TCP   pid=3337(Socket Thread) cookie=70147  10.0.2.15(lev-VirtualBox):44392 -> 151.101.1.91(miss):443
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):33765
-OPEN  UDP   pid=534(systemd-resolve) cookie=68220  10.0.2.15(lev-VirtualBox):37246 -> 10.0.2.3(vboxdns):53
-CLOSE UDP   pid=534(systemd-resolve) cookie=68220  10.0.2.15(lev-VirtualBox):37246 -> 10.0.2.3(vboxdns):53  out=97B/2p in=276B/2p  age=30ms reason=close()
-CLOSE TCP   pid=3337(Socket Thread) cookie=70147  10.0.2.15(lev-VirtualBox):44392 -> 151.101.1.91(no-ptr):443  out=3003B/7p in=1991B/16p  age=5.443s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):36471  out=144B/1p in=44B/1p  age=5.508s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):56652  out=336B/2p in=88B/2p  age=5.507s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):33765  out=114B/1p in=54B/1p  age=5.44s reason=idle
-OPEN  TCP   pid=3337(Socket Thread) cookie=65892  10.0.2.15(lev-VirtualBox):38530 -> 140.82.112.26(miss):443
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):55238
-OPEN  TCP   pid=3337(Socket Thread) cookie=61087  10.0.2.15(lev-VirtualBox):59324 -> 34.107.243.93(miss):443
-CLOSE TCP   pid=3337(Socket Thread) cookie=61087  10.0.2.15(lev-VirtualBox):59324 -> 34.107.243.93(pending):443  out=24B/1p in=0B/0p  age=6ms reason=close()
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):39286
-OPEN  UDP   pid=534(systemd-resolve) cookie=68252  10.0.2.15(lev-VirtualBox):58694 -> 10.0.2.3(vboxdns):53
-CLOSE UDP   pid=534(systemd-resolve) cookie=68252  10.0.2.15(lev-VirtualBox):58694 -> 10.0.2.3(vboxdns):53  out=55B/1p in=133B/1p  age=40ms reason=close()
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):55238  out=100B/1p in=55B/1p  age=5.722s reason=idle
-CLOSE TCP   pid=3337(Socket Thread) cookie=65892  10.0.2.15(lev-VirtualBox):38530 -> 140.82.112.26(lb-140-82-112-26-iad.github.com):443  out=30B/1p in=26B/2p  age=5.724s reason=idle
-OPEN  UDP   pid=3337(DNS Res~ver #24) cookie=69124  127.0.0.1(localhost):36672 -> 127.0.0.53(dnsstub):53
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):36672
-OPEN  UDP   pid=534(systemd-resolve) cookie=68280  10.0.2.15(lev-VirtualBox):50758 -> 10.0.2.3(vboxdns):53
-OPEN  UDP   pid=534(systemd-resolve) cookie=68281  10.0.2.15(lev-VirtualBox):50504 -> 10.0.2.3(vboxdns):53
-CLOSE UDP   pid=534(systemd-resolve) cookie=68280  10.0.2.15(lev-VirtualBox):50758 -> 10.0.2.3(vboxdns):53  out=54B/1p in=95B/1p  age=41ms reason=close()
-CLOSE UDP   pid=534(systemd-resolve) cookie=68281  10.0.2.15(lev-VirtualBox):50504 -> 10.0.2.3(vboxdns):53  out=54B/1p in=158B/1p  age=45ms reason=close()
-CLOSE UDP   pid=3337(DNS Res~ver #24) cookie=69124  127.0.0.1(localhost):36672 -> 127.0.0.53(dnsstub):53  out=108B/2p in=205B/2p  age=49ms reason=close()
-OPEN  TCP   pid=3337(Socket Thread) cookie=70184  10.0.2.15(lev-VirtualBox):49786 -> 34.107.243.93(93.243.107.34.bc.googleusercontent.com):443
-OPEN  TCP   pid=3337(Socket Thread) cookie=70185  10.0.2.15(lev-VirtualBox):49800 -> 34.107.243.93(93.243.107.34.bc.googleusercontent.com):443
-OPEN  UDP   pid=3337(DNS Res~ver #23) cookie=70912  127.0.0.1(localhost):41735 -> 127.0.0.53(dnsstub):53
-OPEN  UDP   pid=3337(DNS Res~ver #24) cookie=69126  127.0.0.1(localhost):39714 -> 127.0.0.53(dnsstub):53
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):41735
-OPEN  UDP   pid=534(systemd-resolve) cookie=68282  10.0.2.15(lev-VirtualBox):48479 -> 10.0.2.3(vboxdns):53
-OPEN  UDP   pid=534(systemd-resolve) cookie=68283  10.0.2.15(lev-VirtualBox):40551 -> 10.0.2.3(vboxdns):53
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):39714
-CLOSE UDP   pid=534(systemd-resolve) cookie=68282  10.0.2.15(lev-VirtualBox):48479 -> 10.0.2.3(vboxdns):53  out=66B/1p in=291B/1p  age=28ms reason=close()
-CLOSE UDP   pid=534(systemd-resolve) cookie=68283  10.0.2.15(lev-VirtualBox):40551 -> 10.0.2.3(vboxdns):53  out=66B/1p in=339B/1p  age=28ms reason=close()
-CLOSE UDP   pid=3337(DNS Res~ver #24) cookie=69126  127.0.0.1(localhost):39714 -> 127.0.0.53(dnsstub):53  out=66B/1p in=166B/1p  age=30ms reason=close()
-CLOSE UDP   pid=3337(DNS Res~ver #23) cookie=70912  127.0.0.1(localhost):41735 -> 127.0.0.53(dnsstub):53  out=132B/2p in=380B/2p  age=37ms reason=close()
-OPEN  TCP   pid=3337(Socket Thread) cookie=70914  10.0.2.15(lev-VirtualBox):42810 -> 151.101.129.91(miss):443
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):57885
-OPEN  UDP   pid=534(systemd-resolve) cookie=68284  10.0.2.15(lev-VirtualBox):47979 -> 10.0.2.3(vboxdns):53
-CLOSE UDP   pid=534(systemd-resolve) cookie=68284  10.0.2.15(lev-VirtualBox):47979 -> 10.0.2.3(vboxdns):53  out=101B/2p in=280B/2p  age=31ms reason=close()
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):39286  out=107B/1p in=55B/1p  age=5.968s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):41735  out=380B/2p in=132B/2p  age=5.145s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):36672  out=205B/2p in=108B/2p  age=5.974s reason=idle
-CLOSE TCP   pid=3337(Socket Thread) cookie=70185  10.0.2.15(lev-VirtualBox):49800 -> 34.107.243.93(93.243.107.34.bc.googleusercontent.com):443  out=2065B/4p in=1242B/12p  age=5.702s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):57885  out=116B/1p in=56B/1p  age=5.102s reason=idle
-CLOSE TCP   pid=3337(Socket Thread) cookie=70184  10.0.2.15(lev-VirtualBox):49786 -> 34.107.243.93(93.243.107.34.bc.googleusercontent.com):443  out=2712B/4p in=861B/12p  age=5.919s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):39714  out=166B/1p in=66B/1p  age=5.142s reason=idle
-CLOSE TCP   pid=3337(Socket Thread) cookie=70914  10.0.2.15(lev-VirtualBox):42810 -> 151.101.129.91(no-ptr):443  out=723B/5p in=4342B/20p  age=6.103s reason=idle
-OPEN  TCP   pid=2831(Chrome_ChildIOT) cookie=70077  10.0.2.15(lev-VirtualBox):39416 -> 13.107.253.44(no-ptr):443
-CLOSE TCP   pid=2831(Chrome_ChildIOT) cookie=70077  10.0.2.15(lev-VirtualBox):39416 -> 13.107.253.44(no-ptr):443  out=0B/0p in=63B/1p  age=5ms reason=close()
-OPEN  TCP   pid=3337(Socket Thread) cookie=70147  10.0.2.15(lev-VirtualBox):44392 -> 151.101.1.91(no-ptr):443
-CLOSE TCP   pid=3337(Socket Thread) cookie=70147  10.0.2.15(lev-VirtualBox):44392 -> 151.101.1.91(no-ptr):443  out=39B/1p in=39B/2p  age=5.921s reason=idle
-OPEN  TCP   pid=3337(Socket Thread) cookie=65892  10.0.2.15(lev-VirtualBox):38530 -> 140.82.112.26(lb-140-82-112-26-iad.github.com):443
-OPEN  TCP   pid=3337(Socket Thread) cookie=70184  10.0.2.15(lev-VirtualBox):49786 -> 34.107.243.93(93.243.107.34.bc.googleusercontent.com):443
-OPEN  TCP   pid=3337(Socket Thread) cookie=70914  10.0.2.15(lev-VirtualBox):42810 -> 151.101.129.91(no-ptr):443
-CLOSE TCP   pid=3337(Socket Thread) cookie=65892  10.0.2.15(lev-VirtualBox):38530 -> 140.82.112.26(lb-140-82-112-26-iad.github.com):443  out=30B/1p in=26B/2p  age=5.722s reason=idle
-CLOSE TCP   pid=3337(Socket Thread) cookie=70184  10.0.2.15(lev-VirtualBox):49786 -> 34.107.243.93(93.243.107.34.bc.googleusercontent.com):443  out=39B/1p in=39B/2p  age=5.916s reason=idle
-CLOSE TCP   pid=3337(Socket Thread) cookie=70914  10.0.2.15(lev-VirtualBox):42810 -> 151.101.129.91(no-ptr):443  out=46B/1p in=46B/2p  age=5.915s reason=idle
-OPEN  TCP   pid=3337(Socket Thread) cookie=70147  10.0.2.15(lev-VirtualBox):44392 -> 151.101.1.91(no-ptr):443
-CLOSE TCP   pid=3337(Socket Thread) cookie=70147  10.0.2.15(lev-VirtualBox):44392 -> 151.101.1.91(no-ptr):443  out=39B/1p in=39B/2p  age=5.911s reason=idle
-OPEN  UDP   pid=534(systemd-resolve) cookie=68479  10.0.2.15(lev-VirtualBox):33423 -> 10.0.2.3(vboxdns):53
-CLOSE UDP   pid=534(systemd-resolve) cookie=68479  10.0.2.15(lev-VirtualBox):33423 -> 10.0.2.3(vboxdns):53  out=58B/1p in=685B/1p  age=40ms reason=close()
-OPEN  TCP   pid=675(NetworkManager) cookie=70286  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):41356 -> [2620:2d:4000:1:0:0:0:97](miss):80
-OPEN  TCP   pid=675(NetworkManager) cookie=70287  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):35922 -> [2001:67c:1562:0:0:0:0:24](miss):80
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):56366
-CLOSE TCP   pid=675(NetworkManager) cookie=70286  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):41356 -> [2620:2d:4000:1:0:0:0:97](pending):80  out=0B/0p in=0B/0p  age=7ms reason=close()
-OPEN  TCP   pid=675(NetworkManager) cookie=71143  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):51690 -> [2620:2d:4000:1:0:0:0:96](miss):80
-CLOSE TCP   pid=675(NetworkManager) cookie=70287  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):35922 -> [2001:67c:1562:0:0:0:0:24](pending):80  out=0B/0p in=0B/0p  age=4ms reason=close()
-OPEN  TCP   pid=675(NetworkManager) cookie=71144  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):42532 -> [2001:67c:1562:0:0:0:0:23](miss):80
-CLOSE TCP   pid=675(NetworkManager) cookie=71143  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):51690 -> [2620:2d:4000:1:0:0:0:96](pending):80  out=0B/0p in=0B/0p  age=2ms reason=close()
-OPEN  TCP   pid=675(NetworkManager) cookie=70290  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):57632 -> [2620:2d:4000:1:0:0:0:2b](miss):80
-CLOSE TCP   pid=675(NetworkManager) cookie=71144  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):42532 -> [2001:67c:1562:0:0:0:0:23](pending):80  out=0B/0p in=0B/0p  age=6ms reason=close()
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):47380
-OPEN  TCP   pid=675(NetworkManager) cookie=70291  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):40686 -> [2620:2d:4002:1:0:0:0:198](miss):80
-CLOSE TCP   pid=675(NetworkManager) cookie=70290  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):57632 -> [2620:2d:4000:1:0:0:0:2b](pending):80  out=0B/0p in=0B/0p  age=1ms reason=close()
-OPEN  TCP   pid=675(NetworkManager) cookie=70292  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):47720 -> [2620:2d:4000:1:0:0:0:2a](miss):80
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):57758
-CLOSE TCP   pid=675(NetworkManager) cookie=70291  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):40686 -> [2620:2d:4002:1:0:0:0:198](pending):80  out=0B/0p in=0B/0p  age=2ms reason=close()
-OPEN  TCP   pid=675(NetworkManager) cookie=70293  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):49388 -> [2620:2d:4000:1:0:0:0:22](miss):80
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):50130
-CLOSE TCP   pid=675(NetworkManager) cookie=70292  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):47720 -> [2620:2d:4000:1:0:0:0:2a](pending):80  out=0B/0p in=0B/0p  age=1ms reason=close()
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):43543
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):43638
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):44979
-OPEN  TCP   pid=675(NetworkManager) cookie=70295  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):41588 -> [2620:2d:4000:1:0:0:0:98](miss):80
-CLOSE TCP   pid=675(NetworkManager) cookie=70293  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):49388 -> [2620:2d:4000:1:0:0:0:22](pending):80  out=0B/0p in=0B/0p  age=12ms reason=close()
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):35124
-OPEN  TCP   pid=675(NetworkManager) cookie=70296  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):56856 -> [2620:2d:4000:1:0:0:0:23](miss):80
-CLOSE TCP   pid=675(NetworkManager) cookie=70295  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):41588 -> [2620:2d:4000:1:0:0:0:98](pending):80  out=0B/0p in=0B/0p  age=1ms reason=close()
-OPEN  TCP   pid=675(NetworkManager) cookie=70297  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):51502 -> [2620:2d:4002:1:0:0:0:197](miss):80
-CLOSE TCP   pid=675(NetworkManager) cookie=70296  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):56856 -> [2620:2d:4000:1:0:0:0:23](pending):80  out=0B/0p in=0B/0p  age=3ms reason=close()
-CLOSE TCP   pid=675(NetworkManager) cookie=70297  [fd00:0:0:0:63c4:dda4:4be2:b7c7](lev-VirtualBox):51502 -> [2620:2d:4002:1:0:0:0:197](pending):80  out=0B/0p in=0B/0p  age=3ms reason=close()
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):60832
-OPEN  UDP   pid=534(systemd-resolve) cookie=71148  10.0.2.15(lev-VirtualBox):59963 -> 10.0.2.3(vboxdns):53
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):40563
-OPEN  UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):42600
-CLOSE UDP   pid=534(systemd-resolve) cookie=71148  10.0.2.15(lev-VirtualBox):59963 -> 10.0.2.3(vboxdns):53  out=101B/1p in=227B/1p  age=5ms reason=close()
-OPEN  ICMPv6 pid=675(NetworkManager) cookie=9698  fe80:0:0:0:7d27:9ada:6974:f568%enp0s3(skip) -> fe80:0:0:0:0:0:0:2%enp0s3(skip)
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):44979  out=135B/1p in=101B/1p  age=5.925s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):35124  out=147B/1p in=101B/1p  age=5.925s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):47380  out=137B/1p in=101B/1p  age=5.939s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):56366  out=155B/1p in=101B/1p  age=5.948s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):57758  out=136B/1p in=101B/1p  age=5.937s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):40563  out=138B/1p in=101B/1p  age=5.92s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):43638  out=155B/1p in=101B/1p  age=5.925s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):42600  out=155B/1p in=101B/1p  age=5.917s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):43543  out=147B/1p in=101B/1p  age=5.935s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):50130  out=155B/1p in=101B/1p  age=5.936s reason=idle
-CLOSE UDP   pid=534(systemd-resolve) cookie=3869  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):60832  out=155B/1p in=101B/1p  age=5.921s reason=idle
-OPEN  TCP   pid=3337(Socket Thread) cookie=65892  10.0.2.15(lev-VirtualBox):38530 -> 140.82.112.26(lb-140-82-112-26-iad.github.com):443
-CLOSE ICMPv6 pid=675(NetworkManager) cookie=9698  fe80:0:0:0:7d27:9ada:6974:f568%enp0s3(skip) -> fe80:0:0:0:0:0:0:2%enp0s3(skip)  out=0B/0p in=32B/1p  age=5.576s reason=idle
-OPEN  TCP   pid=3337(Socket Thread) cookie=70184  10.0.2.15(lev-VirtualBox):49786 -> 34.107.243.93(93.243.107.34.bc.googleusercontent.com):443
-OPEN  TCP   pid=3337(Socket Thread) cookie=70914  10.0.2.15(lev-VirtualBox):42810 -> 151.101.129.91(no-ptr):443
-CLOSE TCP   pid=3337(Socket Thread) cookie=65892  10.0.2.15(lev-VirtualBox):38530 -> 140.82.112.26(lb-140-82-112-26-iad.github.com):443  out=30B/1p in=26B/2p  age=5.726s reason=idle
-CLOSE TCP   pid=3337(Socket Thread) cookie=70184  10.0.2.15(lev-VirtualBox):49786 -> 34.107.243.93(93.243.107.34.bc.googleusercontent.com):443  out=39B/1p in=39B/2p  age=5.909s reason=idle
-CLOSE TCP   pid=3337(Socket Thread) cookie=70914  10.0.2.15(lev-VirtualBox):42810 -> 151.101.129.91(no-ptr):443  out=46B/1p in=46B/2p  age=5.908s reason=idle
-^C2026/02/24 04:23:19.305682 PERF_LOST_TOTAL total=0 gen=0
+sudo ./bpfgo -resolve=false | stdbuf -oL egrep --line-buffered 'python3|nc|udp_|curl'
+
+python3 - <<'PY'
+import socket
+s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.bind(("127.0.0.1",9999))
+while True:
+    d,a=s.recvfrom(65535)
+    s.sendto(d,a)
+PY
+
+python3 - <<'PY'
+import socket, time
+c=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+c.connect(("127.0.0.1",9999))
+c.send(b"ping")
+print(c.recv(65535))
+time.sleep(0.2)
+PY
