@@ -900,7 +900,4 @@ nc -l 127.0.0.1 18081 > /dev/null
 dd if=/dev/zero bs=1M count=10 | nc 127.0.0.1 18081
 
 
-OPEN  TCP   pid=23000(python3) cookie=85027  127.0.0.1(localhost):18084 -> 127.0.0.1(localhost):33932
-OPEN  TCP   pid=23017(python3) cookie=83770  127.0.0.1(localhost):33932 -> 127.0.0.1(localhost):18084
-CLOSE TCP   pid=23017(python3) cookie=83770  127.0.0.1(localhost):33932 -> 127.0.0.1(localhost):18084  out=1048576B/1p in=0B/0p  age=205ms reason=close()
-CLOSE TCP   pid=23000(python3) cookie=85027  127.0.0.1(localhost):18084 -> 127.0.0.1(localhost):33932  out=0B/0p in=1048576B/18p  age=6.002s reason=idle
+146.75.53.91(no-ptr):443  
