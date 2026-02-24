@@ -887,6 +887,6 @@ int main(int argc, char **argv) {
 }
 
 
-./udp6_pktinfo_client 'fe80::XXXX:YYYY:ZZZZ:AAAA%enp0s3' 9997 ping
+sudo ./bpfgo -resolve=false | stdbuf -oL egrep --line-buffered 'udp6_pktinfo|OPEN|CLOSE|ICMPv6|UDP'
 
 
