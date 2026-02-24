@@ -890,5 +890,4 @@ int main(int argc, char **argv) {
 sudo ./bpfgo -resolve=false | stdbuf -oL egrep --line-buffered 'udp6_pktinfo|OPEN|CLOSE|ICMPv6|UDP'
 
 
-OPEN  UDP   pid=11900(udp6_pkt_client) cookie=59503  [fe80:0:0:0:7d27:9ada:6974:f568](?):47257 -> [fe80:0:0:0:0:0:0:2%enp0s3](?):9997
-CLOSE UDP   pid=11900(udp6_pkt_client) cookie=59503  [fe80:0:0:0:7d27:9ada:6974:f568](?):47257 -> [fe80:0:0:0:0:0:0:2%enp0s3](?):9997  out=4B/1p in=0B/0p  age=5.748s reason=idle
+ip -6 addr show dev enp0s3 scope link
