@@ -900,4 +900,6 @@ nc -l 127.0.0.1 18081 > /dev/null
 dd if=/dev/zero bs=1M count=10 | nc 127.0.0.1 18081
 
 
+OPEN  TCP   pid=5612(Socket Thread) cookie=43324  10.0.2.15(lev-VirtualBox):60316 -> 146.75.53.91(no-ptr):443
+
 CLOSE TCP   pid=5612(Socket Thread) cookie=43324  10.0.2.15(lev-VirtualBox):60316 -> 146.75.53.91(no-ptr):443  out=63B/2p in=0B/0p  age=6ms reason=close()
