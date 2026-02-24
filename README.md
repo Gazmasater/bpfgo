@@ -900,8 +900,17 @@ nc -l 127.0.0.1 18081 > /dev/null
 dd if=/dev/zero bs=1M count=10 | nc 127.0.0.1 18081
 
 
-OPEN  TCP   pid=20840(nc) cookie=76623  127.0.0.1(localhost):41960 -> 127.0.0.1(localhost):18081
-OPEN  TCP   pid=20800(nc) cookie=78255  127.0.0.1(localhost):18081 -> 127.0.0.1(localhost):41960
-CLOSE TCP   pid=20840(nc) cookie=76623  127.0.0.1(localhost):41960 -> 127.0.0.1(localhost):18081  out=10485760B/640p in=0B/0p  age=6.158s reason=idle
-CLOSE TCP   pid=20800(nc) cookie=78255  127.0.0.1(localhost):18081 -> 127.0.0.1(localhost):41960  out=0B/0p in=10485760B/642p  age=6.158s reason=idle
+python3 - <<'PY'
+import socket
+s=socket.socket()
+s.bind(("127.0.0.1",18082))
+s.listen(1)
+c,addr=s.accept()
+while True:
+    d=c.recv(65535)
+    if not d: break
+    c.sendall(d)
+PY
 
+
+dd if=/dev/zero bs=1M count=5 | nc 127.0.0.1 18082 > /dev/null
