@@ -3970,3 +3970,12 @@ func main() {
 		}
 	}
 }
+
+
+
+
+ev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
+[sudo] password for lev: 
+2026/02/25 01:07:24.581920 hostsPrefill: added=7 from /etc/hosts
+2026/02/25 01:07:25.051106 failed to load bpf objects: field TraceSendmsgExit: program trace_sendmsg_exit: load program: permission denied: 1228: (85) call bpf_probe_read_user#112: R2 unbounded memory access, use 'var &= const' or 'if (var < const)' (951 line(s) omitted)
+lev@lev-VirtualBox:~/bpfgo$ 
