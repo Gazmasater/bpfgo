@@ -887,12 +887,6 @@ int main(int argc, char **argv) {
 }
 
 
-lev@lev-VirtualBox:~/bpfgo/test$ gcc -O2 -Wall -o udp6_pkt_client udp6_pkt_client.c
-udp6_pkt_client.c: In function ‘main’:
-udp6_pkt_client.c:47:26: warning: implicit declaration of function ‘if_nametoindex’ [-Wimplicit-function-declaration]
-   47 |         unsigned ifidx = if_nametoindex(scope);
-      |                          ^~~~~~~~~~~~~~
-lev@lev-VirtualBox:~/bpfgo/test$ 
-
+./udp6_pktinfo_client 'fe80::XXXX:YYYY:ZZZZ:AAAA%enp0s3' 9997 ping
 
 
