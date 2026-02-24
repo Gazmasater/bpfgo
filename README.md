@@ -87,6 +87,10 @@ __________________________________________________
 
 bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
 
+bpf2go -output-dir . -tags linux \
+  -type trace_info -type tls_chunk_t \
+  -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+
 
 
 sudo nft add table ip6 test
