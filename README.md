@@ -905,3 +905,9 @@ gcc -O2 -Wall -o udp_pktinfo_server udp_pktinfo_server.c
 ./udp_pktinfo_server
 
 echo -n "ping" | nc -u -w1 10.0.2.15 9999
+
+
+
+ev@lev-VirtualBox:~/bpfgo/test$ gcc -O2 -Wall -o udp_pktinfo_server udp_pktinfo_server.c
+cc1: fatal error: udp_pktinfo_server.c: No such file or directory
+compilation terminated.
