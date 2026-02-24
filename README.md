@@ -891,3 +891,11 @@ sudo ./bpfgo -resolve=false | stdbuf -oL egrep --line-buffered 'udp6_pktinfo|OPE
 
 
 ip -6 addr show dev enp0s3 scope link
+
+
+
+OPEN  UDP   pid=15519(udp6_pkt_client) cookie=64339  [fe80:0:0:0:7d27:9ada:6974:f568](skip):38944 -> [fe80:0:0:0:7d27:9ada:6974:f568%enp0s3](skip):9997
+OPEN  UDP   pid=15469(udp6_pkt_server) cookie=66783  [fe80:0:0:0:7d27:9ada:6974:f568%enp0s3](skip):9997 -> [fe80:0:0:0:7d27:9ada:6974:f568%enp0s3](skip):38944
+CLOSE UDP   pid=15519(udp6_pkt_client) cookie=64339  [fe80:0:0:0:7d27:9ada:6974:f568](skip):38944 -> [fe80:0:0:0:7d27:9ada:6974:f568%enp0s3](skip):9997  out=4B/1p in=4B/1p  age=1ms reason=close()
+^C2026/02/24 04:11:24.657539 PERF_LOST_TOTAL total=0 gen=0
+CLOSE UDP   pid=15469(udp6_pkt_server) cookie=66783  [fe80:0:0:0:7d27:9ada:6974:f568%enp0s3](skip):9997 -> [fe80:0:0:0:7d27:9ada:6974:f568%enp0s3](skip):38944  out=4B/1p in=4B/1p  age=8.517s reason=signal
