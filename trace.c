@@ -1591,6 +1591,24 @@ int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
 }
 
 
+static __always_inline __u64 inode_cookie_from_sock(struct sock *sk)
+{
+    if (!sk) return 0;
+
+    struct socket *sock = BPF_CORE_READ(sk, sk_socket);
+    if (!sock) return 0;
+
+    struct file *file = BPF_CORE_READ(sock, file);
+    if (!file) return 0;
+
+    struct inode *ino = BPF_CORE_READ(file, f_inode);
+    if (!ino) return 0;
+
+    return (__u64)BPF_CORE_READ(ino, i_ino);
+}
+
+
+
 SEC("tracepoint/net/net_dev_queue")
 int trace_net_dev_queue(struct tp_net_dev_queue *ctx)
 {
@@ -1601,8 +1619,9 @@ int trace_net_dev_queue(struct tp_net_dev_queue *ctx)
     struct sock *sk = BPF_CORE_READ(skb, sk);
     if (!sk) return 0;
 
-    __u64 cookie = BPF_CORE_READ(sk, __sk_common.skc_cookie.counter);
+__u64 cookie = inode_cookie_from_sock(sk);
 if (!cookie) return 0;
+
 
      
     // family from sock
