@@ -698,1737 +698,630 @@ gcc -O2 -Wall -o udp_mmsg_client udp_mmsg_client.c
 
 
 
-//go:build ignore
-#include "vmlinux.h"
 
-#include "bpf/bpf_tracing.h"
-#include "bpf/bpf_endian.h"
-#include "bpf/bpf_core_read.h"
-#include <bpf/bpf_helpers.h>
 
-#ifndef IFNAMSIZ
-#define IFNAMSIZ 16
-#endif
-
-#define AF_INET  2
-#define AF_INET6 10
-
-#define IPPROTO_ICMP   1
-#define IPPROTO_TCP    6
-#define IPPROTO_UDP    17
-#define IPPROTO_ICMPV6 58
-
-#define EINPROGRESS 115
-#define EALREADY    114
-
-// syscalls events
-#define EV_SENDTO    1
-#define EV_RECVFROM  2
-#define EV_CONNECT   3
-#define EV_ACCEPT    4
-#define EV_BINDOK    20
-#define EV_SENDMSG   11
-#define EV_RECVMSG   12
-#define EV_SENDMMSG  13
-#define EV_RECVMMSG  14
-#define EV_READ      21
-#define EV_WRITE     22
-#define EV_CLOSE     30
-
-// skb hint
-#define EV_SKB_OUT   40
-
-// tls chunk (separate perf)
-#define EV_TLS_CHUNK 41
-
-// socket flags
-#define MSG_PEEK 0x2
-
-// file modes
-#define S_IFMT   0170000
-#define S_IFSOCK 0140000
-
-// cmsg constants (Linux)
-#define SOL_IP       0
-#define SOL_IPV6     41
-#define IP_PKTINFO   8
-#define IPV6_PKTINFO 50
-
-// bounded parsing limits
-#define MAX_MMSG 16
-#define MAX_IOV  4
-
-#define CMSG_ALIGN(len) (((len) + sizeof(__u64) - 1) & ~(sizeof(__u64) - 1))
-
-/* ===== TLS capture knobs ===== */
-#define TLS_CHUNK_BYTES 77
-#define TLS_MAX_BYTES   1536
-
-/* ===== net_dev_queue tracepoint ctx (layout used by kernel tracepoint) ===== */
-struct tp_net_dev_queue {
-    __u16 common_type;
-    __u8  common_flags;
-    __u8  common_preempt_count;
-    __s32 common_pid;
-
-    __u64 skbaddr;
-    __u32 len;
-    char  name[IFNAMSIZ];
-};
-
-/* ====== types ====== */
-
-struct conn_info_t {
-    __u32 tgid;
-    __u32 fd;
-    char  comm[64];
-};
-
-struct fd_key_t {
-    __u32 tgid;
-    __s32 fd;
-};
-
-struct fd_state_t {
-    __u16 family;
-    __u8  proto;
-    __u8  _pad0;
-
-    __u16 lport;   // host order
-    __u16 rport;   // host order
-
-    __u32 lip;     // net order
-    __u32 rip;     // net order
-
-    struct in6_addr lip6;
-    struct in6_addr rip6;
-};
-
-struct inflight_fd_t { __s32 fd; };
-
-/* EVENT to userspace */
-struct trace_info {
-    __u64 ts_ns;
-    __u64 cookie;
-
-    __u32 tgid;
-    __u32 tid;
-
-    __u32 fd;
-    __s32 _pad0;
-
-    __s64 ret;     // bytes (mmsg: best-effort sum)
-
-    __u16 family;
-    __u16 sport;
-    __u16 dport;
-
-    __u8  proto;
-    __u8  event;
-    __u8  state;   // connect: 0/1 ; mmsg: packets count (clamped)
-    __u8  _pad1;
-
-    __u32 src_ip4; // net order
-    __u32 dst_ip4; // net order
-    __u8  src_ip6[16];
-    __u8  dst_ip6[16];
-
-    __u32 src_scope; // ifindex for IPv6 link-local/mcast when known
-    __u32 dst_scope; // ifindex for IPv6 link-local/mcast when known
-
-    char  comm[32];
-};
-
-const struct trace_info *unused __attribute__((unused));
-
-/* ---- userspace ABI (amd64) ---- */
-
-struct user_msghdr64 {
-    __u64 msg_name;       // void*
-    __u32 msg_namelen;    // socklen_t
-    __u32 _pad0;
-
-    __u64 msg_iov;        // struct iovec*
-    __u64 msg_iovlen;     // size_t
-
-    __u64 msg_control;    // void*
-    __u64 msg_controllen; // size_t
-
-    __u32 msg_flags;      // int
-    __u32 _pad1;
-};
-
-struct user_iovec64 {
-    __u64 iov_base;
-    __u64 iov_len;
-};
-
-struct user_cmsghdr64 {
-    __u64 cmsg_len;   // size_t
-    __s32 cmsg_level; // int
-    __s32 cmsg_type;  // int
-};
-
-struct user_in6_pktinfo {
-    __u8  ipi6_addr[16];
-    __u32 ipi6_ifindex;
-};
-
-struct user_in_pktinfo {
-    __s32 ipi_ifindex;
-    __u32 ipi_spec_dst;
-    __u32 ipi_addr;
-};
-
-/* ---- mmsg (amd64) ---- */
-
-struct user_mmsghdr64 {
-    struct user_msghdr64 msg_hdr;
-    __u32 msg_len;
-    __u32 _pad;
-};
-
-struct addr_ptrlen_t {
-    __u64 addr;   // user sockaddr*
-    __u32 len;    // sockaddr len
-    __u32 _pad;
-};
-
-struct addr_recv_meta_t {
-    __u64 addr;   // user sockaddr*
-    __u64 lenp;   // user socklen_t*
-    __u32 flags;
-    __u32 _pad;
-};
-
-struct msg_ptrflags_t {
-    __u64 msg;    // user msghdr*
-    __u32 flags;
-    __u32 _pad;
-};
-
-struct mmsg_ptrvlen_t {
-    __u64 vec;    // user mmsghdr*
-    __u32 vlen;
-    __u32 flags;
-};
-
-struct buf_ptrlen_t {
-    __u64 buf;
-    __u32 len;
-    __u32 _pad;
-};
-
-/* ===== TLS chunk event ===== */
-
-struct tls_state_t {
-    __u16 off;
-    __u8  done;
-    __u8  _pad;
-};
-
-struct tls_chunk_t {
-    __u64 ts_ns;
-    __u64 cookie;
-
-    __u32 tgid;
-    __u32 tid;
-    __u32 fd;
-
-    __u16 dport;
-    __u16 off;
-    __u16 len;
-
-    __u8  proto;
-    __u8  family;
-    __u8  _pad0[2];
-
-    char  comm[32];
-    __u8  data[TLS_CHUNK_BYTES];
-
-    __u8  _pad_end[5]; // align struct size to 8 bytes (152 total)
-};
-
-/* ====== maps ====== */
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 65536);
-    __type(key, struct fd_key_t);
-    __type(value, struct fd_state_t);
-} fd_state_map SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 16384);
-    __type(key, __u64);
-    __type(value, struct inflight_fd_t);
-} connect_fd_map SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 16384);
-    __type(key, __u64);
-    __type(value, struct addr_ptrlen_t);
-} addrConnect_map SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 16384);
-    __type(key, __u64);
-    __type(value, struct addr_ptrlen_t);
-} addrBind_map SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 16384);
-    __type(key, __u64);
-    __type(value, struct addr_ptrlen_t);
-} addrSend_map SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 16384);
-    __type(key, __u64);
-    __type(value, struct addr_recv_meta_t);
-} addrRecv_map SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 16384);
-    __type(key, __u64);
-    __type(value, __u64); // user msghdr*
-} msgSend_map SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 16384);
-    __type(key, __u64);
-    __type(value, struct msg_ptrflags_t);
-} msgRecv_map SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 16384);
-    __type(key, __u64);
-    __type(value, struct mmsg_ptrvlen_t);
-} mmsgSend_map SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 16384);
-    __type(key, __u64);
-    __type(value, struct mmsg_ptrvlen_t);
-} mmsgRecv_map SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 16384);
-    __type(key, __u64);
-    __type(value, struct conn_info_t);
-} conn_info_map SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 16384);
-    __type(key, __u64);
-    __type(value, struct buf_ptrlen_t);
-} sendto_buf_map SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 16384);
-    __type(key, __u64);
-    __type(value, struct buf_ptrlen_t);
-} write_buf_map SEC(".maps");
-
-/* TLS state: cookie -> {off,done} */
-struct {
-    __uint(type, BPF_MAP_TYPE_LRU_HASH);
-    __uint(max_entries, 65536);
-    __type(key, __u64);
-    __type(value, struct tls_state_t);
-} tls_state_map SEC(".maps");
-
-/* perf outputs */
-struct {
-    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-    __uint(max_entries, 128);
-} trace_events SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-    __uint(max_entries, 128);
-} tls_events SEC(".maps");
-
-char LICENSE[] SEC("license") = "Dual BSD/GPL";
-
-/* ====== helpers ====== */
-
-static __always_inline __u32 min_u32(__u32 a, __u32 b) { return a < b ? a : b; }
-
-static __always_inline int read_sys_exit_ret(struct trace_event_raw_sys_exit *ctx, __s64 *ret)
-{
-    if (BPF_CORE_READ_INTO(ret, ctx, ret) < 0)
-        return -1;
-    return 0;
-}
-
-static __always_inline int read_msghdr64(__u64 msg_u, struct user_msghdr64 *h)
-{
-    if (!msg_u) return -1;
-    if (bpf_probe_read_user(h, sizeof(*h), (void *)msg_u) < 0) return -1;
-    return 0;
-}
-
-static __always_inline int read_mmsghdr0(__u64 vec_u, struct user_mmsghdr64 *out)
-{
-    if (!vec_u) return -1;
-    if (bpf_probe_read_user(out, sizeof(*out), (void *)vec_u) < 0) return -1;
-    return 0;
-}
-
-static __always_inline __s64 sum_mmsg_len(__u64 vec_u, __u32 n)
-{
-    __s64 total = 0;
-#pragma clang loop unroll(full)
-    for (int i = 0; i < MAX_MMSG; i++) {
-        if ((__u32)i >= n) continue;
-        struct user_mmsghdr64 mh = {};
-        __u64 p = vec_u + (__u64)i * (__u64)sizeof(struct user_mmsghdr64);
-        if (bpf_probe_read_user(&mh, sizeof(mh), (void *)p) == 0)
-            total += (__s64)mh.msg_len;
-    }
-    return total;
-}
-
-static __always_inline __s64 sum_mmsg_iov_bytes(__u64 vec_u, __u32 n)
-{
-    __s64 total = 0;
-#pragma clang loop unroll(full)
-    for (int i = 0; i < MAX_MMSG; i++) {
-        if ((__u32)i >= n) continue;
-
-        struct user_mmsghdr64 mh = {};
-        __u64 p = vec_u + (__u64)i * (__u64)sizeof(struct user_mmsghdr64);
-        if (bpf_probe_read_user(&mh, sizeof(mh), (void *)p) != 0) continue;
-
-        if (!mh.msg_hdr.msg_iov || mh.msg_hdr.msg_iovlen == 0) continue;
-
-        __u32 iovcnt = (mh.msg_hdr.msg_iovlen > 0xffffffffULL) ? 0xffffffffU : (__u32)mh.msg_hdr.msg_iovlen;
-        iovcnt = min_u32(iovcnt, MAX_IOV);
-
-#pragma clang loop unroll(full)
-        for (int j = 0; j < MAX_IOV; j++) {
-            if ((__u32)j >= iovcnt) continue;
-            struct user_iovec64 iv = {};
-            __u64 ip = mh.msg_hdr.msg_iov + (__u64)j * (__u64)sizeof(struct user_iovec64);
-            if (bpf_probe_read_user(&iv, sizeof(iv), (void *)ip) == 0)
-                total += (__s64)iv.iov_len;
-        }
-    }
-    return total;
-}
-
-/* ---- fd->file helpers ---- */
-
-static __always_inline struct file *file_from_fd(int fd)
-{
-    if (fd < 0) return 0;
-
-    struct task_struct *task = (struct task_struct *)bpf_get_current_task_btf();
-    if (!task) return 0;
-
-    struct files_struct *files = BPF_CORE_READ(task, files);
-    if (!files) return 0;
-
-    struct fdtable *fdt = BPF_CORE_READ(files, fdt);
-    if (!fdt) return 0;
-
-    int max_fds = BPF_CORE_READ(fdt, max_fds);
-    if (fd >= max_fds) return 0;
-
-    struct file **fd_array = BPF_CORE_READ(fdt, fd);
-    if (!fd_array) return 0;
-
-    struct file *file = 0;
-    if (bpf_probe_read_kernel(&file, sizeof(file), &fd_array[fd]) < 0 || !file)
-        return 0;
-
-    return file;
-}
-
-static __always_inline int is_socket_fd(int fd)
-{
-    struct file *file = file_from_fd(fd);
-    if (!file) return 0;
-
-    struct inode *inode = BPF_CORE_READ(file, f_inode);
-    if (!inode) return 0;
-
-    __u16 mode = BPF_CORE_READ(inode, i_mode);
-    return (mode & S_IFMT) == S_IFSOCK;
-}
-
-/* cookie = inode number */
-static __always_inline __u64 cookie_from_fd(int fd)
-{
-    struct file *file = file_from_fd(fd);
-    if (!file) return 0;
-
-    struct inode *inode = BPF_CORE_READ(file, f_inode);
-    if (!inode) return 0;
-
-    return (__u64)BPF_CORE_READ(inode, i_ino);
-}
-
-static __always_inline struct sock *sock_from_fd(int fd)
-{
-    struct file *file = file_from_fd(fd);
-    if (!file) return 0;
-
-    void *pd = BPF_CORE_READ(file, private_data);
-    struct socket *sock = (struct socket *)pd;
-    if (!sock) return 0;
-
-    return BPF_CORE_READ(sock, sk);
-}
-
-/* ---- sockaddr from user (AF_INET/AF_INET6) ---- */
-
-static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
-                                                   const void *uaddr,
-                                                   __u32 addrlen,
-                                                   int fill_dst)
-{
-    __u16 family = 0;
-    if (!uaddr || addrlen < sizeof(__u16))
-        return -1;
-
-    if (bpf_probe_read_user(&family, sizeof(family), uaddr) < 0)
-        return -1;
-
-    if (info->family != 0 && family != info->family) {
-        // allow v4-mapped on v6 socket
-        if (info->family == AF_INET6 && family == AF_INET) {
-            if (addrlen < sizeof(struct sockaddr_in)) return -1;
-            struct sockaddr_in sa = {};
-            if (bpf_probe_read_user(&sa, sizeof(sa), uaddr) < 0) return -1;
-            __u16 port = bpf_ntohs(sa.sin_port);
-
-            __u8 v6[16] = {};
-            v6[10] = 0xff;
-            v6[11] = 0xff;
-            __builtin_memcpy(&v6[12], &sa.sin_addr.s_addr, 4);
-
-            if (fill_dst) {
-                __builtin_memcpy(info->dst_ip6, v6, 16);
-                if (port) info->dport = port;
-            } else {
-                __builtin_memcpy(info->src_ip6, v6, 16);
-                if (port) info->sport = port;
-            }
-            return 0;
-        }
-        return -1;
-    }
-
-    if (info->family == 0) info->family = family;
-
-    if (family == AF_INET) {
-        if (addrlen < sizeof(struct sockaddr_in)) return -1;
-        struct sockaddr_in sa = {};
-        if (bpf_probe_read_user(&sa, sizeof(sa), uaddr) < 0) return -1;
-        __u16 port = bpf_ntohs(sa.sin_port);
-
-        if (fill_dst) {
-            info->dst_ip4 = sa.sin_addr.s_addr;
-            if (port) info->dport = port;
-        } else {
-            info->src_ip4 = sa.sin_addr.s_addr;
-            if (port) info->sport = port;
-        }
-        return 0;
-    }
-
-    if (family == AF_INET6) {
-        if (addrlen < sizeof(struct sockaddr_in6)) return -1;
-        struct sockaddr_in6 sa6 = {};
-        if (bpf_probe_read_user(&sa6, sizeof(sa6), uaddr) < 0) return -1;
-        __u16 port = bpf_ntohs(sa6.sin6_port);
-        __u32 scope = sa6.sin6_scope_id;
-
-        if (fill_dst) {
-            __builtin_memcpy(info->dst_ip6, &sa6.sin6_addr, 16);
-            if (port) info->dport = port;
-            if (scope) info->dst_scope = scope;
-        } else {
-            __builtin_memcpy(info->src_ip6, &sa6.sin6_addr, 16);
-            if (port) info->sport = port;
-            if (scope) info->src_scope = scope;
-        }
-        return 0;
-    }
-
-    return -1;
-}
-
-/* ---- local addr helpers ---- */
-
-static __always_inline __u32 ipv4_local_addr(struct sock *sk)
-{
-    __u32 a = BPF_CORE_READ(sk, __sk_common.skc_rcv_saddr);
-    if (a == 0) {
-        struct inet_sock *inet = (struct inet_sock *)sk;
-        a = BPF_CORE_READ(inet, inet_saddr);
-    }
-    return a;
-}
-
-static __always_inline int is_ipv4_loopback(__u32 addr_be)
-{
-    if (addr_be == 0) return 0;
-    __u32 h = bpf_ntohl(addr_be);
-    return ((h >> 24) == 127);
-}
-
-static __always_inline int is_ipv6_loopback(const __u8 a[16])
-{
-#pragma clang loop unroll(full)
-    for (int i = 0; i < 15; i++) {
-        if (a[i] != 0) return 0;
-    }
-    return a[15] == 1;
-}
-
-static __always_inline void loopback_fallback(struct trace_info *info, int is_send_dir)
-{
-    if (info->family == AF_INET) {
-        if (is_send_dir) {
-            if (info->src_ip4 == 0 && is_ipv4_loopback(info->dst_ip4))
-                info->src_ip4 = bpf_htonl(0x7f000001);
-        } else {
-            if (info->dst_ip4 == 0 && is_ipv4_loopback(info->src_ip4))
-                info->dst_ip4 = bpf_htonl(0x7f000001);
-        }
-    } else if (info->family == AF_INET6) {
-        if (is_send_dir) {
-            if (is_ipv6_loopback(info->dst_ip6)) {
-                int all0 = 1;
-#pragma clang loop unroll(full)
-                for (int i = 0; i < 16; i++) if (info->src_ip6[i] != 0) all0 = 0;
-                if (all0) info->src_ip6[15] = 1;
-            }
-        } else {
-            int all0 = 1;
-#pragma clang loop unroll(full)
-            for (int i = 0; i < 16; i++) if (info->dst_ip6[i] != 0) all0 = 0;
-            if (all0 && is_ipv6_loopback(info->src_ip6)) info->dst_ip6[15] = 1;
-        }
-    }
-}
-
-/* ---- fd state ---- */
-
-static __always_inline int fill_fd_state(int fd, struct fd_state_t *st)
-{
-    struct sock *sk = sock_from_fd(fd);
-    if (!sk) return -1;
-
-    st->family = BPF_CORE_READ(sk, __sk_common.skc_family);
-    st->proto  = BPF_CORE_READ(sk, sk_protocol);
-
-    st->lport  = BPF_CORE_READ(sk, __sk_common.skc_num);
-    __u16 dport_be = BPF_CORE_READ(sk, __sk_common.skc_dport);
-    st->rport = bpf_ntohs(dport_be);
-
-    if (st->family == AF_INET) {
-        st->lip = ipv4_local_addr(sk);
-        st->rip = BPF_CORE_READ(sk, __sk_common.skc_daddr);
-        return 0;
-    }
-    if (st->family == AF_INET6) {
-        if (BPF_CORE_READ_INTO(&st->lip6, sk, __sk_common.skc_v6_rcv_saddr) < 0) return -1;
-        if (BPF_CORE_READ_INTO(&st->rip6, sk, __sk_common.skc_v6_daddr) < 0) return -1;
-        return 0;
-    }
-    return -1;
-}
-
-static __always_inline int fill_from_fd_state_map(struct trace_info *info, __u32 tgid, int fd, int is_send_dir)
-{
-    struct fd_key_t k = { .tgid = tgid, .fd = fd };
-
-    struct fd_state_t tmp = {};
-    struct fd_state_t *st = bpf_map_lookup_elem(&fd_state_map, &k);
-
-    if (!st) {
-        if (fill_fd_state(fd, &tmp) < 0) return -1;
-        bpf_map_update_elem(&fd_state_map, &k, &tmp, BPF_ANY);
-        st = &tmp;
-    } else {
-        // self-heal for TCP ports
-        if (st->proto == IPPROTO_TCP && (st->lport == 0 || st->rport == 0)) {
-            if (fill_fd_state(fd, &tmp) == 0) {
-                bpf_map_update_elem(&fd_state_map, &k, &tmp, BPF_ANY);
-                st = &tmp;
-            }
-        }
-    }
-
-    info->proto  = st->proto;
-    info->family = st->family;
-
-    if (st->family == AF_INET) {
-        if (is_send_dir) {
-            info->src_ip4 = st->lip; info->dst_ip4 = st->rip;
-            info->sport = st->lport; info->dport = st->rport;
-        } else {
-            info->src_ip4 = st->rip; info->dst_ip4 = st->lip;
-            info->sport = st->rport; info->dport = st->lport;
-        }
-        loopback_fallback(info, is_send_dir);
-        return 0;
-    }
-
-    if (st->family == AF_INET6) {
-        if (is_send_dir) {
-            __builtin_memcpy(info->src_ip6, &st->lip6, 16);
-            __builtin_memcpy(info->dst_ip6, &st->rip6, 16);
-            info->sport = st->lport; info->dport = st->rport;
-        } else {
-            __builtin_memcpy(info->src_ip6, &st->rip6, 16);
-            __builtin_memcpy(info->dst_ip6, &st->lip6, 16);
-            info->sport = st->rport; info->dport = st->lport;
-        }
-        loopback_fallback(info, is_send_dir);
-        return 0;
-    }
-
-    return -1;
-}
-
-static __always_inline void fill_ids_comm_cookie(struct trace_info *info, __u64 pid_tgid, int fd, const char *comm64_opt)
-{
-    info->ts_ns  = bpf_ktime_get_ns();
-    info->tgid   = pid_tgid >> 32;
-    info->tid    = (__u32)pid_tgid;
-    info->cookie = cookie_from_fd(fd);
-
-    if (comm64_opt) {
-        __builtin_memcpy(info->comm, comm64_opt, sizeof(info->comm));
-    } else {
-        bpf_get_current_comm(info->comm, sizeof(info->comm));
-    }
-}
-
-/* ---- parse pktinfo cmsg (bounded steps) ---- */
-
-static __always_inline void parse_pktinfo_cmsg(struct trace_info *info, __u64 ctrl, __u64 controllen, int set_dst)
-{
-    if (!ctrl || controllen < sizeof(struct user_cmsghdr64))
-        return;
-
-    __u64 p = ctrl;
-    __u64 left = controllen;
-
-#define CMSG_STEP() do { \
-    if (left < sizeof(struct user_cmsghdr64)) return; \
-    struct user_cmsghdr64 ch = {}; \
-    if (bpf_probe_read_user(&ch, sizeof(ch), (void *)p) != 0) return; \
-    if (ch.cmsg_len < sizeof(struct user_cmsghdr64) || ch.cmsg_len > left) return; \
-    __u64 data = p + sizeof(struct user_cmsghdr64); \
-    __u64 datalen = ch.cmsg_len - sizeof(struct user_cmsghdr64); \
-    if (info->family == AF_INET6 && ch.cmsg_level == SOL_IPV6 && ch.cmsg_type == IPV6_PKTINFO && datalen >= sizeof(struct user_in6_pktinfo)) { \
-        struct user_in6_pktinfo pi6 = {}; \
-        if (bpf_probe_read_user(&pi6, sizeof(pi6), (void *)data) == 0) { \
-            if (set_dst) { \
-                __builtin_memcpy(info->dst_ip6, &pi6.ipi6_addr, 16); \
-                if (pi6.ipi6_ifindex) info->dst_scope = pi6.ipi6_ifindex; \
-            } else { \
-                __builtin_memcpy(info->src_ip6, &pi6.ipi6_addr, 16); \
-                if (pi6.ipi6_ifindex) info->src_scope = pi6.ipi6_ifindex; \
-            } \
-        } \
-        return; \
-    } \
-    if (info->family == AF_INET && ch.cmsg_level == SOL_IP && ch.cmsg_type == IP_PKTINFO && datalen >= sizeof(struct user_in_pktinfo)) { \
-        struct user_in_pktinfo pi4 = {}; \
-        if (bpf_probe_read_user(&pi4, sizeof(pi4), (void *)data) == 0) { \
-            __u32 local = pi4.ipi_spec_dst; \
-            if (set_dst) info->dst_ip4 = local; else info->src_ip4 = local; \
-        } \
-        return; \
-    } \
-    __u64 step = CMSG_ALIGN(ch.cmsg_len); \
-    if (step == 0 || step > left) return; \
-    p += step; \
-    left -= step; \
-} while (0)
-
-    CMSG_STEP(); CMSG_STEP(); CMSG_STEP(); CMSG_STEP(); CMSG_STEP(); CMSG_STEP();
-#undef CMSG_STEP
-}
-
-/* ===== TLS chunk emitter (verifier-safe) =====
-   Key fixes:
-   - size for bpf_probe_read_user is CONSTANT (sizeof(ev.data))
-   - off is hard-bounded before pointer arithmetic
-*/
-static __always_inline void try_emit_tls_chunk(void *ctx,
-                                               const struct trace_info *base,
-                                               __u64 pid_tgid,
-                                               int fd,
-                                               const void *buf,
-                                               __u32 buflen,
-                                               __u32 sent_bytes)
-{
-    if (!buf || buflen == 0 || sent_bytes == 0) return;
-    if (base->proto != IPPROTO_TCP || base->dport != 443) return;
-    if (base->cookie == 0) return;
-
-    __u64 cookie = base->cookie;
-
-    struct tls_state_t *st = bpf_map_lookup_elem(&tls_state_map, &cookie);
-    if (!st) {
-        struct tls_state_t init = {};
-        bpf_map_update_elem(&tls_state_map, &cookie, &init, BPF_NOEXIST);
-        st = bpf_map_lookup_elem(&tls_state_map, &cookie);
-        if (!st) return;
-    }
-    if (st->done) return;
-
-    __u32 avail = sent_bytes < buflen ? sent_bytes : buflen;
-
-    // st->off is from map -> treat as unknown; hard bound it
-    __u32 off = (__u32)st->off;
-    if (off >= TLS_MAX_BYTES) { st->done = 1; return; }
-
-    if (avail <= off) return;
-
-    __u32 left = avail - off;
-    __u32 n = left;
-    if (n > TLS_CHUNK_BYTES) n = TLS_CHUNK_BYTES;
-
-    // extra hard-bound to satisfy verifier if it gets picky
-    if (n == 0 || n > TLS_CHUNK_BYTES) return;
-
-    struct tls_chunk_t ev = {};
-    ev.ts_ns  = bpf_ktime_get_ns();
-    ev.cookie = cookie;
-    ev.tgid   = pid_tgid >> 32;
-    ev.tid    = (__u32)pid_tgid;
-    ev.fd     = (__u32)fd;
-    ev.dport  = base->dport;
-    ev.off    = (__u16)off;
-    ev.len    = (__u16)n;
-    ev.proto  = base->proto;
-    ev.family = base->family;
-    __builtin_memcpy(ev.comm, base->comm, sizeof(ev.comm));
-
-    // IMPORTANT: read constant size
-    if (bpf_probe_read_user(ev.data, sizeof(ev.data), (const char *)buf + off) != 0)
-        return;
-
-    bpf_perf_event_output(ctx, &tls_events, BPF_F_CURRENT_CPU, &ev, sizeof(ev));
-
-    off += n;
-    st->off = (__u16)off;
-    if (off >= TLS_MAX_BYTES) st->done = 1;
-}
-
-/* ====== connect ====== */
-
-SEC("tracepoint/syscalls/sys_enter_connect")
-int trace_connect_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    struct conn_info_t ci = {};
-    ci.tgid = tgid;
-    ci.fd   = (__u32)ctx->args[0];
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
-
-    struct inflight_fd_t in = {};
-    in.fd = (int)ctx->args[0];
-    bpf_map_update_elem(&connect_fd_map, &id, &in, BPF_ANY);
-
-    __u64 uaddr   = (__u64)ctx->args[1];
-    __u32 addrlen = (__u32)ctx->args[2];
-    if (uaddr && addrlen >= sizeof(__u16)) {
-        struct addr_ptrlen_t v = {.addr = uaddr, .len = addrlen};
-        bpf_map_update_elem(&addrConnect_map, &id, &v, BPF_ANY);
-    }
-    return 0;
-}
-
-SEC("tracepoint/syscalls/sys_exit_connect")
-int trace_connect_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0) goto cleanup;
-    if (ret < 0 && ret != -EINPROGRESS && ret != -EALREADY) goto cleanup;
-
-    struct inflight_fd_t *in = bpf_map_lookup_elem(&connect_fd_map, &id);
-    if (!in) goto cleanup;
-
-    struct fd_state_t st = {};
-    if (fill_fd_state(in->fd, &st) < 0) goto cleanup;
-
-    struct fd_key_t k = { .tgid = tgid, .fd = in->fd };
-    bpf_map_update_elem(&fd_state_map, &k, &st, BPF_ANY);
-
-    struct conn_info_t *conn = bpf_map_lookup_elem(&conn_info_map, &id);
-
-    struct trace_info info = {};
-    info.event = EV_CONNECT;
-    info.state = (ret < 0) ? 1 : 0;
-    info.fd    = (__u32)in->fd;
-    info.ret   = ret;
-
-    fill_ids_comm_cookie(&info, id, (int)info.fd, conn ? conn->comm : 0);
-
-    info.proto  = st.proto;
-    info.family = st.family;
-    info.sport  = st.lport;
-    info.dport  = st.rport;
-
-    if (st.family == AF_INET) {
-        info.src_ip4 = st.lip;
-        info.dst_ip4 = st.rip;
-    } else if (st.family == AF_INET6) {
-        __builtin_memcpy(info.src_ip6, &st.lip6, 16);
-        __builtin_memcpy(info.dst_ip6, &st.rip6, 16);
-    } else goto cleanup;
-
-    struct addr_ptrlen_t *ap = bpf_map_lookup_elem(&addrConnect_map, &id);
-    if (ap && ap->addr && ap->len)
-        (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 1);
-
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-cleanup:
-    bpf_map_delete_elem(&addrConnect_map, &id);
-    bpf_map_delete_elem(&connect_fd_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
-
-/* ====== accept/accept4 ====== */
-
-static __always_inline int accept_enter_common(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    struct conn_info_t ci = {};
-    ci.tgid = tgid;
-    ci.fd   = (__u32)ctx->args[0];
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
-    return 0;
-}
-
-static __always_inline int accept_exit_common(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 newfd = 0;
-    if (read_sys_exit_ret(ctx, &newfd) < 0 || newfd < 0) goto cleanup;
-
-    struct fd_state_t st = {};
-    if (fill_fd_state((int)newfd, &st) < 0) goto cleanup;
-
-    struct fd_key_t k = { .tgid = tgid, .fd = (int)newfd };
-    bpf_map_update_elem(&fd_state_map, &k, &st, BPF_ANY);
-
-    struct conn_info_t *conn = bpf_map_lookup_elem(&conn_info_map, &id);
-
-    struct trace_info info = {};
-    info.event = EV_ACCEPT;
-    info.fd    = conn ? conn->fd : 0;
-    info.ret   = newfd;
-
-    info.ts_ns  = bpf_ktime_get_ns();
-    info.tgid   = tgid;
-    info.tid    = (__u32)id;
-    info.cookie = cookie_from_fd((int)newfd);
-
-    if (conn) __builtin_memcpy(info.comm, conn->comm, sizeof(info.comm));
-    else bpf_get_current_comm(info.comm, sizeof(info.comm));
-
-    info.proto  = st.proto;
-    info.family = st.family;
-
-    // accept: peer -> local
-    info.sport = st.rport;
-    info.dport = st.lport;
-
-    if (st.family == AF_INET) {
-        info.src_ip4 = st.rip;
-        info.dst_ip4 = st.lip;
-    } else if (st.family == AF_INET6) {
-        __builtin_memcpy(info.src_ip6, &st.rip6, 16);
-        __builtin_memcpy(info.dst_ip6, &st.lip6, 16);
-    } else goto cleanup;
-
-    loopback_fallback(&info, 0);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-cleanup:
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
-
-SEC("tracepoint/syscalls/sys_enter_accept4")
-int trace_accept4_enter(struct trace_event_raw_sys_enter *ctx) { return accept_enter_common(ctx); }
-
-SEC("tracepoint/syscalls/sys_exit_accept4")
-int trace_accept4_exit(struct trace_event_raw_sys_exit *ctx) { return accept_exit_common(ctx); }
-
-SEC("tracepoint/syscalls/sys_enter_accept")
-int trace_accept_enter(struct trace_event_raw_sys_enter *ctx) { return accept_enter_common(ctx); }
-
-SEC("tracepoint/syscalls/sys_exit_accept")
-int trace_accept_exit(struct trace_event_raw_sys_exit *ctx) { return accept_exit_common(ctx); }
-
-/* ====== bind ====== */
-
-SEC("tracepoint/syscalls/sys_enter_bind")
-int trace_bind_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    struct conn_info_t ci = {};
-    ci.tgid = tgid;
-    ci.fd   = (__u32)ctx->args[0];
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
-
-    __u64 uaddr   = (__u64)ctx->args[1];
-    __u32 addrlen = (__u32)ctx->args[2];
-    if (uaddr && addrlen >= sizeof(__u16)) {
-        struct addr_ptrlen_t v = {.addr = uaddr, .len = addrlen};
-        bpf_map_update_elem(&addrBind_map, &id, &v, BPF_ANY);
-    }
-    return 0;
-}
-
-SEC("tracepoint/syscalls/sys_exit_bind")
-int trace_bind_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret < 0) goto cleanup;
-
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci) goto cleanup;
-
-    struct fd_state_t st = {};
-    if (fill_fd_state((int)ci->fd, &st) < 0) goto cleanup;
-
-    struct fd_key_t k = { .tgid = tgid, .fd = (int)ci->fd };
-    bpf_map_update_elem(&fd_state_map, &k, &st, BPF_ANY);
-
-    struct trace_info info = {};
-    info.event = EV_BINDOK;
-    info.fd    = ci->fd;
-    info.ret   = ret;
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-
-    info.proto  = st.proto;
-    info.family = st.family;
-
-    info.sport = st.lport;
-    if (st.family == AF_INET) info.src_ip4 = st.lip;
-    else if (st.family == AF_INET6) __builtin_memcpy(info.src_ip6, &st.lip6, 16);
-
-    struct addr_ptrlen_t *ap = bpf_map_lookup_elem(&addrBind_map, &id);
-    if (ap && ap->addr && ap->len)
-        (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 0);
-
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-cleanup:
-    bpf_map_delete_elem(&addrBind_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
-
-/* ====== sendto ====== */
-
-SEC("tracepoint/syscalls/sys_enter_sendto")
-int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    struct conn_info_t ci = {};
-    ci.tgid = tgid;
-    ci.fd = (__u32)ctx->args[0];
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
-
-    struct buf_ptrlen_t bp = {
-        .buf = (__u64)ctx->args[1],
-        .len = (__u32)ctx->args[2],
-    };
-    bpf_map_update_elem(&sendto_buf_map, &id, &bp, BPF_ANY);
-
-    __u64 uaddr   = (__u64)ctx->args[4];
-    __u32 addrlen = (__u32)ctx->args[5];
-    if (uaddr && addrlen >= sizeof(__u16)) {
-        struct addr_ptrlen_t v = {.addr = uaddr, .len = addrlen};
-        bpf_map_update_elem(&addrSend_map, &id, &v, BPF_ANY);
-    }
-    return 0;
-}
-
-SEC("tracepoint/syscalls/sys_exit_sendto")
-int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0) goto cleanup;
-
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci) goto cleanup;
-
-    struct trace_info info = {};
-    info.event = EV_SENDTO;
-    info.fd = ci->fd;
-    info.ret = ret;
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0) goto cleanup;
-
-    struct addr_ptrlen_t *ap = bpf_map_lookup_elem(&addrSend_map, &id);
-    if (ap && ap->addr && ap->len)
-        (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 1);
-
-    // TLS chunk (if TCP:443)
-    struct buf_ptrlen_t *bp = bpf_map_lookup_elem(&sendto_buf_map, &id);
-    if (bp && bp->buf && bp->len) {
-        try_emit_tls_chunk(ctx, &info, id, (int)ci->fd, (void *)bp->buf, bp->len, (__u32)ret);
-    }
-
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-cleanup:
-    bpf_map_delete_elem(&sendto_buf_map, &id);
-    bpf_map_delete_elem(&addrSend_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
-
-/* ====== recvfrom (filter MSG_PEEK) ====== */
-
-SEC("tracepoint/syscalls/sys_enter_recvfrom")
-int trace_recvfrom_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    struct conn_info_t ci = {};
-    ci.tgid = tgid;
-    ci.fd = (__u32)ctx->args[0];
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
-
-    __u32 flags  = (__u32)ctx->args[3];
-    __u64 uaddr  = (__u64)ctx->args[4];
-    __u64 lenp_u = (__u64)ctx->args[5];
-
-    if (uaddr && lenp_u) {
-        struct addr_recv_meta_t m = {.addr = uaddr, .lenp = lenp_u, .flags = flags};
-        bpf_map_update_elem(&addrRecv_map, &id, &m, BPF_ANY);
-    } else if (flags & MSG_PEEK) {
-        struct addr_recv_meta_t m = {.addr = 0, .lenp = 0, .flags = flags};
-        bpf_map_update_elem(&addrRecv_map, &id, &m, BPF_ANY);
-    }
-    return 0;
-}
-
-SEC("tracepoint/syscalls/sys_exit_recvfrom")
-int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0) goto cleanup;
-
-    struct addr_recv_meta_t *m = bpf_map_lookup_elem(&addrRecv_map, &id);
-    if (m && (m->flags & MSG_PEEK)) goto cleanup;
-
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci) goto cleanup;
-
-    struct trace_info info = {};
-    info.event = EV_RECVFROM;
-    info.fd = ci->fd;
-    info.ret = ret;
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0) goto cleanup;
-
-    if (m && m->addr && m->lenp) {
-        __u32 addrlen = 0;
-        if (bpf_probe_read_user(&addrlen, sizeof(addrlen), (void *)m->lenp) == 0) {
-            if (addrlen >= sizeof(__u16))
-                (void)fill_from_sockaddr_user(&info, (void *)m->addr, addrlen, 0);
-        }
-    }
-
-    loopback_fallback(&info, 0);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-cleanup:
-    bpf_map_delete_elem(&addrRecv_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
-
-/* ====== sendmsg ====== */
-
-SEC("tracepoint/syscalls/sys_enter_sendmsg")
-int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    struct conn_info_t ci = {};
-    ci.tgid = tgid;
-    ci.fd = (__u32)ctx->args[0];
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
-
-    __u64 msg_u = (__u64)ctx->args[1];
-    if (msg_u)
-        bpf_map_update_elem(&msgSend_map, &id, &msg_u, BPF_ANY);
-
-    return 0;
-}
-
-SEC("tracepoint/syscalls/sys_exit_sendmsg")
-int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0) goto cleanup;
-
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci) goto cleanup;
-
-    struct trace_info info = {};
-    info.event = EV_SENDMSG;
-    info.fd = ci->fd;
-    info.ret = ret;
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0) goto cleanup;
-
-    __u64 *msgp = bpf_map_lookup_elem(&msgSend_map, &id);
-    if (msgp && *msgp) {
-        struct user_msghdr64 mh = {};
-        if (read_msghdr64(*msgp, &mh) == 0) {
-            if (mh.msg_name && mh.msg_namelen >= sizeof(__u16))
-                (void)fill_from_sockaddr_user(&info, (void *)mh.msg_name, mh.msg_namelen, 1);
-
-            if (mh.msg_control && mh.msg_controllen >= sizeof(struct user_cmsghdr64))
-                parse_pktinfo_cmsg(&info, mh.msg_control, mh.msg_controllen, 0 /* set SRC */);
-
-            // TLS chunk from iov[0] (verifier-safe clamped length)
-            if (mh.msg_iov && mh.msg_iovlen) {
-                struct user_iovec64 iv0 = {};
-                if (bpf_probe_read_user(&iv0, sizeof(iv0), (void *)mh.msg_iov) == 0) {
-                    if (iv0.iov_base && iv0.iov_len) {
-                        __u32 blen = 0;
-                        if (iv0.iov_len > 0xffffffffULL) blen = 0xffffffffU;
-                        else blen = (__u32)iv0.iov_len;
-
-                        try_emit_tls_chunk(ctx, &info, id, (int)ci->fd,
-                                           (void *)iv0.iov_base, blen, (__u32)ret);
-                    }
-                }
-            }
-        }
-    }
-
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-cleanup:
-    bpf_map_delete_elem(&msgSend_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
-
-/* ====== recvmsg (filter MSG_PEEK) ====== */
-
-SEC("tracepoint/syscalls/sys_enter_recvmsg")
-int trace_recvmsg_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    struct conn_info_t ci = {};
-    ci.tgid = tgid;
-    ci.fd = (__u32)ctx->args[0];
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
-
-    __u64 msg_u = (__u64)ctx->args[1];
-    __u32 flags = (__u32)ctx->args[2];
-
-    if (msg_u) {
-        struct msg_ptrflags_t v = {.msg = msg_u, .flags = flags};
-        bpf_map_update_elem(&msgRecv_map, &id, &v, BPF_ANY);
-    }
-    return 0;
-}
-
-SEC("tracepoint/syscalls/sys_exit_recvmsg")
-int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0) goto cleanup;
-
-    struct msg_ptrflags_t *pv = bpf_map_lookup_elem(&msgRecv_map, &id);
-    if (pv && (pv->flags & MSG_PEEK)) goto cleanup;
-
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci) goto cleanup;
-
-    struct trace_info info = {};
-    info.event = EV_RECVMSG;
-    info.fd = ci->fd;
-    info.ret = ret;
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0) goto cleanup;
-
-    if (pv && pv->msg) {
-        struct user_msghdr64 mh = {};
-        if (read_msghdr64(pv->msg, &mh) == 0) {
-            if (mh.msg_name && mh.msg_namelen >= sizeof(__u16))
-                (void)fill_from_sockaddr_user(&info, (void *)mh.msg_name, mh.msg_namelen, 0);
-
-            if (mh.msg_control && mh.msg_controllen >= sizeof(struct user_cmsghdr64))
-                parse_pktinfo_cmsg(&info, mh.msg_control, mh.msg_controllen, 1 /* set DST(local) */);
-        }
-    }
-
-    loopback_fallback(&info, 0);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-cleanup:
-    bpf_map_delete_elem(&msgRecv_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
-
-/* ====== sendmmsg ====== */
-
-SEC("tracepoint/syscalls/sys_enter_sendmmsg")
-int trace_sendmmsg_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    struct conn_info_t ci = {};
-    ci.tgid = tgid;
-    ci.fd   = (__u32)ctx->args[0];
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
-
-    struct mmsg_ptrvlen_t v = {};
-    v.vec   = (__u64)ctx->args[1];
-    v.vlen  = (__u32)ctx->args[2];
-    v.flags = (__u32)ctx->args[3];
-
-    if (v.vec && v.vlen)
-        bpf_map_update_elem(&mmsgSend_map, &id, &v, BPF_ANY);
-
-    return 0;
-}
-
-SEC("tracepoint/syscalls/sys_exit_sendmmsg")
-int trace_sendmmsg_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0) goto cleanup;
-
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    struct mmsg_ptrvlen_t *pv = bpf_map_lookup_elem(&mmsgSend_map, &id);
-    if (!ci || !pv || !pv->vec) goto cleanup;
-
-    __u32 cnt = (__u32)ret;
-    cnt = min_u32(cnt, pv->vlen);
-    cnt = min_u32(cnt, MAX_MMSG);
-
-    struct trace_info info = {};
-    info.event = EV_SENDMMSG;
-    info.fd    = ci->fd;
-    info.state = (ret > 255) ? 255 : (__u8)ret;
-    info.ret   = sum_mmsg_iov_bytes(pv->vec, cnt);
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0) goto cleanup;
-
-    struct user_mmsghdr64 m0 = {};
-    if (read_mmsghdr0(pv->vec, &m0) == 0) {
-        if (m0.msg_hdr.msg_name && m0.msg_hdr.msg_namelen >= sizeof(__u16))
-            (void)fill_from_sockaddr_user(&info, (void *)m0.msg_hdr.msg_name, m0.msg_hdr.msg_namelen, 1);
-
-        if (m0.msg_hdr.msg_control && m0.msg_hdr.msg_controllen >= sizeof(struct user_cmsghdr64))
-            parse_pktinfo_cmsg(&info, m0.msg_hdr.msg_control, m0.msg_hdr.msg_controllen, 0 /* set SRC */);
-    }
-
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-cleanup:
-    bpf_map_delete_elem(&mmsgSend_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
-
-/* ====== recvmmsg ====== */
-
-SEC("tracepoint/syscalls/sys_enter_recvmmsg")
-int trace_recvmmsg_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    struct conn_info_t ci = {};
-    ci.tgid = tgid;
-    ci.fd   = (__u32)ctx->args[0];
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
-
-    struct mmsg_ptrvlen_t v = {};
-    v.vec   = (__u64)ctx->args[1];
-    v.vlen  = (__u32)ctx->args[2];
-    v.flags = (__u32)ctx->args[3];
-
-    if (v.vec && v.vlen)
-        bpf_map_update_elem(&mmsgRecv_map, &id, &v, BPF_ANY);
-
-    return 0;
-}
-
-SEC("tracepoint/syscalls/sys_exit_recvmmsg")
-int trace_recvmmsg_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0) goto cleanup;
-
-    struct mmsg_ptrvlen_t *pv = bpf_map_lookup_elem(&mmsgRecv_map, &id);
-    if (pv && (pv->flags & MSG_PEEK)) goto cleanup;
-
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci || !pv || !pv->vec) goto cleanup;
-
-    __u32 cnt = (__u32)ret;
-    cnt = min_u32(cnt, pv->vlen);
-    cnt = min_u32(cnt, MAX_MMSG);
-
-    struct trace_info info = {};
-    info.event = EV_RECVMMSG;
-    info.fd    = ci->fd;
-    info.state = (ret > 255) ? 255 : (__u8)ret;
-    info.ret   = sum_mmsg_len(pv->vec, cnt);
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0) goto cleanup;
-
-    struct user_mmsghdr64 m0 = {};
-    if (read_mmsghdr0(pv->vec, &m0) == 0) {
-        if (m0.msg_hdr.msg_name && m0.msg_hdr.msg_namelen >= sizeof(__u16))
-            (void)fill_from_sockaddr_user(&info, (void *)m0.msg_hdr.msg_name, m0.msg_hdr.msg_namelen, 0);
-
-        if (m0.msg_hdr.msg_control && m0.msg_hdr.msg_controllen >= sizeof(struct user_cmsghdr64))
-            parse_pktinfo_cmsg(&info, m0.msg_hdr.msg_control, m0.msg_hdr.msg_controllen, 1 /* set DST(local) */);
-    }
-
-    loopback_fallback(&info, 0);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-cleanup:
-    bpf_map_delete_elem(&mmsgRecv_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
-
-/* ====== write/read (ONLY SOCKETS) ====== */
-
-SEC("tracepoint/syscalls/sys_enter_write")
-int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-    int fd = (int)ctx->args[0];
-
-    if (!is_socket_fd(fd)) return 0;
-
-    struct conn_info_t ci = {};
-    ci.tgid = tgid;
-    ci.fd   = (__u32)fd;
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
-
-    struct buf_ptrlen_t bp = {
-        .buf = (__u64)ctx->args[1],
-        .len = (__u32)ctx->args[2],
-    };
-    bpf_map_update_elem(&write_buf_map, &id, &bp, BPF_ANY);
-
-    return 0;
-}
-
-SEC("tracepoint/syscalls/sys_exit_write")
-int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0) goto cleanup;
-
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci) goto cleanup;
-
-    struct trace_info info = {};
-    info.event = EV_WRITE;
-    info.fd    = ci->fd;
-    info.ret   = ret;
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0) goto cleanup;
-
-    struct buf_ptrlen_t *bp = bpf_map_lookup_elem(&write_buf_map, &id);
-    if (bp && bp->buf && bp->len) {
-        try_emit_tls_chunk(ctx, &info, id, (int)ci->fd, (void *)bp->buf, bp->len, (__u32)ret);
-    }
-
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-cleanup:
-    bpf_map_delete_elem(&write_buf_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
-
-SEC("tracepoint/syscalls/sys_enter_read")
-int trace_read_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-    int fd = (int)ctx->args[0];
-
-    if (!is_socket_fd(fd)) return 0;
-
-    struct conn_info_t ci = {};
-    ci.tgid = tgid;
-    ci.fd   = (__u32)fd;
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
-    return 0;
-}
-
-SEC("tracepoint/syscalls/sys_exit_read")
-int trace_read_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0) goto cleanup;
-
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci) goto cleanup;
-
-    struct trace_info info = {};
-    info.event = EV_READ;
-    info.fd    = ci->fd;
-    info.ret   = ret;
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0) goto cleanup;
-
-    loopback_fallback(&info, 0);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-cleanup:
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
-
-/* ====== close (ONLY SOCKETS) ====== */
-
-SEC("tracepoint/syscalls/sys_enter_close")
-int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-    int fd = (int)ctx->args[0];
-
-    // drop cached fd state
-    struct fd_key_t k = { .tgid = tgid, .fd = fd };
-    bpf_map_delete_elem(&fd_state_map, &k);
-
-    if (!is_socket_fd(fd)) return 0;
-
-    // drop tls state by cookie
-    __u64 c = cookie_from_fd(fd);
-    if (c) bpf_map_delete_elem(&tls_state_map, &c);
-
-    struct trace_info info = {};
-    info.event = EV_CLOSE;
-    info.fd    = (__u32)fd;
-    info.ret   = 0;
-
-    fill_ids_comm_cookie(&info, id, fd, 0);
-
-    struct fd_state_t st = {};
-    if (fill_fd_state(fd, &st) == 0) {
-        info.proto  = st.proto;
-        info.family = st.family;
-        info.sport  = st.lport;
-        info.dport  = st.rport;
-
-        if (st.family == AF_INET) {
-            info.src_ip4 = st.lip;
-            info.dst_ip4 = st.rip;
-        } else if (st.family == AF_INET6) {
-            __builtin_memcpy(info.src_ip6, &st.lip6, 16);
-            __builtin_memcpy(info.dst_ip6, &st.rip6, 16);
-        }
-
-        loopback_fallback(&info, 1);
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    }
-
-    return 0;
-}
-
-/* ===== net_dev_queue -> skb out hint ===== */
-
-static __always_inline __u64 inode_cookie_from_sock(struct sock *sk)
-{
-    if (!sk) return 0;
-
-    struct socket *sock = BPF_CORE_READ(sk, sk_socket);
-    if (!sock) return 0;
-
-    struct file *file = BPF_CORE_READ(sock, file);
-    if (!file) return 0;
-
-    struct inode *ino = BPF_CORE_READ(file, f_inode);
-    if (!ino) return 0;
-
-    return (__u64)BPF_CORE_READ(ino, i_ino);
-}
-
-SEC("tracepoint/net/net_dev_queue")
-int trace_net_dev_queue(struct tp_net_dev_queue *ctx)
-{
-    struct sk_buff *skb = (struct sk_buff *)(unsigned long)ctx->skbaddr;
-    if (!skb) return 0;
-
-    struct sock *sk = BPF_CORE_READ(skb, sk);
-    if (!sk) return 0;
-
-    __u64 cookie = inode_cookie_from_sock(sk);
-    if (!cookie) return 0;
-
-    __u16 family = BPF_CORE_READ(sk, __sk_common.skc_family);
-
-    struct trace_info e = {};
-    e.event  = EV_SKB_OUT;
-    e.cookie = cookie;
-    e.family = family;
-
-    void *head = (void *)BPF_CORE_READ(skb, head);
-    __u16 nh   = BPF_CORE_READ(skb, network_header);
-    __u16 th   = BPF_CORE_READ(skb, transport_header);
-    if (!head) return 0;
-
-    if (family == AF_INET) {
-        struct iphdr iph = {};
-        bpf_probe_read_kernel(&iph, sizeof(iph), head + nh);
-        if (iph.version != 4) return 0;
-
-        e.proto   = iph.protocol;
-        e.src_ip4 = iph.saddr;
-        e.dst_ip4 = iph.daddr;
-
-        if (e.proto == IPPROTO_UDP) {
-            struct udphdr uh = {};
-            bpf_probe_read_kernel(&uh, sizeof(uh), head + th);
-            e.sport = bpf_ntohs(uh.source);
-            e.dport = bpf_ntohs(uh.dest);
-        } else if (e.proto == IPPROTO_TCP) {
-            struct tcphdr thh = {};
-            bpf_probe_read_kernel(&thh, sizeof(thh), head + th);
-            e.sport = bpf_ntohs(thh.source);
-            e.dport = bpf_ntohs(thh.dest);
-        }
-    } else if (family == AF_INET6) {
-        struct ipv6hdr ip6h = {};
-        bpf_probe_read_kernel(&ip6h, sizeof(ip6h), head + nh);
-
-        e.proto = ip6h.nexthdr;
-        __builtin_memcpy(e.src_ip6, &ip6h.saddr, 16);
-        __builtin_memcpy(e.dst_ip6, &ip6h.daddr, 16);
-
-        if (e.proto == IPPROTO_UDP) {
-            struct udphdr uh = {};
-            bpf_probe_read_kernel(&uh, sizeof(uh), head + th);
-            e.sport = bpf_ntohs(uh.source);
-            e.dport = bpf_ntohs(uh.dest);
-        } else if (e.proto == IPPROTO_TCP) {
-            struct tcphdr thh = {};
-            bpf_probe_read_kernel(&thh, sizeof(thh), head + th);
-            e.sport = bpf_ntohs(thh.source);
-            e.dport = bpf_ntohs(thh.dest);
-        }
-    } else {
-        return 0;
-    }
-
-    if (e.proto != IPPROTO_TCP && e.proto != IPPROTO_UDP && e.proto != IPPROTO_ICMP && e.proto != IPPROTO_ICMPV6)
-        return 0;
-
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &e, sizeof(e));
-    return 0;
-}
+CLOSE UDP   pid=5612(DNS Res~ver #19) cookie=50160  127.0.0.1(localhost):57371 -> 127.0.0.53(dnsstub):53  out=39B/1p in=104B/1p  age=8ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=51097  10.0.2.15(lev-VirtualBox):55623 -> 10.0.2.3(vboxdns):53  out=46B/1p in=141B/1p  age=138ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=51106  10.0.2.15(lev-VirtualBox):48590 -> 10.0.2.3(vboxdns):53  out=50B/1p in=131B/1p  age=26ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #18) cookie=51659  127.0.0.1(localhost):40349 -> 127.0.0.53(dnsstub):53  out=86B/2p in=278B/2p  age=126ms reason=close()
+OPEN  UDP   pid=5612(DNS Res~ver #21) cookie=52715  127.0.0.1(localhost):44237 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):44237
+OPEN  UDP   pid=524(systemd-resolve) cookie=51108  10.0.2.15(lev-VirtualBox):60382 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=5612(DNS Res~ver #20) cookie=52716  127.0.0.1(localhost):35001 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=51109  10.0.2.15(lev-VirtualBox):55135 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):35001
+OPEN  UDP   pid=524(systemd-resolve) cookie=51110  10.0.2.15(lev-VirtualBox):37708 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=51096  10.0.2.15(lev-VirtualBox):50377 -> 10.0.2.3(vboxdns):53  out=46B/1p in=129B/1p  age=171ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #15) cookie=50156  127.0.0.1(localhost):49270 -> 127.0.0.53(dnsstub):53  out=92B/2p in=194B/2p  age=175ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=51108  10.0.2.15(lev-VirtualBox):60382 -> 10.0.2.3(vboxdns):53  out=40B/1p in=337B/1p  age=25ms reason=close()
+OPEN  TCP   pid=5612(Socket Thread) cookie=52713  10.0.2.15(lev-VirtualBox):39378 -> 34.120.208.123(miss):443
+CLOSE UDP   pid=524(systemd-resolve) cookie=51109  10.0.2.15(lev-VirtualBox):55135 -> 10.0.2.3(vboxdns):53  out=40B/1p in=196B/1p  age=26ms reason=close()
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):49908
+OPEN  UDP   pid=524(systemd-resolve) cookie=51111  10.0.2.15(lev-VirtualBox):39968 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=5612(DNS Res~ver #21) cookie=52715  127.0.0.1(localhost):44237 -> 127.0.0.53(dnsstub):53  out=80B/2p in=368B/2p  age=42ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=51110  10.0.2.15(lev-VirtualBox):37708 -> 10.0.2.3(vboxdns):53  out=40B/1p in=119B/1p  age=48ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #20) cookie=52716  127.0.0.1(localhost):35001 -> 127.0.0.53(dnsstub):53  out=40B/1p in=97B/1p  age=60ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=51111  10.0.2.15(lev-VirtualBox):39968 -> 10.0.2.3(vboxdns):53  out=56B/1p in=136B/1p  age=42ms reason=close()
+OPEN  UDP   pid=5612(DNS Res~ver #18) cookie=51112  127.0.0.1(localhost):34620 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):39827
+OPEN  UDP   pid=5612(DNS Res~ver #19) cookie=50164  127.0.0.1(localhost):39827 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=51113  10.0.2.15(lev-VirtualBox):51732 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):34620
+OPEN  UDP   pid=524(systemd-resolve) cookie=51114  10.0.2.15(lev-VirtualBox):50248 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=51115  10.0.2.15(lev-VirtualBox):46561 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=51113  10.0.2.15(lev-VirtualBox):51732 -> 10.0.2.3(vboxdns):53  out=49B/1p in=85B/1p  age=26ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=51114  10.0.2.15(lev-VirtualBox):50248 -> 10.0.2.3(vboxdns):53  out=49B/1p in=133B/1p  age=30ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=51115  10.0.2.15(lev-VirtualBox):46561 -> 10.0.2.3(vboxdns):53  out=49B/1p in=97B/1p  age=29ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #18) cookie=51112  127.0.0.1(localhost):34620 -> 127.0.0.53(dnsstub):53  out=49B/1p in=106B/1p  age=51ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #19) cookie=50164  127.0.0.1(localhost):39827 -> 127.0.0.53(dnsstub):53  out=98B/2p in=142B/2p  age=51ms reason=close()
+OPEN  UDP   pid=5612(Socket Thread) cookie=50167  10.0.2.15(lev-VirtualBox):60455 -> 74.125.205.119(miss):443
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):35147
+OPEN  UDP   pid=524(systemd-resolve) cookie=51116  10.0.2.15(lev-VirtualBox):57057 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=51116  10.0.2.15(lev-VirtualBox):57057 -> 10.0.2.3(vboxdns):53  out=56B/1p in=117B/1p  age=27ms reason=close()
+OPEN  UDP   pid=5612(Socket Thread) cookie=50172  10.0.2.15(lev-VirtualBox):34008 -> 64.233.164.95(miss):443
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):41156
+OPEN  UDP   pid=524(systemd-resolve) cookie=51117  10.0.2.15(lev-VirtualBox):56790 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=51117  10.0.2.15(lev-VirtualBox):56790 -> 10.0.2.3(vboxdns):53  out=55B/1p in=114B/1p  age=25ms reason=close()
+OPEN  TCP   pid=5612(Socket Thread) cookie=53275  10.0.2.15(lev-VirtualBox):42426 -> 74.125.205.119(le-in-f119.1e100.net):443
+OPEN  UDP   pid=5612(DNS Res~ver #20) cookie=52730  127.0.0.1(localhost):51263 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=5612(DNS Res~ver #15) cookie=53284  127.0.0.1(localhost):39896 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):51263
+OPEN  UDP   pid=524(systemd-resolve) cookie=52731  10.0.2.15(lev-VirtualBox):36262 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):39896
+OPEN  UDP   pid=524(systemd-resolve) cookie=52732  10.0.2.15(lev-VirtualBox):39779 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=51156  10.0.2.15(lev-VirtualBox):52442 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=52732  10.0.2.15(lev-VirtualBox):39779 -> 10.0.2.3(vboxdns):53  out=46B/1p in=79B/1p  age=50ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=52731  10.0.2.15(lev-VirtualBox):36262 -> 10.0.2.3(vboxdns):53  out=46B/1p in=88B/1p  age=54ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=51156  10.0.2.15(lev-VirtualBox):52442 -> 10.0.2.3(vboxdns):53  out=46B/1p in=91B/1p  age=49ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #20) cookie=52730  127.0.0.1(localhost):51263 -> 127.0.0.53(dnsstub):53  out=46B/1p in=71B/1p  age=61ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #15) cookie=53284  127.0.0.1(localhost):39896 -> 127.0.0.53(dnsstub):53  out=92B/2p in=136B/2p  age=61ms reason=close()
+OPEN  UDP   pid=5612(DNS Res~ver #20) cookie=51158  127.0.0.1(localhost):40865 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=5612(DNS Res~ver #21) cookie=52733  127.0.0.1(localhost):42681 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):40865
+OPEN  UDP   pid=524(systemd-resolve) cookie=51159  10.0.2.15(lev-VirtualBox):46275 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=51160  10.0.2.15(lev-VirtualBox):41592 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):42681
+OPEN  UDP   pid=524(systemd-resolve) cookie=51161  10.0.2.15(lev-VirtualBox):49724 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=51159  10.0.2.15(lev-VirtualBox):46275 -> 10.0.2.3(vboxdns):53  out=48B/1p in=83B/1p  age=29ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=51160  10.0.2.15(lev-VirtualBox):41592 -> 10.0.2.3(vboxdns):53  out=48B/1p in=95B/1p  age=28ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #20) cookie=51158  127.0.0.1(localhost):40865 -> 127.0.0.53(dnsstub):53  out=96B/2p in=140B/2p  age=42ms reason=close()
+OPEN  UDP   pid=5612(Socket Thread) cookie=53287  10.0.2.15(lev-VirtualBox):46082 -> 74.125.205.94(miss):443
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):43241
+OPEN  UDP   pid=524(systemd-resolve) cookie=51164  10.0.2.15(lev-VirtualBox):54312 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=51161  10.0.2.15(lev-VirtualBox):49724 -> 10.0.2.3(vboxdns):53  out=48B/1p in=128B/1p  age=26ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #21) cookie=52733  127.0.0.1(localhost):42681 -> 127.0.0.53(dnsstub):53  out=48B/1p in=98B/1p  age=50ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=51164  10.0.2.15(lev-VirtualBox):54312 -> 10.0.2.3(vboxdns):53  out=55B/1p in=114B/1p  age=23ms reason=close()
+OPEN  UDP   pid=5612(Socket Thread) cookie=53291  10.0.2.15(lev-VirtualBox):55541 -> 74.125.205.84(miss):443
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):56928
+OPEN  UDP   pid=524(systemd-resolve) cookie=51166  10.0.2.15(lev-VirtualBox):51285 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=51166  10.0.2.15(lev-VirtualBox):51285 -> 10.0.2.3(vboxdns):53  out=55B/1p in=114B/1p  age=24ms reason=close()
+OPEN  TCP   pid=5612(Socket Thread) cookie=53295  10.0.2.15(lev-VirtualBox):46958 -> 74.125.205.84(le-in-f84.1e100.net):443
+OPEN  TCP   pid=5612(Socket Thread) cookie=52734  10.0.2.15(lev-VirtualBox):46966 -> 74.125.205.84(le-in-f84.1e100.net):443
+OPEN  UDP   pid=5612(DNS Res~ver #19) cookie=53297  127.0.0.1(localhost):37749 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):37749
+OPEN  UDP   pid=524(systemd-resolve) cookie=51167  10.0.2.15(lev-VirtualBox):57374 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=5612(DNS Res~ver #18) cookie=51723  127.0.0.1(localhost):36609 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):36609
+OPEN  UDP   pid=524(systemd-resolve) cookie=51168  10.0.2.15(lev-VirtualBox):36109 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=51167  10.0.2.15(lev-VirtualBox):57374 -> 10.0.2.3(vboxdns):53  out=58B/1p in=238B/1p  age=43ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=51168  10.0.2.15(lev-VirtualBox):36109 -> 10.0.2.3(vboxdns):53  out=58B/1p in=286B/1p  age=39ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #18) cookie=51723  127.0.0.1(localhost):36609 -> 127.0.0.53(dnsstub):53  out=58B/1p in=122B/1p  age=43ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #19) cookie=53297  127.0.0.1(localhost):37749 -> 127.0.0.53(dnsstub):53  out=116B/2p in=292B/2p  age=46ms reason=close()
+OPEN  TCP   pid=5612(Socket Thread) cookie=52735  10.0.2.15(lev-VirtualBox):48590 -> 151.101.65.91(miss):443
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):57931
+OPEN  UDP   pid=524(systemd-resolve) cookie=51169  10.0.2.15(lev-VirtualBox):43434 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=51169  10.0.2.15(lev-VirtualBox):43434 -> 10.0.2.3(vboxdns):53  out=99B/2p in=278B/2p  age=27ms reason=close()
+OPEN  UDP   pid=5612(DNS Res~ver #20) cookie=51171  127.0.0.1(localhost):47711 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):47711
+OPEN  UDP   pid=524(systemd-resolve) cookie=51172  10.0.2.15(lev-VirtualBox):59700 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=51173  10.0.2.15(lev-VirtualBox):51197 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=5612(DNS Res~ver #15) cookie=53300  127.0.0.1(localhost):37051 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):37051
+OPEN  UDP   pid=524(systemd-resolve) cookie=51176  10.0.2.15(lev-VirtualBox):44460 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=51172  10.0.2.15(lev-VirtualBox):59700 -> 10.0.2.3(vboxdns):53  out=43B/1p in=223B/1p  age=23ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=51173  10.0.2.15(lev-VirtualBox):51197 -> 10.0.2.3(vboxdns):53  out=43B/1p in=211B/1p  age=24ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #20) cookie=51171  127.0.0.1(localhost):47711 -> 127.0.0.53(dnsstub):53  out=86B/2p in=294B/2p  age=27ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=51176  10.0.2.15(lev-VirtualBox):44460 -> 10.0.2.3(vboxdns):53  out=43B/1p in=82B/1p  age=26ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #15) cookie=53300  127.0.0.1(localhost):37051 -> 127.0.0.53(dnsstub):53  out=43B/1p in=68B/1p  age=29ms reason=close()
+OPEN  UDP   pid=5612(Socket Thread) cookie=52738  10.0.2.15(lev-VirtualBox):57222 -> 74.125.205.147(miss):443
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):50448
+OPEN  UDP   pid=524(systemd-resolve) cookie=51181  10.0.2.15(lev-VirtualBox):40523 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=51181  10.0.2.15(lev-VirtualBox):40523 -> 10.0.2.3(vboxdns):53  out=56B/1p in=117B/1p  age=29ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):33604  out=113B/1p in=51B/1p  age=5.655s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):35227  out=167B/2p in=86B/2p  age=5.694s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):46259  out=98B/1p in=54B/1p  age=5.399s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):33696  out=59B/1p in=43B/1p  age=5.604s reason=idle
+CLOSE TCP   pid=5612(Socket Thread) cookie=52696  10.0.2.15(lev-VirtualBox):33562 -> 140.82.121.5(lb-140-82-121-5-fra.github.com):443  out=4588B/6p in=4337B/22p  age=5.604s reason=idle
+CLOSE UDP   pid=5612(Socket Thread) cookie=53291  10.0.2.15(lev-VirtualBox):55541 -> 74.125.205.84(le-in-f84.1e100.net):443  out=3846B/4p in=8163B/6p  age=2.117s reason=close()
+OPEN  UDP   pid=5612(DNS Res~ver #21) cookie=52747  127.0.0.1(localhost):58547 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=5612(DNS Res~ver #18) cookie=51762  127.0.0.1(localhost):54058 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):54058
+OPEN  UDP   pid=524(systemd-resolve) cookie=54273  10.0.2.15(lev-VirtualBox):60692 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):58547
+OPEN  UDP   pid=524(systemd-resolve) cookie=54274  10.0.2.15(lev-VirtualBox):34333 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=54275  10.0.2.15(lev-VirtualBox):58315 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=54274  10.0.2.15(lev-VirtualBox):34333 -> 10.0.2.3(vboxdns):53  out=56B/1p in=228B/1p  age=44ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=54275  10.0.2.15(lev-VirtualBox):58315 -> 10.0.2.3(vboxdns):53  out=56B/1p in=276B/1p  age=43ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=54273  10.0.2.15(lev-VirtualBox):60692 -> 10.0.2.3(vboxdns):53  out=56B/1p in=108B/1p  age=45ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #21) cookie=52747  127.0.0.1(localhost):58547 -> 127.0.0.53(dnsstub):53  out=112B/2p in=288B/2p  age=49ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #18) cookie=51762  127.0.0.1(localhost):54058 -> 127.0.0.53(dnsstub):53  out=56B/1p in=81B/1p  age=50ms reason=close()
+OPEN  UDP   pid=5612(Socket Thread) cookie=53344  10.0.2.15(lev-VirtualBox):57118 -> 64.233.161.155(miss):443
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):58992
+OPEN  UDP   pid=524(systemd-resolve) cookie=54287  10.0.2.15(lev-VirtualBox):33115 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=54287  10.0.2.15(lev-VirtualBox):33115 -> 10.0.2.3(vboxdns):53  out=56B/1p in=117B/1p  age=25ms reason=close()
+OPEN  TCP   pid=5612(Socket Thread) cookie=53351  10.0.2.15(lev-VirtualBox):33910 -> 64.233.161.155(lh-in-f155.1e100.net):443
+OPEN  UDP   pid=5612(DNS Res~ver #19) cookie=53355  127.0.0.1(localhost):56769 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):56769
+OPEN  UDP   pid=524(systemd-resolve) cookie=54291  10.0.2.15(lev-VirtualBox):50769 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=54292  10.0.2.15(lev-VirtualBox):43135 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=5612(DNS Res~ver #20) cookie=54293  127.0.0.1(localhost):55121 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):55121
+OPEN  UDP   pid=524(systemd-resolve) cookie=54294  10.0.2.15(lev-VirtualBox):46786 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=54291  10.0.2.15(lev-VirtualBox):50769 -> 10.0.2.3(vboxdns):53  out=62B/1p in=187B/1p  age=25ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=54292  10.0.2.15(lev-VirtualBox):43135 -> 10.0.2.3(vboxdns):53  out=62B/1p in=199B/1p  age=29ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=54294  10.0.2.15(lev-VirtualBox):46786 -> 10.0.2.3(vboxdns):53  out=62B/1p in=193B/1p  age=25ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #20) cookie=54293  127.0.0.1(localhost):55121 -> 127.0.0.53(dnsstub):53  out=62B/1p in=114B/1p  age=30ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #19) cookie=53355  127.0.0.1(localhost):56769 -> 127.0.0.53(dnsstub):53  out=124B/2p in=228B/2p  age=36ms reason=close()
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):36540
+OPEN  UDP   pid=5612(DNS Res~ver #15) cookie=53359  127.0.0.1(localhost):36540 -> 127.0.0.53(dnsstub):53
+CLOSE UDP   pid=5612(DNS Res~ver #15) cookie=53359  127.0.0.1(localhost):36540 -> 127.0.0.53(dnsstub):53  out=120B/2p in=164B/2p  age=5ms reason=close()
+OPEN  UDP   pid=5612(Socket Thread) cookie=51764  10.0.2.15(lev-VirtualBox):45184 -> 173.194.57.167(miss):443
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):40309
+OPEN  UDP   pid=524(systemd-resolve) cookie=54297  10.0.2.15(lev-VirtualBox):56896 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=54297  10.0.2.15(lev-VirtualBox):56896 -> 10.0.2.3(vboxdns):53  out=56B/1p in=121B/1p  age=24ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):40082  out=254B/2p in=88B/2p  age=5.14s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):55403  out=155B/1p in=44B/1p  age=5.142s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=51769  10.0.2.15(lev-VirtualBox):41074 -> 173.194.57.167(dfw25s55-in-f7.1e100.net):443
+OPEN  TCP   pid=5612(Socket Thread) cookie=51770  10.0.2.15(lev-VirtualBox):41080 -> 173.194.57.167(dfw25s55-in-f7.1e100.net):443
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):34091  out=344B/2p in=96B/2p  age=5.398s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):34725  out=270B/2p in=94B/2p  age=5.369s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):48591  out=90B/1p in=56B/1p  age=5.998s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):57371  out=104B/1p in=39B/1p  age=5.197s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):50589  out=346B/2p in=88B/2p  age=5.465s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):40349  out=278B/2p in=86B/2p  age=5.306s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):41006  out=183B/1p in=44B/1p  age=5.447s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):43599  out=282B/2p in=88B/2p  age=5.453s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):35818  out=347B/2p in=118B/2p  age=5.331s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):44237  out=368B/2p in=80B/2p  age=5.173s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):49270  out=194B/2p in=92B/2p  age=5.327s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):57932  out=159B/2p in=78B/2p  age=5.295s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):43113  out=134B/1p in=59B/1p  age=5.332s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):34620  out=106B/1p in=49B/1p  age=5.062s reason=idle
+CLOSE TCP   pid=5612(Socket Thread) cookie=50840  10.0.2.15(lev-VirtualBox):37198 -> 140.82.113.21(lb-140-82-113-21-iad.github.com):443  out=7815B/3p in=572B/6p  age=5.595s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):54817  out=329B/2p in=98B/2p  age=5.682s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):59147  out=128B/1p in=47B/1p  age=5.346s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):35001  out=97B/1p in=40B/1p  age=5.169s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):49908  out=109B/1p in=56B/1p  age=5.142s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):50271  out=143B/1p in=44B/1p  age=5.469s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):49415  out=126B/1p in=46B/1p  age=5.32s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):39827  out=142B/2p in=98B/2p  age=5.075s reason=idle
+CLOSE TCP   pid=5612(Socket Thread) cookie=52709  10.0.2.15(lev-VirtualBox):45974 -> 64.233.164.198(lf-in-f198.1e100.net):443  out=2087B/4p in=8362B/12p  age=5.809s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):49182  out=136B/1p in=43B/1p  age=5.302s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):58111  out=100B/1p in=55B/1p  age=5.388s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):39246  out=145B/1p in=48B/1p  age=5.384s reason=idle
+OPEN  UDP   pid=5612(DNS Res~ver #21) cookie=52902  127.0.0.1(localhost):46157 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):46157
+OPEN  UDP   pid=5612(DNS Res~ver #18) cookie=51805  127.0.0.1(localhost):50442 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=52903  10.0.2.15(lev-VirtualBox):49040 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=52904  10.0.2.15(lev-VirtualBox):43921 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):50442
+OPEN  UDP   pid=524(systemd-resolve) cookie=52905  10.0.2.15(lev-VirtualBox):42130 -> 10.0.2.3(vboxdns):53
+CLOSE TCP   pid=5612(Socket Thread) cookie=53275  10.0.2.15(lev-VirtualBox):42426 -> 74.125.205.119(le-in-f119.1e100.net):443  out=2083B/4p in=6296B/12p  age=5.818s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):35147  out=90B/1p in=56B/1p  age=5.965s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):41156  out=88B/1p in=55B/1p  age=5.879s reason=idle
+CLOSE UDP   pid=5612(Socket Thread) cookie=50167  10.0.2.15(lev-VirtualBox):60455 -> 74.125.205.119(le-in-f119.1e100.net):443  out=4287B/6p in=10086B/9p  age=5.967s reason=idle
+CLOSE TCP   pid=5612(Socket Thread) cookie=52713  10.0.2.15(lev-VirtualBox):39378 -> 34.120.208.123(123.208.120.34.bc.googleusercontent.com):443  out=5232B/7p in=4863B/18p  age=6.317s reason=idle
+CLOSE UDP   pid=5612(Socket Thread) cookie=50172  10.0.2.15(lev-VirtualBox):34008 -> 64.233.164.95(lf-in-f95.1e100.net):443  out=3997B/5p in=6942B/7p  age=5.881s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=52905  10.0.2.15(lev-VirtualBox):42130 -> 10.0.2.3(vboxdns):53  out=51B/1p in=136B/1p  age=39ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #18) cookie=51805  127.0.0.1(localhost):50442 -> 127.0.0.53(dnsstub):53  out=51B/1p in=111B/1p  age=47ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=52903  10.0.2.15(lev-VirtualBox):49040 -> 10.0.2.3(vboxdns):53  out=51B/1p in=127B/1p  age=45ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=52904  10.0.2.15(lev-VirtualBox):43921 -> 10.0.2.3(vboxdns):53  out=51B/1p in=151B/1p  age=48ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #21) cookie=52902  127.0.0.1(localhost):46157 -> 127.0.0.53(dnsstub):53  out=102B/2p in=190B/2p  age=53ms reason=close()
+OPEN  UDP   pid=5612(Socket Thread) cookie=53751  10.0.2.15(lev-VirtualBox):43099 -> 108.177.14.148(miss):443
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):53249
+OPEN  UDP   pid=524(systemd-resolve) cookie=52908  10.0.2.15(lev-VirtualBox):39308 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=52908  10.0.2.15(lev-VirtualBox):39308 -> 10.0.2.3(vboxdns):53  out=56B/1p in=117B/1p  age=25ms reason=close()
+OPEN  TCP   pid=5612(Socket Thread) cookie=52909  10.0.2.15(lev-VirtualBox):52140 -> 108.177.14.148(lt-in-f148.1e100.net):443
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):43241  out=88B/1p in=55B/1p  age=5.893s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):42681  out=98B/1p in=48B/1p  age=5.914s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):56928  out=88B/1p in=55B/1p  age=5.854s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):51263  out=71B/1p in=46B/1p  age=6.005s reason=idle
+CLOSE TCP   pid=5612(Socket Thread) cookie=53295  10.0.2.15(lev-VirtualBox):46958 -> 74.125.205.84(le-in-f84.1e100.net):443  out=2091B/4p in=4564B/12p  age=5.84s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):39896  out=136B/2p in=92B/2p  age=6.002s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):40865  out=140B/2p in=96B/2p  age=5.937s reason=idle
+CLOSE UDP   pid=5612(Socket Thread) cookie=53287  10.0.2.15(lev-VirtualBox):46082 -> 74.125.205.94(le-in-f94.1e100.net):443  out=3998B/5p in=6819B/6p  age=5.897s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):57931  out=115B/1p in=55B/1p  age=5.658s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):36609  out=122B/1p in=58B/1p  age=5.871s reason=idle
+CLOSE TCP   pid=5612(Socket Thread) cookie=52734  10.0.2.15(lev-VirtualBox):46966 -> 74.125.205.84(le-in-f84.1e100.net):443  out=2568B/10p in=9848B/40p  age=6.531s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):37051  out=68B/1p in=43B/1p  age=5.624s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):47711  out=294B/2p in=86B/2p  age=5.628s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):37749  out=292B/2p in=116B/2p  age=5.874s reason=idle
+CLOSE TCP   pid=5612(Socket Thread) cookie=52735  10.0.2.15(lev-VirtualBox):48590 -> 151.101.65.91(no-ptr):443  out=3392B/7p in=2340B/14p  age=5.82s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):50448  out=90B/1p in=56B/1p  age=5.578s reason=idle
+CLOSE TCP   pid=5612(Socket Thread) cookie=51769  10.0.2.15(lev-VirtualBox):41074 -> 173.194.57.167(dfw25s55-in-f7.1e100.net):443  out=2006B/3p in=4625B/6p  age=5.013s reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):56769  out=228B/2p in=124B/2p  age=5.306s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):58547  out=288B/2p in=112B/2p  age=5.652s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):36540  out=164B/2p in=120B/2p  age=5.248s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):58992  out=90B/1p in=56B/1p  age=5.562s reason=idle
+CLOSE TCP   pid=5612(Socket Thread) cookie=53351  10.0.2.15(lev-VirtualBox):33910 -> 64.233.161.155(lh-in-f155.1e100.net):443  out=2099B/4p in=6119B/12p  age=5.533s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):40309  out=94B/1p in=56B/1p  age=5.237s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):54058  out=81B/1p in=56B/1p  age=5.653s reason=idle
+CLOSE UDP   pid=5612(Socket Thread) cookie=53344  10.0.2.15(lev-VirtualBox):57118 -> 64.233.161.155(lh-in-f155.1e100.net):443  out=4607B/9p in=7977B/9p  age=5.564s reason=idle
+CLOSE UDP   pid=5612(Socket Thread) cookie=52738  10.0.2.15(lev-VirtualBox):57222 -> 74.125.205.147(le-in-f147.1e100.net):443  out=4615B/10p in=31350B/14p  age=6.581s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):55121  out=114B/1p in=62B/1p  age=5.299s reason=idle
+CLOSE TCP   pid=5612(Socket Thread) cookie=51770  10.0.2.15(lev-VirtualBox):41080 -> 173.194.57.167(dfw25s55-in-f7.1e100.net):443  out=2006B/3p in=4625B/6p  age=6.005s reason=close()
+CLOSE UDP   pid=5612(Socket Thread) cookie=51764  10.0.2.15(lev-VirtualBox):45184 -> 173.194.57.167(dfw25s55-in-f7.1e100.net):443  out=9730B/12p in=7939B/19p  age=7.236s reason=idle
+CLOSE UDP   pid=5612(Socket Thread) cookie=52705  10.0.2.15(lev-VirtualBox):42710 -> 64.233.164.198(lf-in-f198.1e100.net):443  out=31832B/155p in=3317947B/606p  age=11.999s reason=idle
+CLOSE TCP   pid=5612(Socket Thread) cookie=52909  10.0.2.15(lev-VirtualBox):52140 -> 108.177.14.148(lt-in-f148.1e100.net):443  out=2094B/4p in=6077B/12p  age=5.888s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):46157  out=190B/2p in=102B/2p  age=6.022s reason=idle
+CLOSE UDP   pid=5612(Socket Thread) cookie=53751  10.0.2.15(lev-VirtualBox):43099 -> 108.177.14.148(lt-in-f148.1e100.net):443  out=4375B/8p in=7084B/6p  age=5.957s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):53249  out=90B/1p in=56B/1p  age=5.954s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):50442  out=111B/1p in=51B/1p  age=6.018s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=48118  10.0.2.15(lev-VirtualBox):53222 -> 140.82.113.25(miss):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=48118  10.0.2.15(lev-VirtualBox):53222 -> 140.82.113.25(pending):443  out=30B/1p in=26B/2p  age=5.638s reason=idle
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):54547
+OPEN  UDP   pid=524(systemd-resolve) cookie=53770  10.0.2.15(lev-VirtualBox):34275 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=53770  10.0.2.15(lev-VirtualBox):34275 -> 10.0.2.3(vboxdns):53  out=55B/1p in=126B/1p  age=41ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):54547  out=100B/1p in=55B/1p  age=5.998s reason=idle
+OPEN  UDP   pid=524(systemd-resolve) cookie=53809  10.0.2.15(lev-VirtualBox):44818 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=53809  10.0.2.15(lev-VirtualBox):44818 -> 10.0.2.3(vboxdns):53  out=58B/1p in=553B/1p  age=42ms reason=close()
+OPEN  TCP   pid=675(NetworkManager) cookie=52950  10.0.2.15(lev-VirtualBox):38104 -> 185.125.190.49(miss):80
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):53060
+OPEN  UDP   pid=524(systemd-resolve) cookie=53811  10.0.2.15(lev-VirtualBox):44321 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=53811  10.0.2.15(lev-VirtualBox):44321 -> 10.0.2.3(vboxdns):53  out=56B/1p in=120B/1p  age=23ms reason=close()
+OPEN  TCP   pid=675(NetworkManager) cookie=51867  [fd00:0:0:0:baa6:3f8d:5eed:42d0](miss):49156 -> [2620:2d:4002:1:0:0:0:198](miss):80
+OPEN  TCP   pid=675(NetworkManager) cookie=51868  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):47634 -> [2001:67c:1562:0:0:0:0:23](miss):80
+CLOSE TCP   pid=675(NetworkManager) cookie=51867  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):49156 -> [2620:2d:4002:1:0:0:0:198](pending):80  out=0B/0p in=0B/0p  age=3ms reason=close()
+OPEN  TCP   pid=675(NetworkManager) cookie=51869  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):48020 -> [2620:2d:4000:1:0:0:0:22](miss):80
+CLOSE TCP   pid=675(NetworkManager) cookie=51868  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):47634 -> [2001:67c:1562:0:0:0:0:23](pending):80  out=0B/0p in=0B/0p  age=0s reason=close()
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):57715
+OPEN  UDP   pid=524(systemd-resolve) cookie=53813  10.0.2.15(lev-VirtualBox):43249 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):58873
+OPEN  UDP   pid=524(systemd-resolve) cookie=53814  10.0.2.15(lev-VirtualBox):43023 -> 10.0.2.3(vboxdns):53
+OPEN  TCP   pid=675(NetworkManager) cookie=51870  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):47246 -> [2620:2d:4000:1:0:0:0:23](miss):80
+CLOSE TCP   pid=675(NetworkManager) cookie=51869  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):48020 -> [2620:2d:4000:1:0:0:0:22](pending):80  out=0B/0p in=0B/0p  age=1ms reason=close()
+OPEN  TCP   pid=675(NetworkManager) cookie=51871  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):36218 -> [2001:67c:1562:0:0:0:0:24](miss):80
+CLOSE TCP   pid=675(NetworkManager) cookie=51870  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):47246 -> [2620:2d:4000:1:0:0:0:23](pending):80  out=0B/0p in=0B/0p  age=1ms reason=close()
+OPEN  TCP   pid=675(NetworkManager) cookie=51872  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):42826 -> [2620:2d:4000:1:0:0:0:2a](miss):80
+CLOSE TCP   pid=675(NetworkManager) cookie=51871  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):36218 -> [2001:67c:1562:0:0:0:0:24](pending):80  out=0B/0p in=0B/0p  age=7ms reason=close()
+OPEN  TCP   pid=675(NetworkManager) cookie=51873  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):46784 -> [2620:2d:4002:1:0:0:0:197](miss):80
+CLOSE TCP   pid=675(NetworkManager) cookie=51872  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):42826 -> [2620:2d:4000:1:0:0:0:2a](pending):80  out=0B/0p in=0B/0p  age=3ms reason=close()
+OPEN  TCP   pid=675(NetworkManager) cookie=51874  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):40704 -> [2620:2d:4000:1:0:0:0:96](miss):80
+CLOSE TCP   pid=675(NetworkManager) cookie=51873  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):46784 -> [2620:2d:4002:1:0:0:0:197](pending):80  out=0B/0p in=0B/0p  age=2ms reason=close()
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):50220
+OPEN  UDP   pid=524(systemd-resolve) cookie=53817  10.0.2.15(lev-VirtualBox):46202 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):39685
+OPEN  UDP   pid=524(systemd-resolve) cookie=53818  10.0.2.15(lev-VirtualBox):40526 -> 10.0.2.3(vboxdns):53
+OPEN  TCP   pid=675(NetworkManager) cookie=51875  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):38222 -> [2620:2d:4000:1:0:0:0:2b](miss):80
+CLOSE TCP   pid=675(NetworkManager) cookie=51874  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):40704 -> [2620:2d:4000:1:0:0:0:96](pending):80  out=0B/0p in=0B/0p  age=3ms reason=close()
+OPEN  TCP   pid=675(NetworkManager) cookie=51876  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):47516 -> [2620:2d:4000:1:0:0:0:97](miss):80
+CLOSE TCP   pid=675(NetworkManager) cookie=51875  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):38222 -> [2620:2d:4000:1:0:0:0:2b](pending):80  out=0B/0p in=0B/0p  age=2ms reason=close()
+OPEN  TCP   pid=675(NetworkManager) cookie=51877  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):55042 -> [2620:2d:4000:1:0:0:0:98](miss):80
+CLOSE TCP   pid=675(NetworkManager) cookie=51876  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):47516 -> [2620:2d:4000:1:0:0:0:97](pending):80  out=0B/0p in=0B/0p  age=2ms reason=close()
+CLOSE TCP   pid=675(NetworkManager) cookie=51877  [fd00:0:0:0:baa6:3f8d:5eed:42d0](pending):55042 -> [2620:2d:4000:1:0:0:0:98](pending):80  out=0B/0p in=0B/0p  age=4ms reason=close()
+CLOSE TCP   pid=675(NetworkManager) cookie=52950  10.0.2.15(lev-VirtualBox):38104 -> 185.125.190.49(fracktail.canonical.com):80  out=87B/1p in=189B/1p  age=115ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=53814  10.0.2.15(lev-VirtualBox):43023 -> 10.0.2.3(vboxdns):53  out=191B/2p in=362B/2p  age=60ms reason=close()
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):52345
+OPEN  UDP   pid=524(systemd-resolve) cookie=51878  10.0.2.15(lev-VirtualBox):38103 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=53813  10.0.2.15(lev-VirtualBox):43249 -> 10.0.2.3(vboxdns):53  out=101B/1p in=227B/1p  age=65ms reason=close()
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):54414
+OPEN  UDP   pid=524(systemd-resolve) cookie=51879  10.0.2.15(lev-VirtualBox):48668 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=53817  10.0.2.15(lev-VirtualBox):46202 -> 10.0.2.3(vboxdns):53  out=101B/1p in=207B/1p  age=64ms reason=close()
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):33762
+OPEN  UDP   pid=524(systemd-resolve) cookie=54647  10.0.2.15(lev-VirtualBox):43229 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=53818  10.0.2.15(lev-VirtualBox):40526 -> 10.0.2.3(vboxdns):53  out=101B/1p in=208B/1p  age=113ms reason=close()
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):36530
+OPEN  UDP   pid=524(systemd-resolve) cookie=54648  10.0.2.15(lev-VirtualBox):58008 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=51878  10.0.2.15(lev-VirtualBox):38103 -> 10.0.2.3(vboxdns):53  out=101B/1p in=210B/1p  age=68ms reason=close()
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):47812
+OPEN  UDP   pid=524(systemd-resolve) cookie=52951  10.0.2.15(lev-VirtualBox):32980 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=51879  10.0.2.15(lev-VirtualBox):48668 -> 10.0.2.3(vboxdns):53  out=101B/1p in=209B/1p  age=77ms reason=close()
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):58467
+OPEN  UDP   pid=524(systemd-resolve) cookie=52952  10.0.2.15(lev-VirtualBox):41051 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=54647  10.0.2.15(lev-VirtualBox):43229 -> 10.0.2.3(vboxdns):53  out=101B/1p in=219B/1p  age=96ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=52952  10.0.2.15(lev-VirtualBox):41051 -> 10.0.2.3(vboxdns):53  out=101B/1p in=219B/1p  age=24ms reason=close()
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):57012
+OPEN  UDP   pid=524(systemd-resolve) cookie=52953  10.0.2.15(lev-VirtualBox):49560 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):33182
+OPEN  UDP   pid=524(systemd-resolve) cookie=52954  10.0.2.15(lev-VirtualBox):53870 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=54648  10.0.2.15(lev-VirtualBox):58008 -> 10.0.2.3(vboxdns):53  out=101B/1p in=227B/1p  age=70ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=52951  10.0.2.15(lev-VirtualBox):32980 -> 10.0.2.3(vboxdns):53  out=101B/1p in=227B/1p  age=66ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=52954  10.0.2.15(lev-VirtualBox):53870 -> 10.0.2.3(vboxdns):53  out=101B/1p in=227B/1p  age=26ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=52953  10.0.2.15(lev-VirtualBox):49560 -> 10.0.2.3(vboxdns):53  out=101B/1p in=227B/1p  age=30ms reason=close()
+OPEN  UDP   pid=2844(Chrome_ChildIOT) cookie=52962  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):48969 -> [2001:4860:4860:0:0:0:0:8888](miss):443
+CLOSE UDP   pid=2844(Chrome_ChildIOT) cookie=52962  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):48969 -> [2001:4860:4860:0:0:0:0:8888](pending):443  out=0B/0p in=0B/0p  age=1ms reason=close()
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):50947
+OPEN  UDP   pid=524(systemd-resolve) cookie=52963  10.0.2.15(lev-VirtualBox):48366 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=52963  10.0.2.15(lev-VirtualBox):48366 -> 10.0.2.3(vboxdns):53  out=101B/1p in=197B/1p  age=40ms reason=close()
+OPEN  TCP   pid=5612(Socket Thread) cookie=52709  10.0.2.15(lev-VirtualBox):45974 -> 64.233.164.198(lf-in-f198.1e100.net):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=52709  10.0.2.15(lev-VirtualBox):45974 -> 64.233.164.198(lf-in-f198.1e100.net):443  out=39B/1p in=39B/2p  age=5.927s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=50840  10.0.2.15(lev-VirtualBox):37198 -> 140.82.113.21(lb-140-82-113-21-iad.github.com):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=50840  10.0.2.15(lev-VirtualBox):37198 -> 140.82.113.21(lb-140-82-113-21-iad.github.com):443  out=39B/1p in=39B/2p  age=5.927s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=53275  10.0.2.15(lev-VirtualBox):42426 -> 74.125.205.119(le-in-f119.1e100.net):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=53275  10.0.2.15(lev-VirtualBox):42426 -> 74.125.205.119(le-in-f119.1e100.net):443  out=39B/1p in=39B/2p  age=5.922s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=52713  10.0.2.15(lev-VirtualBox):39378 -> 34.120.208.123(123.208.120.34.bc.googleusercontent.com):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=52713  10.0.2.15(lev-VirtualBox):39378 -> 34.120.208.123(123.208.120.34.bc.googleusercontent.com):443  out=39B/1p in=39B/2p  age=5.922s reason=idle
+OPEN  ICMPv6 pid=675(NetworkManager) cookie=9766  fe80:0:0:0:7d27:9ada:6974:f568%enp0s3(skip) -> fe80:0:0:0:0:0:0:2%enp0s3(skip)
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):50220  out=135B/1p in=101B/1p  age=5.272s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):54414  out=137B/1p in=101B/1p  age=5.21s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):52345  out=138B/1p in=101B/1p  age=5.217s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):57012  out=155B/1p in=101B/1p  age=5.102s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):57715  out=155B/1p in=101B/1p  age=5.28s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):36530  out=155B/1p in=101B/1p  age=5.156s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=53295  10.0.2.15(lev-VirtualBox):46958 -> 74.125.205.84(le-in-f84.1e100.net):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=53295  10.0.2.15(lev-VirtualBox):46958 -> 74.125.205.84(le-in-f84.1e100.net):443  out=39B/1p in=39B/2p  age=5.92s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):33182  out=155B/1p in=101B/1p  age=5.099s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):47812  out=155B/1p in=101B/1p  age=5.145s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):33762  out=147B/1p in=101B/1p  age=5.204s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):39685  out=136B/1p in=101B/1p  age=5.272s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):58467  out=147B/1p in=101B/1p  age=5.129s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):58873  out=163B/1p in=101B/1p  age=5.28s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):53060  out=93B/1p in=56B/1p  age=5.368s reason=idle
+OPEN  UDP   pid=5612(DNS Res~ver #20) cookie=54658  127.0.0.1(localhost):57594 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):57594
+CLOSE UDP   pid=5612(DNS Res~ver #20) cookie=54658  127.0.0.1(localhost):57594 -> 127.0.0.53(dnsstub):53  out=88B/2p in=282B/2p  age=7ms reason=close()
+OPEN  UDP   pid=5612(Socket Thread) cookie=54659  10.0.2.15(lev-VirtualBox):54116 -> 64.233.164.198(lf-in-f198.1e100.net):443
+OPEN  TCP   pid=5612(Socket Thread) cookie=54663  10.0.2.15(lev-VirtualBox):56546 -> 64.233.164.198(lf-in-f198.1e100.net):443
+OPEN  TCP   pid=5612(Socket Thread) cookie=52734  10.0.2.15(lev-VirtualBox):46966 -> 74.125.205.84(le-in-f84.1e100.net):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=52734  10.0.2.15(lev-VirtualBox):46966 -> 74.125.205.84(le-in-f84.1e100.net):443  out=39B/1p in=39B/2p  age=5.91s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=52735  10.0.2.15(lev-VirtualBox):48590 -> 151.101.65.91(no-ptr):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=52735  10.0.2.15(lev-VirtualBox):48590 -> 151.101.65.91(no-ptr):443  out=39B/1p in=39B/2p  age=5.913s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):50947  out=125B/1p in=101B/1p  age=5.1s reason=idle
+OPEN  UDP   pid=2844(Chrome_ChildIOT) cookie=51916  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):46282 -> [2001:4860:4860:0:0:0:0:8888](dns.google):443
+CLOSE UDP   pid=2844(Chrome_ChildIOT) cookie=51916  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):46282 -> [2001:4860:4860:0:0:0:0:8888](dns.google):443  out=0B/0p in=0B/0p  age=0s reason=close()
+OPEN  UDP   pid=2844(Chrome_ChildIOT) cookie=51917  127.0.0.1(localhost):21111 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=2844(Chrome_ChildIOT) cookie=51918  127.0.0.1(localhost):14714 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):21111
+OPEN  UDP   pid=524(systemd-resolve) cookie=53894  10.0.2.15(lev-VirtualBox):43628 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=2844(Chrome_ChildIOT) cookie=51919  127.0.0.1(localhost):43706 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):14714
+OPEN  UDP   pid=524(systemd-resolve) cookie=53895  10.0.2.15(lev-VirtualBox):43496 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):43706
+OPEN  UDP   pid=524(systemd-resolve) cookie=53896  10.0.2.15(lev-VirtualBox):33522 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=53894  10.0.2.15(lev-VirtualBox):43628 -> 10.0.2.3(vboxdns):53  out=48B/1p in=168B/1p  age=53ms reason=close()
+OPEN  UDP   pid=524(systemd-resolve) cookie=53897  10.0.2.15(lev-VirtualBox):36771 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=53896  10.0.2.15(lev-VirtualBox):33522 -> 10.0.2.3(vboxdns):53  out=48B/1p in=419B/1p  age=52ms reason=close()
+CLOSE UDP   pid=2844(Chrome_ChildIOT) cookie=51919  127.0.0.1(localhost):43706 -> 127.0.0.53(dnsstub):53  out=37B/1p in=200B/1p  age=54ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=53895  10.0.2.15(lev-VirtualBox):43496 -> 10.0.2.3(vboxdns):53  out=48B/1p in=217B/1p  age=54ms reason=close()
+CLOSE UDP   pid=2844(Chrome_ChildIOT) cookie=51918  127.0.0.1(localhost):14714 -> 127.0.0.53(dnsstub):53  out=37B/1p in=134B/1p  age=56ms reason=close()
+CLOSE UDP   pid=2844(Chrome_ChildIOT) cookie=51917  127.0.0.1(localhost):21111 -> 127.0.0.53(dnsstub):53  out=37B/1p in=0B/0p  age=69ms reason=close()
+OPEN  UDP   pid=2844(Chrome_ChildIOT) cookie=51920  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):35373 -> [2603:1061:14:32:0:0:0:1](miss):80
+OPEN  UDP   pid=2844(Chrome_ChildIOT) cookie=51921  10.0.2.15(lev-VirtualBox):42318 -> 13.107.226.44(miss):80
+OPEN  UDP   pid=2844(Chrome_ChildIOT) cookie=51922  10.0.2.15(lev-VirtualBox):58695 -> 13.107.253.44(miss):80
+CLOSE UDP   pid=2844(Chrome_ChildIOT) cookie=51920  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):35373 -> [2603:1061:14:32:0:0:0:1](pending):80  out=0B/0p in=0B/0p  age=1ms reason=close()
+CLOSE UDP   pid=2844(Chrome_ChildIOT) cookie=51922  10.0.2.15(lev-VirtualBox):58695 -> 13.107.253.44(pending):80  out=0B/0p in=0B/0p  age=1ms reason=close()
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):45916
+OPEN  UDP   pid=524(systemd-resolve) cookie=53899  10.0.2.15(lev-VirtualBox):53902 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=2844(Chrome_ChildIOT) cookie=51921  10.0.2.15(lev-VirtualBox):42318 -> 13.107.226.44(pending):80  out=0B/0p in=0B/0p  age=2ms reason=close()
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):56307
+OPEN  UDP   pid=524(systemd-resolve) cookie=53900  10.0.2.15(lev-VirtualBox):60518 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):44120
+OPEN  UDP   pid=524(systemd-resolve) cookie=53901  10.0.2.15(lev-VirtualBox):38165 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=53899  10.0.2.15(lev-VirtualBox):53902 -> 10.0.2.3(vboxdns):53  out=99B/2p in=326B/2p  age=24ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=53901  10.0.2.15(lev-VirtualBox):38165 -> 10.0.2.3(vboxdns):53  out=99B/2p in=326B/2p  age=25ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=53897  10.0.2.15(lev-VirtualBox):36771 -> 10.0.2.3(vboxdns):53  out=50B/1p in=295B/1p  age=58ms reason=close()
+OPEN  UDP   pid=524(systemd-resolve) cookie=53902  10.0.2.15(lev-VirtualBox):35783 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=53900  10.0.2.15(lev-VirtualBox):60518 -> 10.0.2.3(vboxdns):53  out=191B/2p in=420B/2p  age=51ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=53902  10.0.2.15(lev-VirtualBox):35783 -> 10.0.2.3(vboxdns):53  out=61B/1p in=151B/1p  age=25ms reason=close()
+CLOSE UDP   pid=5612(Socket Thread) cookie=54659  10.0.2.15(lev-VirtualBox):54116 -> 64.233.164.198(lf-in-f198.1e100.net):443  out=12520B/9p in=4910B/8p  age=1.297s reason=close()
+OPEN  TCP   pid=2844(Chrome_ChildIOT) cookie=51925  10.0.2.15(lev-VirtualBox):44500 -> 13.107.226.44(no-ptr):443
+OPEN  TCP   pid=5612(Socket Thread) cookie=53351  10.0.2.15(lev-VirtualBox):33910 -> 64.233.161.155(lh-in-f155.1e100.net):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=53351  10.0.2.15(lev-VirtualBox):33910 -> 64.233.161.155(lh-in-f155.1e100.net):443  out=39B/1p in=39B/2p  age=5.808s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=52909  10.0.2.15(lev-VirtualBox):52140 -> 108.177.14.148(lt-in-f148.1e100.net):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=52909  10.0.2.15(lev-VirtualBox):52140 -> 108.177.14.148(lt-in-f148.1e100.net):443  out=39B/1p in=39B/2p  age=5.849s reason=idle
+CLOSE ICMPv6 pid=675(NetworkManager) cookie=9766  fe80:0:0:0:7d27:9ada:6974:f568%enp0s3(skip) -> fe80:0:0:0:0:0:0:2%enp0s3(skip)  out=0B/0p in=32B/1p  age=5.194s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):57594  out=282B/2p in=88B/2p  age=5.809s reason=idle
+CLOSE TCP   pid=5612(Socket Thread) cookie=54663  10.0.2.15(lev-VirtualBox):56546 -> 64.233.164.198(lf-in-f198.1e100.net):443  out=8157B/8p in=1238B/20p  age=5.623s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):44120  out=141B/1p in=55B/1p  age=5.453s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):45916  out=141B/1p in=55B/1p  age=5.461s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):56307  out=187B/1p in=101B/1p  age=5.459s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):21111  out=228B/1p in=37B/1p  age=5.532s reason=idle
+CLOSE TCP   pid=2844(Chrome_ChildIOT) cookie=51925  10.0.2.15(lev-VirtualBox):44500 -> 13.107.226.44(no-ptr):443  out=2798B/6p in=74342B/21p  age=5.456s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):43706  out=200B/1p in=37B/1p  age=5.53s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):14714  out=134B/1p in=37B/1p  age=5.531s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=48118  10.0.2.15(lev-VirtualBox):53222 -> 140.82.113.25(lb-140-82-113-25-iad.github.com):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=48118  10.0.2.15(lev-VirtualBox):53222 -> 140.82.113.25(lb-140-82-113-25-iad.github.com):443  out=30B/1p in=26B/2p  age=5.635s reason=idle
+OPEN  ICMPv6 pid=675(NetworkManager) cookie=9766  ff02:0:0:0:0:0:0:1%enp0s3(skip) -> fe80:0:0:0:0:0:0:2%enp0s3(skip)
+CLOSE ICMPv6 pid=675(NetworkManager) cookie=9766  ff02:0:0:0:0:0:0:1%enp0s3(skip) -> fe80:0:0:0:0:0:0:2%enp0s3(skip)  out=0B/0p in=56B/1p  age=5.346s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=51501  10.0.2.15(lev-VirtualBox):51972 -> 34.107.243.93(miss):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=51501  10.0.2.15(lev-VirtualBox):51972 -> 34.107.243.93(pending):443  out=28B/1p in=24B/2p  age=5.356s reason=idle
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):40567
+OPEN  UDP   pid=524(systemd-resolve) cookie=53018  10.0.2.15(lev-VirtualBox):44598 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=53018  10.0.2.15(lev-VirtualBox):44598 -> 10.0.2.3(vboxdns):53  out=55B/1p in=133B/1p  age=71ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):40567  out=107B/1p in=55B/1p  age=5.953s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=50840  10.0.2.15(lev-VirtualBox):37198 -> 140.82.113.21(lb-140-82-113-21-iad.github.com):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=50840  10.0.2.15(lev-VirtualBox):37198 -> 140.82.113.21(lb-140-82-113-21-iad.github.com):443  out=102B/3p in=78B/4p  age=1.917s reason=close()
+OPEN  TCP   pid=5612(Socket Thread) cookie=53275  10.0.2.15(lev-VirtualBox):42426 -> 74.125.205.119(le-in-f119.1e100.net):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=53275  10.0.2.15(lev-VirtualBox):42426 -> 74.125.205.119(le-in-f119.1e100.net):443  out=39B/1p in=39B/2p  age=5.339s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=52709  10.0.2.15(lev-VirtualBox):45974 -> 64.233.164.198(lf-in-f198.1e100.net):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=52709  10.0.2.15(lev-VirtualBox):45974 -> 64.233.164.198(lf-in-f198.1e100.net):443  out=39B/1p in=39B/2p  age=5.338s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=52713  10.0.2.15(lev-VirtualBox):39378 -> 34.120.208.123(123.208.120.34.bc.googleusercontent.com):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=52713  10.0.2.15(lev-VirtualBox):39378 -> 34.120.208.123(123.208.120.34.bc.googleusercontent.com):443  out=39B/1p in=39B/2p  age=5.336s reason=idle
+OPEN  UDP   pid=5612(DNS Res~ver #19) cookie=54816  127.0.0.1(localhost):45873 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):45873
+CLOSE UDP   pid=5612(DNS Res~ver #19) cookie=54816  127.0.0.1(localhost):45873 -> 127.0.0.53(dnsstub):53  out=112B/2p in=288B/2p  age=7ms reason=close()
+OPEN  UDP   pid=5612(Socket Thread) cookie=54017  10.0.2.15(lev-VirtualBox):52667 -> 64.233.161.155(lh-in-f155.1e100.net):443
+OPEN  TCP   pid=5612(Socket Thread) cookie=53295  10.0.2.15(lev-VirtualBox):46958 -> 74.125.205.84(le-in-f84.1e100.net):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=53295  10.0.2.15(lev-VirtualBox):46958 -> 74.125.205.84(le-in-f84.1e100.net):443  out=39B/1p in=39B/2p  age=5.328s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=54028  10.0.2.15(lev-VirtualBox):41298 -> 64.233.161.155(lh-in-f155.1e100.net):443
+OPEN  TCP   pid=5612(Socket Thread) cookie=52735  10.0.2.15(lev-VirtualBox):48590 -> 151.101.65.91(no-ptr):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=52735  10.0.2.15(lev-VirtualBox):48590 -> 151.101.65.91(no-ptr):443  out=39B/1p in=39B/2p  age=5.327s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=52734  10.0.2.15(lev-VirtualBox):46966 -> 74.125.205.84(le-in-f84.1e100.net):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=52734  10.0.2.15(lev-VirtualBox):46966 -> 74.125.205.84(le-in-f84.1e100.net):443  out=39B/1p in=39B/2p  age=5.326s reason=idle
+CLOSE UDP   pid=5612(Socket Thread) cookie=54017  10.0.2.15(lev-VirtualBox):52667 -> 64.233.161.155(lh-in-f155.1e100.net):443  out=8764B/5p in=4888B/5p  age=1.053s reason=close()
+OPEN  TCP   pid=5612(Socket Thread) cookie=53351  10.0.2.15(lev-VirtualBox):33910 -> 64.233.161.155(lh-in-f155.1e100.net):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=53351  10.0.2.15(lev-VirtualBox):33910 -> 64.233.161.155(lh-in-f155.1e100.net):443  out=39B/1p in=39B/2p  age=5.324s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=52909  10.0.2.15(lev-VirtualBox):52140 -> 108.177.14.148(lt-in-f148.1e100.net):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=52909  10.0.2.15(lev-VirtualBox):52140 -> 108.177.14.148(lt-in-f148.1e100.net):443  out=39B/1p in=39B/2p  age=5.318s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):45873  out=288B/2p in=112B/2p  age=5.109s reason=idle
+CLOSE TCP   pid=5612(Socket Thread) cookie=54028  10.0.2.15(lev-VirtualBox):41298 -> 64.233.161.155(lh-in-f155.1e100.net):443  out=1937B/8p in=1843B/26p  age=5.995s reason=idle
+OPEN  UDP   pid=5612(DNS Res~ver #15) cookie=54870  127.0.0.1(localhost):49601 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):49601
+OPEN  UDP   pid=524(systemd-resolve) cookie=54050  10.0.2.15(lev-VirtualBox):38874 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=54051  10.0.2.15(lev-VirtualBox):38186 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=54051  10.0.2.15(lev-VirtualBox):38186 -> 10.0.2.3(vboxdns):53  out=45B/1p in=174B/1p  age=46ms reason=close()
+OPEN  UDP   pid=524(systemd-resolve) cookie=54052  10.0.2.15(lev-VirtualBox):54983 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=54050  10.0.2.15(lev-VirtualBox):38874 -> 10.0.2.3(vboxdns):53  out=45B/1p in=121B/1p  age=51ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=54052  10.0.2.15(lev-VirtualBox):54983 -> 10.0.2.3(vboxdns):53  out=44B/1p in=128B/1p  age=23ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #15) cookie=54870  127.0.0.1(localhost):49601 -> 127.0.0.53(dnsstub):53  out=90B/2p in=209B/2p  age=74ms reason=close()
+OPEN  UDP   pid=5612(DNS Res~ver #21) cookie=53114  127.0.0.1(localhost):49074 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=5612(DNS Res~ver #18) cookie=54871  127.0.0.1(localhost):36515 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):36515
+OPEN  UDP   pid=524(systemd-resolve) cookie=54053  10.0.2.15(lev-VirtualBox):53735 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):49074
+OPEN  UDP   pid=5612(DNS Res~ver #20) cookie=52038  127.0.0.1(localhost):45803 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=54054  10.0.2.15(lev-VirtualBox):55887 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):45803
+CLOSE UDP   pid=5612(DNS Res~ver #20) cookie=52038  127.0.0.1(localhost):45803 -> 127.0.0.53(dnsstub):53  out=45B/1p in=80B/1p  age=2ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=54054  10.0.2.15(lev-VirtualBox):55887 -> 10.0.2.3(vboxdns):53  out=44B/1p in=128B/1p  age=3ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #21) cookie=53114  127.0.0.1(localhost):49074 -> 127.0.0.53(dnsstub):53  out=90B/2p in=225B/2p  age=13ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=54053  10.0.2.15(lev-VirtualBox):53735 -> 10.0.2.3(vboxdns):53  out=44B/1p in=141B/1p  age=23ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #18) cookie=54871  127.0.0.1(localhost):36515 -> 127.0.0.53(dnsstub):53  out=45B/1p in=164B/1p  age=26ms reason=close()
+OPEN  TCP   pid=5612(Socket Thread) cookie=54055  10.0.2.15(lev-VirtualBox):52572 -> 140.82.112.25(miss):443
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):39910
+OPEN  UDP   pid=524(systemd-resolve) cookie=54056  10.0.2.15(lev-VirtualBox):56513 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=54056  10.0.2.15(lev-VirtualBox):56513 -> 10.0.2.3(vboxdns):53  out=55B/1p in=126B/1p  age=25ms reason=close()
+OPEN  TCP   pid=5612(Socket Thread) cookie=54663  10.0.2.15(lev-VirtualBox):56546 -> 64.233.164.198(lf-in-f198.1e100.net):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=54663  10.0.2.15(lev-VirtualBox):56546 -> 64.233.164.198(lf-in-f198.1e100.net):443  out=39B/1p in=39B/2p  age=5.313s reason=idle
+OPEN  UDP   pid=5612(DNS Res~ver #19) cookie=54873  127.0.0.1(localhost):39207 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):39207
+OPEN  UDP   pid=524(systemd-resolve) cookie=54057  10.0.2.15(lev-VirtualBox):40481 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=54058  10.0.2.15(lev-VirtualBox):54599 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=54058  10.0.2.15(lev-VirtualBox):54599 -> 10.0.2.3(vboxdns):53  out=39B/1p in=123B/1p  age=5ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=54057  10.0.2.15(lev-VirtualBox):40481 -> 10.0.2.3(vboxdns):53  out=39B/1p in=65B/1p  age=41ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #19) cookie=54873  127.0.0.1(localhost):39207 -> 127.0.0.53(dnsstub):53  out=78B/2p in=159B/2p  age=42ms reason=close()
+OPEN  UDP   pid=5612(DNS Res~ver #15) cookie=54875  127.0.0.1(localhost):38618 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):38618
+CLOSE UDP   pid=5612(DNS Res~ver #15) cookie=54875  127.0.0.1(localhost):38618 -> 127.0.0.53(dnsstub):53  out=39B/1p in=55B/1p  age=3ms reason=close()
+OPEN  TCP   pid=5612(Socket Thread) cookie=48118  10.0.2.15(lev-VirtualBox):53222 -> 140.82.113.25(lb-140-82-113-25-iad.github.com):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=48118  10.0.2.15(lev-VirtualBox):53222 -> 140.82.113.25(lb-140-82-113-25-iad.github.com):443  out=69B/2p in=41B/2p  age=1.008s reason=close()
+OPEN  TCP   pid=5612(Socket Thread) cookie=54059  10.0.2.15(lev-VirtualBox):33446 -> 140.82.121.3(miss):443
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):49888
+OPEN  UDP   pid=524(systemd-resolve) cookie=52040  10.0.2.15(lev-VirtualBox):36747 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=52040  10.0.2.15(lev-VirtualBox):36747 -> 10.0.2.3(vboxdns):53  out=54B/1p in=123B/1p  age=23ms reason=close()
+OPEN  TCP   pid=5612(Socket Thread) cookie=53115  10.0.2.15(lev-VirtualBox):40806 -> 140.82.112.25(lb-140-82-112-25-iad.github.com):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=54055  10.0.2.15(lev-VirtualBox):52572 -> 140.82.112.25(lb-140-82-112-25-iad.github.com):443  out=3730B/6p in=3848B/18p  age=1.604s reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):36515  out=164B/1p in=45B/1p  age=5.398s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):45803  out=80B/1p in=45B/1p  age=5.393s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):49074  out=225B/2p in=90B/2p  age=5.396s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):49601  out=209B/2p in=90B/2p  age=5.475s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):39910  out=100B/1p in=55B/1p  age=5.051s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):38618  out=55B/1p in=39B/1p  age=5.782s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):49888  out=98B/1p in=54B/1p  age=5.59s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):39207  out=159B/2p in=78B/2p  age=5.87s reason=idle
+CLOSE TCP   pid=5612(Socket Thread) cookie=54059  10.0.2.15(lev-VirtualBox):33446 -> 140.82.121.3(lb-140-82-121-3-fra.github.com):443  out=4038B/7p in=13050B/34p  age=5.782s reason=idle
+CLOSE TCP   pid=5612(Socket Thread) cookie=53115  10.0.2.15(lev-VirtualBox):40806 -> 140.82.112.25(lb-140-82-112-25-iad.github.com):443  out=3655B/4p in=3894B/20p  age=6.184s reason=idle
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):56109
+OPEN  UDP   pid=5612(DNS Res~ver #20) cookie=54097  127.0.0.1(localhost):56109 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=54942  10.0.2.15(lev-VirtualBox):45753 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=5612(DNS Res~ver #21) cookie=53193  127.0.0.1(localhost):50869 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=54943  10.0.2.15(lev-VirtualBox):32986 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):50869
+CLOSE UDP   pid=524(systemd-resolve) cookie=54942  10.0.2.15(lev-VirtualBox):45753 -> 10.0.2.3(vboxdns):53  out=44B/1p in=247B/1p  age=95ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #21) cookie=53193  127.0.0.1(localhost):50869 -> 127.0.0.53(dnsstub):53  out=44B/1p in=144B/1p  age=108ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=54943  10.0.2.15(lev-VirtualBox):32986 -> 10.0.2.3(vboxdns):53  out=44B/1p in=295B/1p  age=108ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #20) cookie=54097  127.0.0.1(localhost):56109 -> 127.0.0.53(dnsstub):53  out=88B/2p in=336B/2p  age=111ms reason=close()
+OPEN  TCP   pid=5612(Socket Thread) cookie=54100  10.0.2.15(lev-VirtualBox):46146 -> 151.101.193.91(miss):443
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):55304
+OPEN  UDP   pid=524(systemd-resolve) cookie=53195  10.0.2.15(lev-VirtualBox):58953 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=53195  10.0.2.15(lev-VirtualBox):58953 -> 10.0.2.3(vboxdns):53  out=101B/2p in=280B/2p  age=37ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):56109  out=336B/2p in=88B/2p  age=5.18s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):50869  out=144B/1p in=44B/1p  age=5.177s reason=idle
+CLOSE TCP   pid=5612(Socket Thread) cookie=54100  10.0.2.15(lev-VirtualBox):46146 -> 151.101.193.91(no-ptr):443  out=3003B/7p in=1991B/16p  age=6.065s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):55304  out=116B/1p in=56B/1p  age=5.819s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=54028  10.0.2.15(lev-VirtualBox):41298 -> 64.233.161.155(lh-in-f155.1e100.net):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=54028  10.0.2.15(lev-VirtualBox):41298 -> 64.233.161.155(lh-in-f155.1e100.net):443  out=39B/1p in=39B/2p  age=5.986s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=54663  10.0.2.15(lev-VirtualBox):56546 -> 64.233.164.198(lf-in-f198.1e100.net):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=54663  10.0.2.15(lev-VirtualBox):56546 -> 64.233.164.198(lf-in-f198.1e100.net):443  out=39B/1p in=39B/2p  age=5.977s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=53115  10.0.2.15(lev-VirtualBox):40806 -> 140.82.112.25(lb-140-82-112-25-iad.github.com):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=53115  10.0.2.15(lev-VirtualBox):40806 -> 140.82.112.25(lb-140-82-112-25-iad.github.com):443  out=29B/1p in=25B/2p  age=5.893s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=54100  10.0.2.15(lev-VirtualBox):46146 -> 151.101.193.91(no-ptr):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=54100  10.0.2.15(lev-VirtualBox):46146 -> 151.101.193.91(no-ptr):443  out=39B/1p in=39B/2p  age=5.975s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=54028  10.0.2.15(lev-VirtualBox):41298 -> 64.233.161.155(lh-in-f155.1e100.net):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=54028  10.0.2.15(lev-VirtualBox):41298 -> 64.233.161.155(lh-in-f155.1e100.net):443  out=39B/1p in=39B/2p  age=5.93s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=53115  10.0.2.15(lev-VirtualBox):40806 -> 140.82.112.25(lb-140-82-112-25-iad.github.com):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=53115  10.0.2.15(lev-VirtualBox):40806 -> 140.82.112.25(lb-140-82-112-25-iad.github.com):443  out=29B/1p in=25B/2p  age=5.731s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=54100  10.0.2.15(lev-VirtualBox):46146 -> 151.101.193.91(no-ptr):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=54100  10.0.2.15(lev-VirtualBox):46146 -> 151.101.193.91(no-ptr):443  out=39B/1p in=39B/2p  age=5.076s reason=idle
+OPEN  UDP   pid=5612(DNS Res~ver #19) cookie=55039  127.0.0.1(localhost):42429 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=5612(DNS Res~ver #18) cookie=54272  127.0.0.1(localhost):39121 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):39121
+OPEN  UDP   pid=524(systemd-resolve) cookie=55403  10.0.2.15(lev-VirtualBox):50904 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):42429
+OPEN  UDP   pid=524(systemd-resolve) cookie=55404  10.0.2.15(lev-VirtualBox):49251 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=55405  10.0.2.15(lev-VirtualBox):51727 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=55403  10.0.2.15(lev-VirtualBox):50904 -> 10.0.2.3(vboxdns):53  out=44B/1p in=199B/1p  age=42ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=55404  10.0.2.15(lev-VirtualBox):49251 -> 10.0.2.3(vboxdns):53  out=44B/1p in=240B/1p  age=41ms reason=close()
+OPEN  UDP   pid=524(systemd-resolve) cookie=55406  10.0.2.15(lev-VirtualBox):55181 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=55405  10.0.2.15(lev-VirtualBox):51727 -> 10.0.2.3(vboxdns):53  out=44B/1p in=211B/1p  age=42ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #18) cookie=54272  127.0.0.1(localhost):39121 -> 127.0.0.53(dnsstub):53  out=88B/2p in=254B/2p  age=51ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=55406  10.0.2.15(lev-VirtualBox):55181 -> 10.0.2.3(vboxdns):53  out=54B/1p in=136B/1p  age=25ms reason=close()
+CLOSE UDP   pid=5612(DNS Res~ver #19) cookie=55039  127.0.0.1(localhost):42429 -> 127.0.0.53(dnsstub):53  out=44B/1p in=155B/1p  age=73ms reason=close()
+OPEN  TCP   pid=5612(Socket Thread) cookie=55042  10.0.2.15(lev-VirtualBox):46342 -> 64.233.164.198(lf-in-f198.1e100.net):443
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):42429  out=155B/1p in=44B/1p  age=5.087s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):39121  out=254B/2p in=88B/2p  age=5.09s reason=idle
+CLOSE TCP   pid=5612(Socket Thread) cookie=55042  10.0.2.15(lev-VirtualBox):46342 -> 64.233.164.198(lf-in-f198.1e100.net):443  out=6049B/8p in=2328B/20p  age=5.998s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=53115  10.0.2.15(lev-VirtualBox):40806 -> 140.82.112.25(lb-140-82-112-25-iad.github.com):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=53115  10.0.2.15(lev-VirtualBox):40806 -> 140.82.112.25(lb-140-82-112-25-iad.github.com):443  out=29B/1p in=25B/2p  age=5.847s reason=idle
+OPEN  UDP   pid=524(systemd-resolve) cookie=55430  10.0.2.15(lev-VirtualBox):57867 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=55430  10.0.2.15(lev-VirtualBox):57867 -> 10.0.2.3(vboxdns):53  out=58B/1p in=553B/1p  age=42ms reason=close()
+OPEN  TCP   pid=675(NetworkManager) cookie=56368  10.0.2.15(lev-VirtualBox):38466 -> 185.125.190.96(miss):80
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):48667
+OPEN  UDP   pid=524(systemd-resolve) cookie=55432  10.0.2.15(lev-VirtualBox):54774 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=55432  10.0.2.15(lev-VirtualBox):54774 -> 10.0.2.3(vboxdns):53  out=56B/1p in=137B/1p  age=26ms reason=close()
+OPEN  TCP   pid=675(NetworkManager) cookie=55436  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):32944 -> [2620:2d:4000:1:0:0:0:2a](is-content-cache-1.canonical.com):80
+OPEN  TCP   pid=675(NetworkManager) cookie=57446  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):41722 -> [2620:2d:4000:1:0:0:0:98](ubuntu-content-cache-3.ps5.canonical.com):80
+CLOSE TCP   pid=675(NetworkManager) cookie=55436  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):32944 -> [2620:2d:4000:1:0:0:0:2a](is-content-cache-1.canonical.com):80  out=0B/0p in=0B/0p  age=2ms reason=close()
+OPEN  TCP   pid=675(NetworkManager) cookie=57447  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):52430 -> [2620:2d:4002:1:0:0:0:198](ubuntu-content-cache-3.ps6.canonical.com):80
+CLOSE TCP   pid=675(NetworkManager) cookie=57446  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):41722 -> [2620:2d:4000:1:0:0:0:98](ubuntu-content-cache-3.ps5.canonical.com):80  out=0B/0p in=0B/0p  age=1ms reason=close()
+OPEN  TCP   pid=675(NetworkManager) cookie=57448  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):39026 -> [2001:67c:1562:0:0:0:0:24](blackcat.canonical.com):80
+CLOSE TCP   pid=675(NetworkManager) cookie=57447  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):52430 -> [2620:2d:4002:1:0:0:0:198](ubuntu-content-cache-3.ps6.canonical.com):80  out=0B/0p in=0B/0p  age=1ms reason=close()
+OPEN  TCP   pid=675(NetworkManager) cookie=57449  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):49476 -> [2620:2d:4000:1:0:0:0:96](ubuntu-content-cache-1.ps5.canonical.com):80
+CLOSE TCP   pid=675(NetworkManager) cookie=57448  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):39026 -> [2001:67c:1562:0:0:0:0:24](blackcat.canonical.com):80  out=0B/0p in=0B/0p  age=3ms reason=close()
+OPEN  TCP   pid=675(NetworkManager) cookie=57450  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):50336 -> [2620:2d:4000:1:0:0:0:22](gladys.canonical.com):80
+CLOSE TCP   pid=675(NetworkManager) cookie=57449  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):49476 -> [2620:2d:4000:1:0:0:0:96](ubuntu-content-cache-1.ps5.canonical.com):80  out=0B/0p in=0B/0p  age=3ms reason=close()
+OPEN  TCP   pid=675(NetworkManager) cookie=57451  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):35094 -> [2001:67c:1562:0:0:0:0:23](amyrose.canonical.com):80
+CLOSE TCP   pid=675(NetworkManager) cookie=57450  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):50336 -> [2620:2d:4000:1:0:0:0:22](gladys.canonical.com):80  out=0B/0p in=0B/0p  age=1ms reason=close()
+OPEN  TCP   pid=675(NetworkManager) cookie=57452  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):45492 -> [2620:2d:4000:1:0:0:0:2b](is-content-cache-2.canonical.com):80
+CLOSE TCP   pid=675(NetworkManager) cookie=57451  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):35094 -> [2001:67c:1562:0:0:0:0:23](amyrose.canonical.com):80  out=0B/0p in=0B/0p  age=1ms reason=close()
+OPEN  TCP   pid=675(NetworkManager) cookie=57453  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):57030 -> [2620:2d:4002:1:0:0:0:197](ubuntu-content-cache-2.ps6.canonical.com):80
+CLOSE TCP   pid=675(NetworkManager) cookie=57452  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):45492 -> [2620:2d:4000:1:0:0:0:2b](is-content-cache-2.canonical.com):80  out=0B/0p in=0B/0p  age=0s reason=close()
+OPEN  TCP   pid=675(NetworkManager) cookie=57454  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):59204 -> [2620:2d:4000:1:0:0:0:23](fracktail.canonical.com):80
+CLOSE TCP   pid=675(NetworkManager) cookie=57453  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):57030 -> [2620:2d:4002:1:0:0:0:197](ubuntu-content-cache-2.ps6.canonical.com):80  out=0B/0p in=0B/0p  age=0s reason=close()
+OPEN  TCP   pid=675(NetworkManager) cookie=57455  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):42710 -> [2620:2d:4000:1:0:0:0:97](ubuntu-content-cache-2.ps5.canonical.com):80
+CLOSE TCP   pid=675(NetworkManager) cookie=57454  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):59204 -> [2620:2d:4000:1:0:0:0:23](fracktail.canonical.com):80  out=0B/0p in=0B/0p  age=3ms reason=close()
+CLOSE TCP   pid=675(NetworkManager) cookie=57455  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):42710 -> [2620:2d:4000:1:0:0:0:97](ubuntu-content-cache-2.ps5.canonical.com):80  out=0B/0p in=0B/0p  age=3ms reason=close()
+CLOSE TCP   pid=675(NetworkManager) cookie=56368  10.0.2.15(lev-VirtualBox):38466 -> 185.125.190.96(ubuntu-content-cache-1.ps5.canonical.com):80  out=87B/1p in=189B/1p  age=322ms reason=close()
+OPEN  UDP   pid=2844(Chrome_ChildIOT) cookie=55157  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):42270 -> [2001:4860:4860:0:0:0:0:8888](dns.google):443
+CLOSE UDP   pid=2844(Chrome_ChildIOT) cookie=55157  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):42270 -> [2001:4860:4860:0:0:0:0:8888](dns.google):443  out=0B/0p in=0B/0p  age=4ms reason=close()
+OPEN  ICMPv6 pid=675(NetworkManager) cookie=9766  fe80:0:0:0:7d27:9ada:6974:f568%enp0s3(skip) -> fe80:0:0:0:0:0:0:2%enp0s3(skip)
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):48667  out=110B/1p in=56B/1p  age=5.348s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=55042  10.0.2.15(lev-VirtualBox):46342 -> 64.233.164.198(lf-in-f198.1e100.net):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=55042  10.0.2.15(lev-VirtualBox):46342 -> 64.233.164.198(lf-in-f198.1e100.net):443  out=39B/1p in=39B/2p  age=5.619s reason=idle
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):49651
+OPEN  UDP   pid=2844(Chrome_ChildIOT) cookie=56379  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):38705 -> [2001:4860:4860:0:0:0:0:8888](dns.google):443
+CLOSE UDP   pid=2844(Chrome_ChildIOT) cookie=56379  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):38705 -> [2001:4860:4860:0:0:0:0:8888](dns.google):443  out=0B/0p in=0B/0p  age=0s reason=close()
+OPEN  UDP   pid=2844(Chrome_ChildIOT) cookie=56380  127.0.0.1(localhost):49651 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=55501  10.0.2.15(lev-VirtualBox):42513 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=2844(Chrome_ChildIOT) cookie=55502  127.0.0.1(localhost):12592 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):12592
+OPEN  UDP   pid=524(systemd-resolve) cookie=55503  10.0.2.15(lev-VirtualBox):54879 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=2844(Chrome_ChildIOT) cookie=55504  127.0.0.1(localhost):45312 -> 127.0.0.53(dnsstub):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):45312
+OPEN  UDP   pid=524(systemd-resolve) cookie=55505  10.0.2.15(lev-VirtualBox):56755 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=55505  10.0.2.15(lev-VirtualBox):56755 -> 10.0.2.3(vboxdns):53  out=48B/1p in=419B/1p  age=52ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=55501  10.0.2.15(lev-VirtualBox):42513 -> 10.0.2.3(vboxdns):53  out=48B/1p in=168B/1p  age=66ms reason=close()
+OPEN  UDP   pid=524(systemd-resolve) cookie=55506  10.0.2.15(lev-VirtualBox):56785 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=2844(Chrome_ChildIOT) cookie=55504  127.0.0.1(localhost):45312 -> 127.0.0.53(dnsstub):53  out=37B/1p in=200B/1p  age=58ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=55503  10.0.2.15(lev-VirtualBox):54879 -> 10.0.2.3(vboxdns):53  out=48B/1p in=217B/1p  age=71ms reason=close()
+CLOSE UDP   pid=2844(Chrome_ChildIOT) cookie=55502  127.0.0.1(localhost):12592 -> 127.0.0.53(dnsstub):53  out=37B/1p in=134B/1p  age=73ms reason=close()
+CLOSE UDP   pid=2844(Chrome_ChildIOT) cookie=56380  127.0.0.1(localhost):49651 -> 127.0.0.53(dnsstub):53  out=37B/1p in=0B/0p  age=91ms reason=close()
+OPEN  UDP   pid=2844(Chrome_ChildIOT) cookie=55507  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):47207 -> [2603:1061:14:32:0:0:0:1](miss):80
+OPEN  UDP   pid=2844(Chrome_ChildIOT) cookie=55508  10.0.2.15(lev-VirtualBox):52703 -> 13.107.226.44(miss):80
+OPEN  UDP   pid=2844(Chrome_ChildIOT) cookie=55509  10.0.2.15(lev-VirtualBox):47164 -> 13.107.253.44(miss):80
+CLOSE UDP   pid=2844(Chrome_ChildIOT) cookie=55507  [fd00:0:0:0:baa6:3f8d:5eed:42d0](lev-VirtualBox):47207 -> [2603:1061:14:32:0:0:0:1](pending):80  out=0B/0p in=0B/0p  age=2ms reason=close()
+CLOSE UDP   pid=2844(Chrome_ChildIOT) cookie=55509  10.0.2.15(lev-VirtualBox):47164 -> 13.107.253.44(pending):80  out=0B/0p in=0B/0p  age=2ms reason=close()
+CLOSE UDP   pid=2844(Chrome_ChildIOT) cookie=55508  10.0.2.15(lev-VirtualBox):52703 -> 13.107.226.44(pending):80  out=0B/0p in=0B/0p  age=2ms reason=close()
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):54639
+OPEN  UDP   pid=524(systemd-resolve) cookie=55510  10.0.2.15(lev-VirtualBox):38684 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):45126
+OPEN  UDP   pid=524(systemd-resolve) cookie=55511  10.0.2.15(lev-VirtualBox):43357 -> 10.0.2.3(vboxdns):53
+OPEN  UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):51523
+OPEN  UDP   pid=524(systemd-resolve) cookie=55512  10.0.2.15(lev-VirtualBox):57795 -> 10.0.2.3(vboxdns):53
+CLOSE UDP   pid=524(systemd-resolve) cookie=55506  10.0.2.15(lev-VirtualBox):56785 -> 10.0.2.3(vboxdns):53  out=61B/1p in=151B/1p  age=45ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=55511  10.0.2.15(lev-VirtualBox):43357 -> 10.0.2.3(vboxdns):53  out=99B/2p in=326B/2p  age=27ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=55512  10.0.2.15(lev-VirtualBox):57795 -> 10.0.2.3(vboxdns):53  out=99B/2p in=326B/2p  age=28ms reason=close()
+CLOSE UDP   pid=524(systemd-resolve) cookie=55510  10.0.2.15(lev-VirtualBox):38684 -> 10.0.2.3(vboxdns):53  out=191B/2p in=420B/2p  age=52ms reason=close()
+OPEN  TCP   pid=2844(Chrome_ChildIOT) cookie=55514  10.0.2.15(lev-VirtualBox):51040 -> 13.107.226.44(no-ptr):443
+CLOSE ICMPv6 pid=675(NetworkManager) cookie=9766  fe80:0:0:0:7d27:9ada:6974:f568%enp0s3(skip) -> fe80:0:0:0:0:0:0:2%enp0s3(skip)  out=0B/0p in=32B/1p  age=5.049s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):45312  out=200B/1p in=37B/1p  age=5.954s reason=idle
+CLOSE TCP   pid=2844(Chrome_ChildIOT) cookie=55514  10.0.2.15(lev-VirtualBox):51040 -> 13.107.226.44(no-ptr):443  out=3532B/6p in=67057B/11p  age=5.859s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):54639  out=187B/1p in=101B/1p  age=5.872s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):49651  out=228B/1p in=37B/1p  age=5.966s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):45126  out=141B/1p in=55B/1p  age=5.869s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):12592  out=134B/1p in=37B/1p  age=5.962s reason=idle
+CLOSE UDP   pid=524(systemd-resolve) cookie=2965  127.0.0.53(dnsstub):53 -> 127.0.0.1(localhost):51523  out=141B/1p in=55B/1p  age=5.868s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=53115  10.0.2.15(lev-VirtualBox):40806 -> 140.82.112.25(lb-140-82-112-25-iad.github.com):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=53115  10.0.2.15(lev-VirtualBox):40806 -> 140.82.112.25(lb-140-82-112-25-iad.github.com):443  out=29B/1p in=25B/2p  age=5.586s reason=idle
+OPEN  TCP   pid=5612(Socket Thread) cookie=51501  10.0.2.15(lev-VirtualBox):51972 -> 34.107.243.93(93.243.107.34.bc.googleusercontent.com):443
+CLOSE TCP   pid=5612(Socket Thread) cookie=51501  10.0.2.15(lev-VirtualBox):51972 -> 34.107.243.93(93.243.107.34.bc.googleusercontent.com):443  out=28B/1p in=24B/2p  age=5.077s reason=idle
