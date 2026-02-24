@@ -890,24 +890,5 @@ int main(int argc, char **argv) {
 sudo ./bpfgo -resolve=false | stdbuf -oL egrep --line-buffered 'udp6_pktinfo|OPEN|CLOSE|ICMPv6|UDP'
 
 
-static __always_inline __u64 inode_cookie_from_sock(struct sock *sk)
-{
-    if (!sk) return 0;
-
-    struct socket *sock = BPF_CORE_READ(sk, sk_socket);
-    if (!sock) return 0;
-
-    struct file *file = BPF_CORE_READ(sock, file);
-    if (!file) return 0;
-
-    struct inode *ino = BPF_CORE_READ(file, f_inode);
-    if (!ino) return 0;
-
-    return (__u64)BPF_CORE_READ(ino, i_ino);
-}
-
-
-
-__u64 cookie = inode_cookie_from_sock(sk);
-if (!cookie) return 0;
-e.cookie = cookie;
+OPEN  UDP   pid=11900(udp6_pkt_client) cookie=59503  [fe80:0:0:0:7d27:9ada:6974:f568](?):47257 -> [fe80:0:0:0:0:0:0:2%enp0s3](?):9997
+CLOSE UDP   pid=11900(udp6_pkt_client) cookie=59503  [fe80:0:0:0:7d27:9ada:6974:f568](?):47257 -> [fe80:0:0:0:0:0:0:2%enp0s3](?):9997  out=4B/1p in=0B/0p  age=5.748s reason=idle
