@@ -908,6 +908,10 @@ echo -n "ping" | nc -u -w1 10.0.2.15 9999
 
 
 
-ev@lev-VirtualBox:~/bpfgo/test$ gcc -O2 -Wall -o udp_pktinfo_server udp_pktinfo_server.c
-cc1: fatal error: udp_pktinfo_server.c: No such file or directory
-compilation terminated.
+OPEN  UDP   pid=5655(nc) cookie=44189  10.0.2.15(?):40533 -> 10.0.2.15(?):9999
+CLOSE UDP   pid=5655(nc) cookie=44189  10.0.2.15(?):40533 -> 10.0.2.15(?):9999  out=4B/1p in=4B/1p  age=1.002s reason=close()
+OPEN  UDP   pid=5732(nc) cookie=41921  10.0.2.15(?):46852 -> 10.0.2.15(?):9999
+CLOSE UDP   pid=5732(nc) cookie=41921  10.0.2.15(?):46852 -> 10.0.2.15(?):9999  out=4B/1p in=4B/1p  age=1.002s reason=close()
+OPEN  UDP   pid=5813(nc) cookie=42348  10.0.2.15(?):48928 -> 10.0.2.15(?):9999
+CLOSE UDP   pid=5813(nc) cookie=42348  10.0.2.15(?):48928 -> 10.0.2.15(?):9999  out=4B/1p in=4B/1p  age=1.002s reason=close()
+
