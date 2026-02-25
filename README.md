@@ -731,66 +731,8 @@ done
 
 
 
-/* ===== write meta ===== */
-
-struct write_meta_t {
-    __u64 buf;   // user void*
-    __u64 cnt;   // size_t
-};
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 16384);
-    __type(key, __u64); // pid_tgid
-    __type(value, struct write_meta_t);
-} write_meta_map SEC(".maps");
-
-/* ===== TLS pending per cookie (to reassemble one TLS record) ===== */
-
-struct tls_need_t {
-    __u32 left;   // bytes remaining to emit from this TLS record
-    __u32 total;  // total bytes for this TLS record (record_len + 5)
-};
-
-struct {
-    __uint(type, BPF_MAP_TYPE_LRU_HASH);
-    __uint(max_entries, 65536);
-    __type(key, __u64);             // cookie
-    __type(value, struct tls_need_t);
-} tls_need_map SEC(".maps");
-
-SEC("tracepoint/syscalls/sys_enter_write")
-int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    int fd = (int)ctx->args[0];
-    if (!is_socket_fd(fd))
-        return 0;
-
-    // conn_info (как раньше)
-    struct conn_info_t ci = {};
-    ci.tgid = tgid;
-    ci.fd   = (__u32)fd;
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
-
-    // save buf + count for TLS chunk on exit
-    struct write_meta_t wm = {};
-    wm.buf = (__u64)ctx->args[1];
-    wm.cnt = (__u64)ctx->args[2];
-    if (wm.buf && wm.cnt)
-        bpf_map_update_elem(&write_meta_map, &id, &wm, BPF_ANY);
-
-    return 0;
-}
-
-
-
-
-SEC("tracepoint/syscalls/sys_exit_write")
-int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+SEC("tracepoint/syscalls/sys_exit_sendmsg")
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
 {
     __u64 id   = bpf_get_current_pid_tgid();
     __u32 tgid = id >> 32;
@@ -809,133 +751,109 @@ int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
         goto cleanup;
 
     __builtin_memset(info, 0, sizeof(*info));
-    info->event = EV_WRITE;
+    info->event = EV_SENDMSG;
     info->fd    = ci->fd;
     info->ret   = ret;
 
     fill_ids_comm_cookie(info, id, (int)ci->fd, ci->comm);
 
-    if (fill_from_fd_state_map(info, tgid, (int)ci->fd, 1 /* send */) < 0)
+    if (fill_from_fd_state_map(info, tgid, (int)ci->fd, 1) < 0)
         goto cleanup;
 
     loopback_fallback(info, 1);
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
-    /* ===== TLS chunk from write(buf): pending logic ===== */
-    if (info->proto == IPPROTO_TCP && info->cookie) {
-        struct write_meta_t *wm = bpf_map_lookup_elem(&write_meta_map, &id);
-        if (wm && wm->buf) {
-            __u64 base = wm->buf;
+    /* ===== TLS detection across multiple iov ===== */
 
-            // how many bytes were actually written
-            __u64 blen = (__u64)ret;
-            if (wm->cnt && blen > wm->cnt)
-                blen = wm->cnt;
+    int want_tls = (info->proto == IPPROTO_TCP) &&
+                   (info->dport == 443 || info->sport == 443 ||
+                    info->dport == 853 || info->sport == 853);
 
-            if (blen > 0) {
-                __u64 c = info->cookie;
+    if (!want_tls)
+        goto cleanup;
 
-                // do we already have a pending TLS record for this cookie?
-                struct tls_need_t *need = bpf_map_lookup_elem(&tls_need_map, &c);
+    __u64 msg_u = 0;
+    __u64 *msgp = bpf_map_lookup_elem(&msgSend_map, &id);
+    if (!msgp)
+        goto cleanup;
 
-                // if no pending, detect start of TLS ClientHello record
-                if (!need && blen >= 6) {
-                    // read: record hdr(5) + handshake_type(1)
-                    __u8 h[6] = {};
-                    if (bpf_probe_read_user(h, sizeof(h), (void *)base) == 0) {
-                        __u8 typ = h[0];
-                        __u8 v1  = h[1];
-                        __u8 v2  = h[2];
-                        __u16 rec_len = ((__u16)h[3] << 8) | (__u16)h[4];
-                        __u8 hs_type  = h[5];
+    msg_u = *msgp;
+    if (!msg_u)
+        goto cleanup;
 
-                        // TLS handshake record + ClientHello only
-                        if (typ == 0x16 && v1 == 0x03 && (v2 >= 0x01 && v2 <= 0x04) && hs_type == 0x01) {
-                            __u32 total = (__u32)rec_len + 5;
-                            // sanity cap: we only need first record for SNI
-                            if (total > 2048)
-                                total = 2048;
+    struct user_msghdr64 mh = {};
+    if (read_msghdr64(msg_u, &mh) != 0)
+        goto cleanup;
 
-                            struct tls_need_t init = {.left = total, .total = total};
-                            bpf_map_update_elem(&tls_need_map, &c, &init, BPF_ANY);
-                            need = bpf_map_lookup_elem(&tls_need_map, &c);
-                        }
-                    }
-                }
+    if (!mh.msg_iov || mh.msg_iovlen == 0)
+        goto cleanup;
 
-                // if pending exists: emit continuation chunks EVEN if buf doesn't start with 16 03 ...
-                if (need && need->left) {
-                    __u64 want = need->left;
-                    if (want > blen)
-                        want = blen;
+    __u32 iovcnt = mh.msg_iovlen > MAX_IOV ? MAX_IOV : (__u32)mh.msg_iovlen;
 
-                    // emit at least 1 byte if possible
-                    if (want > 0) {
-                        struct tls_chunk_t *ch = bpf_map_lookup_elem(&scratch_tls, &zero);
-                        if (ch) {
-                            __builtin_memset(ch, 0, sizeof(*ch));
+    struct tls_chunk_t *ch = bpf_map_lookup_elem(&scratch_tls, &zero);
+    if (!ch)
+        goto cleanup;
 
-                            ch->ts_ns  = bpf_ktime_get_ns();
-                            ch->cookie = c;
-                            ch->tgid   = info->tgid;
-                            ch->tid    = info->tid;
-                            ch->fd     = info->fd;
+    __builtin_memset(ch, 0, sizeof(*ch));
 
-                            ch->family = info->family;
-                            ch->proto  = info->proto;
-                            ch->sport  = info->sport;
-                            ch->dport  = info->dport;
-                            ch->event  = EV_TLS_CHUNK;
+    ch->ts_ns  = bpf_ktime_get_ns();
+    ch->cookie = info->cookie;
+    ch->tgid   = info->tgid;
+    ch->tid    = info->tid;
+    ch->fd     = info->fd;
+    ch->family = info->family;
+    ch->proto  = info->proto;
+    ch->sport  = info->sport;
+    ch->dport  = info->dport;
+    ch->event  = EV_TLS_CHUNK;
 
-                            // verifier-friendly reads: constant sizes only
-                            if (want >= TLS_SNAP) {
-                                if (bpf_probe_read_user(ch->data, TLS_SNAP, (void *)base) == 0) ch->len = TLS_SNAP;
-                            } else if (want >= 256) {
-                                if (bpf_probe_read_user(ch->data, 256, (void *)base) == 0) ch->len = 256;
-                            } else if (want >= 128) {
-                                if (bpf_probe_read_user(ch->data, 128, (void *)base) == 0) ch->len = 128;
-                            } else if (want >= 64) {
-                                if (bpf_probe_read_user(ch->data, 64, (void *)base) == 0) ch->len = 64;
-                            } else if (want >= 32) {
-                                if (bpf_probe_read_user(ch->data, 32, (void *)base) == 0) ch->len = 32;
-                            } else if (want >= 16) {
-                                if (bpf_probe_read_user(ch->data, 16, (void *)base) == 0) ch->len = 16;
-                            } else if (want >= 8) {
-                                if (bpf_probe_read_user(ch->data, 8, (void *)base) == 0) ch->len = 8;
-                            } else if (want >= 4) {
-                                if (bpf_probe_read_user(ch->data, 4, (void *)base) == 0) ch->len = 4;
-                            } else if (want >= 2) {
-                                if (bpf_probe_read_user(ch->data, 2, (void *)base) == 0) ch->len = 2;
-                            } else {
-                                if (bpf_probe_read_user(ch->data, 1, (void *)base) == 0) ch->len = 1;
-                            }
+    __u32 copied = 0;
 
-                            if (ch->len) {
-                                // decrease remaining bytes for this TLS record
-                                if (need->left <= ch->len) {
-                                    bpf_map_delete_elem(&tls_need_map, &c);
-                                } else {
-                                    need->left -= ch->len;
-                                }
+#pragma clang loop unroll(full)
+    for (int i = 0; i < MAX_IOV; i++) {
 
-                                bpf_perf_event_output(ctx, &tls_events, BPF_F_CURRENT_CPU, ch, sizeof(*ch));
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        if ((__u32)i >= iovcnt)
+            continue;
+
+        struct user_iovec64 iv = {};
+        __u64 ip = mh.msg_iov + (__u64)i * sizeof(struct user_iovec64);
+
+        if (bpf_probe_read_user(&iv, sizeof(iv), (void *)ip) != 0)
+            continue;
+
+        if (!iv.iov_base || iv.iov_len == 0)
+            continue;
+
+        __u64 to_copy = iv.iov_len;
+        if (copied + to_copy > TLS_SNAP)
+            to_copy = TLS_SNAP - copied;
+
+        if (to_copy == 0)
+            break;
+
+        if (bpf_probe_read_user(ch->data + copied, to_copy, (void *)iv.iov_base) == 0)
+            copied += to_copy;
+
+        if (copied >= TLS_SNAP)
+            break;
     }
 
+    if (copied < 6)
+        goto cleanup;
+
+    /* check TLS record header */
+    if (!(ch->data[0] == 0x16 &&
+          ch->data[1] == 0x03 &&
+          ch->data[2] >= 0x01 &&
+          ch->data[2] <= 0x04))
+        goto cleanup;
+
+    ch->len = copied;
+
+    bpf_perf_event_output(ctx, &tls_events, BPF_F_CURRENT_CPU, ch, sizeof(*ch));
+
 cleanup:
-    bpf_map_delete_elem(&write_meta_map, &id);
+    bpf_map_delete_elem(&msgSend_map, &id);
     bpf_map_delete_elem(&conn_info_map, &id);
     return 0;
 }
-
-
-
-
-
-
-2026/02/25 07:26:44.714714 SNI cookie=159420 mobile.events.data.microsoft.com
