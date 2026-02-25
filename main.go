@@ -1,25 +1,17 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
-	"context"
 	"encoding/binary"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log"
-	"math/bits"
-	"net"
-	"net/http"
-	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -31,7 +23,7 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 )
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target amd64 -type trace_info bpf trace.c -- -I.
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target amd64 -type trace_info -type tls_chunk_t bpf trace.c -- -I.
 
 var objs bpfObjects
 
@@ -57,50 +49,29 @@ const (
 	EV_WRITE    = 22
 	EV_CLOSE    = 30
 
-	// new: skb-derived L3 hint (real selected src IP)
 	EV_SKB_OUT = 40
+
+	// must match trace.c
+	EV_TLS_CHUNK = 50
 )
 
 var (
-	// perfMB = общий бюджет, делим на CPU + fallback.
-	flgPerfMB    = flag.Int("perfMB", 8, "perf buffer total budget in MB (divided per-CPU with fallback)")
-	flgPprof     = flag.Bool("pprof", true, "enable pprof")
-	flgPprofAddr = flag.String("pprofAddr", ":6060", "pprof listen addr")
-
-	flgTTL   = flag.Duration("ttl", 5*time.Second, "idle TTL for flow close")
-	flgSweep = flag.Duration("print", 1*time.Second, "TTL sweep interval + perf-loss rate logging interval")
+	flgPerfMB = flag.Int("perfMB", 8, "perf ring total budget in MB (per reader)")
+	flgTTL    = flag.Duration("ttl", 5*time.Second, "idle TTL for flow close")
+	flgSweep  = flag.Duration("sweep", 1*time.Second, "sweep interval")
 
 	flgOnlyPID  = flag.Int("pid", 0, "only this pid (0=all)")
 	flgOnlyComm = flag.String("comm", "", "only comm containing substring (empty=all)")
 
-	flgRW   = flag.Bool("rw", true, "trace read/write on socket fds")
 	flgMmsg = flag.Bool("mmsg", true, "trace sendmmsg/recvmmsg")
+	flgRW   = flag.Bool("rw", true, "trace read/write on socket fds")
 
-	// PTR resolve
-	flgResolve        = flag.Bool("resolve", true, "reverse DNS resolve IPs (PTR) async")
-	flgResolveTTL     = flag.Duration("resolveTTL", 30*time.Minute, "PTR cache TTL (positive)")
-	flgResolveNegTTL  = flag.Duration("resolveNegTTL", 5*time.Minute, "PTR negative TTL (NXDOMAIN only)")
-	flgResolveWorkers = flag.Int("resolveWorkers", 4, "PTR workers")
-	flgResolveTimeout = flag.Duration("resolveTimeout", 2*time.Second, "PTR timeout")
-	flgResolveQ       = flag.Int("resolveQ", 4096, "PTR queue size")
-	flgHostState      = flag.Bool("hostState", true, "show alias state: pending/miss/no-ptr/skip")
-
-	// known names from /etc/hosts
-	flgHostsPrefill = flag.Bool("hostsPrefill", true, "prefill names from /etc/hosts")
-	flgHostsFile    = flag.String("hostsFile", "/etc/hosts", "hosts file")
-	flgHostsTTL     = flag.Duration("hostsTTL", 24*time.Hour, "hosts prefill TTL")
-
-	// dns cache sweep
-	flgResolveSweepEach = flag.Int("resolveSweepEach", 500, "dns cache sweep per tick")
-	flgResolvePokeEach  = flag.Int("resolvePokeEach", 256, "poke flows per tick to resolve alias")
-
-	// L3-hint cache ttl + OPEN delay to wait for skb-hint (to avoid *(any))
-	flgL3TTL       = flag.Duration("l3ttl", 10*time.Second, "TTL for skb-derived L3 hints (cookie->src/dst)")
-	flgOpenDelay   = flag.Duration("openDelay", 200*time.Millisecond, "delay OPEN print (max) to wait for skb hint to fill src ip")
-	flgL3SweepEach = flag.Int("l3SweepEach", 500, "l3 hint sweep per tick")
+	flgSNI     = flag.Bool("sni", true, "parse SNI from TLS ClientHello")
+	flgSniTTL  = flag.Duration("sniTTL", 30*time.Second, "SNI cache TTL")
+	flgTlsKeep = flag.Duration("tlsKeep", 2*time.Second, "keep partial TLS buffers for this long")
 )
 
-/* ===== basic helpers ===== */
+/* --------------------- small helpers --------------------- */
 
 func commString(c [32]int8) string {
 	var b [32]byte
@@ -154,7 +125,7 @@ func isAllZero16(b [16]byte) bool {
 	return true
 }
 
-// IPv4 u32 from kernel is network-order but looks swapped on little-endian.
+// kernel u32 IPv4 is network-order but appears swapped on little-endian
 func ip4KeyFromU32Net(x uint32) (key [16]byte) {
 	var b4 [4]byte
 	binary.LittleEndian.PutUint32(b4[:], x)
@@ -179,49 +150,25 @@ func fmtIPv6Full(b [16]byte) string {
 	)
 }
 
-func isIPv6LinkLocalUnicast(ip [16]byte) bool { return ip[0] == 0xfe && (ip[1]&0xc0) == 0x80 }
-func isIPv6LinkLocalMulticast(ip [16]byte) bool {
-	return ip[0] == 0xff && (ip[1]&0x0f) == 0x02
-}
-func needsScope6(ip [16]byte) bool { return isIPv6LinkLocalUnicast(ip) || isIPv6LinkLocalMulticast(ip) }
-
-func isIPv6Loopback(ip [16]byte) bool {
-	for i := 0; i < 15; i++ {
-		if ip[i] != 0 {
-			return false
-		}
+func addrStr(family uint16, ip [16]byte) string {
+	if isAllZero16(ip) {
+		return "*"
 	}
-	return ip[15] == 1 // ::1
+	if family == AF_INET6 {
+		return fmtIPv6Full(ip)
+	}
+	return fmtIPv4FromKey(ip)
 }
 
-type ifResolver struct {
-	mu sync.Mutex
-	m  map[uint32]string
+func fmtEndpoint(family uint16, ip [16]byte, port uint16, proto uint8) string {
+	if proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6 {
+		return addrStr(family, ip)
+	}
+	if family == AF_INET6 && !isAllZero16(ip) {
+		return fmt.Sprintf("[%s]:%d", addrStr(family, ip), port)
+	}
+	return fmt.Sprintf("%s:%d", addrStr(family, ip), port)
 }
-
-func (r *ifResolver) name(ifidx uint32) string {
-	if ifidx == 0 {
-		return ""
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.m == nil {
-		r.m = make(map[uint32]string, 32)
-	}
-	if s, ok := r.m[ifidx]; ok {
-		return s
-	}
-	ifi, err := net.InterfaceByIndex(int(ifidx))
-	if err != nil || ifi == nil || ifi.Name == "" {
-		s := fmt.Sprintf("if%d", ifidx)
-		r.m[ifidx] = s
-		return s
-	}
-	r.m[ifidx] = ifi.Name
-	return ifi.Name
-}
-
-var ifr ifResolver
 
 func srcKeyFromEvent(ev bpfTraceInfo) (k [16]byte) {
 	if uint16(ev.Family) == AF_INET {
@@ -238,570 +185,263 @@ func dstKeyFromEvent(ev bpfTraceInfo) (k [16]byte) {
 	return
 }
 
-func srcScopeFromEvent(ev bpfTraceInfo) uint32 {
-	if uint16(ev.Family) == AF_INET6 {
-		return uint32(ev.SrcScope)
+/* --------------------- TLS SNI parsing --------------------- */
+
+func u16(b []byte, i int) (uint16, bool) {
+	if i+2 > len(b) {
+		return 0, false
 	}
-	return 0
+	return uint16(b[i])<<8 | uint16(b[i+1]), true
 }
-func dstScopeFromEvent(ev bpfTraceInfo) uint32 {
-	if uint16(ev.Family) == AF_INET6 {
-		return uint32(ev.DstScope)
+
+// expects one TLS record starting at buf[0] (type 0x16)
+func parseSNIFromTLSRecord(buf []byte) string {
+	if len(buf) < 5 {
+		return ""
 	}
-	return 0
-}
-
-/* ===== .env loader (no deps) ===== */
-
-func fileExists(path string) bool {
-	st, err := os.Stat(path)
-	return err == nil && !st.IsDir()
-}
-
-func loadDotEnvFile(path string, override bool) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
+	if buf[0] != 0x16 { // Handshake
+		return ""
 	}
-	defer f.Close()
-	return loadDotEnvReader(f, override)
-}
+	if buf[1] != 0x03 {
+		return ""
+	}
+	recLenU, ok := u16(buf, 3)
+	if !ok {
+		return ""
+	}
+	total := int(recLenU) + 5
+	if total < 6 || len(buf) < total {
+		return ""
+	}
 
-func loadDotEnvReader(r io.Reader, override bool) error {
-	sc := bufio.NewScanner(r)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
+	p := 5
+	if p+4 > total {
+		return ""
+	}
+	if buf[p] != 0x01 { // ClientHello
+		return ""
+	}
+	hsLen := int(buf[p+1])<<16 | int(buf[p+2])<<8 | int(buf[p+3])
+	p += 4
+	if p+hsLen > total {
+		return ""
+	}
+
+	// version(2)+random(32)
+	if p+34 > total {
+		return ""
+	}
+	p += 34
+
+	// session id
+	if p+1 > total {
+		return ""
+	}
+	sidLen := int(buf[p])
+	p++
+	if p+sidLen > total {
+		return ""
+	}
+	p += sidLen
+
+	// cipher suites
+	csLenU, ok := u16(buf, p)
+	if !ok {
+		return ""
+	}
+	csLen := int(csLenU)
+	p += 2
+	if p+csLen > total {
+		return ""
+	}
+	p += csLen
+
+	// compression
+	if p+1 > total {
+		return ""
+	}
+	cmLen := int(buf[p])
+	p++
+	if p+cmLen > total {
+		return ""
+	}
+	p += cmLen
+
+	// extensions
+	extLenU, ok := u16(buf, p)
+	if !ok {
+		return ""
+	}
+	extLen := int(extLenU)
+	p += 2
+	if p+extLen > total {
+		return ""
+	}
+	extEnd := p + extLen
+
+	for p+4 <= extEnd {
+		typU, _ := u16(buf, p)
+		lU, _ := u16(buf, p+2)
+		typ := int(typU)
+		l := int(lU)
+		p += 4
+		if p+l > extEnd {
+			return ""
 		}
-		if i := strings.Index(line, " #"); i >= 0 {
-			line = strings.TrimSpace(line[:i])
-		}
-		if strings.HasPrefix(line, "export ") {
-			line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
-		}
-		i := strings.IndexByte(line, '=')
-		if i <= 0 {
-			continue
-		}
-		key := strings.TrimSpace(line[:i])
-		val := strings.TrimSpace(line[i+1:])
-		if len(val) >= 2 {
-			if (val[0] == '"' && val[len(val)-1] == '"') || (val[0] == '\'' && val[len(val)-1] == '\'') {
-				val = val[1 : len(val)-1]
+
+		if typ == 0x0000 { // server_name
+			if p+2 > extEnd {
+				return ""
 			}
-		}
-		if key == "" {
-			continue
-		}
-		if !override {
-			if _, exists := os.LookupEnv(key); exists {
-				continue
+			listLenU, _ := u16(buf, p)
+			listLen := int(listLenU)
+			q := p + 2
+			end := q + listLen
+			if end > p+l {
+				return ""
 			}
-		}
-		_ = os.Setenv(key, val)
-	}
-	return sc.Err()
-}
-
-func loadDotEnvAuto() (string, error) {
-	if p, ok := os.LookupEnv("BPFGO_DOTENV"); ok && strings.TrimSpace(p) != "" {
-		p = strings.TrimSpace(p)
-		if fileExists(p) {
-			return p, loadDotEnvFile(p, false)
-		}
-		return p, fmt.Errorf("BPFGO_DOTENV set but file not found: %s", p)
-	}
-	if fileExists(".env") {
-		return ".env", loadDotEnvFile(".env", false)
-	}
-	if exe, err := os.Executable(); err == nil {
-		dir := filepath.Dir(exe)
-		p := filepath.Join(dir, ".env")
-		if fileExists(p) {
-			return p, loadDotEnvFile(p, false)
-		}
-	}
-	return "", nil
-}
-
-func applyEnvToFlags() {
-	set := func(flagName, envName string) {
-		if v, ok := os.LookupEnv(envName); ok && strings.TrimSpace(v) != "" {
-			_ = flag.Set(flagName, strings.TrimSpace(v))
-		}
-	}
-
-	set("perfMB", "BPFGO_PERF_MB")
-	set("pprof", "BPFGO_PPROF")
-	set("pprofAddr", "BPFGO_PPROF_ADDR")
-	set("ttl", "BPFGO_TTL")
-	set("print", "BPFGO_SWEEP")
-	set("pid", "BPFGO_ONLY_PID")
-	set("comm", "BPFGO_ONLY_COMM")
-	set("rw", "BPFGO_RW")
-	set("mmsg", "BPFGO_MMSG")
-
-	set("resolve", "BPFGO_RESOLVE")
-	set("resolveTTL", "BPFGO_RESOLVE_TTL")
-	set("resolveNegTTL", "BPFGO_RESOLVE_NEG_TTL")
-	set("resolveWorkers", "BPFGO_RESOLVE_WORKERS")
-	set("resolveTimeout", "BPFGO_RESOLVE_TIMEOUT")
-	set("resolveQ", "BPFGO_RESOLVE_Q")
-	set("hostState", "BPFGO_HOST_STATE")
-
-	set("hostsPrefill", "BPFGO_HOSTS_PREFILL")
-	set("hostsFile", "BPFGO_HOSTS_FILE")
-	set("hostsTTL", "BPFGO_HOSTS_TTL")
-
-	set("resolveSweepEach", "BPFGO_RESOLVE_SWEEP_EACH")
-	set("resolvePokeEach", "BPFGO_RESOLVE_POKE_EACH")
-
-	set("l3ttl", "BPFGO_L3_TTL")
-	set("openDelay", "BPFGO_OPEN_DELAY")
-	set("l3SweepEach", "BPFGO_L3_SWEEP_EACH")
-}
-
-/* ===== PTR resolver cache ===== */
-
-type dnsKey struct {
-	Family uint16
-	IP     [16]byte
-}
-
-type dnsEntry struct {
-	Name    string
-	Exp     time.Time
-	Pending bool
-	Neg     bool
-}
-
-type dnsResolver struct {
-	mu     sync.Mutex
-	m      map[dnsKey]*dnsEntry
-	q      chan dnsKey
-	ttl    time.Duration
-	negTtl time.Duration
-	to     time.Duration
-	wg     sync.WaitGroup
-}
-
-func newDNSResolver(qsize, workers int, ttl, negTtl, timeout time.Duration) *dnsResolver {
-	if workers < 1 {
-		workers = 1
-	}
-	if qsize < 64 {
-		qsize = 64
-	}
-	r := &dnsResolver{
-		m:      make(map[dnsKey]*dnsEntry, 8192),
-		q:      make(chan dnsKey, qsize),
-		ttl:    ttl,
-		negTtl: negTtl,
-		to:     timeout,
-	}
-	r.wg.Add(workers)
-	for i := 0; i < workers; i++ {
-		go func() { defer r.wg.Done(); r.worker() }()
-	}
-	return r
-}
-
-func (r *dnsResolver) Close() { close(r.q); r.wg.Wait() }
-
-func ipToNetIP(family uint16, ip [16]byte) net.IP {
-	if family == AF_INET {
-		return net.IPv4(ip[0], ip[1], ip[2], ip[3]).To4()
-	}
-	b := make([]byte, 16)
-	copy(b, ip[:])
-	return net.IP(b)
-}
-
-func shouldResolveIP(family uint16, ip [16]byte) bool {
-	if isAllZero16(ip) {
-		return false
-	}
-	nip := ipToNetIP(family, ip)
-	if nip == nil {
-		return false
-	}
-	if nip.IsLoopback() || nip.IsMulticast() || nip.IsUnspecified() {
-		return false
-	}
-	if family == AF_INET6 && needsScope6(ip) {
-		return false
-	}
-	return true
-}
-
-func trimDot(s string) string {
-	s = strings.TrimSpace(s)
-	for strings.HasSuffix(s, ".") {
-		s = strings.TrimSuffix(s, ".")
-	}
-	return s
-}
-
-func (r *dnsResolver) SetKnown(family uint16, ip [16]byte, name string, ttl time.Duration) {
-	name = trimDot(name)
-	if name == "" {
-		return
-	}
-	k := dnsKey{Family: family, IP: ip}
-	r.mu.Lock()
-	r.m[k] = &dnsEntry{Name: name, Exp: time.Now().Add(ttl)}
-	r.mu.Unlock()
-}
-
-func (r *dnsResolver) Get(family uint16, ip [16]byte) (string, bool) {
-	if !shouldResolveIP(family, ip) {
-		return "", false
-	}
-	k := dnsKey{Family: family, IP: ip}
-	now := time.Now()
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	e := r.m[k]
-	if e == nil {
-		return "", false
-	}
-	if now.After(e.Exp) && !e.Pending {
-		delete(r.m, k)
-		return "", false
-	}
-	if e.Neg || e.Name == "" {
-		return "", false
-	}
-	return e.Name, true
-}
-
-func (r *dnsResolver) Peek(family uint16, ip [16]byte) (name string, pending bool, neg bool, ok bool) {
-	if !shouldResolveIP(family, ip) {
-		return "", false, false, false
-	}
-	k := dnsKey{Family: family, IP: ip}
-	now := time.Now()
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	e := r.m[k]
-	if e == nil {
-		return "", false, false, false
-	}
-	if now.After(e.Exp) && !e.Pending {
-		delete(r.m, k)
-		return "", false, false, false
-	}
-	return e.Name, e.Pending, e.Neg, true
-}
-
-func (r *dnsResolver) Ensure(family uint16, ip [16]byte) {
-	if !shouldResolveIP(family, ip) {
-		return
-	}
-	k := dnsKey{Family: family, IP: ip}
-	now := time.Now()
-
-	r.mu.Lock()
-	if e := r.m[k]; e != nil {
-		if e.Pending || now.Before(e.Exp) {
-			r.mu.Unlock()
-			return
-		}
-		e.Pending = true
-		e.Name = ""
-		e.Neg = false
-		r.mu.Unlock()
-	} else {
-		r.m[k] = &dnsEntry{Pending: true}
-		r.mu.Unlock()
-	}
-
-	select {
-	case r.q <- k:
-	default:
-		r.mu.Lock()
-		if e := r.m[k]; e != nil {
-			e.Pending = false
-			e.Exp = time.Now().Add(500 * time.Millisecond)
-		}
-		r.mu.Unlock()
-	}
-}
-
-func (r *dnsResolver) worker() {
-	for k := range r.q {
-		ip := ipToNetIP(k.Family, k.IP)
-		name := ""
-		neg := false
-		retrySoon := false
-
-		ctx, cancel := context.WithTimeout(context.Background(), r.to)
-		names, err := net.DefaultResolver.LookupAddr(ctx, ip.String())
-		cancel()
-
-		if err != nil {
-			// ВАЖНО: timeout/temporary НЕ кэшируем как neg на 5 минут
-			if dnsErr, ok := err.(*net.DNSError); ok {
-				if dnsErr.IsNotFound {
-					neg = true
-				} else if dnsErr.IsTimeout || dnsErr.IsTemporary {
-					retrySoon = true
-				} else {
-					retrySoon = true
+			for q+3 <= end {
+				nameType := buf[q]
+				q++
+				nameLenU, _ := u16(buf, q)
+				nameLen := int(nameLenU)
+				q += 2
+				if q+nameLen > end {
+					return ""
 				}
+				if nameType == 0 {
+					host := strings.TrimSpace(string(buf[q : q+nameLen]))
+					if host != "" {
+						return host
+					}
+				}
+				q += nameLen
+			}
+			return ""
+		}
+
+		p += l
+	}
+
+	return ""
+}
+
+/* --------------------- TLS reassembly (fix for "rare SNI") --------------------- */
+
+type tlsReasm struct {
+	buf  []byte
+	seen time.Time
+	done bool // SNI already found for this cookie
+}
+
+const (
+	tlsMaxBuf = 16 * 1024 // cap memory per cookie
+)
+
+// find TLS handshake record header in b (16 03 xx len len)
+func findTLSHeader(b []byte) int {
+	// naive scan is fast enough for <=16KB
+	for i := 0; i+5 <= len(b); i++ {
+		if b[i] == 0x16 && b[i+1] == 0x03 {
+			v := b[i+2]
+			if v >= 0x01 && v <= 0x04 { // TLS1.0..1.3 record version bytes
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+// Feed new chunk, try to extract complete TLS records and parse SNI.
+// Returns (sni, ok).
+func (t *tlsReasm) Feed(now time.Time, chunk []byte) (string, bool) {
+	if t.done {
+		return "", false
+	}
+	t.seen = now
+
+	// append with cap
+	if len(chunk) > 0 {
+		need := len(t.buf) + len(chunk)
+		if need > tlsMaxBuf {
+			// keep tail (most recent) to avoid endless growth
+			drop := need - tlsMaxBuf
+			if drop >= len(t.buf) {
+				t.buf = t.buf[:0]
 			} else {
-				retrySoon = true
+				t.buf = append([]byte(nil), t.buf[drop:]...)
+			}
+		}
+		t.buf = append(t.buf, chunk...)
+	}
+
+	// reassembly loop: align to header, wait full record, parse, consume
+	for {
+		if len(t.buf) < 5 {
+			return "", false
+		}
+
+		hi := findTLSHeader(t.buf)
+		if hi < 0 {
+			// keep last 4 bytes just in case header crosses boundary
+			if len(t.buf) > 4 {
+				t.buf = append([]byte(nil), t.buf[len(t.buf)-4:]...)
+			}
+			return "", false
+		}
+		if hi > 0 {
+			// drop garbage before header
+			t.buf = t.buf[hi:]
+			if len(t.buf) < 5 {
+				return "", false
 			}
 		}
 
-		if len(names) > 0 {
-			name = trimDot(names[0])
-			if name == "" {
-				neg = true
-				retrySoon = false
-			}
-		} else {
-			if !retrySoon {
-				neg = true
-			}
-		}
-
-		exp := time.Now().Add(r.ttl)
-		if neg {
-			exp = time.Now().Add(r.negTtl)
-		} else if retrySoon {
-			exp = time.Now().Add(2 * time.Second)
-		}
-
-		r.mu.Lock()
-		e := r.m[k]
-		if e == nil {
-			e = &dnsEntry{}
-			r.m[k] = e
-		}
-		e.Pending = false
-		e.Neg = neg
-		e.Name = name
-		e.Exp = exp
-		r.mu.Unlock()
-	}
-}
-
-func (r *dnsResolver) SweepExpired(limit int) {
-	if limit <= 0 {
-		return
-	}
-	now := time.Now()
-	n := 0
-	r.mu.Lock()
-	for k, e := range r.m {
-		if !e.Pending && now.After(e.Exp) {
-			delete(r.m, k)
-			n++
-			if n >= limit {
-				break
-			}
-		}
-	}
-	r.mu.Unlock()
-}
-
-func parseHostsPrefill(path string, ttl time.Duration, r *dnsResolver) {
-	f, err := os.Open(path)
-	if err != nil {
-		log.Printf("hostsPrefill: open %s: %v", path, err)
-		return
-	}
-	defer f.Close()
-
-	sc := bufio.NewScanner(f)
-	added := 0
-	for sc.Scan() {
-		line := sc.Text()
-		if i := strings.IndexByte(line, '#'); i >= 0 {
-			line = line[:i]
-		}
-		line = strings.TrimSpace(line)
-		if line == "" {
+		recLen := int(t.buf[3])<<8 | int(t.buf[4])
+		total := 5 + recLen
+		if recLen <= 0 || total > tlsMaxBuf {
+			// invalid length -> drop 1 byte and resync
+			t.buf = t.buf[1:]
 			continue
 		}
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
+		if len(t.buf) < total {
+			// wait more
+			return "", false
 		}
-		ipStr := fields[0]
-		name := fields[1]
-		ip := net.ParseIP(ipStr)
-		if ip == nil {
-			continue
+
+		rec := t.buf[:total]
+		if sni := parseSNIFromTLSRecord(rec); sni != "" {
+			t.done = true
+			return sni, true
 		}
-		if v4 := ip.To4(); v4 != nil {
-			var key [16]byte
-			copy(key[:4], v4)
-			r.SetKnown(AF_INET, key, name, ttl)
-			added++
-			continue
-		}
-		if v6 := ip.To16(); v6 != nil {
-			var key [16]byte
-			copy(key[:], v6)
-			r.SetKnown(AF_INET6, key, name, ttl)
-			added++
-		}
+
+		// consume this record and continue scanning next records
+		t.buf = t.buf[total:]
 	}
-	if err := sc.Err(); err != nil {
-		log.Printf("hostsPrefill: scan %s: %v", path, err)
-	}
-	log.Printf("hostsPrefill: added=%d from %s", added, path)
 }
 
-var dnsr *dnsResolver
-
-/* ===== L3 hint cache (cookie -> real src/dst) ===== */
-
-type l3Info struct {
-	Family uint16
-	Proto  uint8
-	Src    [16]byte
-	Sport  uint16
-	SrcSc  uint32
-	Dst    [16]byte
-	Dport  uint16
-	DstSc  uint32
-	Seen   time.Time
+type sniEntry struct {
+	Name string
+	Seen time.Time
 }
 
-func (l l3Info) expired(now time.Time, ttl time.Duration) bool {
-	return now.Sub(l.Seen) > ttl
-}
-
-/* ===== unified endpoint printing: ip(alias):port ===== */
-
-func specialAlias(family uint16, ip [16]byte) (string, bool) {
-	if family == AF_INET {
-		// localhost
-		if ip[0] == 127 && ip[1] == 0 && ip[2] == 0 && ip[3] == 1 {
-			return "localhost", true
-		}
-		// systemd-resolved stub
-		if ip[0] == 127 && ip[1] == 0 && ip[2] == 0 && ip[3] == 53 {
-			return "dnsstub", true
-		}
-		// VirtualBox NAT defaults
-		if ip[0] == 10 && ip[1] == 0 && ip[2] == 2 && ip[3] == 2 {
-			return "vboxgw", true
-		}
-		if ip[0] == 10 && ip[1] == 0 && ip[2] == 2 && ip[3] == 3 {
-			return "vboxdns", true
-		}
-	}
-	if family == AF_INET6 && isIPv6Loopback(ip) {
-		return "localhost", true
-	}
-	return "", false
-}
-
-func addrStr(family uint16, ip [16]byte, scope uint32) string {
-	if isAllZero16(ip) {
-		return "*"
-	}
-	if family == AF_INET6 {
-		s := fmtIPv6Full(ip)
-		if needsScope6(ip) && scope != 0 {
-			s += "%" + ifr.name(scope)
-		}
-		return s
-	}
-	return fmtIPv4FromKey(ip)
-}
-
-// aliasForIP: всегда возвращает alias (или состояние), может дернуть Ensure().
-func aliasForIP(family uint16, ip [16]byte) string {
-	if isAllZero16(ip) {
-		return "any"
-	}
-	if a, ok := specialAlias(family, ip); ok {
-		return a
-	}
-	if dnsr == nil {
-		return "?"
-	}
-	if !shouldResolveIP(family, ip) {
-		return "skip"
-	}
-	if h, ok := dnsr.Get(family, ip); ok && h != "" {
-		return h
-	}
-	if name, pending, neg, ok := dnsr.Peek(family, ip); ok {
-		if name != "" && !neg {
-			return name
-		}
-		if pending {
-			if *flgHostState {
-				return "pending"
-			}
-			return "?"
-		}
-		if neg {
-			if *flgHostState {
-				return "no-ptr"
-			}
-			return "?"
-		}
-	}
-	dnsr.Ensure(family, ip)
-	if *flgHostState {
-		// чтобы "miss" не залипал — можно сразу peek; но достаточно так
-		return "miss"
-	}
-	return "?"
-}
-
-func fmtEndpointAll(family uint16, ip [16]byte, port uint16, scope uint32, proto uint8, alias string) string {
-	isICMP := proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6
-	a := addrStr(family, ip, scope)
-	if alias == "" {
-		alias = "?"
-	}
-	if isICMP {
-		return fmt.Sprintf("%s(%s)", a, alias)
-	}
-	if family == AF_INET6 && !isAllZero16(ip) {
-		return fmt.Sprintf("[%s](%s):%d", a, alias, port)
-	}
-	return fmt.Sprintf("%s(%s):%d", a, alias, port)
-}
-
-/* ===== FLOW ===== */
+/* --------------------- Flow model --------------------- */
 
 type FlowKey struct {
 	TGID   uint32
 	Cookie uint64
 	Proto  uint8
 	Family uint16
-
-	PeerMode uint8
-	Rport    uint16
-	Remote   [16]byte
-	Rscope   uint32
 }
 
 type Flow struct {
 	Key  FlowKey
 	Comm string
 
-	Local      [16]byte
-	Lport      uint16
-	LocalScope uint32
-
-	Remote      [16]byte
-	Rport       uint16
-	RemoteScope uint32
+	Local  [16]byte
+	Lport  uint16
+	Remote [16]byte
+	Rport  uint16
 
 	FirstSeen time.Time
 	LastSeen  time.Time
@@ -814,168 +454,75 @@ type Flow struct {
 	OpenedPrinted bool
 	GenStart      uint64
 
-	RemoteHost string // per-flow cache for real resolved name (not miss/pending/no-ptr)
+	TLSSNI string
 }
 
 func makeKey(ev bpfTraceInfo) FlowKey {
-	k := FlowKey{
+	return FlowKey{
 		TGID:   ev.Tgid,
 		Cookie: ev.Cookie,
 		Proto:  uint8(ev.Proto),
 		Family: uint16(ev.Family),
 	}
-
-	evt := uint8(ev.Event)
-
-	if k.Proto == IPPROTO_UDP {
-		var remote [16]byte
-		var rport uint16
-		var rscope uint32
-
-		if isRecv(evt) {
-			remote = srcKeyFromEvent(ev)
-			rport = uint16(ev.Sport)
-			rscope = srcScopeFromEvent(ev)
-		} else {
-			remote = dstKeyFromEvent(ev)
-			rport = uint16(ev.Dport)
-			rscope = dstScopeFromEvent(ev)
-		}
-
-		if rport != 0 && !isAllZero16(remote) {
-			k.PeerMode = 1
-			k.Remote = remote
-			k.Rport = rport
-			if k.Family == AF_INET6 && needsScope6(remote) && rscope != 0 {
-				k.Rscope = rscope
-			}
-		}
-	}
-
-	if k.Proto == IPPROTO_ICMP || k.Proto == IPPROTO_ICMPV6 {
-		var remote [16]byte
-		var rscope uint32
-		if isRecv(evt) {
-			remote = srcKeyFromEvent(ev)
-			rscope = srcScopeFromEvent(ev)
-		} else {
-			remote = dstKeyFromEvent(ev)
-			rscope = dstScopeFromEvent(ev)
-		}
-		if !isAllZero16(remote) {
-			k.PeerMode = 1
-			k.Remote = remote
-			if k.Family == AF_INET6 && needsScope6(remote) && rscope != 0 {
-				k.Rscope = rscope
-			}
-		}
-	}
-
-	return k
 }
 
 func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 	evt := uint8(ev.Event)
 
-	var localIP, remoteIP [16]byte
-	var lport, rport uint16
-	var localScope, remoteScope uint32
-
 	switch {
 	case isSend(evt) || evt == EV_CONNECT:
-		localIP = srcKeyFromEvent(ev)
-		remoteIP = dstKeyFromEvent(ev)
-		lport = uint16(ev.Sport)
-		rport = uint16(ev.Dport)
-		localScope = srcScopeFromEvent(ev)
-		remoteScope = dstScopeFromEvent(ev)
+		if !isAllZero16(srcKeyFromEvent(ev)) {
+			f.Local = srcKeyFromEvent(ev)
+		}
+		if !isAllZero16(dstKeyFromEvent(ev)) {
+			f.Remote = dstKeyFromEvent(ev)
+		}
+		if ev.Sport != 0 {
+			f.Lport = uint16(ev.Sport)
+		}
+		if ev.Dport != 0 {
+			f.Rport = uint16(ev.Dport)
+		}
 
 	case isRecv(evt):
-		localIP = dstKeyFromEvent(ev)
-		remoteIP = srcKeyFromEvent(ev)
-		lport = uint16(ev.Dport)
-		rport = uint16(ev.Sport)
-		localScope = dstScopeFromEvent(ev)
-		remoteScope = srcScopeFromEvent(ev)
+		if !isAllZero16(dstKeyFromEvent(ev)) {
+			f.Local = dstKeyFromEvent(ev)
+		}
+		if !isAllZero16(srcKeyFromEvent(ev)) {
+			f.Remote = srcKeyFromEvent(ev)
+		}
+		if ev.Dport != 0 {
+			f.Lport = uint16(ev.Dport)
+		}
+		if ev.Sport != 0 {
+			f.Rport = uint16(ev.Sport)
+		}
 
 	case evt == EV_BINDOK:
-		localIP = srcKeyFromEvent(ev)
-		lport = uint16(ev.Sport)
-		localScope = srcScopeFromEvent(ev)
+		if !isAllZero16(srcKeyFromEvent(ev)) {
+			f.Local = srcKeyFromEvent(ev)
+		}
+		if ev.Sport != 0 {
+			f.Lport = uint16(ev.Sport)
+		}
 
 	case evt == EV_ACCEPT:
-		localIP = dstKeyFromEvent(ev)
-		remoteIP = srcKeyFromEvent(ev)
-		lport = uint16(ev.Dport)
-		rport = uint16(ev.Sport)
-		localScope = dstScopeFromEvent(ev)
-		remoteScope = srcScopeFromEvent(ev)
-	}
-
-	if f.Lport == 0 && lport != 0 {
-		f.Lport = lport
-	}
-	if isAllZero16(f.Local) && !isAllZero16(localIP) {
-		f.Local = localIP
-	}
-	if f.LocalScope == 0 && localScope != 0 && needsScope6(localIP) {
-		f.LocalScope = localScope
-	}
-
-	if f.Rport == 0 && rport != 0 {
-		f.Rport = rport
-	}
-	if isAllZero16(f.Remote) && !isAllZero16(remoteIP) {
-		f.Remote = remoteIP
-	}
-	if f.RemoteScope == 0 && remoteScope != 0 && needsScope6(remoteIP) {
-		f.RemoteScope = remoteScope
-	}
-}
-
-// apply skb-hint to fill missing local ip (and sometimes remote too)
-func applyL3HintToFlow(f *Flow, h l3Info) {
-	if h.Family != f.Key.Family || h.Proto != f.Key.Proto {
-		return
-	}
-
-	// If we already know remote, try to match either direction
-	if !isAllZero16(f.Remote) {
-		// send direction: remote == dst
-		if f.Rport != 0 && f.Rport == h.Dport && bytes.Equal(f.Remote[:], h.Dst[:]) {
-			if isAllZero16(f.Local) && !isAllZero16(h.Src) {
-				f.Local = h.Src
-				f.LocalScope = h.SrcSc
-			}
-			if f.Lport == 0 && h.Sport != 0 {
-				f.Lport = h.Sport
-			}
-			return
+		if !isAllZero16(dstKeyFromEvent(ev)) {
+			f.Local = dstKeyFromEvent(ev)
 		}
-		// recv direction: remote == src
-		if f.Rport != 0 && f.Rport == h.Sport && bytes.Equal(f.Remote[:], h.Src[:]) {
-			if isAllZero16(f.Local) && !isAllZero16(h.Dst) {
-				f.Local = h.Dst
-				f.LocalScope = h.DstSc
-			}
-			if f.Lport == 0 && h.Dport != 0 {
-				f.Lport = h.Dport
-			}
-			return
+		if !isAllZero16(srcKeyFromEvent(ev)) {
+			f.Remote = srcKeyFromEvent(ev)
 		}
-	}
-
-	// If remote is unknown, we can still fill local from src (best effort)
-	if isAllZero16(f.Local) && !isAllZero16(h.Src) {
-		f.Local = h.Src
-		f.LocalScope = h.SrcSc
-		if f.Lport == 0 && h.Sport != 0 {
-			f.Lport = h.Sport
+		if ev.Dport != 0 {
+			f.Lport = uint16(ev.Dport)
+		}
+		if ev.Sport != 0 {
+			f.Rport = uint16(ev.Sport)
 		}
 	}
 }
 
-func flowReadyToOpenBase(f *Flow) bool {
+func flowReadyToOpen(f *Flow) bool {
 	if isAllZero16(f.Remote) {
 		return false
 	}
@@ -987,170 +534,70 @@ func flowReadyToOpenBase(f *Flow) bool {
 	}
 }
 
-func flowReadyToPrintOpen(f *Flow) bool {
-	if !flowReadyToOpenBase(f) {
-		return false
-	}
-	// if local ip still unknown, wait a bit for skb-hint
-	if isAllZero16(f.Local) && time.Since(f.FirstSeen) < *flgOpenDelay {
-		return false
-	}
-	return true
-}
-
-var lostTotal uint64
-var lostGen uint64
-
-func maybeLostNote(f *Flow) string {
-	if f.InBytes == 0 && f.OutBytes == 0 && f.GenStart != atomic.LoadUint64(&lostGen) {
-		return " maybe_lost=1"
-	}
-	return ""
-}
-
-func incompleteNote(f *Flow) string {
-	switch f.Key.Proto {
-	case IPPROTO_TCP, IPPROTO_UDP:
-		if isAllZero16(f.Remote) || f.Lport == 0 || f.Rport == 0 {
-			return " incomplete=1"
-		}
-	case IPPROTO_ICMP, IPPROTO_ICMPV6:
-		if isAllZero16(f.Remote) {
-			return " incomplete=1"
-		}
-	}
-	return ""
-}
-
-func dropZeroFlow(f *Flow) bool {
-	if f.InBytes != 0 || f.OutBytes != 0 {
-		return false
-	}
-	if f.Key.Proto == IPPROTO_UDP || f.Key.Proto == IPPROTO_ICMP || f.Key.Proto == IPPROTO_ICMPV6 {
-		return f.GenStart == atomic.LoadUint64(&lostGen)
-	}
-	return false
-}
-
-func remoteAliasCached(f *Flow) string {
-	if f.RemoteHost != "" {
-		return f.RemoteHost
-	}
-	a := aliasForIP(f.Key.Family, f.Remote)
-	switch a {
-	case "", "?", "any", "skip", "pending", "no-ptr", "miss":
-		return a
-	default:
-		f.RemoteHost = a
-		return a
-	}
-}
-
 func printOpen(f *Flow) {
-	lAlias := aliasForIP(f.Key.Family, f.Local)
-	rAlias := remoteAliasCached(f)
-
-	fmt.Printf("OPEN  %-5s pid=%d(%s) cookie=%d  %s -> %s%s%s\n",
+	sni := ""
+	if f.TLSSNI != "" {
+		sni = " sni=" + f.TLSSNI
+	}
+	fmt.Printf("OPEN  %-5s pid=%d(%s) cookie=%d  %s -> %s%s\n",
 		protoStr(f.Key.Proto),
 		f.Key.TGID, f.Comm, f.Key.Cookie,
-		fmtEndpointAll(f.Key.Family, f.Local, f.Lport, f.LocalScope, f.Key.Proto, lAlias),
-		fmtEndpointAll(f.Key.Family, f.Remote, f.Rport, f.RemoteScope, f.Key.Proto, rAlias),
-		incompleteNote(f),
-		maybeLostNote(f),
+		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.Key.Proto),
+		sni,
 	)
 }
 
 func printClose(f *Flow, reason string) {
-	lAlias := aliasForIP(f.Key.Family, f.Local)
-	rAlias := remoteAliasCached(f)
-
+	sni := ""
+	if f.TLSSNI != "" {
+		sni = " sni=" + f.TLSSNI
+	}
 	age := time.Since(f.FirstSeen).Truncate(time.Millisecond)
-	fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s reason=%s%s%s\n",
+	fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s reason=%s%s\n",
 		protoStr(f.Key.Proto),
 		f.Key.TGID, f.Comm, f.Key.Cookie,
-		fmtEndpointAll(f.Key.Family, f.Local, f.Lport, f.LocalScope, f.Key.Proto, lAlias),
-		fmtEndpointAll(f.Key.Family, f.Remote, f.Rport, f.RemoteScope, f.Key.Proto, rAlias),
+		fmtEndpoint(f.Key.Family, f.Local, f.Lport, f.Key.Proto),
+		fmtEndpoint(f.Key.Family, f.Remote, f.Rport, f.Key.Proto),
 		f.OutBytes, f.OutPkts, f.InBytes, f.InPkts,
 		age, reason,
-		incompleteNote(f),
-		maybeLostNote(f),
+		sni,
 	)
 }
 
-/* ===== perf reader: total budget -> per-CPU + fallback ===== */
+/* --------------------- perf reader helpers --------------------- */
 
-func openPerfReaderTotalBudget(events *ebpf.Map, totalMB int) (*perf.Reader, int, error) {
+func openPerfReaderTotalBudget(m *ebpf.Map, totalMB int) (*perf.Reader, int, error) {
 	totalBytes := totalMB * 1024 * 1024
 	if totalBytes < 256*1024 {
 		totalBytes = 256 * 1024
 	}
-
 	nCPU := runtime.NumCPU()
 	perCPU := totalBytes / nCPU
 	if perCPU < 256*1024 {
 		perCPU = 256 * 1024
 	}
-
-	page := os.Getpagesize()
-	pages := perCPU / page
-	if pages < 8 {
-		pages = 8
-	}
-	p2 := 1 << (bits.Len(uint(pages)) - 1)
-	try := p2 * page
-
-	var rd *perf.Reader
-	var err error
-	for try >= 256*1024 {
-		rd, err = perf.NewReader(events, try)
-		if err == nil {
-			return rd, try, nil
-		}
-		if strings.Contains(err.Error(), "cannot allocate memory") || strings.Contains(err.Error(), "can't mmap") {
-			try /= 2
-			continue
-		}
-		break
-	}
-	return nil, 0, err
+	rd, err := perf.NewReader(m, perCPU)
+	return rd, perCPU, err
 }
 
-/* ===== main ===== */
+/* --------------------- main --------------------- */
+
+var lostTrace uint64
+var lostTLS uint64
+var lostGen uint64
 
 func main() {
-	if p, err := loadDotEnvAuto(); err != nil {
-		log.Printf("dotenv: %v", err)
-	} else if p != "" {
-		log.Printf("dotenv loaded: %s", p)
-	}
-
-	applyEnvToFlags()
 	flag.Parse()
-
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
-	if *flgResolve {
-		dnsr = newDNSResolver(*flgResolveQ, *flgResolveWorkers, *flgResolveTTL, *flgResolveNegTTL, *flgResolveTimeout)
-		defer dnsr.Close()
-		if *flgHostsPrefill {
-			parseHostsPrefill(*flgHostsFile, *flgHostsTTL, dnsr)
-		}
-	}
-
 	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatalf("failed to remove memlock: %v", err)
+		log.Fatalf("rlimit.RemoveMemlock: %v", err)
 	}
 	if err := loadBpfObjects(&objs, nil); err != nil {
-		log.Fatalf("failed to load bpf objects: %v", err)
+		log.Fatalf("loadBpfObjects: %v", err)
 	}
 	defer objs.Close()
-
-	if *flgPprof {
-		go func() {
-			log.Printf("pprof on %s", *flgPprofAddr)
-			_ = http.ListenAndServe(*flgPprofAddr, nil)
-		}()
-	}
 
 	selfName := filepath.Base(os.Args[0])
 
@@ -1169,6 +616,7 @@ func main() {
 		links = append(links, l)
 	}
 
+	// baseline
 	attach("syscalls", "sys_enter_bind", objs.TraceBindEnter)
 	attach("syscalls", "sys_exit_bind", objs.TraceBindExit)
 
@@ -1205,17 +653,27 @@ func main() {
 		attach("syscalls", "sys_exit_read", objs.TraceReadExit)
 	}
 
-	// NEW: attach skb-out hint
+	// skb hint (можешь вернуть обработку позже)
 	attach("net", "net_dev_queue", objs.TraceNetDevQueue)
 
-	rd, perCPUBytes, err := openPerfReaderTotalBudget(objs.TraceEvents, *flgPerfMB)
+	// perf readers
+	traceRd, perCPU, err := openPerfReaderTotalBudget(objs.TraceEvents, *flgPerfMB)
 	if err != nil {
-		log.Fatalf("perf.NewReader: %v", err)
+		log.Fatalf("perf.NewReader trace: %v", err)
 	}
-	defer rd.Close()
+	defer traceRd.Close()
 
-	log.Printf("perf ring per-cpu=%dKB total~=%dMB cpus=%d",
-		perCPUBytes/1024, (perCPUBytes*runtime.NumCPU())/(1024*1024), runtime.NumCPU())
+	var tlsRd *perf.Reader
+	if *flgSNI {
+		tlsRd, _, err = openPerfReaderTotalBudget(objs.TlsEvents, *flgPerfMB)
+		if err != nil {
+			log.Fatalf("perf.NewReader tls: %v", err)
+		}
+		defer tlsRd.Close()
+	}
+
+	log.Printf("perf trace per-cpu=%dKB total~=%dMB cpus=%d", perCPU/1024, (perCPU*runtime.NumCPU())/(1024*1024), runtime.NumCPU())
+	log.Printf("started. Ctrl+C to exit")
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -1224,13 +682,12 @@ func main() {
 		ev  bpfTraceInfo
 		now time.Time
 	}
-
 	evCh := make(chan evWrap, 16384)
 
 	go func() {
 		defer close(evCh)
 		for {
-			rec, e := rd.Read()
+			rec, e := traceRd.Read()
 			if e != nil {
 				if errors.Is(e, perf.ErrClosed) {
 					return
@@ -1238,9 +695,8 @@ func main() {
 				continue
 			}
 			if rec.LostSamples != 0 {
-				total := atomic.AddUint64(&lostTotal, rec.LostSamples)
-				gen := atomic.AddUint64(&lostGen, 1)
-				log.Printf("PERF_LOST chunk=%d total=%d gen=%d", rec.LostSamples, total, gen)
+				atomic.AddUint64(&lostTrace, rec.LostSamples)
+				atomic.AddUint64(&lostGen, 1)
 			}
 			if len(rec.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
 				continue
@@ -1250,13 +706,41 @@ func main() {
 		}
 	}()
 
+	type tlsWrap struct {
+		ev  bpfTlsChunkT
+		now time.Time
+	}
+	tlsCh := make(chan tlsWrap, 8192)
+
+	if *flgSNI {
+		go func() {
+			defer close(tlsCh)
+			for {
+				rec, e := tlsRd.Read()
+				if e != nil {
+					if errors.Is(e, perf.ErrClosed) {
+						return
+					}
+					continue
+				}
+				if rec.LostSamples != 0 {
+					atomic.AddUint64(&lostTLS, rec.LostSamples)
+					atomic.AddUint64(&lostGen, 1)
+				}
+				if len(rec.RawSample) < int(unsafe.Sizeof(bpfTlsChunkT{})) {
+					continue
+				}
+				ev := *(*bpfTlsChunkT)(unsafe.Pointer(&rec.RawSample[0]))
+				tlsCh <- tlsWrap{ev: ev, now: time.Now()}
+			}
+		}()
+	}
+
 	flows := make(map[FlowKey]*Flow, 8192)
-	l3ByCookie := make(map[uint64]l3Info, 8192)
 
-	ticker := time.NewTicker(*flgSweep)
-	defer ticker.Stop()
-
-	log.Println("OPEN/CLOSE (TCP/UDP/ICMP) + PTR + skb-hint. Ctrl+C to exit")
+	// TLS + SNI state
+	tlsByCookie := make(map[uint64]*tlsReasm, 8192)
+	sniByCookie := make(map[uint64]sniEntry, 8192)
 
 	shouldKeep := func(pid uint32, comm string) bool {
 		if comm == "" || comm == selfName {
@@ -1271,42 +755,20 @@ func main() {
 		return true
 	}
 
-	upgradeKeyIfNeeded := func(key FlowKey) (FlowKey, *Flow) {
-		if key.PeerMode != 1 {
-			return key, nil
+	attachSNIToFlow := func(f *Flow, now time.Time) {
+		if f.TLSSNI != "" {
+			return
 		}
-		if key.Proto != IPPROTO_UDP && key.Proto != IPPROTO_ICMP && key.Proto != IPPROTO_ICMPV6 {
-			return key, nil
+		if se, ok := sniByCookie[f.Key.Cookie]; ok && now.Sub(se.Seen) < *flgSniTTL {
+			f.TLSSNI = se.Name
 		}
-		base := key
-		base.PeerMode = 0
-		base.Rport = 0
-		base.Rscope = 0
-		for i := range base.Remote {
-			base.Remote[i] = 0
-		}
-		if fb := flows[base]; fb != nil {
-			delete(flows, base)
-			fb.Key = key
-			flows[key] = fb
-			return key, fb
-		}
-		return key, nil
 	}
 
 	closeByCookie := func(tgid uint32, cookie uint64, reason string) {
 		for k, f := range flows {
 			if k.TGID == tgid && k.Cookie == cookie {
-				// try l3 fill before printing
-				if h, ok := l3ByCookie[cookie]; ok {
-					applyL3HintToFlow(f, h)
-				}
-
-				if dropZeroFlow(f) {
-					delete(flows, k)
-					continue
-				}
-				if !f.OpenedPrinted && flowReadyToPrintOpen(f) {
+				attachSNIToFlow(f, time.Now())
+				if !f.OpenedPrinted && flowReadyToOpen(f) {
 					printOpen(f)
 					f.OpenedPrinted = true
 				}
@@ -1318,92 +780,65 @@ func main() {
 		}
 	}
 
-	lastLost := uint64(0)
-	lastTick := time.Now()
+	ticker := time.NewTicker(*flgSweep)
+	defer ticker.Stop()
 
 	for {
 		select {
 		case <-stop:
-			_ = rd.Close()
-			log.Printf("PERF_LOST_TOTAL total=%d gen=%d", atomic.LoadUint64(&lostTotal), atomic.LoadUint64(&lostGen))
+			_ = traceRd.Close()
+			if tlsRd != nil {
+				_ = tlsRd.Close()
+			}
 			for _, f := range flows {
-				if dropZeroFlow(f) {
-					continue
+				attachSNIToFlow(f, time.Now())
+				if !f.OpenedPrinted && flowReadyToOpen(f) {
+					printOpen(f)
+					f.OpenedPrinted = true
 				}
 				if f.OpenedPrinted {
 					printClose(f, "signal")
 				}
 			}
-			log.Println("Exiting...")
+			log.Printf("lost trace=%d tls=%d gen=%d", atomic.LoadUint64(&lostTrace), atomic.LoadUint64(&lostTLS), atomic.LoadUint64(&lostGen))
 			return
 
-		case <-ticker.C:
-			now := time.Now()
-
-			total := atomic.LoadUint64(&lostTotal)
-			delta := total - lastLost
-			dt := now.Sub(lastTick)
-			if delta > 0 {
-				log.Printf("PERF_LOST_RATE lost=%d in=%s total=%d gen=%d evCh=%d/%d flows=%d",
-					delta, dt.Truncate(time.Millisecond),
-					total, atomic.LoadUint64(&lostGen),
-					len(evCh), cap(evCh), len(flows),
-				)
+		case tw, ok := <-tlsCh:
+			if !ok {
+				tlsCh = nil
+				continue
 			}
-			lastLost = total
-			lastTick = now
-
-			if dnsr != nil && *flgResolveSweepEach > 0 {
-				dnsr.SweepExpired(*flgResolveSweepEach)
+			ev := tw.ev
+			if ev.Cookie == 0 || uint8(ev.Event) != EV_TLS_CHUNK {
+				continue
 			}
 
-			// sweep L3 hints
-			if *flgL3SweepEach > 0 {
-				n := 0
-				for c, h := range l3ByCookie {
-					if h.expired(now, *flgL3TTL) {
-						delete(l3ByCookie, c)
-						n++
-						if n >= *flgL3SweepEach {
-							break
-						}
-					}
-				}
+			ln := int(ev.Len)
+			if ln <= 0 {
+				continue
+			}
+			if ln > len(ev.Data) {
+				ln = len(ev.Data)
+			}
+			chunk := ev.Data[:ln]
+
+			tr := tlsByCookie[ev.Cookie]
+			if tr == nil {
+				tr = &tlsReasm{buf: make([]byte, 0, 2048)}
+				tlsByCookie[ev.Cookie] = tr
 			}
 
-			// poke some flows for resolve + l3 fill
-			if *flgResolvePokeEach > 0 {
-				n := 0
+			if sni, ok := tr.Feed(tw.now, chunk); ok {
+				sniByCookie[ev.Cookie] = sniEntry{Name: sni, Seen: tw.now}
+				delete(tlsByCookie, ev.Cookie)
+
+				log.Printf("SNI cookie=%d %s", ev.Cookie, sni)
+
+				// update existing flows
 				for _, f := range flows {
-					if h, ok := l3ByCookie[f.Key.Cookie]; ok {
-						applyL3HintToFlow(f, h)
+					if f.Key.Cookie == ev.Cookie && f.TLSSNI == "" {
+						f.TLSSNI = sni
 					}
-					_ = remoteAliasCached(f)
-					n++
-					if n >= *flgResolvePokeEach {
-						break
-					}
-				}
-			}
-
-			// TTL sweep flows
-			for k, f := range flows {
-				if now.Sub(f.LastSeen) > *flgTTL {
-					if h, ok := l3ByCookie[f.Key.Cookie]; ok {
-						applyL3HintToFlow(f, h)
-					}
-					if dropZeroFlow(f) {
-						delete(flows, k)
-						continue
-					}
-					if !f.OpenedPrinted && flowReadyToPrintOpen(f) {
-						printOpen(f)
-						f.OpenedPrinted = true
-					}
-					if f.OpenedPrinted {
-						printClose(f, "idle")
-					}
-					delete(flows, k)
 				}
 			}
 
@@ -1411,35 +846,12 @@ func main() {
 			if !ok {
 				return
 			}
-
 			ev := w.ev
 			evt := uint8(ev.Event)
 			proto := uint8(ev.Proto)
 			family := uint16(ev.Family)
 
-			// handle skb-out hint first (no printing, no comm filtering)
 			if evt == EV_SKB_OUT {
-				if !protoAllowed(proto) || (family != AF_INET && family != AF_INET6) || ev.Cookie == 0 {
-					continue
-				}
-				h := l3Info{
-					Family: family,
-					Proto:  proto,
-					Src:    srcKeyFromEvent(ev),
-					Sport:  uint16(ev.Sport),
-					SrcSc:  srcScopeFromEvent(ev),
-					Dst:    dstKeyFromEvent(ev),
-					Dport:  uint16(ev.Dport),
-					DstSc:  dstScopeFromEvent(ev),
-					Seen:   w.now,
-				}
-				l3ByCookie[ev.Cookie] = h
-				// also try to update existing flows with same cookie
-				for _, f := range flows {
-					if f.Key.Cookie == ev.Cookie {
-						applyL3HintToFlow(f, h)
-					}
-				}
 				continue
 			}
 
@@ -1447,7 +859,6 @@ func main() {
 			if !shouldKeep(ev.Tgid, comm) {
 				continue
 			}
-
 			if !protoAllowed(proto) {
 				continue
 			}
@@ -1461,31 +872,23 @@ func main() {
 			}
 
 			key := makeKey(ev)
-			key, upgraded := upgradeKeyIfNeeded(key)
-
 			f := flows[key]
 			if f == nil {
-				if upgraded != nil {
-					f = upgraded
-				} else {
-					f = &Flow{
-						Key:       key,
-						Comm:      comm,
-						FirstSeen: w.now,
-						LastSeen:  w.now,
-						GenStart:  atomic.LoadUint64(&lostGen),
-					}
-					flows[key] = f
+				f = &Flow{
+					Key:       key,
+					Comm:      comm,
+					FirstSeen: w.now,
+					LastSeen:  w.now,
+					GenStart:  atomic.LoadUint64(&lostGen),
 				}
+				flows[key] = f
+
+				// attach SNI if already known
+				attachSNIToFlow(f, w.now)
 			}
 
 			f.LastSeen = w.now
 			applyEndpoints(f, ev)
-
-			// try fill local ip from skb hints
-			if h, ok := l3ByCookie[f.Key.Cookie]; ok {
-				applyL3HintToFlow(f, h)
-			}
 
 			// accounting
 			switch evt {
@@ -1517,9 +920,49 @@ func main() {
 				}
 			}
 
-			if !f.OpenedPrinted && flowReadyToPrintOpen(f) {
+			if !f.OpenedPrinted && flowReadyToOpen(f) {
 				printOpen(f)
 				f.OpenedPrinted = true
+			}
+
+		case <-ticker.C:
+			now := time.Now()
+
+			// sweep flows by TTL
+			for k, f := range flows {
+				if now.Sub(f.LastSeen) > *flgTTL {
+					attachSNIToFlow(f, now)
+					if !f.OpenedPrinted && flowReadyToOpen(f) {
+						printOpen(f)
+						f.OpenedPrinted = true
+					}
+					if f.OpenedPrinted {
+						printClose(f, "idle")
+					}
+					delete(flows, k)
+				}
+			}
+
+			// sweep partial TLS buffers (handshake is short)
+			for c, tr := range tlsByCookie {
+				if now.Sub(tr.seen) > *flgTlsKeep {
+					delete(tlsByCookie, c)
+				}
+			}
+
+			// sweep sni cache
+			for c, se := range sniByCookie {
+				if now.Sub(se.Seen) > *flgSniTTL {
+					delete(sniByCookie, c)
+				}
+			}
+
+			// periodic loss note (optional)
+			lt := atomic.LoadUint64(&lostTrace)
+			ll := atomic.LoadUint64(&lostTLS)
+			if lt != 0 || ll != 0 {
+				// можно закомментировать если шумит
+				// log.Printf("lost trace=%d tls=%d gen=%d", lt, ll, atomic.LoadUint64(&lostGen))
 			}
 		}
 	}
