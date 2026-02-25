@@ -704,4 +704,158 @@ gcc -O2 -Wall -o udp_mmsg_client udp_mmsg_client.c
 
 
 
+#define EV_TLS_CHUNK  50
+#define TLS_SNAP      192  // держим маленьким, чтобы не переполнить BPF stack
+
+struct tls_chunk_t {
+    __u64 ts_ns;
+    __u64 cookie;
+
+    __u32 tgid;
+    __u32 tid;
+    __u32 fd;
+    __u32 _pad0;
+
+    __u16 family;
+    __u16 sport;
+    __u16 dport;
+
+    __u8  proto;
+    __u8  event;
+    __u16 _pad1;
+
+    __u32 len;
+    __u8  data[TLS_SNAP];
+};
+
+const struct tls_chunk_t *unused_tls __attribute__((unused));
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+    __uint(max_entries, 128);
+} tls_events SEC(".maps");
+
+
+
+
+SEC("tracepoint/syscalls/sys_exit_sendmsg")
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+    struct trace_info info = {};
+    info.event = EV_SENDMSG;
+    info.fd    = ci->fd;
+    info.ret   = ret;
+
+    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1 /* send dir */) < 0)
+        goto cleanup;
+
+    // достаем msghdr, чтобы:
+    //  - заполнить dst из msg_name (если задан)
+    //  - заполнить src из pktinfo (cmsg)
+    //  - (опционально) снять TLS chunk из iov[0]
+    __u64 msg_u = 0;
+    __u64 *msgp = bpf_map_lookup_elem(&msgSend_map, &id);
+    if (msgp)
+        msg_u = *msgp;
+
+    struct user_msghdr64 mh = {};
+    int mh_ok = 0;
+    if (msg_u && read_msghdr64(msg_u, &mh) == 0)
+        mh_ok = 1;
+
+    if (mh_ok) {
+        if (mh.msg_name && mh.msg_namelen >= sizeof(__u16))
+            (void)fill_from_sockaddr_user(&info, (void *)mh.msg_name, mh.msg_namelen, 1 /* dst */);
+
+        if (mh.msg_control && mh.msg_controllen >= sizeof(struct user_cmsghdr64))
+            parse_pktinfo_cmsg(&info, mh.msg_control, mh.msg_controllen, 0 /* set SRC */);
+    }
+
+    // обычный эвент как раньше
+    loopback_fallback(&info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+    // ===== optional: TLS payload snapshot (для SNI в Go) =====
+    // ловим и клиент (dport=443), и сервер (sport=443)
+    int want_tls = (info.proto == IPPROTO_TCP) &&
+                   (info.dport == 443 || info.sport == 443 || info.dport == 853 || info.sport == 853);
+
+    if (want_tls && mh_ok && mh.msg_iov && mh.msg_iovlen) {
+        // iov[0]
+        struct user_iovec64 iv0 = {};
+        if (bpf_probe_read_user(&iv0, sizeof(iv0), (void *)mh.msg_iov) == 0) {
+            __u64 base = iv0.iov_base;
+            __u64 blen = iv0.iov_len;
+
+            // быстрый “похоже на TLS record header” фильтр:
+            // type=0x16 (handshake), ver=0x0301..0x0304 (TLS1.0..1.3)
+            if (base && blen >= 5) {
+                __u8 hdr[5] = {};
+                if (bpf_probe_read_user(hdr, sizeof(hdr), (void *)base) == 0) {
+                    __u8 typ = hdr[0];
+                    __u8 v1  = hdr[1];
+                    __u8 v2  = hdr[2];
+                    int looks_tls = (typ == 0x16) && (v1 == 0x03) && (v2 >= 0x01 && v2 <= 0x04);
+
+                    if (looks_tls) {
+                        struct tls_chunk_t ch = {};
+                        ch.ts_ns  = bpf_ktime_get_ns();
+                        ch.cookie = info.cookie;
+                        ch.tgid   = info.tgid;
+                        ch.tid    = info.tid;
+                        ch.fd     = info.fd;
+                        ch.family = info.family;
+                        ch.proto  = info.proto;
+                        ch.sport  = info.sport;
+                        ch.dport  = info.dport;
+                        ch.event  = EV_TLS_CHUNK;
+
+                        // verifier-friendly: читаем только константные размеры
+                        if (blen >= TLS_SNAP) {
+                            if (bpf_probe_read_user(ch.data, TLS_SNAP, (void *)base) == 0)
+                                ch.len = TLS_SNAP;
+                        } else if (blen >= 128) {
+                            if (bpf_probe_read_user(ch.data, 128, (void *)base) == 0)
+                                ch.len = 128;
+                        } else if (blen >= 64) {
+                            if (bpf_probe_read_user(ch.data, 64, (void *)base) == 0)
+                                ch.len = 64;
+                        } else if (blen >= 32) {
+                            if (bpf_probe_read_user(ch.data, 32, (void *)base) == 0)
+                                ch.len = 32;
+                        } else if (blen >= 16) {
+                            if (bpf_probe_read_user(ch.data, 16, (void *)base) == 0)
+                                ch.len = 16;
+                        } else {
+                            if (bpf_probe_read_user(ch.data, 8, (void *)base) == 0)
+                                ch.len = 8;
+                        }
+
+                        if (ch.len)
+                            bpf_perf_event_output(ctx, &tls_events, BPF_F_CURRENT_CPU, &ch, sizeof(ch));
+                    }
+                }
+            }
+        }
+    }
+
+cleanup:
+    bpf_map_delete_elem(&msgSend_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
 
