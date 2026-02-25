@@ -1894,26 +1894,4 @@ func main() {
 
 
 
-[{
-	"resource": "/home/lev/bpfgo/main.go",
-	"owner": "_generated_diagnostic_collection_name_#1",
-	"code": {
-		"value": "UnusedVar",
-		"target": {
-			"$mid": 1,
-			"path": "/golang.org/x/tools/internal/typesinternal",
-			"scheme": "https",
-			"authority": "pkg.go.dev",
-			"fragment": "UnusedVar"
-		}
-	},
-	"severity": 8,
-	"message": "declared and not used: now",
-	"source": "compiler",
-	"startLineNumber": 1159,
-	"startColumn": 4,
-	"endLineNumber": 1159,
-	"endColumn": 7,
-	"modelVersionId": 39,
-	"origin": "extHost1"
-}]
+sudo strace -f -e trace=sendmsg,write -p <PID>
