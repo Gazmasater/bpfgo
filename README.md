@@ -706,6 +706,78 @@ sudo strace -f -e trace=sendmsg,write -p <PID>
 
 #define USER_PTR_MASK 0x7fffffffffffffffULL
 
+static __always_inline void copy_user_into_tls(struct tls_chunk_t *ch, __u32 *pcopied, __u64 base, __u64 blen)
+{
+    if (!base || blen == 0)
+        return;
+
+    base &= USER_PTR_MASK;
+    if (!base)
+        return;
+
+    __u32 copied = *pcopied;
+    if (copied >= TLS_SNAP)
+        return;
+
+    __u32 left = TLS_SNAP - copied;
+
+    /* ВАЖНО: только константные размеры чтения */
+    if (left >= 256 && blen >= 256) {
+        if (bpf_probe_read_user(ch->data + copied, 256, (void *)base) == 0)
+            copied += 256;
+        *pcopied = copied;
+        return;
+    }
+    if (left >= 128 && blen >= 128) {
+        if (bpf_probe_read_user(ch->data + copied, 128, (void *)base) == 0)
+            copied += 128;
+        *pcopied = copied;
+        return;
+    }
+    if (left >= 64 && blen >= 64) {
+        if (bpf_probe_read_user(ch->data + copied, 64, (void *)base) == 0)
+            copied += 64;
+        *pcopied = copied;
+        return;
+    }
+    if (left >= 32 && blen >= 32) {
+        if (bpf_probe_read_user(ch->data + copied, 32, (void *)base) == 0)
+            copied += 32;
+        *pcopied = copied;
+        return;
+    }
+    if (left >= 16 && blen >= 16) {
+        if (bpf_probe_read_user(ch->data + copied, 16, (void *)base) == 0)
+            copied += 16;
+        *pcopied = copied;
+        return;
+    }
+    if (left >= 8 && blen >= 8) {
+        if (bpf_probe_read_user(ch->data + copied, 8, (void *)base) == 0)
+            copied += 8;
+        *pcopied = copied;
+        return;
+    }
+    if (left >= 4 && blen >= 4) {
+        if (bpf_probe_read_user(ch->data + copied, 4, (void *)base) == 0)
+            copied += 4;
+        *pcopied = copied;
+        return;
+    }
+    if (left >= 2 && blen >= 2) {
+        if (bpf_probe_read_user(ch->data + copied, 2, (void *)base) == 0)
+            copied += 2;
+        *pcopied = copied;
+        return;
+    }
+    if (left >= 1 && blen >= 1) {
+        if (bpf_probe_read_user(ch->data + copied, 1, (void *)base) == 0)
+            copied += 1;
+        *pcopied = copied;
+        return;
+    }
+}
+
 SEC("tracepoint/syscalls/sys_exit_sendmsg")
 int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
 {
@@ -738,7 +810,7 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
     loopback_fallback(info, 1);
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
-    /* ===== TLS across multiple iov ===== */
+    /* TLS only */
     int want_tls = (info->proto == IPPROTO_TCP) &&
                    (info->dport == 443 || info->sport == 443 ||
                     info->dport == 853 || info->sport == 853);
@@ -750,8 +822,7 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (!msgp)
         goto cleanup;
 
-    msg_u = *msgp;
-    msg_u &= USER_PTR_MASK;
+    msg_u = (*msgp) & USER_PTR_MASK;
     if (!msg_u)
         goto cleanup;
 
@@ -762,8 +833,7 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (!mh.msg_iov || mh.msg_iovlen == 0)
         goto cleanup;
 
-    __u64 iov_u = mh.msg_iov;
-    iov_u &= USER_PTR_MASK;
+    __u64 iov_u = mh.msg_iov & USER_PTR_MASK;
     if (!iov_u)
         goto cleanup;
 
@@ -792,13 +862,11 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
     for (int i = 0; i < MAX_IOV; i++) {
         if ((__u32)i >= iovcnt)
             continue;
-
         if (copied >= TLS_SNAP)
             continue;
 
         struct user_iovec64 iv = {};
         __u64 ip = iov_u + (__u64)i * (__u64)sizeof(struct user_iovec64);
-
         ip &= USER_PTR_MASK;
         if (!ip)
             continue;
@@ -806,24 +874,7 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
         if (bpf_probe_read_user(&iv, sizeof(iv), (void *)ip) != 0)
             continue;
 
-        __u64 base = iv.iov_base;
-        __u64 blen = iv.iov_len;
-
-        base &= USER_PTR_MASK;
-        if (!base || blen == 0)
-            continue;
-
-        __u32 left = TLS_SNAP - copied;
-        __u64 to_copy64 = blen;
-        if (to_copy64 > (__u64)left)
-            to_copy64 = (__u64)left;
-
-        __u32 to_copy = (__u32)to_copy64;
-        if (to_copy == 0)
-            continue;
-
-        if (bpf_probe_read_user(ch->data + copied, to_copy, (void *)base) == 0)
-            copied += to_copy;
+        copy_user_into_tls(ch, &copied, iv.iov_base, iv.iov_len);
     }
 
     if (copied < 6)
@@ -844,10 +895,3 @@ cleanup:
     bpf_map_delete_elem(&conn_info_map, &id);
     return 0;
 }
-
-
-
-lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo -comm openssl 
-2026/02/25 07:54:22.977828 loadBpfObjects: field TraceSendmsgExit: program trace_sendmsg_exit: load program: permission denied: invalid access to map value, value_size=560 off=560 size=511: R1 max value is outside of the allowed memory range (972 line(s) omitted)
-lev@lev-VirtualBox:~/bpfgo$ 
-
