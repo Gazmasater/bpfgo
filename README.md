@@ -741,7 +741,7 @@ gcc -O2 -Wall -o udp_mmsg_client udp_mmsg_client.c
 #define EV_WRITE     22
 #define EV_CLOSE     30
 
-// skb out (net_dev_queue)
+// skb out hint
 #define EV_SKB_OUT   40
 
 // socket flags
@@ -760,15 +760,14 @@ gcc -O2 -Wall -o udp_mmsg_client udp_mmsg_client.c
 // bounded parsing limits
 #define MAX_MMSG 16
 #define MAX_IOV  4
-#define MAX_CMSG_STEPS 6
 
 #define CMSG_ALIGN(len) (((len) + sizeof(__u64) - 1) & ~(sizeof(__u64) - 1))
 
 // SNI payload capture
 #define MAX_PAYLOAD     160
-#define MAX_SNI_CHUNKS  6   // сколько первых write/sendmsg чанков снимем на cookie
+#define MAX_SNI_CHUNKS  6   // first N chunks per cookie
 
-/* ===== tracepoint net_dev_queue ctx ===== */
+/* ===== tracepoint net_dev_queue ctx (stable subset) ===== */
 struct tp_net_dev_queue {
     __u16 common_type;
     __u8  common_flags;
@@ -784,18 +783,18 @@ struct tp_net_dev_queue {
 struct in_addr_u { __u32 s_addr; };
 
 struct sockaddr_in_u {
-    __u16           sin_family;
-    __u16           sin_port;
+    __u16            sin_family;
+    __u16            sin_port;
     struct in_addr_u sin_addr;
-    __u8            pad[8];
+    __u8             pad[8];
 };
 
 struct sockaddr_in6_u {
-    __u16           sin6_family;
-    __u16           sin6_port;
-    __u32           sin6_flowinfo;
-    struct in6_addr sin6_addr;
-    __u32           sin6_scope_id;
+    __u16            sin6_family;
+    __u16            sin6_port;
+    __u32            sin6_flowinfo;
+    struct in6_addr  sin6_addr;
+    __u32            sin6_scope_id;
 };
 
 /* ====== types ====== */
@@ -849,7 +848,7 @@ struct trace_info {
 
     __u8  proto;
     __u8  event;
-    __u8  state;
+    __u8  state;   // mmsg packets count (clamped), connect: 0/1
     __u8  _pad1;
 
     __u32 src_ip4; // net order
@@ -1032,13 +1031,31 @@ struct {
     __type(value, struct payload_ptrlen_t);
 } write_args_map SEC(".maps");
 
-// cookie(inode) -> state
+// cookie(inode) -> state: 0..MAX_SNI_CHUNKS, 0xff stop
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 16384);
     __type(key, __u64); // cookie
-    __type(value, __u8); // 0..MAX_SNI_CHUNKS, 0xff stop
+    __type(value, __u8);
 } sni_state_map SEC(".maps");
+
+/* ---- per-cpu scratch to avoid stack >512B ---- */
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, struct trace_info);
+} scratch_event SEC(".maps");
+
+static __always_inline struct trace_info *evt_new(void)
+{
+    __u32 k = 0;
+    struct trace_info *e = bpf_map_lookup_elem(&scratch_event, &k);
+    if (!e)
+        return 0;
+    __builtin_memset(e, 0, sizeof(*e));
+    return e;
+}
 
 struct {
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
@@ -1076,6 +1093,7 @@ static __always_inline int read_mmsghdr0(__u64 vec_u, struct user_mmsghdr64 *out
     return 0;
 }
 
+/* recv: sum msg_len */
 static __always_inline __s64 sum_mmsg_len(__u64 vec_u, __u32 n)
 {
     __s64 total = 0;
@@ -1092,6 +1110,7 @@ static __always_inline __s64 sum_mmsg_len(__u64 vec_u, __u32 n)
     return total;
 }
 
+/* send: best-effort sum iov_len (clamped) */
 static __always_inline __s64 sum_mmsg_iov_bytes(__u64 vec_u, __u32 n)
 {
     __s64 total = 0;
@@ -1171,6 +1190,7 @@ static __always_inline int is_socket_fd(int fd)
     return (mode & S_IFMT) == S_IFSOCK;
 }
 
+/* cookie = socket inode number */
 static __always_inline __u64 cookie_from_fd(int fd)
 {
     struct file *file = file_from_fd(fd);
@@ -1198,7 +1218,7 @@ static __always_inline struct sock *sock_from_fd(int fd)
     return BPF_CORE_READ(sock, sk);
 }
 
-/* ---- sockaddr from user ---- */
+/* ---- sockaddr from user (AF_INET/AF_INET6) ---- */
 
 static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
                                                    const void *uaddr,
@@ -1212,6 +1232,7 @@ static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
     if (bpf_probe_read_user(&family, sizeof(family), uaddr) < 0)
         return -1;
 
+    /* don't allow family to "jump" once fixed (except v4-mapped on v6 socket) */
     if (info->family != 0 && family != info->family) {
         if (info->family == AF_INET6 && family == AF_INET) {
             if (addrlen < sizeof(struct sockaddr_in_u))
@@ -1289,7 +1310,7 @@ static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
     return -1;
 }
 
-/* ---- local addr helpers ---- */
+/* ---- local addr helpers (IPv4) ---- */
 
 static __always_inline __u32 ipv4_local_addr(struct sock *sk)
 {
@@ -1324,7 +1345,7 @@ static __always_inline void loopback_fallback(struct trace_info *info, int is_se
     if (info->family == AF_INET) {
         if (is_send_dir) {
             if (info->src_ip4 == 0 && is_ipv4_loopback(info->dst_ip4))
-                info->src_ip4 = bpf_htonl(0x7f000001);
+                info->src_ip4 = bpf_htonl(0x7f000001); // 127.0.0.1
         } else {
             if (info->dst_ip4 == 0 && is_ipv4_loopback(info->src_ip4))
                 info->dst_ip4 = bpf_htonl(0x7f000001);
@@ -1387,6 +1408,7 @@ static __always_inline int fill_fd_state(int fd, struct fd_state_t *st)
     return -1;
 }
 
+/* cache + self-heal */
 static __always_inline int fill_from_fd_state_map(struct trace_info *info, __u32 tgid, int fd, int is_send_dir)
 {
     struct fd_key_t k = { .tgid = tgid, .fd = fd };
@@ -1460,7 +1482,7 @@ static __always_inline void fill_ids_comm_cookie(struct trace_info *info, __u64 
     }
 }
 
-/* ---- parse pktinfo cmsg (NO LOOPS) ---- */
+/* ---- parse pktinfo cmsg (bounded steps) ---- */
 
 static __always_inline void parse_pktinfo_cmsg(struct trace_info *info, __u64 ctrl, __u64 controllen, int set_dst)
 {
@@ -1514,7 +1536,7 @@ static __always_inline void parse_pktinfo_cmsg(struct trace_info *info, __u64 ct
 #undef CMSG_TRY_STEP
 }
 
-/* ===== SNI helpers (TLS ClientHello sniff) ===== */
+/* ===== SNI helpers ===== */
 
 static __always_inline int looks_like_tls_clienthello(const void *p)
 {
@@ -1522,9 +1544,8 @@ static __always_inline int looks_like_tls_clienthello(const void *p)
     if (!p) return 0;
     if (bpf_probe_read_user(h, sizeof(h), p) != 0)
         return 0;
-    // TLS record: 0x16 0x03 xx
-    if (h[0] != 0x16) return 0;
-    if (h[1] != 0x03) return 0;
+    if (h[0] != 0x16) return 0; // handshake record
+    if (h[1] != 0x03) return 0; // TLS major
     return 1;
 }
 
@@ -1612,35 +1633,38 @@ int trace_connect_exit(struct trace_event_raw_sys_exit *ctx)
 
     struct conn_info_t *conn = bpf_map_lookup_elem(&conn_info_map, &id);
 
-    struct trace_info info = {};
-    info.event = EV_CONNECT;
-    info.state = (ret < 0) ? 1 : 0;
-    info.fd    = (__u32)in->fd;
-    info.ret   = ret;
+    struct trace_info *info = evt_new();
+    if (!info)
+        goto cleanup;
 
-    fill_ids_comm_cookie(&info, id, (int)info.fd, conn ? conn->comm : 0);
+    info->event = EV_CONNECT;
+    info->state = (ret < 0) ? 1 : 0;
+    info->fd    = (__u32)in->fd;
+    info->ret   = ret;
 
-    info.proto  = st.proto;
-    info.family = st.family;
-    info.sport  = st.lport;
-    info.dport  = st.rport;
+    fill_ids_comm_cookie(info, id, (int)info->fd, conn ? conn->comm : 0);
+
+    info->proto  = st.proto;
+    info->family = st.family;
+    info->sport  = st.lport;
+    info->dport  = st.rport;
 
     if (st.family == AF_INET) {
-        info.src_ip4 = st.lip;
-        info.dst_ip4 = st.rip;
+        info->src_ip4 = st.lip;
+        info->dst_ip4 = st.rip;
     } else if (st.family == AF_INET6) {
-        __builtin_memcpy(info.src_ip6, &st.lip6, 16);
-        __builtin_memcpy(info.dst_ip6, &st.rip6, 16);
+        __builtin_memcpy(info->src_ip6, &st.lip6, 16);
+        __builtin_memcpy(info->dst_ip6, &st.rip6, 16);
     } else {
         goto cleanup;
     }
 
     struct addr_ptrlen_t *ap = bpf_map_lookup_elem(&addrConnect_map, &id);
     if (ap && ap->addr && ap->len)
-        (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 1);
+        (void)fill_from_sockaddr_user(info, (void *)ap->addr, ap->len, 1);
 
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    loopback_fallback(info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&addrConnect_map, &id);
@@ -1682,40 +1706,43 @@ static __always_inline int accept_exit_common(struct trace_event_raw_sys_exit *c
 
     struct conn_info_t *conn = bpf_map_lookup_elem(&conn_info_map, &id);
 
-    struct trace_info info = {};
-    info.event = EV_ACCEPT;
+    struct trace_info *info = evt_new();
+    if (!info)
+        goto cleanup;
 
-    info.fd  = conn ? conn->fd : 0; // listen fd
-    info.ret = newfd;
+    info->event = EV_ACCEPT;
+    info->fd  = conn ? conn->fd : 0; // listen fd
+    info->ret = newfd;
 
-    info.ts_ns  = bpf_ktime_get_ns();
-    info.tgid   = tgid;
-    info.tid    = (__u32)id;
-    info.cookie = cookie_from_fd((int)newfd);
+    info->ts_ns  = bpf_ktime_get_ns();
+    info->tgid   = tgid;
+    info->tid    = (__u32)id;
+    info->cookie = cookie_from_fd((int)newfd);
 
     if (conn)
-        __builtin_memcpy(info.comm, conn->comm, sizeof(info.comm));
+        __builtin_memcpy(info->comm, conn->comm, sizeof(info->comm));
     else
-        bpf_get_current_comm(info.comm, sizeof(info.comm));
+        bpf_get_current_comm(info->comm, sizeof(info->comm));
 
-    info.proto  = st.proto;
-    info.family = st.family;
+    info->proto  = st.proto;
+    info->family = st.family;
 
-    info.sport = st.rport;
-    info.dport = st.lport;
+    // accept: peer -> local
+    info->sport = st.rport;
+    info->dport = st.lport;
 
     if (st.family == AF_INET) {
-        info.src_ip4 = st.rip;
-        info.dst_ip4 = st.lip;
+        info->src_ip4 = st.rip;
+        info->dst_ip4 = st.lip;
     } else if (st.family == AF_INET6) {
-        __builtin_memcpy(info.src_ip6, &st.rip6, 16);
-        __builtin_memcpy(info.dst_ip6, &st.lip6, 16);
+        __builtin_memcpy(info->src_ip6, &st.rip6, 16);
+        __builtin_memcpy(info->dst_ip6, &st.lip6, 16);
     } else {
         goto cleanup;
     }
 
-    loopback_fallback(&info, 0);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    loopback_fallback(info, 0);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&conn_info_map, &id);
@@ -1778,29 +1805,33 @@ int trace_bind_exit(struct trace_event_raw_sys_exit *ctx)
     struct fd_key_t k = { .tgid = tgid, .fd = (int)ci->fd };
     bpf_map_update_elem(&fd_state_map, &k, &st, BPF_ANY);
 
-    struct trace_info info = {};
-    info.event = EV_BINDOK;
-    info.fd    = ci->fd;
-    info.ret   = ret;
+    struct trace_info *info = evt_new();
+    if (!info)
+        goto cleanup;
 
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+    info->event = EV_BINDOK;
+    info->fd    = ci->fd;
+    info->ret   = ret;
 
-    info.proto  = st.proto;
-    info.family = st.family;
+    fill_ids_comm_cookie(info, id, (int)ci->fd, ci->comm);
 
-    info.sport = st.lport;
+    info->proto  = st.proto;
+    info->family = st.family;
+
+    // bind = local -> src
+    info->sport = st.lport;
     if (st.family == AF_INET) {
-        info.src_ip4 = st.lip;
+        info->src_ip4 = st.lip;
     } else if (st.family == AF_INET6) {
-        __builtin_memcpy(info.src_ip6, &st.lip6, 16);
+        __builtin_memcpy(info->src_ip6, &st.lip6, 16);
     }
 
     struct addr_ptrlen_t *ap = bpf_map_lookup_elem(&addrBind_map, &id);
     if (ap && ap->addr && ap->len)
-        (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 0);
+        (void)fill_from_sockaddr_user(info, (void *)ap->addr, ap->len, 0);
 
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    loopback_fallback(info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&addrBind_map, &id);
@@ -1845,22 +1876,25 @@ int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx)
     if (!ci)
         goto cleanup;
 
-    struct trace_info info = {};
-    info.event = EV_SENDTO;
-    info.fd = ci->fd;
-    info.ret = ret;
+    struct trace_info *info = evt_new();
+    if (!info)
+        goto cleanup;
 
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+    info->event = EV_SENDTO;
+    info->fd = ci->fd;
+    info->ret = ret;
 
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
+    fill_ids_comm_cookie(info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(info, tgid, (int)ci->fd, 1) < 0)
         goto cleanup;
 
     struct addr_ptrlen_t *ap = bpf_map_lookup_elem(&addrSend_map, &id);
     if (ap && ap->addr && ap->len)
-        (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 1);
+        (void)fill_from_sockaddr_user(info, (void *)ap->addr, ap->len, 1);
 
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    loopback_fallback(info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&addrSend_map, &id);
@@ -1915,26 +1949,29 @@ int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx)
     if (!ci)
         goto cleanup;
 
-    struct trace_info info = {};
-    info.event = EV_RECVFROM;
-    info.fd = ci->fd;
-    info.ret = ret;
+    struct trace_info *info = evt_new();
+    if (!info)
+        goto cleanup;
 
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+    info->event = EV_RECVFROM;
+    info->fd = ci->fd;
+    info->ret = ret;
 
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
+    fill_ids_comm_cookie(info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(info, tgid, (int)ci->fd, 0) < 0)
         goto cleanup;
 
     if (m && m->addr && m->lenp) {
         __u32 addrlen = 0;
         if (bpf_probe_read_user(&addrlen, sizeof(addrlen), (void *)m->lenp) == 0) {
             if (addrlen >= sizeof(__u16))
-                (void)fill_from_sockaddr_user(&info, (void *)m->addr, addrlen, 0);
+                (void)fill_from_sockaddr_user(info, (void *)m->addr, addrlen, 0);
         }
     }
 
-    loopback_fallback(&info, 0);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    loopback_fallback(info, 0);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&addrRecv_map, &id);
@@ -1977,14 +2014,17 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (!ci)
         goto cleanup;
 
-    struct trace_info info = {};
-    info.event = EV_SENDMSG;
-    info.fd = ci->fd;
-    info.ret = ret;
+    struct trace_info *info = evt_new();
+    if (!info)
+        goto cleanup;
 
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+    info->event = EV_SENDMSG;
+    info->fd = ci->fd;
+    info->ret = ret;
 
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
+    fill_ids_comm_cookie(info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(info, tgid, (int)ci->fd, 1) < 0)
         goto cleanup;
 
     __u64 *msgp = bpf_map_lookup_elem(&msgSend_map, &id);
@@ -1992,24 +2032,25 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
         struct user_msghdr64 mh = {};
         if (read_msghdr64(*msgp, &mh) == 0) {
             if (mh.msg_name && mh.msg_namelen >= sizeof(__u16))
-                (void)fill_from_sockaddr_user(&info, (void *)mh.msg_name, mh.msg_namelen, 1);
+                (void)fill_from_sockaddr_user(info, (void *)mh.msg_name, mh.msg_namelen, 1);
 
             if (mh.msg_control && mh.msg_controllen >= sizeof(struct user_cmsghdr64))
-                parse_pktinfo_cmsg(&info, mh.msg_control, mh.msg_controllen, 0 /* set SRC */);
+                parse_pktinfo_cmsg(info, mh.msg_control, mh.msg_controllen, 0 /* set SRC */);
 
+            // payload from first iov
             if (mh.msg_iov && mh.msg_iovlen > 0) {
                 struct user_iovec64 iv = {};
                 if (bpf_probe_read_user(&iv, sizeof(iv), (void *)mh.msg_iov) == 0) {
                     __u32 L = (__u32)iv.iov_len;
-                    if ((__s64)L > info.ret) L = (__u32)info.ret;
-                    maybe_attach_payload(&info, (void *)iv.iov_base, L);
+                    if ((__s64)L > info->ret) L = (__u32)info->ret;
+                    maybe_attach_payload(info, (void *)iv.iov_base, L);
                 }
             }
         }
     }
 
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    loopback_fallback(info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&msgSend_map, &id);
@@ -2059,29 +2100,32 @@ int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (!ci)
         goto cleanup;
 
-    struct trace_info info = {};
-    info.event = EV_RECVMSG;
-    info.fd = ci->fd;
-    info.ret = ret;
+    struct trace_info *info = evt_new();
+    if (!info)
+        goto cleanup;
 
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+    info->event = EV_RECVMSG;
+    info->fd = ci->fd;
+    info->ret = ret;
 
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
+    fill_ids_comm_cookie(info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(info, tgid, (int)ci->fd, 0) < 0)
         goto cleanup;
 
     if (pv && pv->msg) {
         struct user_msghdr64 mh = {};
         if (read_msghdr64(pv->msg, &mh) == 0) {
             if (mh.msg_name && mh.msg_namelen >= sizeof(__u16))
-                (void)fill_from_sockaddr_user(&info, (void *)mh.msg_name, mh.msg_namelen, 0);
+                (void)fill_from_sockaddr_user(info, (void *)mh.msg_name, mh.msg_namelen, 0);
 
             if (mh.msg_control && mh.msg_controllen >= sizeof(struct user_cmsghdr64))
-                parse_pktinfo_cmsg(&info, mh.msg_control, mh.msg_controllen, 1 /* set DST(local) */);
+                parse_pktinfo_cmsg(info, mh.msg_control, mh.msg_controllen, 1 /* set DST(local) */);
         }
     }
 
-    loopback_fallback(&info, 0);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    loopback_fallback(info, 0);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&msgRecv_map, &id);
@@ -2095,10 +2139,9 @@ SEC("tracepoint/syscalls/sys_enter_sendmmsg")
 int trace_sendmmsg_enter(struct trace_event_raw_sys_enter *ctx)
 {
     __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
 
     struct conn_info_t ci = {};
-    ci.tgid = tgid;
+    ci.tgid = id >> 32;
     ci.fd   = (__u32)ctx->args[0];
     bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
     bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
@@ -2133,28 +2176,31 @@ int trace_sendmmsg_exit(struct trace_event_raw_sys_exit *ctx)
     cnt = min_u32(cnt, pv->vlen);
     cnt = min_u32(cnt, MAX_MMSG);
 
-    struct trace_info info = {};
-    info.event = EV_SENDMMSG;
-    info.fd    = ci->fd;
-    info.state = (ret > 255) ? 255 : (__u8)ret;
-    info.ret   = sum_mmsg_iov_bytes(pv->vec, cnt);
+    struct trace_info *info = evt_new();
+    if (!info)
+        goto cleanup;
 
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+    info->event = EV_SENDMMSG;
+    info->fd    = ci->fd;
+    info->state = (ret > 255) ? 255 : (__u8)ret;
+    info->ret   = sum_mmsg_iov_bytes(pv->vec, cnt);
 
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
+    fill_ids_comm_cookie(info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(info, tgid, (int)ci->fd, 1) < 0)
         goto cleanup;
 
     struct user_mmsghdr64 m0 = {};
     if (read_mmsghdr0(pv->vec, &m0) == 0) {
         if (m0.msg_hdr.msg_name && m0.msg_hdr.msg_namelen >= sizeof(__u16))
-            (void)fill_from_sockaddr_user(&info, (void *)m0.msg_hdr.msg_name, m0.msg_hdr.msg_namelen, 1);
+            (void)fill_from_sockaddr_user(info, (void *)m0.msg_hdr.msg_name, m0.msg_hdr.msg_namelen, 1);
 
         if (m0.msg_hdr.msg_control && m0.msg_hdr.msg_controllen >= sizeof(struct user_cmsghdr64))
-            parse_pktinfo_cmsg(&info, m0.msg_hdr.msg_control, m0.msg_hdr.msg_controllen, 0 /* set SRC */);
+            parse_pktinfo_cmsg(info, m0.msg_hdr.msg_control, m0.msg_hdr.msg_controllen, 0 /* set SRC */);
     }
 
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    loopback_fallback(info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&mmsgSend_map, &id);
@@ -2168,10 +2214,9 @@ SEC("tracepoint/syscalls/sys_enter_recvmmsg")
 int trace_recvmmsg_enter(struct trace_event_raw_sys_enter *ctx)
 {
     __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
 
     struct conn_info_t ci = {};
-    ci.tgid = tgid;
+    ci.tgid = id >> 32;
     ci.fd   = (__u32)ctx->args[0];
     bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
     bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
@@ -2209,28 +2254,31 @@ int trace_recvmmsg_exit(struct trace_event_raw_sys_exit *ctx)
     cnt = min_u32(cnt, pv->vlen);
     cnt = min_u32(cnt, MAX_MMSG);
 
-    struct trace_info info = {};
-    info.event = EV_RECVMMSG;
-    info.fd    = ci->fd;
-    info.state = (ret > 255) ? 255 : (__u8)ret;
-    info.ret   = sum_mmsg_len(pv->vec, cnt);
+    struct trace_info *info = evt_new();
+    if (!info)
+        goto cleanup;
 
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+    info->event = EV_RECVMMSG;
+    info->fd    = ci->fd;
+    info->state = (ret > 255) ? 255 : (__u8)ret;
+    info->ret   = sum_mmsg_len(pv->vec, cnt);
 
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
+    fill_ids_comm_cookie(info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(info, tgid, (int)ci->fd, 0) < 0)
         goto cleanup;
 
     struct user_mmsghdr64 m0 = {};
     if (read_mmsghdr0(pv->vec, &m0) == 0) {
         if (m0.msg_hdr.msg_name && m0.msg_hdr.msg_namelen >= sizeof(__u16))
-            (void)fill_from_sockaddr_user(&info, (void *)m0.msg_hdr.msg_name, m0.msg_hdr.msg_namelen, 0);
+            (void)fill_from_sockaddr_user(info, (void *)m0.msg_hdr.msg_name, m0.msg_hdr.msg_namelen, 0);
 
         if (m0.msg_hdr.msg_control && m0.msg_hdr.msg_controllen >= sizeof(struct user_cmsghdr64))
-            parse_pktinfo_cmsg(&info, m0.msg_hdr.msg_control, m0.msg_hdr.msg_controllen, 1 /* set DST(local) */);
+            parse_pktinfo_cmsg(info, m0.msg_hdr.msg_control, m0.msg_hdr.msg_controllen, 1 /* set DST(local) */);
     }
 
-    loopback_fallback(&info, 0);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    loopback_fallback(info, 0);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&mmsgRecv_map, &id);
@@ -2280,25 +2328,29 @@ int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
     if (!ci)
         goto cleanup;
 
-    struct trace_info info = {};
-    info.event = EV_WRITE;
-    info.fd    = ci->fd;
-    info.ret   = ret;
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
+    struct trace_info *info = evt_new();
+    if (!info)
         goto cleanup;
 
+    info->event = EV_WRITE;
+    info->fd    = ci->fd;
+    info->ret   = ret;
+
+    fill_ids_comm_cookie(info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(info, tgid, (int)ci->fd, 1) < 0)
+        goto cleanup;
+
+    // payload for TLS
     struct payload_ptrlen_t *a = bpf_map_lookup_elem(&write_args_map, &id);
     if (a && a->ptr && a->len) {
         __u32 L = a->len;
-        if ((__s64)L > info.ret) L = (__u32)info.ret;
-        maybe_attach_payload(&info, (void *)a->ptr, L);
+        if ((__s64)L > info->ret) L = (__u32)info->ret;
+        maybe_attach_payload(info, (void *)a->ptr, L);
     }
 
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    loopback_fallback(info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&write_args_map, &id);
@@ -2339,18 +2391,21 @@ int trace_read_exit(struct trace_event_raw_sys_exit *ctx)
     if (!ci)
         goto cleanup;
 
-    struct trace_info info = {};
-    info.event = EV_READ;
-    info.fd    = ci->fd;
-    info.ret   = ret;
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
+    struct trace_info *info = evt_new();
+    if (!info)
         goto cleanup;
 
-    loopback_fallback(&info, 0);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    info->event = EV_READ;
+    info->fd    = ci->fd;
+    info->ret   = ret;
+
+    fill_ids_comm_cookie(info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(info, tgid, (int)ci->fd, 0) < 0)
+        goto cleanup;
+
+    loopback_fallback(info, 0);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&conn_info_map, &id);
@@ -2370,7 +2425,7 @@ int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
     struct fd_key_t k = { .tgid = tgid, .fd = fd };
     bpf_map_delete_elem(&fd_state_map, &k);
 
-    // drop sni state for this cookie (avoid stale)
+    // drop sni state for this cookie
     __u64 c = cookie_from_fd(fd);
     if (c)
         bpf_map_delete_elem(&sni_state_map, &c);
@@ -2378,30 +2433,33 @@ int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
     if (!is_socket_fd(fd))
         return 0;
 
-    struct trace_info info = {};
-    info.event = EV_CLOSE;
-    info.fd    = (__u32)fd;
-    info.ret   = 0;
+    struct trace_info *info = evt_new();
+    if (!info)
+        return 0;
 
-    fill_ids_comm_cookie(&info, id, fd, 0);
+    info->event = EV_CLOSE;
+    info->fd    = (__u32)fd;
+    info->ret   = 0;
+
+    fill_ids_comm_cookie(info, id, fd, 0);
 
     struct fd_state_t st = {};
     if (fill_fd_state(fd, &st) == 0) {
-        info.proto  = st.proto;
-        info.family = st.family;
-        info.sport  = st.lport;
-        info.dport  = st.rport;
+        info->proto  = st.proto;
+        info->family = st.family;
+        info->sport  = st.lport;
+        info->dport  = st.rport;
 
         if (st.family == AF_INET) {
-            info.src_ip4 = st.lip;
-            info.dst_ip4 = st.rip;
+            info->src_ip4 = st.lip;
+            info->dst_ip4 = st.rip;
         } else if (st.family == AF_INET6) {
-            __builtin_memcpy(info.src_ip6, &st.lip6, 16);
-            __builtin_memcpy(info.dst_ip6, &st.rip6, 16);
+            __builtin_memcpy(info->src_ip6, &st.lip6, 16);
+            __builtin_memcpy(info->dst_ip6, &st.rip6, 16);
         }
 
-        loopback_fallback(&info, 1);
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+        loopback_fallback(info, 1);
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
     }
 
     return 0;
@@ -2439,10 +2497,12 @@ int trace_net_dev_queue(struct tp_net_dev_queue *ctx)
 
     __u16 family = BPF_CORE_READ(sk, __sk_common.skc_family);
 
-    struct trace_info e = {};
-    e.event  = EV_SKB_OUT;
-    e.cookie = cookie;
-    e.family = family;
+    struct trace_info *e = evt_new();
+    if (!e) return 0;
+
+    e->event  = EV_SKB_OUT;
+    e->cookie = cookie;
+    e->family = family;
 
     void *head = (void *)BPF_CORE_READ(skb, head);
     __u16 nh   = BPF_CORE_READ(skb, network_header);
@@ -2455,51 +2515,50 @@ int trace_net_dev_queue(struct tp_net_dev_queue *ctx)
         bpf_probe_read_kernel(&iph, sizeof(iph), head + nh);
         if (iph.version != 4) return 0;
 
-        e.proto   = iph.protocol;
-        e.src_ip4 = iph.saddr;
-        e.dst_ip4 = iph.daddr;
+        e->proto   = iph.protocol;
+        e->src_ip4 = iph.saddr;
+        e->dst_ip4 = iph.daddr;
 
-        if (e.proto == IPPROTO_UDP) {
+        if (e->proto == IPPROTO_UDP) {
             struct udphdr uh = {};
             bpf_probe_read_kernel(&uh, sizeof(uh), head + th);
-            e.sport = bpf_ntohs(uh.source);
-            e.dport = bpf_ntohs(uh.dest);
-        } else if (e.proto == IPPROTO_TCP) {
+            e->sport = bpf_ntohs(uh.source);
+            e->dport = bpf_ntohs(uh.dest);
+        } else if (e->proto == IPPROTO_TCP) {
             struct tcphdr thh = {};
             bpf_probe_read_kernel(&thh, sizeof(thh), head + th);
-            e.sport = bpf_ntohs(thh.source);
-            e.dport = bpf_ntohs(thh.dest);
+            e->sport = bpf_ntohs(thh.source);
+            e->dport = bpf_ntohs(thh.dest);
         }
     } else if (family == AF_INET6) {
         struct ipv6hdr ip6h = {};
         bpf_probe_read_kernel(&ip6h, sizeof(ip6h), head + nh);
 
-        e.proto = ip6h.nexthdr;
-        __builtin_memcpy(e.src_ip6, &ip6h.saddr, sizeof(e.src_ip6));
-        __builtin_memcpy(e.dst_ip6, &ip6h.daddr, sizeof(e.dst_ip6));
+        e->proto = ip6h.nexthdr;
+        __builtin_memcpy(e->src_ip6, &ip6h.saddr, sizeof(e->src_ip6));
+        __builtin_memcpy(e->dst_ip6, &ip6h.daddr, sizeof(e->dst_ip6));
 
-        if (e.proto == IPPROTO_UDP) {
+        if (e->proto == IPPROTO_UDP) {
             struct udphdr uh = {};
             bpf_probe_read_kernel(&uh, sizeof(uh), head + th);
-            e.sport = bpf_ntohs(uh.source);
-            e.dport = bpf_ntohs(uh.dest);
-        } else if (e.proto == IPPROTO_TCP) {
+            e->sport = bpf_ntohs(uh.source);
+            e->dport = bpf_ntohs(uh.dest);
+        } else if (e->proto == IPPROTO_TCP) {
             struct tcphdr thh = {};
             bpf_probe_read_kernel(&thh, sizeof(thh), head + th);
-            e.sport = bpf_ntohs(thh.source);
-            e.dport = bpf_ntohs(thh.dest);
+            e->sport = bpf_ntohs(thh.source);
+            e->dport = bpf_ntohs(thh.dest);
         }
     } else {
         return 0;
     }
 
-    if (e.proto != IPPROTO_TCP && e.proto != IPPROTO_UDP && e.proto != IPPROTO_ICMP && e.proto != IPPROTO_ICMPV6)
+    if (e->proto != IPPROTO_TCP && e->proto != IPPROTO_UDP && e->proto != IPPROTO_ICMP && e->proto != IPPROTO_ICMPV6)
         return 0;
 
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &e, sizeof(e));
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, e, sizeof(*e));
     return 0;
 }
-
 
 
 
@@ -2541,7 +2600,7 @@ int trace_net_dev_queue(struct tp_net_dev_queue *ctx)
 #define EV_WRITE     22
 #define EV_CLOSE     30
 
-// skb out (net_dev_queue)
+// skb out hint
 #define EV_SKB_OUT   40
 
 // socket flags
@@ -2560,15 +2619,14 @@ int trace_net_dev_queue(struct tp_net_dev_queue *ctx)
 // bounded parsing limits
 #define MAX_MMSG 16
 #define MAX_IOV  4
-#define MAX_CMSG_STEPS 6
 
 #define CMSG_ALIGN(len) (((len) + sizeof(__u64) - 1) & ~(sizeof(__u64) - 1))
 
 // SNI payload capture
 #define MAX_PAYLOAD     160
-#define MAX_SNI_CHUNKS  6   // сколько первых write/sendmsg чанков снимем на cookie
+#define MAX_SNI_CHUNKS  6   // first N chunks per cookie
 
-/* ===== tracepoint net_dev_queue ctx ===== */
+/* ===== tracepoint net_dev_queue ctx (stable subset) ===== */
 struct tp_net_dev_queue {
     __u16 common_type;
     __u8  common_flags;
@@ -2584,18 +2642,18 @@ struct tp_net_dev_queue {
 struct in_addr_u { __u32 s_addr; };
 
 struct sockaddr_in_u {
-    __u16           sin_family;
-    __u16           sin_port;
+    __u16            sin_family;
+    __u16            sin_port;
     struct in_addr_u sin_addr;
-    __u8            pad[8];
+    __u8             pad[8];
 };
 
 struct sockaddr_in6_u {
-    __u16           sin6_family;
-    __u16           sin6_port;
-    __u32           sin6_flowinfo;
-    struct in6_addr sin6_addr;
-    __u32           sin6_scope_id;
+    __u16            sin6_family;
+    __u16            sin6_port;
+    __u32            sin6_flowinfo;
+    struct in6_addr  sin6_addr;
+    __u32            sin6_scope_id;
 };
 
 /* ====== types ====== */
@@ -2649,7 +2707,7 @@ struct trace_info {
 
     __u8  proto;
     __u8  event;
-    __u8  state;
+    __u8  state;   // mmsg packets count (clamped), connect: 0/1
     __u8  _pad1;
 
     __u32 src_ip4; // net order
@@ -2832,13 +2890,31 @@ struct {
     __type(value, struct payload_ptrlen_t);
 } write_args_map SEC(".maps");
 
-// cookie(inode) -> state
+// cookie(inode) -> state: 0..MAX_SNI_CHUNKS, 0xff stop
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 16384);
     __type(key, __u64); // cookie
-    __type(value, __u8); // 0..MAX_SNI_CHUNKS, 0xff stop
+    __type(value, __u8);
 } sni_state_map SEC(".maps");
+
+/* ---- per-cpu scratch to avoid stack >512B ---- */
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, struct trace_info);
+} scratch_event SEC(".maps");
+
+static __always_inline struct trace_info *evt_new(void)
+{
+    __u32 k = 0;
+    struct trace_info *e = bpf_map_lookup_elem(&scratch_event, &k);
+    if (!e)
+        return 0;
+    __builtin_memset(e, 0, sizeof(*e));
+    return e;
+}
 
 struct {
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
@@ -2876,6 +2952,7 @@ static __always_inline int read_mmsghdr0(__u64 vec_u, struct user_mmsghdr64 *out
     return 0;
 }
 
+/* recv: sum msg_len */
 static __always_inline __s64 sum_mmsg_len(__u64 vec_u, __u32 n)
 {
     __s64 total = 0;
@@ -2892,6 +2969,7 @@ static __always_inline __s64 sum_mmsg_len(__u64 vec_u, __u32 n)
     return total;
 }
 
+/* send: best-effort sum iov_len (clamped) */
 static __always_inline __s64 sum_mmsg_iov_bytes(__u64 vec_u, __u32 n)
 {
     __s64 total = 0;
@@ -2971,6 +3049,7 @@ static __always_inline int is_socket_fd(int fd)
     return (mode & S_IFMT) == S_IFSOCK;
 }
 
+/* cookie = socket inode number */
 static __always_inline __u64 cookie_from_fd(int fd)
 {
     struct file *file = file_from_fd(fd);
@@ -2998,7 +3077,7 @@ static __always_inline struct sock *sock_from_fd(int fd)
     return BPF_CORE_READ(sock, sk);
 }
 
-/* ---- sockaddr from user ---- */
+/* ---- sockaddr from user (AF_INET/AF_INET6) ---- */
 
 static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
                                                    const void *uaddr,
@@ -3012,6 +3091,7 @@ static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
     if (bpf_probe_read_user(&family, sizeof(family), uaddr) < 0)
         return -1;
 
+    /* don't allow family to "jump" once fixed (except v4-mapped on v6 socket) */
     if (info->family != 0 && family != info->family) {
         if (info->family == AF_INET6 && family == AF_INET) {
             if (addrlen < sizeof(struct sockaddr_in_u))
@@ -3089,7 +3169,7 @@ static __always_inline int fill_from_sockaddr_user(struct trace_info *info,
     return -1;
 }
 
-/* ---- local addr helpers ---- */
+/* ---- local addr helpers (IPv4) ---- */
 
 static __always_inline __u32 ipv4_local_addr(struct sock *sk)
 {
@@ -3124,7 +3204,7 @@ static __always_inline void loopback_fallback(struct trace_info *info, int is_se
     if (info->family == AF_INET) {
         if (is_send_dir) {
             if (info->src_ip4 == 0 && is_ipv4_loopback(info->dst_ip4))
-                info->src_ip4 = bpf_htonl(0x7f000001);
+                info->src_ip4 = bpf_htonl(0x7f000001); // 127.0.0.1
         } else {
             if (info->dst_ip4 == 0 && is_ipv4_loopback(info->src_ip4))
                 info->dst_ip4 = bpf_htonl(0x7f000001);
@@ -3187,6 +3267,7 @@ static __always_inline int fill_fd_state(int fd, struct fd_state_t *st)
     return -1;
 }
 
+/* cache + self-heal */
 static __always_inline int fill_from_fd_state_map(struct trace_info *info, __u32 tgid, int fd, int is_send_dir)
 {
     struct fd_key_t k = { .tgid = tgid, .fd = fd };
@@ -3260,7 +3341,7 @@ static __always_inline void fill_ids_comm_cookie(struct trace_info *info, __u64 
     }
 }
 
-/* ---- parse pktinfo cmsg (NO LOOPS) ---- */
+/* ---- parse pktinfo cmsg (bounded steps) ---- */
 
 static __always_inline void parse_pktinfo_cmsg(struct trace_info *info, __u64 ctrl, __u64 controllen, int set_dst)
 {
@@ -3314,7 +3395,7 @@ static __always_inline void parse_pktinfo_cmsg(struct trace_info *info, __u64 ct
 #undef CMSG_TRY_STEP
 }
 
-/* ===== SNI helpers (TLS ClientHello sniff) ===== */
+/* ===== SNI helpers ===== */
 
 static __always_inline int looks_like_tls_clienthello(const void *p)
 {
@@ -3322,9 +3403,8 @@ static __always_inline int looks_like_tls_clienthello(const void *p)
     if (!p) return 0;
     if (bpf_probe_read_user(h, sizeof(h), p) != 0)
         return 0;
-    // TLS record: 0x16 0x03 xx
-    if (h[0] != 0x16) return 0;
-    if (h[1] != 0x03) return 0;
+    if (h[0] != 0x16) return 0; // handshake record
+    if (h[1] != 0x03) return 0; // TLS major
     return 1;
 }
 
@@ -3412,35 +3492,38 @@ int trace_connect_exit(struct trace_event_raw_sys_exit *ctx)
 
     struct conn_info_t *conn = bpf_map_lookup_elem(&conn_info_map, &id);
 
-    struct trace_info info = {};
-    info.event = EV_CONNECT;
-    info.state = (ret < 0) ? 1 : 0;
-    info.fd    = (__u32)in->fd;
-    info.ret   = ret;
+    struct trace_info *info = evt_new();
+    if (!info)
+        goto cleanup;
 
-    fill_ids_comm_cookie(&info, id, (int)info.fd, conn ? conn->comm : 0);
+    info->event = EV_CONNECT;
+    info->state = (ret < 0) ? 1 : 0;
+    info->fd    = (__u32)in->fd;
+    info->ret   = ret;
 
-    info.proto  = st.proto;
-    info.family = st.family;
-    info.sport  = st.lport;
-    info.dport  = st.rport;
+    fill_ids_comm_cookie(info, id, (int)info->fd, conn ? conn->comm : 0);
+
+    info->proto  = st.proto;
+    info->family = st.family;
+    info->sport  = st.lport;
+    info->dport  = st.rport;
 
     if (st.family == AF_INET) {
-        info.src_ip4 = st.lip;
-        info.dst_ip4 = st.rip;
+        info->src_ip4 = st.lip;
+        info->dst_ip4 = st.rip;
     } else if (st.family == AF_INET6) {
-        __builtin_memcpy(info.src_ip6, &st.lip6, 16);
-        __builtin_memcpy(info.dst_ip6, &st.rip6, 16);
+        __builtin_memcpy(info->src_ip6, &st.lip6, 16);
+        __builtin_memcpy(info->dst_ip6, &st.rip6, 16);
     } else {
         goto cleanup;
     }
 
     struct addr_ptrlen_t *ap = bpf_map_lookup_elem(&addrConnect_map, &id);
     if (ap && ap->addr && ap->len)
-        (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 1);
+        (void)fill_from_sockaddr_user(info, (void *)ap->addr, ap->len, 1);
 
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    loopback_fallback(info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&addrConnect_map, &id);
@@ -3482,40 +3565,43 @@ static __always_inline int accept_exit_common(struct trace_event_raw_sys_exit *c
 
     struct conn_info_t *conn = bpf_map_lookup_elem(&conn_info_map, &id);
 
-    struct trace_info info = {};
-    info.event = EV_ACCEPT;
+    struct trace_info *info = evt_new();
+    if (!info)
+        goto cleanup;
 
-    info.fd  = conn ? conn->fd : 0; // listen fd
-    info.ret = newfd;
+    info->event = EV_ACCEPT;
+    info->fd  = conn ? conn->fd : 0; // listen fd
+    info->ret = newfd;
 
-    info.ts_ns  = bpf_ktime_get_ns();
-    info.tgid   = tgid;
-    info.tid    = (__u32)id;
-    info.cookie = cookie_from_fd((int)newfd);
+    info->ts_ns  = bpf_ktime_get_ns();
+    info->tgid   = tgid;
+    info->tid    = (__u32)id;
+    info->cookie = cookie_from_fd((int)newfd);
 
     if (conn)
-        __builtin_memcpy(info.comm, conn->comm, sizeof(info.comm));
+        __builtin_memcpy(info->comm, conn->comm, sizeof(info->comm));
     else
-        bpf_get_current_comm(info.comm, sizeof(info.comm));
+        bpf_get_current_comm(info->comm, sizeof(info->comm));
 
-    info.proto  = st.proto;
-    info.family = st.family;
+    info->proto  = st.proto;
+    info->family = st.family;
 
-    info.sport = st.rport;
-    info.dport = st.lport;
+    // accept: peer -> local
+    info->sport = st.rport;
+    info->dport = st.lport;
 
     if (st.family == AF_INET) {
-        info.src_ip4 = st.rip;
-        info.dst_ip4 = st.lip;
+        info->src_ip4 = st.rip;
+        info->dst_ip4 = st.lip;
     } else if (st.family == AF_INET6) {
-        __builtin_memcpy(info.src_ip6, &st.rip6, 16);
-        __builtin_memcpy(info.dst_ip6, &st.lip6, 16);
+        __builtin_memcpy(info->src_ip6, &st.rip6, 16);
+        __builtin_memcpy(info->dst_ip6, &st.lip6, 16);
     } else {
         goto cleanup;
     }
 
-    loopback_fallback(&info, 0);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    loopback_fallback(info, 0);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&conn_info_map, &id);
@@ -3578,29 +3664,33 @@ int trace_bind_exit(struct trace_event_raw_sys_exit *ctx)
     struct fd_key_t k = { .tgid = tgid, .fd = (int)ci->fd };
     bpf_map_update_elem(&fd_state_map, &k, &st, BPF_ANY);
 
-    struct trace_info info = {};
-    info.event = EV_BINDOK;
-    info.fd    = ci->fd;
-    info.ret   = ret;
+    struct trace_info *info = evt_new();
+    if (!info)
+        goto cleanup;
 
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+    info->event = EV_BINDOK;
+    info->fd    = ci->fd;
+    info->ret   = ret;
 
-    info.proto  = st.proto;
-    info.family = st.family;
+    fill_ids_comm_cookie(info, id, (int)ci->fd, ci->comm);
 
-    info.sport = st.lport;
+    info->proto  = st.proto;
+    info->family = st.family;
+
+    // bind = local -> src
+    info->sport = st.lport;
     if (st.family == AF_INET) {
-        info.src_ip4 = st.lip;
+        info->src_ip4 = st.lip;
     } else if (st.family == AF_INET6) {
-        __builtin_memcpy(info.src_ip6, &st.lip6, 16);
+        __builtin_memcpy(info->src_ip6, &st.lip6, 16);
     }
 
     struct addr_ptrlen_t *ap = bpf_map_lookup_elem(&addrBind_map, &id);
     if (ap && ap->addr && ap->len)
-        (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 0);
+        (void)fill_from_sockaddr_user(info, (void *)ap->addr, ap->len, 0);
 
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    loopback_fallback(info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&addrBind_map, &id);
@@ -3645,22 +3735,25 @@ int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx)
     if (!ci)
         goto cleanup;
 
-    struct trace_info info = {};
-    info.event = EV_SENDTO;
-    info.fd = ci->fd;
-    info.ret = ret;
+    struct trace_info *info = evt_new();
+    if (!info)
+        goto cleanup;
 
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+    info->event = EV_SENDTO;
+    info->fd = ci->fd;
+    info->ret = ret;
 
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
+    fill_ids_comm_cookie(info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(info, tgid, (int)ci->fd, 1) < 0)
         goto cleanup;
 
     struct addr_ptrlen_t *ap = bpf_map_lookup_elem(&addrSend_map, &id);
     if (ap && ap->addr && ap->len)
-        (void)fill_from_sockaddr_user(&info, (void *)ap->addr, ap->len, 1);
+        (void)fill_from_sockaddr_user(info, (void *)ap->addr, ap->len, 1);
 
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    loopback_fallback(info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&addrSend_map, &id);
@@ -3715,26 +3808,29 @@ int trace_recvfrom_exit(struct trace_event_raw_sys_exit *ctx)
     if (!ci)
         goto cleanup;
 
-    struct trace_info info = {};
-    info.event = EV_RECVFROM;
-    info.fd = ci->fd;
-    info.ret = ret;
+    struct trace_info *info = evt_new();
+    if (!info)
+        goto cleanup;
 
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+    info->event = EV_RECVFROM;
+    info->fd = ci->fd;
+    info->ret = ret;
 
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
+    fill_ids_comm_cookie(info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(info, tgid, (int)ci->fd, 0) < 0)
         goto cleanup;
 
     if (m && m->addr && m->lenp) {
         __u32 addrlen = 0;
         if (bpf_probe_read_user(&addrlen, sizeof(addrlen), (void *)m->lenp) == 0) {
             if (addrlen >= sizeof(__u16))
-                (void)fill_from_sockaddr_user(&info, (void *)m->addr, addrlen, 0);
+                (void)fill_from_sockaddr_user(info, (void *)m->addr, addrlen, 0);
         }
     }
 
-    loopback_fallback(&info, 0);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    loopback_fallback(info, 0);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&addrRecv_map, &id);
@@ -3777,14 +3873,17 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (!ci)
         goto cleanup;
 
-    struct trace_info info = {};
-    info.event = EV_SENDMSG;
-    info.fd = ci->fd;
-    info.ret = ret;
+    struct trace_info *info = evt_new();
+    if (!info)
+        goto cleanup;
 
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+    info->event = EV_SENDMSG;
+    info->fd = ci->fd;
+    info->ret = ret;
 
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
+    fill_ids_comm_cookie(info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(info, tgid, (int)ci->fd, 1) < 0)
         goto cleanup;
 
     __u64 *msgp = bpf_map_lookup_elem(&msgSend_map, &id);
@@ -3792,24 +3891,25 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
         struct user_msghdr64 mh = {};
         if (read_msghdr64(*msgp, &mh) == 0) {
             if (mh.msg_name && mh.msg_namelen >= sizeof(__u16))
-                (void)fill_from_sockaddr_user(&info, (void *)mh.msg_name, mh.msg_namelen, 1);
+                (void)fill_from_sockaddr_user(info, (void *)mh.msg_name, mh.msg_namelen, 1);
 
             if (mh.msg_control && mh.msg_controllen >= sizeof(struct user_cmsghdr64))
-                parse_pktinfo_cmsg(&info, mh.msg_control, mh.msg_controllen, 0 /* set SRC */);
+                parse_pktinfo_cmsg(info, mh.msg_control, mh.msg_controllen, 0 /* set SRC */);
 
+            // payload from first iov
             if (mh.msg_iov && mh.msg_iovlen > 0) {
                 struct user_iovec64 iv = {};
                 if (bpf_probe_read_user(&iv, sizeof(iv), (void *)mh.msg_iov) == 0) {
                     __u32 L = (__u32)iv.iov_len;
-                    if ((__s64)L > info.ret) L = (__u32)info.ret;
-                    maybe_attach_payload(&info, (void *)iv.iov_base, L);
+                    if ((__s64)L > info->ret) L = (__u32)info->ret;
+                    maybe_attach_payload(info, (void *)iv.iov_base, L);
                 }
             }
         }
     }
 
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    loopback_fallback(info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&msgSend_map, &id);
@@ -3859,29 +3959,32 @@ int trace_recvmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (!ci)
         goto cleanup;
 
-    struct trace_info info = {};
-    info.event = EV_RECVMSG;
-    info.fd = ci->fd;
-    info.ret = ret;
+    struct trace_info *info = evt_new();
+    if (!info)
+        goto cleanup;
 
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+    info->event = EV_RECVMSG;
+    info->fd = ci->fd;
+    info->ret = ret;
 
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
+    fill_ids_comm_cookie(info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(info, tgid, (int)ci->fd, 0) < 0)
         goto cleanup;
 
     if (pv && pv->msg) {
         struct user_msghdr64 mh = {};
         if (read_msghdr64(pv->msg, &mh) == 0) {
             if (mh.msg_name && mh.msg_namelen >= sizeof(__u16))
-                (void)fill_from_sockaddr_user(&info, (void *)mh.msg_name, mh.msg_namelen, 0);
+                (void)fill_from_sockaddr_user(info, (void *)mh.msg_name, mh.msg_namelen, 0);
 
             if (mh.msg_control && mh.msg_controllen >= sizeof(struct user_cmsghdr64))
-                parse_pktinfo_cmsg(&info, mh.msg_control, mh.msg_controllen, 1 /* set DST(local) */);
+                parse_pktinfo_cmsg(info, mh.msg_control, mh.msg_controllen, 1 /* set DST(local) */);
         }
     }
 
-    loopback_fallback(&info, 0);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    loopback_fallback(info, 0);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&msgRecv_map, &id);
@@ -3895,10 +3998,9 @@ SEC("tracepoint/syscalls/sys_enter_sendmmsg")
 int trace_sendmmsg_enter(struct trace_event_raw_sys_enter *ctx)
 {
     __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
 
     struct conn_info_t ci = {};
-    ci.tgid = tgid;
+    ci.tgid = id >> 32;
     ci.fd   = (__u32)ctx->args[0];
     bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
     bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
@@ -3933,28 +4035,31 @@ int trace_sendmmsg_exit(struct trace_event_raw_sys_exit *ctx)
     cnt = min_u32(cnt, pv->vlen);
     cnt = min_u32(cnt, MAX_MMSG);
 
-    struct trace_info info = {};
-    info.event = EV_SENDMMSG;
-    info.fd    = ci->fd;
-    info.state = (ret > 255) ? 255 : (__u8)ret;
-    info.ret   = sum_mmsg_iov_bytes(pv->vec, cnt);
+    struct trace_info *info = evt_new();
+    if (!info)
+        goto cleanup;
 
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+    info->event = EV_SENDMMSG;
+    info->fd    = ci->fd;
+    info->state = (ret > 255) ? 255 : (__u8)ret;
+    info->ret   = sum_mmsg_iov_bytes(pv->vec, cnt);
 
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
+    fill_ids_comm_cookie(info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(info, tgid, (int)ci->fd, 1) < 0)
         goto cleanup;
 
     struct user_mmsghdr64 m0 = {};
     if (read_mmsghdr0(pv->vec, &m0) == 0) {
         if (m0.msg_hdr.msg_name && m0.msg_hdr.msg_namelen >= sizeof(__u16))
-            (void)fill_from_sockaddr_user(&info, (void *)m0.msg_hdr.msg_name, m0.msg_hdr.msg_namelen, 1);
+            (void)fill_from_sockaddr_user(info, (void *)m0.msg_hdr.msg_name, m0.msg_hdr.msg_namelen, 1);
 
         if (m0.msg_hdr.msg_control && m0.msg_hdr.msg_controllen >= sizeof(struct user_cmsghdr64))
-            parse_pktinfo_cmsg(&info, m0.msg_hdr.msg_control, m0.msg_hdr.msg_controllen, 0 /* set SRC */);
+            parse_pktinfo_cmsg(info, m0.msg_hdr.msg_control, m0.msg_hdr.msg_controllen, 0 /* set SRC */);
     }
 
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    loopback_fallback(info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&mmsgSend_map, &id);
@@ -3968,10 +4073,9 @@ SEC("tracepoint/syscalls/sys_enter_recvmmsg")
 int trace_recvmmsg_enter(struct trace_event_raw_sys_enter *ctx)
 {
     __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
 
     struct conn_info_t ci = {};
-    ci.tgid = tgid;
+    ci.tgid = id >> 32;
     ci.fd   = (__u32)ctx->args[0];
     bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
     bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
@@ -4009,28 +4113,31 @@ int trace_recvmmsg_exit(struct trace_event_raw_sys_exit *ctx)
     cnt = min_u32(cnt, pv->vlen);
     cnt = min_u32(cnt, MAX_MMSG);
 
-    struct trace_info info = {};
-    info.event = EV_RECVMMSG;
-    info.fd    = ci->fd;
-    info.state = (ret > 255) ? 255 : (__u8)ret;
-    info.ret   = sum_mmsg_len(pv->vec, cnt);
+    struct trace_info *info = evt_new();
+    if (!info)
+        goto cleanup;
 
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+    info->event = EV_RECVMMSG;
+    info->fd    = ci->fd;
+    info->state = (ret > 255) ? 255 : (__u8)ret;
+    info->ret   = sum_mmsg_len(pv->vec, cnt);
 
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
+    fill_ids_comm_cookie(info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(info, tgid, (int)ci->fd, 0) < 0)
         goto cleanup;
 
     struct user_mmsghdr64 m0 = {};
     if (read_mmsghdr0(pv->vec, &m0) == 0) {
         if (m0.msg_hdr.msg_name && m0.msg_hdr.msg_namelen >= sizeof(__u16))
-            (void)fill_from_sockaddr_user(&info, (void *)m0.msg_hdr.msg_name, m0.msg_hdr.msg_namelen, 0);
+            (void)fill_from_sockaddr_user(info, (void *)m0.msg_hdr.msg_name, m0.msg_hdr.msg_namelen, 0);
 
         if (m0.msg_hdr.msg_control && m0.msg_hdr.msg_controllen >= sizeof(struct user_cmsghdr64))
-            parse_pktinfo_cmsg(&info, m0.msg_hdr.msg_control, m0.msg_hdr.msg_controllen, 1 /* set DST(local) */);
+            parse_pktinfo_cmsg(info, m0.msg_hdr.msg_control, m0.msg_hdr.msg_controllen, 1 /* set DST(local) */);
     }
 
-    loopback_fallback(&info, 0);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    loopback_fallback(info, 0);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&mmsgRecv_map, &id);
@@ -4080,25 +4187,29 @@ int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
     if (!ci)
         goto cleanup;
 
-    struct trace_info info = {};
-    info.event = EV_WRITE;
-    info.fd    = ci->fd;
-    info.ret   = ret;
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
+    struct trace_info *info = evt_new();
+    if (!info)
         goto cleanup;
 
+    info->event = EV_WRITE;
+    info->fd    = ci->fd;
+    info->ret   = ret;
+
+    fill_ids_comm_cookie(info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(info, tgid, (int)ci->fd, 1) < 0)
+        goto cleanup;
+
+    // payload for TLS
     struct payload_ptrlen_t *a = bpf_map_lookup_elem(&write_args_map, &id);
     if (a && a->ptr && a->len) {
         __u32 L = a->len;
-        if ((__s64)L > info.ret) L = (__u32)info.ret;
-        maybe_attach_payload(&info, (void *)a->ptr, L);
+        if ((__s64)L > info->ret) L = (__u32)info->ret;
+        maybe_attach_payload(info, (void *)a->ptr, L);
     }
 
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    loopback_fallback(info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&write_args_map, &id);
@@ -4139,18 +4250,21 @@ int trace_read_exit(struct trace_event_raw_sys_exit *ctx)
     if (!ci)
         goto cleanup;
 
-    struct trace_info info = {};
-    info.event = EV_READ;
-    info.fd    = ci->fd;
-    info.ret   = ret;
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 0) < 0)
+    struct trace_info *info = evt_new();
+    if (!info)
         goto cleanup;
 
-    loopback_fallback(&info, 0);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    info->event = EV_READ;
+    info->fd    = ci->fd;
+    info->ret   = ret;
+
+    fill_ids_comm_cookie(info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(info, tgid, (int)ci->fd, 0) < 0)
+        goto cleanup;
+
+    loopback_fallback(info, 0);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
 cleanup:
     bpf_map_delete_elem(&conn_info_map, &id);
@@ -4170,7 +4284,7 @@ int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
     struct fd_key_t k = { .tgid = tgid, .fd = fd };
     bpf_map_delete_elem(&fd_state_map, &k);
 
-    // drop sni state for this cookie (avoid stale)
+    // drop sni state for this cookie
     __u64 c = cookie_from_fd(fd);
     if (c)
         bpf_map_delete_elem(&sni_state_map, &c);
@@ -4178,30 +4292,33 @@ int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
     if (!is_socket_fd(fd))
         return 0;
 
-    struct trace_info info = {};
-    info.event = EV_CLOSE;
-    info.fd    = (__u32)fd;
-    info.ret   = 0;
+    struct trace_info *info = evt_new();
+    if (!info)
+        return 0;
 
-    fill_ids_comm_cookie(&info, id, fd, 0);
+    info->event = EV_CLOSE;
+    info->fd    = (__u32)fd;
+    info->ret   = 0;
+
+    fill_ids_comm_cookie(info, id, fd, 0);
 
     struct fd_state_t st = {};
     if (fill_fd_state(fd, &st) == 0) {
-        info.proto  = st.proto;
-        info.family = st.family;
-        info.sport  = st.lport;
-        info.dport  = st.rport;
+        info->proto  = st.proto;
+        info->family = st.family;
+        info->sport  = st.lport;
+        info->dport  = st.rport;
 
         if (st.family == AF_INET) {
-            info.src_ip4 = st.lip;
-            info.dst_ip4 = st.rip;
+            info->src_ip4 = st.lip;
+            info->dst_ip4 = st.rip;
         } else if (st.family == AF_INET6) {
-            __builtin_memcpy(info.src_ip6, &st.lip6, 16);
-            __builtin_memcpy(info.dst_ip6, &st.rip6, 16);
+            __builtin_memcpy(info->src_ip6, &st.lip6, 16);
+            __builtin_memcpy(info->dst_ip6, &st.rip6, 16);
         }
 
-        loopback_fallback(&info, 1);
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+        loopback_fallback(info, 1);
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
     }
 
     return 0;
@@ -4239,10 +4356,12 @@ int trace_net_dev_queue(struct tp_net_dev_queue *ctx)
 
     __u16 family = BPF_CORE_READ(sk, __sk_common.skc_family);
 
-    struct trace_info e = {};
-    e.event  = EV_SKB_OUT;
-    e.cookie = cookie;
-    e.family = family;
+    struct trace_info *e = evt_new();
+    if (!e) return 0;
+
+    e->event  = EV_SKB_OUT;
+    e->cookie = cookie;
+    e->family = family;
 
     void *head = (void *)BPF_CORE_READ(skb, head);
     __u16 nh   = BPF_CORE_READ(skb, network_header);
@@ -4255,118 +4374,48 @@ int trace_net_dev_queue(struct tp_net_dev_queue *ctx)
         bpf_probe_read_kernel(&iph, sizeof(iph), head + nh);
         if (iph.version != 4) return 0;
 
-        e.proto   = iph.protocol;
-        e.src_ip4 = iph.saddr;
-        e.dst_ip4 = iph.daddr;
+        e->proto   = iph.protocol;
+        e->src_ip4 = iph.saddr;
+        e->dst_ip4 = iph.daddr;
 
-        if (e.proto == IPPROTO_UDP) {
+        if (e->proto == IPPROTO_UDP) {
             struct udphdr uh = {};
             bpf_probe_read_kernel(&uh, sizeof(uh), head + th);
-            e.sport = bpf_ntohs(uh.source);
-            e.dport = bpf_ntohs(uh.dest);
-        } else if (e.proto == IPPROTO_TCP) {
+            e->sport = bpf_ntohs(uh.source);
+            e->dport = bpf_ntohs(uh.dest);
+        } else if (e->proto == IPPROTO_TCP) {
             struct tcphdr thh = {};
             bpf_probe_read_kernel(&thh, sizeof(thh), head + th);
-            e.sport = bpf_ntohs(thh.source);
-            e.dport = bpf_ntohs(thh.dest);
+            e->sport = bpf_ntohs(thh.source);
+            e->dport = bpf_ntohs(thh.dest);
         }
     } else if (family == AF_INET6) {
         struct ipv6hdr ip6h = {};
         bpf_probe_read_kernel(&ip6h, sizeof(ip6h), head + nh);
 
-        e.proto = ip6h.nexthdr;
-        __builtin_memcpy(e.src_ip6, &ip6h.saddr, sizeof(e.src_ip6));
-        __builtin_memcpy(e.dst_ip6, &ip6h.daddr, sizeof(e.dst_ip6));
+        e->proto = ip6h.nexthdr;
+        __builtin_memcpy(e->src_ip6, &ip6h.saddr, sizeof(e->src_ip6));
+        __builtin_memcpy(e->dst_ip6, &ip6h.daddr, sizeof(e->dst_ip6));
 
-        if (e.proto == IPPROTO_UDP) {
+        if (e->proto == IPPROTO_UDP) {
             struct udphdr uh = {};
             bpf_probe_read_kernel(&uh, sizeof(uh), head + th);
-            e.sport = bpf_ntohs(uh.source);
-            e.dport = bpf_ntohs(uh.dest);
-        } else if (e.proto == IPPROTO_TCP) {
+            e->sport = bpf_ntohs(uh.source);
+            e->dport = bpf_ntohs(uh.dest);
+        } else if (e->proto == IPPROTO_TCP) {
             struct tcphdr thh = {};
             bpf_probe_read_kernel(&thh, sizeof(thh), head + th);
-            e.sport = bpf_ntohs(thh.source);
-            e.dport = bpf_ntohs(thh.dest);
+            e->sport = bpf_ntohs(thh.source);
+            e->dport = bpf_ntohs(thh.dest);
         }
     } else {
         return 0;
     }
 
-    if (e.proto != IPPROTO_TCP && e.proto != IPPROTO_UDP && e.proto != IPPROTO_ICMP && e.proto != IPPROTO_ICMPV6)
+    if (e->proto != IPPROTO_TCP && e->proto != IPPROTO_UDP && e->proto != IPPROTO_ICMP && e->proto != IPPROTO_ICMPV6)
         return 0;
 
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &e, sizeof(e));
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, e, sizeof(*e));
     return 0;
 }
 
-
-
-
-lev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux   -type trace_info   -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
-/home/lev/bpfgo/trace.c:1412:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-int trace_sendmmsg_exit(struct trace_event_raw_sys_exit *ctx)
-    ^
-/home/lev/bpfgo/trace.c:1412:5: note: could not determine the original source location for ./trace.c:0:0
-/home/lev/bpfgo/trace.c:1412:5: note: could not determine the original source location for ./trace.c:0:0
-/home/lev/bpfgo/trace.c:1412:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-int trace_sendmmsg_exit(struct trace_event_raw_sys_exit *ctx)
-    ^
-/home/lev/bpfgo/trace.c:1412:5: note: could not determine the original source location for ./trace.c:0:0
-./trace.c:748:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-    info->cookie = cookie_from_fd(fd);
-                 ^
-./trace.c:748:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-./trace.c:751:9: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-        __builtin_memcpy(info->comm, comm64_opt, sizeof(info->comm));
-        ^
-./trace.c:751:9: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-./trace.c:1442:27: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-    if (read_mmsghdr0(pv->vec, &m0) == 0) {
-                          ^
-./trace.c:1412:5: note: could not determine the original source location for ./trace.c:0:0
-int trace_sendmmsg_exit(struct trace_event_raw_sys_exit *ctx)
-    ^
-./trace.c:1412:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-int trace_sendmmsg_exit(struct trace_event_raw_sys_exit *ctx)
-    ^
-./trace.c:1412:5: note: could not determine the original source location for ./trace.c:0:0
-./trace.c:618:9: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-    if (info->family == AF_INET) {
-        ^
-./trace.c:1485:5: note: could not determine the original source location for ./trace.c:0:0
-int trace_recvmmsg_exit(struct trace_event_raw_sys_exit *ctx)
-    ^
-./trace.c:1485:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-int trace_recvmmsg_exit(struct trace_event_raw_sys_exit *ctx)
-    ^
-./trace.c:1485:5: note: could not determine the original source location for ./trace.c:0:0
-./trace.c:1485:5: note: could not determine the original source location for ./trace.c:0:0
-./trace.c:1485:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-int trace_recvmmsg_exit(struct trace_event_raw_sys_exit *ctx)
-    ^
-./trace.c:1485:5: note: could not determine the original source location for ./trace.c:0:0
-./trace.c:748:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-    info->cookie = cookie_from_fd(fd);
-                 ^
-./trace.c:748:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-./trace.c:751:9: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-        __builtin_memcpy(info->comm, comm64_opt, sizeof(info->comm));
-        ^
-./trace.c:751:9: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-./trace.c:1518:27: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-    if (read_mmsghdr0(pv->vec, &m0) == 0) {
-                          ^
-./trace.c:1485:5: note: could not determine the original source location for ./trace.c:0:0
-int trace_recvmmsg_exit(struct trace_event_raw_sys_exit *ctx)
-    ^
-./trace.c:1485:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-int trace_recvmmsg_exit(struct trace_event_raw_sys_exit *ctx)
-    ^
-./trace.c:1485:5: note: could not determine the original source location for ./trace.c:0:0
-./trace.c:618:9: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-    if (info->family == AF_INET) {
-        ^
-18 errors generated.
-Error: compile: exit status 1
-lev@lev-VirtualBox:~/bpfgo$ 
