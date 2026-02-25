@@ -733,7 +733,20 @@ openssl s_client -connect 127.0.0.1:8443 -servername test.local </dev/null
 
 
 
-OPEN  TCP   pid=36312(openssl) cookie=102559  127.0.0.1(?):45830 -> 127.0.0.1(?):8443
-OPEN  TCP   pid=36074(openssl) cookie=102418  [0:0:0:0:0:ffff:7f00:1](?):8443 -> [0:0:0:0:0:ffff:7f00:1](?):45830
-CLOSE TCP   pid=36074(openssl) cookie=102418  [0:0:0:0:0:ffff:7f00:1](?):8443 -> [0:0:0:0:0:ffff:7f00:1](?):45830  out=1873B/4p in=416B/8p  age=23ms reason=close()
-CLOSE TCP   pid=36312(openssl) cookie=102559  127.0.0.1(?):45830 -> 127.0.0.1(?):8443  out=416B/3p in=1873B/16p  age=24ms reason=close()
+case tw, ok := <-tlsCh:
+	if !ok {
+		return
+	}
+	ev := tw.ev
+
+	ln := int(ev.Len)
+	if ln > len(ev.Data) {
+		ln = len(ev.Data)
+	}
+	if ln >= 5 {
+		log.Printf("TLS_CHUNK cookie=%d len=%d hdr=% x",
+			ev.Cookie, ln, ev.Data[:min(8, ln)],
+		)
+	}
+
+	// дальше твоя текущая логика accumulator + parseSNI...
