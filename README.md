@@ -704,32 +704,7 @@ sudo strace -f -e trace=sendmsg,write -p <PID>
 
 
 
-Пересобери генерацию типов (важно, чтобы появился bpfTlsChunkT):
-
-go generate ./...
-go build -o bpfgo .
-sudo ./bpfgo -comm openssl -sni=1
-
-Тест:
-
-# сервер (любой TLS). Например:
-openssl s_server -accept 8443 -cert cert.pem -key key.pem
-
-# клиент с SNI:
-openssl s_client -connect 127.0.0.1:8443 -servername test.local </dev/null
-
-
-
-openssl s_server -accept 8443 -cert cert.pem -key key.pem
-
-
-for i in $(seq 1 5); do
-  openssl s_client -connect 127.0.0.1:8443 -servername default.exp-tas.com -no_ticket </dev/null | head -n 1
-done
-
-
-
-
+#define USER_PTR_MASK 0x7fffffffffffffffULL
 
 SEC("tracepoint/syscalls/sys_exit_sendmsg")
 int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
@@ -763,12 +738,10 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
     loopback_fallback(info, 1);
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
 
-    /* ===== TLS detection across multiple iov ===== */
-
+    /* ===== TLS across multiple iov ===== */
     int want_tls = (info->proto == IPPROTO_TCP) &&
                    (info->dport == 443 || info->sport == 443 ||
                     info->dport == 853 || info->sport == 853);
-
     if (!want_tls)
         goto cleanup;
 
@@ -778,6 +751,7 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
         goto cleanup;
 
     msg_u = *msgp;
+    msg_u &= USER_PTR_MASK;
     if (!msg_u)
         goto cleanup;
 
@@ -788,14 +762,19 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (!mh.msg_iov || mh.msg_iovlen == 0)
         goto cleanup;
 
-    __u32 iovcnt = mh.msg_iovlen > MAX_IOV ? MAX_IOV : (__u32)mh.msg_iovlen;
+    __u64 iov_u = mh.msg_iov;
+    iov_u &= USER_PTR_MASK;
+    if (!iov_u)
+        goto cleanup;
+
+    __u32 iovcnt = (__u32)mh.msg_iovlen;
+    if (iovcnt > MAX_IOV) iovcnt = MAX_IOV;
 
     struct tls_chunk_t *ch = bpf_map_lookup_elem(&scratch_tls, &zero);
     if (!ch)
         goto cleanup;
 
     __builtin_memset(ch, 0, sizeof(*ch));
-
     ch->ts_ns  = bpf_ktime_get_ns();
     ch->cookie = info->cookie;
     ch->tgid   = info->tgid;
@@ -811,37 +790,46 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
 
 #pragma clang loop unroll(full)
     for (int i = 0; i < MAX_IOV; i++) {
-
         if ((__u32)i >= iovcnt)
             continue;
 
+        if (copied >= TLS_SNAP)
+            continue;
+
         struct user_iovec64 iv = {};
-        __u64 ip = mh.msg_iov + (__u64)i * sizeof(struct user_iovec64);
+        __u64 ip = iov_u + (__u64)i * (__u64)sizeof(struct user_iovec64);
+
+        ip &= USER_PTR_MASK;
+        if (!ip)
+            continue;
 
         if (bpf_probe_read_user(&iv, sizeof(iv), (void *)ip) != 0)
             continue;
 
-        if (!iv.iov_base || iv.iov_len == 0)
+        __u64 base = iv.iov_base;
+        __u64 blen = iv.iov_len;
+
+        base &= USER_PTR_MASK;
+        if (!base || blen == 0)
             continue;
 
-        __u64 to_copy = iv.iov_len;
-        if (copied + to_copy > TLS_SNAP)
-            to_copy = TLS_SNAP - copied;
+        __u32 left = TLS_SNAP - copied;
+        __u64 to_copy64 = blen;
+        if (to_copy64 > (__u64)left)
+            to_copy64 = (__u64)left;
 
+        __u32 to_copy = (__u32)to_copy64;
         if (to_copy == 0)
-            break;
+            continue;
 
-        if (bpf_probe_read_user(ch->data + copied, to_copy, (void *)iv.iov_base) == 0)
+        if (bpf_probe_read_user(ch->data + copied, to_copy, (void *)base) == 0)
             copied += to_copy;
-
-        if (copied >= TLS_SNAP)
-            break;
     }
 
     if (copied < 6)
         goto cleanup;
 
-    /* check TLS record header */
+    /* TLS record header check */
     if (!(ch->data[0] == 0x16 &&
           ch->data[1] == 0x03 &&
           ch->data[2] >= 0x01 &&
@@ -849,7 +837,6 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
         goto cleanup;
 
     ch->len = copied;
-
     bpf_perf_event_output(ctx, &tls_events, BPF_F_CURRENT_CPU, ch, sizeof(*ch));
 
 cleanup:
@@ -859,8 +846,3 @@ cleanup:
 }
 
 
-
-ev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
-[sudo] password for lev: 
-2026/02/25 07:50:06.083985 loadBpfObjects: field TraceSendmsgExit: program trace_sendmsg_exit: load program: permission denied: 995: (85) call bpf_probe_read_user#112: R2 min value is negative, either use unsigned or 'var &= const' (830 line(s) omitted)
-lev@lev-VirtualBox:~/bpfgo$ 
