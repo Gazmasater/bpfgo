@@ -88,7 +88,7 @@ __________________________________________________
 bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
 
 bpf2go -output-dir . -tags linux \
-  -type trace_info -type tls_chunk_t \
+  -type trace_info -type tls_sni_event \
   -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
 
 
@@ -3268,3 +3268,83 @@ int trace_net_dev_queue(struct tp_net_dev_queue *ctx) {
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &e, sizeof(e));
     return 0;
 }
+
+
+
+
+lev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux   -type trace_info   -go-package=main -target amd6
+4 bpf $(pwd)/trace.c -- -I$(pwd)
+/home/lev/bpfgo/trace.c:329:17: warning: implicit declaration of function 'bpf_ntohs' is invalid in C99 [-Wimplicit-function-declaration]
+    st->rport = bpf_ntohs(dport_be);
+                ^
+/home/lev/bpfgo/trace.c:413:22: warning: implicit declaration of function 'bpf_ntohs' is invalid in C99 [-Wimplicit-function-declaration]
+        __u16 port = bpf_ntohs(sa.sin_port);
+                     ^
+/home/lev/bpfgo/trace.c:423:22: warning: implicit declaration of function 'bpf_ntohs' is invalid in C99 [-Wimplicit-function-declaration]
+        __u16 port = bpf_ntohs(sa6.sin6_port);
+                     ^
+/home/lev/bpfgo/trace.c:1126:23: warning: implicit declaration of function 'bpf_ntohs' is invalid in C99 [-Wimplicit-function-declaration]
+            e.sport = bpf_ntohs(uh.source);
+                      ^
+/home/lev/bpfgo/trace.c:1131:23: warning: implicit declaration of function 'bpf_ntohs' is invalid in C99 [-Wimplicit-function-declaration]
+            e.sport = bpf_ntohs(thh.source);
+                      ^
+/home/lev/bpfgo/trace.c:1145:23: warning: implicit declaration of function 'bpf_ntohs' is invalid in C99 [-Wimplicit-function-declaration]
+            e.sport = bpf_ntohs(uh.source);
+                      ^
+/home/lev/bpfgo/trace.c:1150:23: warning: implicit declaration of function 'bpf_ntohs' is invalid in C99 [-Wimplicit-function-declaration]
+            e.sport = bpf_ntohs(thh.source);
+                      ^
+./trace.c:830:11: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+    __u64 id = bpf_get_current_pid_tgid();
+          ^
+./trace.c:833:11: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+    __s64 ret = 0;
+          ^
+./trace.c:829:5: note: could not determine the original source location for ./trace.c:0:0
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx) {
+    ^
+./trace.c:829:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx) {
+    ^
+./trace.c:829:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:829:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:829:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx) {
+    ^
+./trace.c:829:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:829:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:829:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx) {
+    ^
+./trace.c:829:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:829:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:829:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx) {
+    ^
+./trace.c:829:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:829:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:829:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx) {
+    ^
+./trace.c:829:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:829:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:829:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx) {
+    ^
+./trace.c:829:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:839:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+    struct trace_info info = {};
+                      ^
+./trace.c:839:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:839:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:839:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:839:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:839:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:839:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:839:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:839:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:839:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:839:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+fatal error: too many errors emitted, stopping now [-ferror-limit=]
+7 warnings and 20 errors generated.
