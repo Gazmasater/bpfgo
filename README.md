@@ -704,7 +704,4 @@ gcc -O2 -Wall -o udp_mmsg_client udp_mmsg_client.c
 
 
 
-ev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
-2026/02/25 04:22:29.396266 hostsPrefill: added=7 from /etc/hosts
-2026/02/25 04:22:29.837444 failed to load bpf objects: field TraceSendmsgExit: program trace_sendmsg_exit: load program: permission denied: 1175: (85) call bpf_probe_read_user#112: R2 min value is negative, either use unsigned or 'var &= const' (845 line(s) omitted)
-lev@lev-VirtualBox:~/bpfgo$ 
+
