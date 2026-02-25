@@ -720,10 +720,10 @@ openssl s_client -connect 127.0.0.1:8443 -servername test.local </dev/null
 
 
 
-out=0B/0p in=0B/0p  age=2ms reason=close()
-OPEN  TCP   pid=41173(openssl) cookie=144256  [0:0:0:0:0:ffff:7f00:1]:8443 -> [0:0:0:0:0:ffff:7f00:1]:43190
-OPEN  TCP   pid=41318(openssl) cookie=145170  127.0.0.1:43190 -> 127.0.0.1:8443
-CLOSE TCP   pid=41173(openssl) cookie=144256  [0:0:0:0:0:ffff:7f00:1]:8443 -> [0:0:0:0:0:ffff:7f00:1]:43190  out=1873B/4p in=416B/8p  age=15ms reason=close()
-CLOSE TCP   pid=41318(openssl) cookie=145170  127.0.0.1:43190 -> 127.0.0.1:8443  out=416B/3p in=1873B/17p  age=16ms reason=close()
-2026/02/25 06:50:41.274980 SNI cookie=146546 default.exp-tas.com
-2026/02/25 06:51:03.646019 SNI cookie=145731 default.exp-tas.com
+openssl s_server -accept 8443 -cert cert.pem -key key.pem
+
+
+for i in $(seq 1 5); do
+  openssl s_client -connect 127.0.0.1:8443 -servername default.exp-tas.com -no_ticket </dev/null | head -n 1
+done
+
