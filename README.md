@@ -4299,3 +4299,74 @@ int trace_net_dev_queue(struct tp_net_dev_queue *ctx)
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &e, sizeof(e));
     return 0;
 }
+
+
+
+
+lev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux   -type trace_info   -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+/home/lev/bpfgo/trace.c:1412:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_sendmmsg_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+/home/lev/bpfgo/trace.c:1412:5: note: could not determine the original source location for ./trace.c:0:0
+/home/lev/bpfgo/trace.c:1412:5: note: could not determine the original source location for ./trace.c:0:0
+/home/lev/bpfgo/trace.c:1412:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_sendmmsg_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+/home/lev/bpfgo/trace.c:1412:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:748:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+    info->cookie = cookie_from_fd(fd);
+                 ^
+./trace.c:748:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:751:9: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+        __builtin_memcpy(info->comm, comm64_opt, sizeof(info->comm));
+        ^
+./trace.c:751:9: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:1442:27: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+    if (read_mmsghdr0(pv->vec, &m0) == 0) {
+                          ^
+./trace.c:1412:5: note: could not determine the original source location for ./trace.c:0:0
+int trace_sendmmsg_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1412:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_sendmmsg_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1412:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:618:9: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+    if (info->family == AF_INET) {
+        ^
+./trace.c:1485:5: note: could not determine the original source location for ./trace.c:0:0
+int trace_recvmmsg_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1485:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_recvmmsg_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1485:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:1485:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:1485:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_recvmmsg_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1485:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:748:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+    info->cookie = cookie_from_fd(fd);
+                 ^
+./trace.c:748:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:751:9: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+        __builtin_memcpy(info->comm, comm64_opt, sizeof(info->comm));
+        ^
+./trace.c:751:9: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:1518:27: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+    if (read_mmsghdr0(pv->vec, &m0) == 0) {
+                          ^
+./trace.c:1485:5: note: could not determine the original source location for ./trace.c:0:0
+int trace_recvmmsg_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1485:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_recvmmsg_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1485:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:618:9: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+    if (info->family == AF_INET) {
+        ^
+18 errors generated.
+Error: compile: exit status 1
+lev@lev-VirtualBox:~/bpfgo$ 
