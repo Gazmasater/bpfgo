@@ -703,151 +703,28 @@ gcc -O2 -Wall -o udp_mmsg_client udp_mmsg_client.c
 sudo strace -f -e trace=sendmsg,write -p <PID>
 
 
-struct write_meta_t {
-    __u64 buf;   // user void*
-    __u64 cnt;   // size_t
-};
 
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 16384);
-    __type(key, __u64); // pid_tgid
-    __type(value, struct write_meta_t);
-} write_meta_map SEC(".maps");
+Шаг 1. Подготовь сертификат
+cd ~/bpfgo
+openssl req -x509 -newkey rsa:2048 -nodes \
+  -keyout key.pem -out cert.pem -days 1 \
+  -subj "/CN=test.local"
+Шаг 2. Запусти локальный TLS-сервер
 
+В отдельном терминале:
 
+openssl s_server -accept 8443 -cert cert.pem -key key.pem -www
+Шаг 3. Пересобери и запусти твой tracer
+go generate ./...
+go build -o bpfgo .
+sudo ./bpfgo -comm openssl
 
-SEC("tracepoint/syscalls/sys_enter_write")
-int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
+-comm openssl нужен, чтобы видеть только openssl-процессы (не тонуть в шуме).
 
-    int fd = (int)ctx->args[0];
-    if (!is_socket_fd(fd))
-        return 0;
+Шаг 4. Сделай клиентский запрос с SNI
 
-    // conn_info (как было)
-    struct conn_info_t ci = {};
-    ci.tgid = tgid;
-    ci.fd   = (__u32)fd;
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+В третьем терминале:
 
-    // save buf+count (нужно для TLS chunk на exit)
-    struct write_meta_t wm = {};
-    wm.buf = (__u64)ctx->args[1];
-    wm.cnt = (__u64)ctx->args[2];
-    if (wm.buf && wm.cnt)
-        bpf_map_update_elem(&write_meta_map, &id, &wm, BPF_ANY);
+openssl s_client -connect 127.0.0.1:8443 -servername test.local </dev/null
 
-    return 0;
-}
-
-
-
-
-SEC("tracepoint/syscalls/sys_exit_write")
-int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
-        goto cleanup;
-
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci)
-        goto cleanup;
-
-    __u32 zero = 0;
-    struct trace_info *info = bpf_map_lookup_elem(&scratch_info, &zero);
-    if (!info)
-        goto cleanup;
-
-    __builtin_memset(info, 0, sizeof(*info));
-    info->event = EV_WRITE;
-    info->fd    = ci->fd;
-    info->ret   = ret;
-
-    fill_ids_comm_cookie(info, id, (int)ci->fd, ci->comm);
-
-    if (fill_from_fd_state_map(info, tgid, (int)ci->fd, 1 /* send */) < 0)
-        goto cleanup;
-
-    loopback_fallback(info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
-
-    /* ===== TLS chunk из write(buf) ===== */
-    if (info->proto == IPPROTO_TCP) {
-        struct write_meta_t *wm = bpf_map_lookup_elem(&write_meta_map, &id);
-        if (wm && wm->buf) {
-            __u64 base = wm->buf;
-
-            // сколько реально отправили
-            __u64 blen = (__u64)ret;
-            if (wm->cnt && blen > wm->cnt)
-                blen = wm->cnt;
-
-            if (blen >= 5) {
-                __u8 typ = 0, v1 = 0, v2 = 0;
-
-                if (bpf_probe_read_user(&typ, 1, (void *)base) == 0 &&
-                    bpf_probe_read_user(&v1,  1, (void *)(base + 1)) == 0 &&
-                    bpf_probe_read_user(&v2,  1, (void *)(base + 2)) == 0) {
-
-                    // TLS record header: 0x16 0x03 0x01..0x04
-                    if (typ == 0x16 && v1 == 0x03 && (v2 >= 0x01 && v2 <= 0x04)) {
-
-                        struct tls_chunk_t *ch = bpf_map_lookup_elem(&scratch_tls, &zero);
-                        if (ch) {
-                            __builtin_memset(ch, 0, sizeof(*ch));
-
-                            ch->ts_ns  = bpf_ktime_get_ns();
-                            ch->cookie = info->cookie;
-                            ch->tgid   = info->tgid;
-                            ch->tid    = info->tid;
-                            ch->fd     = info->fd;
-
-                            ch->family = info->family;
-                            ch->proto  = info->proto;
-                            ch->sport  = info->sport;
-                            ch->dport  = info->dport;
-                            ch->event  = EV_TLS_CHUNK;
-
-                            // verifier-friendly: только константные размеры
-                            if (blen >= TLS_SNAP) {
-                                if (bpf_probe_read_user(ch->data, TLS_SNAP, (void *)base) == 0)
-                                    ch->len = TLS_SNAP;
-                            } else if (blen >= 128) {
-                                if (bpf_probe_read_user(ch->data, 128, (void *)base) == 0)
-                                    ch->len = 128;
-                            } else if (blen >= 64) {
-                                if (bpf_probe_read_user(ch->data, 64, (void *)base) == 0)
-                                    ch->len = 64;
-                            } else if (blen >= 32) {
-                                if (bpf_probe_read_user(ch->data, 32, (void *)base) == 0)
-                                    ch->len = 32;
-                            } else if (blen >= 16) {
-                                if (bpf_probe_read_user(ch->data, 16, (void *)base) == 0)
-                                    ch->len = 16;
-                            } else {
-                                if (bpf_probe_read_user(ch->data, 8, (void *)base) == 0)
-                                    ch->len = 8;
-                            }
-
-                            if (ch->len)
-                                bpf_perf_event_output(ctx, &tls_events, BPF_F_CURRENT_CPU, ch, sizeof(*ch));
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-cleanup:
-    bpf_map_delete_elem(&write_meta_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
+✅ Ожидаемый результат:
