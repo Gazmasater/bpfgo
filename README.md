@@ -728,3 +728,12 @@ sudo ./bpfgo -comm openssl
 openssl s_client -connect 127.0.0.1:8443 -servername test.local </dev/null
 
 ✅ Ожидаемый результат:
+
+
+
+
+
+OPEN  TCP   pid=36312(openssl) cookie=102559  127.0.0.1(?):45830 -> 127.0.0.1(?):8443
+OPEN  TCP   pid=36074(openssl) cookie=102418  [0:0:0:0:0:ffff:7f00:1](?):8443 -> [0:0:0:0:0:ffff:7f00:1](?):45830
+CLOSE TCP   pid=36074(openssl) cookie=102418  [0:0:0:0:0:ffff:7f00:1](?):8443 -> [0:0:0:0:0:ffff:7f00:1](?):45830  out=1873B/4p in=416B/8p  age=23ms reason=close()
+CLOSE TCP   pid=36312(openssl) cookie=102559  127.0.0.1(?):45830 -> 127.0.0.1(?):8443  out=416B/3p in=1873B/16p  age=24ms reason=close()
