@@ -720,17 +720,10 @@ openssl s_client -connect 127.0.0.1:8443 -servername test.local </dev/null
 
 
 
-
-ev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux   -type trace_info -type tls_chunk_t   -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
-lev@lev-VirtualBox:~/bpfgo$ go build .
-lev@lev-VirtualBox:~/bpfgo$ go build .
-lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo -comm openssl -sni=1
-[sudo] password for lev: 
-2026/02/25 06:46:39.655048 perf trace per-cpu=2048KB total~=8MB cpus=4
-2026/02/25 06:46:39.655144 started. Ctrl+C to exit
-OPEN  UDP   pid=41173(openssl) cookie=144254  [0:0:0:0:0:ffff:7f00:1]:41961 -> [0:0:0:0:0:ffff:0:0]:8443
-CLOSE UDP   pid=41173(openssl) cookie=144254  [0:0:0:0:0:ffff:7f00:1]:41961 -> [0:0:0:0:0:ffff:0:0]:8443  out=0B/0p in=0B/0p  age=2ms reason=close()
+out=0B/0p in=0B/0p  age=2ms reason=close()
 OPEN  TCP   pid=41173(openssl) cookie=144256  [0:0:0:0:0:ffff:7f00:1]:8443 -> [0:0:0:0:0:ffff:7f00:1]:43190
 OPEN  TCP   pid=41318(openssl) cookie=145170  127.0.0.1:43190 -> 127.0.0.1:8443
 CLOSE TCP   pid=41173(openssl) cookie=144256  [0:0:0:0:0:ffff:7f00:1]:8443 -> [0:0:0:0:0:ffff:7f00:1]:43190  out=1873B/4p in=416B/8p  age=15ms reason=close()
 CLOSE TCP   pid=41318(openssl) cookie=145170  127.0.0.1:43190 -> 127.0.0.1:8443  out=416B/3p in=1873B/17p  age=16ms reason=close()
+2026/02/25 06:50:41.274980 SNI cookie=146546 default.exp-tas.com
+2026/02/25 06:51:03.646019 SNI cookie=145731 default.exp-tas.com
