@@ -740,7 +740,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -757,7 +756,6 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 )
 
-// IMPORTANT: add -type tls_chunk_t
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target amd64 -type trace_info -type tls_chunk_t bpf trace.c -- -I.
 
 var objs bpfObjects
@@ -801,8 +799,9 @@ var (
 	flgMmsg = flag.Bool("mmsg", true, "trace sendmmsg/recvmmsg")
 	flgRW   = flag.Bool("rw", true, "trace read/write on socket fds")
 
-	flgSNI    = flag.Bool("sni", true, "parse SNI from TLS ClientHello")
-	flgSniTTL = flag.Duration("sniTTL", 30*time.Second, "SNI cache TTL")
+	flgSNI     = flag.Bool("sni", true, "parse SNI from TLS ClientHello")
+	flgSniTTL  = flag.Duration("sniTTL", 30*time.Second, "SNI cache TTL")
+	flgTlsKeep = flag.Duration("tlsKeep", 2*time.Second, "keep partial TLS buffers for this long")
 )
 
 /* --------------------- small helpers --------------------- */
@@ -884,15 +883,6 @@ func fmtIPv6Full(b [16]byte) string {
 	)
 }
 
-func isIPv6Loopback(ip [16]byte) bool {
-	for i := 0; i < 15; i++ {
-		if ip[i] != 0 {
-			return false
-		}
-	}
-	return ip[15] == 1
-}
-
 func addrStr(family uint16, ip [16]byte) string {
 	if isAllZero16(ip) {
 		return "*"
@@ -942,7 +932,7 @@ func parseSNIFromTLSRecord(buf []byte) string {
 	if len(buf) < 5 {
 		return ""
 	}
-	if buf[0] != 0x16 {
+	if buf[0] != 0x16 { // Handshake
 		return ""
 	}
 	if buf[1] != 0x03 {
@@ -1031,6 +1021,7 @@ func parseSNIFromTLSRecord(buf []byte) string {
 		if p+l > extEnd {
 			return ""
 		}
+
 		if typ == 0x0000 { // server_name
 			if p+2 > extEnd {
 				return ""
@@ -1052,8 +1043,7 @@ func parseSNIFromTLSRecord(buf []byte) string {
 					return ""
 				}
 				if nameType == 0 {
-					host := string(buf[q : q+nameLen])
-					host = strings.TrimSpace(host)
+					host := strings.TrimSpace(string(buf[q : q+nameLen]))
 					if host != "" {
 						return host
 					}
@@ -1062,14 +1052,105 @@ func parseSNIFromTLSRecord(buf []byte) string {
 			}
 			return ""
 		}
+
 		p += l
 	}
+
 	return ""
 }
 
-type tlsBuf struct {
-	b    []byte
+/* --------------------- TLS reassembly (fix for "rare SNI") --------------------- */
+
+type tlsReasm struct {
+	buf  []byte
 	seen time.Time
+	done bool // SNI already found for this cookie
+}
+
+const (
+	tlsMaxBuf = 16 * 1024 // cap memory per cookie
+)
+
+// find TLS handshake record header in b (16 03 xx len len)
+func findTLSHeader(b []byte) int {
+	// naive scan is fast enough for <=16KB
+	for i := 0; i+5 <= len(b); i++ {
+		if b[i] == 0x16 && b[i+1] == 0x03 {
+			v := b[i+2]
+			if v >= 0x01 && v <= 0x04 { // TLS1.0..1.3 record version bytes
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+// Feed new chunk, try to extract complete TLS records and parse SNI.
+// Returns (sni, ok).
+func (t *tlsReasm) Feed(now time.Time, chunk []byte) (string, bool) {
+	if t.done {
+		return "", false
+	}
+	t.seen = now
+
+	// append with cap
+	if len(chunk) > 0 {
+		need := len(t.buf) + len(chunk)
+		if need > tlsMaxBuf {
+			// keep tail (most recent) to avoid endless growth
+			drop := need - tlsMaxBuf
+			if drop >= len(t.buf) {
+				t.buf = t.buf[:0]
+			} else {
+				t.buf = append([]byte(nil), t.buf[drop:]...)
+			}
+		}
+		t.buf = append(t.buf, chunk...)
+	}
+
+	// reassembly loop: align to header, wait full record, parse, consume
+	for {
+		if len(t.buf) < 5 {
+			return "", false
+		}
+
+		hi := findTLSHeader(t.buf)
+		if hi < 0 {
+			// keep last 4 bytes just in case header crosses boundary
+			if len(t.buf) > 4 {
+				t.buf = append([]byte(nil), t.buf[len(t.buf)-4:]...)
+			}
+			return "", false
+		}
+		if hi > 0 {
+			// drop garbage before header
+			t.buf = t.buf[hi:]
+			if len(t.buf) < 5 {
+				return "", false
+			}
+		}
+
+		recLen := int(t.buf[3])<<8 | int(t.buf[4])
+		total := 5 + recLen
+		if recLen <= 0 || total > tlsMaxBuf {
+			// invalid length -> drop 1 byte and resync
+			t.buf = t.buf[1:]
+			continue
+		}
+		if len(t.buf) < total {
+			// wait more
+			return "", false
+		}
+
+		rec := t.buf[:total]
+		if sni := parseSNIFromTLSRecord(rec); sni != "" {
+			t.done = true
+			return sni, true
+		}
+
+		// consume this record and continue scanning next records
+		t.buf = t.buf[total:]
+	}
 }
 
 type sniEntry struct {
@@ -1123,26 +1204,54 @@ func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 
 	switch {
 	case isSend(evt) || evt == EV_CONNECT:
-		f.Local = srcKeyFromEvent(ev)
-		f.Remote = dstKeyFromEvent(ev)
-		f.Lport = uint16(ev.Sport)
-		f.Rport = uint16(ev.Dport)
+		if !isAllZero16(srcKeyFromEvent(ev)) {
+			f.Local = srcKeyFromEvent(ev)
+		}
+		if !isAllZero16(dstKeyFromEvent(ev)) {
+			f.Remote = dstKeyFromEvent(ev)
+		}
+		if ev.Sport != 0 {
+			f.Lport = uint16(ev.Sport)
+		}
+		if ev.Dport != 0 {
+			f.Rport = uint16(ev.Dport)
+		}
 
 	case isRecv(evt):
-		f.Local = dstKeyFromEvent(ev)
-		f.Remote = srcKeyFromEvent(ev)
-		f.Lport = uint16(ev.Dport)
-		f.Rport = uint16(ev.Sport)
+		if !isAllZero16(dstKeyFromEvent(ev)) {
+			f.Local = dstKeyFromEvent(ev)
+		}
+		if !isAllZero16(srcKeyFromEvent(ev)) {
+			f.Remote = srcKeyFromEvent(ev)
+		}
+		if ev.Dport != 0 {
+			f.Lport = uint16(ev.Dport)
+		}
+		if ev.Sport != 0 {
+			f.Rport = uint16(ev.Sport)
+		}
 
 	case evt == EV_BINDOK:
-		f.Local = srcKeyFromEvent(ev)
-		f.Lport = uint16(ev.Sport)
+		if !isAllZero16(srcKeyFromEvent(ev)) {
+			f.Local = srcKeyFromEvent(ev)
+		}
+		if ev.Sport != 0 {
+			f.Lport = uint16(ev.Sport)
+		}
 
 	case evt == EV_ACCEPT:
-		f.Local = dstKeyFromEvent(ev)
-		f.Remote = srcKeyFromEvent(ev)
-		f.Lport = uint16(ev.Dport)
-		f.Rport = uint16(ev.Sport)
+		if !isAllZero16(dstKeyFromEvent(ev)) {
+			f.Local = dstKeyFromEvent(ev)
+		}
+		if !isAllZero16(srcKeyFromEvent(ev)) {
+			f.Remote = srcKeyFromEvent(ev)
+		}
+		if ev.Dport != 0 {
+			f.Lport = uint16(ev.Dport)
+		}
+		if ev.Sport != 0 {
+			f.Rport = uint16(ev.Sport)
+		}
 	}
 }
 
@@ -1207,7 +1316,8 @@ func openPerfReaderTotalBudget(m *ebpf.Map, totalMB int) (*perf.Reader, int, err
 
 /* --------------------- main --------------------- */
 
-var lostTotal uint64
+var lostTrace uint64
+var lostTLS uint64
 var lostGen uint64
 
 func main() {
@@ -1217,7 +1327,6 @@ func main() {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.Fatalf("rlimit.RemoveMemlock: %v", err)
 	}
-
 	if err := loadBpfObjects(&objs, nil); err != nil {
 		log.Fatalf("loadBpfObjects: %v", err)
 	}
@@ -1277,7 +1386,7 @@ func main() {
 		attach("syscalls", "sys_exit_read", objs.TraceReadExit)
 	}
 
-	// skb hint
+	// skb hint (можешь вернуть обработку позже)
 	attach("net", "net_dev_queue", objs.TraceNetDevQueue)
 
 	// perf readers
@@ -1319,7 +1428,7 @@ func main() {
 				continue
 			}
 			if rec.LostSamples != 0 {
-				atomic.AddUint64(&lostTotal, rec.LostSamples)
+				atomic.AddUint64(&lostTrace, rec.LostSamples)
 				atomic.AddUint64(&lostGen, 1)
 			}
 			if len(rec.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
@@ -1348,7 +1457,7 @@ func main() {
 					continue
 				}
 				if rec.LostSamples != 0 {
-					atomic.AddUint64(&lostTotal, rec.LostSamples)
+					atomic.AddUint64(&lostTLS, rec.LostSamples)
 					atomic.AddUint64(&lostGen, 1)
 				}
 				if len(rec.RawSample) < int(unsafe.Sizeof(bpfTlsChunkT{})) {
@@ -1361,7 +1470,9 @@ func main() {
 	}
 
 	flows := make(map[FlowKey]*Flow, 8192)
-	tlsByCookie := make(map[uint64]*tlsBuf, 8192)
+
+	// TLS + SNI state
+	tlsByCookie := make(map[uint64]*tlsReasm, 8192)
 	sniByCookie := make(map[uint64]sniEntry, 8192)
 
 	shouldKeep := func(pid uint32, comm string) bool {
@@ -1377,16 +1488,19 @@ func main() {
 		return true
 	}
 
+	attachSNIToFlow := func(f *Flow, now time.Time) {
+		if f.TLSSNI != "" {
+			return
+		}
+		if se, ok := sniByCookie[f.Key.Cookie]; ok && now.Sub(se.Seen) < *flgSniTTL {
+			f.TLSSNI = se.Name
+		}
+	}
+
 	closeByCookie := func(tgid uint32, cookie uint64, reason string) {
 		for k, f := range flows {
 			if k.TGID == tgid && k.Cookie == cookie {
-				// attach SNI if known
-				if f.TLSSNI == "" {
-					if se, ok := sniByCookie[cookie]; ok && time.Since(se.Seen) < *flgSniTTL {
-						f.TLSSNI = se.Name
-					}
-				}
-
+				attachSNIToFlow(f, time.Now())
 				if !f.OpenedPrinted && flowReadyToOpen(f) {
 					printOpen(f)
 					f.OpenedPrinted = true
@@ -1410,6 +1524,7 @@ func main() {
 				_ = tlsRd.Close()
 			}
 			for _, f := range flows {
+				attachSNIToFlow(f, time.Now())
 				if !f.OpenedPrinted && flowReadyToOpen(f) {
 					printOpen(f)
 					f.OpenedPrinted = true
@@ -1418,11 +1533,11 @@ func main() {
 					printClose(f, "signal")
 				}
 			}
+			log.Printf("lost trace=%d tls=%d gen=%d", atomic.LoadUint64(&lostTrace), atomic.LoadUint64(&lostTLS), atomic.LoadUint64(&lostGen))
 			return
 
 		case tw, ok := <-tlsCh:
 			if !ok {
-				// tls reader closed
 				tlsCh = nil
 				continue
 			}
@@ -1430,6 +1545,7 @@ func main() {
 			if ev.Cookie == 0 || uint8(ev.Event) != EV_TLS_CHUNK {
 				continue
 			}
+
 			ln := int(ev.Len)
 			if ln <= 0 {
 				continue
@@ -1437,25 +1553,24 @@ func main() {
 			if ln > len(ev.Data) {
 				ln = len(ev.Data)
 			}
+			chunk := ev.Data[:ln]
 
-			tb := tlsByCookie[ev.Cookie]
-			if tb == nil {
-				tb = &tlsBuf{b: make([]byte, 0, 2048)}
-				tlsByCookie[ev.Cookie] = tb
+			tr := tlsByCookie[ev.Cookie]
+			if tr == nil {
+				tr = &tlsReasm{buf: make([]byte, 0, 2048)}
+				tlsByCookie[ev.Cookie] = tr
 			}
-			tb.seen = tw.now
-			tb.b = append(tb.b, ev.Data[:ln]...)
 
-			// try parse SNI
-			if name := parseSNIFromTLSRecord(tb.b); name != "" {
-				sniByCookie[ev.Cookie] = sniEntry{Name: name, Seen: tw.now}
+			if sni, ok := tr.Feed(tw.now, chunk); ok {
+				sniByCookie[ev.Cookie] = sniEntry{Name: sni, Seen: tw.now}
 				delete(tlsByCookie, ev.Cookie)
-				log.Printf("SNI cookie=%d %s", ev.Cookie, name)
 
-				// also update already existing flows
+				log.Printf("SNI cookie=%d %s", ev.Cookie, sni)
+
+				// update existing flows
 				for _, f := range flows {
 					if f.Key.Cookie == ev.Cookie && f.TLSSNI == "" {
-						f.TLSSNI = name
+						f.TLSSNI = sni
 					}
 				}
 			}
@@ -1464,13 +1579,11 @@ func main() {
 			if !ok {
 				return
 			}
-
 			ev := w.ev
 			evt := uint8(ev.Event)
 			proto := uint8(ev.Proto)
 			family := uint16(ev.Family)
 
-			// skb hint: just ignore in this compact version (you can add back)
 			if evt == EV_SKB_OUT {
 				continue
 			}
@@ -1504,9 +1617,7 @@ func main() {
 				flows[key] = f
 
 				// attach SNI if already known
-				if se, ok := sniByCookie[key.Cookie]; ok && time.Since(se.Seen) < *flgSniTTL {
-					f.TLSSNI = se.Name
-				}
+				attachSNIToFlow(f, w.now)
 			}
 
 			f.LastSeen = w.now
@@ -1553,11 +1664,7 @@ func main() {
 			// sweep flows by TTL
 			for k, f := range flows {
 				if now.Sub(f.LastSeen) > *flgTTL {
-					if f.TLSSNI == "" {
-						if se, ok := sniByCookie[f.Key.Cookie]; ok && now.Sub(se.Seen) < *flgSniTTL {
-							f.TLSSNI = se.Name
-						}
-					}
+					attachSNIToFlow(f, now)
 					if !f.OpenedPrinted && flowReadyToOpen(f) {
 						printOpen(f)
 						f.OpenedPrinted = true
@@ -1569,9 +1676,9 @@ func main() {
 				}
 			}
 
-			// sweep tls buffers quickly (handshake is short)
-			for c, tb := range tlsByCookie {
-				if now.Sub(tb.seen) > 2*time.Second {
+			// sweep partial TLS buffers (handshake is short)
+			for c, tr := range tlsByCookie {
+				if now.Sub(tr.seen) > *flgTlsKeep {
 					delete(tlsByCookie, c)
 				}
 			}
@@ -1582,16 +1689,15 @@ func main() {
 					delete(sniByCookie, c)
 				}
 			}
+
+			// periodic loss note (optional)
+			lt := atomic.LoadUint64(&lostTrace)
+			ll := atomic.LoadUint64(&lostTLS)
+			if lt != 0 || ll != 0 {
+				// можно закомментировать если шумит
+				// log.Printf("lost trace=%d tls=%d gen=%d", lt, ll, atomic.LoadUint64(&lostGen))
+			}
 		}
 	}
 }
-
-/* --------------------- optional helper for scope --------------------- */
-
-func needsScope6(ip [16]byte) bool {
-	// only if you later re-add scope printing
-	_ = net.IP(ip[:])
-	return !isIPv6Loopback(ip) && (ip[0] == 0xfe && (ip[1]&0xc0) == 0x80 || (ip[0] == 0xff && (ip[1]&0x0f) == 0x02))
-}
-
 
