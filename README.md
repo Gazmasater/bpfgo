@@ -733,20 +733,13 @@ openssl s_client -connect 127.0.0.1:8443 -servername test.local </dev/null
 
 
 
-case tw, ok := <-tlsCh:
-	if !ok {
-		return
-	}
-	ev := tw.ev
-
-	ln := int(ev.Len)
-	if ln > len(ev.Data) {
-		ln = len(ev.Data)
-	}
-	if ln >= 5 {
-		log.Printf("TLS_CHUNK cookie=%d len=%d hdr=% x",
-			ev.Cookie, ln, ev.Data[:min(8, ln)],
-		)
-	}
-
-	// дальше твоя текущая логика accumulator + parseSNI...
+026/02/25 06:21:58.761828 pprof on :6060
+2026/02/25 06:21:58.779385 perf trace per-cpu=2048KB total~=8MB cpus=4
+2026/02/25 06:21:58.779481 started. Ctrl+C to exit
+OPEN  TCP   pid=38497(openssl) cookie=112667  127.0.0.1(?):57250 -> 127.0.0.1(?):8443
+OPEN  TCP   pid=36074(openssl) cookie=104687  [0:0:0:0:0:ffff:7f00:1](?):8443 -> [0:0:0:0:0:ffff:7f00:1](?):57250
+2026/02/25 06:22:04.369429 TLS_CHUNK cookie=112667 len=128 hdr=16 03 01 01 33 01 00 01
+2026/02/25 06:22:04.373334 TLS_CHUNK cookie=104687 len=512 hdr=16 03 03 00 7a 02 00 00
+CLOSE TCP   pid=36074(openssl) cookie=104687  [0:0:0:0:0:ffff:7f00:1](?):8443 -> [0:0:0:0:0:ffff:7f00:1](?):57250  out=1873B/4p in=416B/8p  age=21ms reason=close()
+CLOSE TCP   pid=38497(openssl) cookie=112667  127.0.0.1(?):57250 -> 127.0.0.1(?):8443  out=416B/3p in=1873B/14p  age=21ms reason=close()
+2026/02/25 06:22:18.355459 TLS_CHUNK cookie=112446 len=128 hdr=16 03 01 01 07 01 00 01
