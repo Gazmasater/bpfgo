@@ -846,3 +846,8 @@ cleanup:
 }
 
 
+
+lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo -comm openssl 
+2026/02/25 07:54:22.977828 loadBpfObjects: field TraceSendmsgExit: program trace_sendmsg_exit: load program: permission denied: invalid access to map value, value_size=560 off=560 size=511: R1 max value is outside of the allowed memory range (972 line(s) omitted)
+lev@lev-VirtualBox:~/bpfgo$ 
+
