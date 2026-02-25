@@ -857,3 +857,10 @@ cleanup:
     bpf_map_delete_elem(&conn_info_map, &id);
     return 0;
 }
+
+
+
+ev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
+[sudo] password for lev: 
+2026/02/25 07:50:06.083985 loadBpfObjects: field TraceSendmsgExit: program trace_sendmsg_exit: load program: permission denied: 995: (85) call bpf_probe_read_user#112: R2 min value is negative, either use unsigned or 'var &= const' (830 line(s) omitted)
+lev@lev-VirtualBox:~/bpfgo$ 
