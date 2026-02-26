@@ -706,5 +706,43 @@ sudo strace -f -e trace=sendmsg,write -p <PID>
 
 
 
-sudo strace -ff -p <PID> -e trace=write,writev,sendto,sendmsg,sendmmsg,recvfrom,recvmsg,recvmmsg,connect,accept,close
-
+lev@lev-VirtualBox:~/bpfgo$ sudo strace -ff -p 3215 -e trace=write,writev,sendto,sendmsg,sendmmsg,recvfrom,recvmsg,recvmmsg,connect,accept,close
+strace: Process 3215 attached with 93 threads
+[pid 14851] recvmsg(195,  <unfinished ...>
+[pid 13768] recvmsg(171,  <unfinished ...>
+[pid 13282] recvmsg(176,  <unfinished ...>
+[pid  3867] recvmsg(158,  <unfinished ...>
+[pid  3845] recvmsg(131,  <unfinished ...>
+[pid  3658] recvmsg(122,  <unfinished ...>
+[pid  3503] recvmsg(64,  <unfinished ...>
+[pid  3457] recvmsg(73,  <unfinished ...>
+[pid  3424] recvmsg(59,  <unfinished ...>
+[pid  3409] recvmsg(61,  <unfinished ...>
+[pid  3335] recvmsg(148, {msg_name=NULL, msg_namelen=0, msg_iov=[{iov_base="\224\0\0\0\0\19\0\1\0\0\0@\0\0\0\377\377\377\377\377\377\377\177\377\377\377\377\377\377\377\377"..., iov_len=4096}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, MSG_DONTWAIT) = 328
+[pid  3335] write(42, "\372", 1)        = 1
+[pid  3335] recvmsg(148, {msg_namelen=0}, MSG_DONTWAIT) = -1 EAGAIN (Resource temporarily unavailable)
+[pid  3215] write(42, "\372", 1)        = 1
+[pid  3215] write(42, "\372", 1)        = 1
+[pid  3336] write(42, "\372", 1)        = 1
+[pid  3215] write(18, "\1\0\0\0\0\0\0\0", 8) = 8
+[pid  3215] write(42, "\372", 1)        = 1
+[pid  3303] sendmsg(17, {msg_name=NULL, msg_namelen=0, msg_iov=[{iov_base="l\1\0\1\0\0\0\0;\3\0\0|\0\0\0\1\1o\0\"\0\0\0/org/gno"..., iov_len=144}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, MSG_NOSIGNAL) = 144
+[pid  3303] write(18, "\1\0\0\0\0\0\0\0", 8) = 8
+[pid  3303] recvmsg(17, {msg_name=NULL, msg_namelen=0, msg_iov=[{iov_base="l\2\1\1\10\0\0\0\313\f\0\0.\0\0\0", iov_len=16}], msg_iovlen=1, msg_controllen=0, msg_flags=MSG_CMSG_CLOEXEC}, MSG_CMSG_CLOEXEC) = 16
+[pid  3303] recvmsg(17, {msg_name=NULL, msg_namelen=0, msg_iov=[{iov_base="\6\1s\0\6\0\0\0:1.114\0\0\10\1g\0\1t\0\0\5\1u\0;\3\0\0"..., iov_len=56}], msg_iovlen=1, msg_controllen=0, msg_flags=MSG_CMSG_CLOEXEC}, MSG_CMSG_CLOEXEC) = 56
+[pid  3303] write(18, "\1\0\0\0\0\0\0\0", 8) = 8
+[pid  3303] write(18, "\1\0\0\0\0\0\0\0", 8) = 8
+[pid  3303] write(16, "\1\0\0\0\0\0\0\0", 8) = 8
+[pid  3303] write(18, "\1\0\0\0\0\0\0\0", 8) = 8
+[pid  3215] write(42, "\372", 1)        = 1
+[pid  3335] recvmsg(74, {msg_name=NULL, msg_namelen=0, msg_iov=[{iov_base="P\0\0\0\4\0a\0\1\0\0\0@\0\0\0\374\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377"..., iov_len=4096}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, MSG_DONTWAIT) = 128
+[pid  3335] recvmsg(74, {msg_namelen=0}, MSG_DONTWAIT) = -1 EAGAIN (Resource temporarily unavailable)
+[pid  3339] sendmsg(74, {msg_name=NULL, msg_namelen=0, msg_iov=[{iov_base="P\0\0\0\1\0a\0\1\0\0\0@\0\0\0\374\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377"..., iov_len=64}, {iov_base="\0\0\0\0\0\0\0\0m\216\36\336\333\213\330\2576\331\247^\306\276\213S\336\345\232G\240h\240f"..., iov_len=64}], msg_iovlen=2, msg_controllen=0, msg_flags=0}, MSG_DONTWAIT) = 128
+[pid  3335] recvmsg(74, {msg_name=NULL, msg_namelen=0, msg_iov=[{iov_base="H\0\0\0\5\0a\0\1\0\0\0@\0\0\0\374\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377"..., iov_len=4096}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, MSG_DONTWAIT) = 120
+[pid  3335] recvmsg(74, {msg_namelen=0}, MSG_DONTWAIT) = -1 EAGAIN (Resource temporarily unavailable)
+[pid  3335] recvmsg(164, {msg_name=NULL, msg_namelen=0, msg_iov=[{iov_base="P\0\0\0\4\0a\0\1\0\0\0@\0\0\0\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377"..., iov_len=4096}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, MSG_DONTWAIT) = 128
+[pid  3335] recvmsg(164, {msg_namelen=0}, MSG_DONTWAIT) = -1 EAGAIN (Resource temporarily unavailable)
+[pid  3339] sendmsg(164, {msg_name=NULL, msg_namelen=0, msg_iov=[{iov_base="P\0\0\0\1\0a\0\1\0\0\0@\0\0\0\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377"..., iov_len=64}, {iov_base="\0\0\0\0\0\0\0\0C\211\2151\7 \311\226q8\315\1\r\207W\0275\370\241\r\325\370\230\24"..., iov_len=64}], msg_iovlen=2, msg_controllen=0, msg_flags=0}, MSG_DONTWAIT) = 128
+[pid  3335] recvmsg(186, {msg_name=NULL, msg_namelen=0, msg_iov=[{iov_base="P\0\0\0\4\0a\0\1\0\0\0@\0\0\0\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377"..., iov_len=4096}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, MSG_DONTWAIT) = 128
+[pid  3335] recvmsg(186, {msg_namelen=0}, MSG_DONTWAIT) = -1 EAGAIN (Resource temporarily unavailable)
+[pid  3339] sendmsg(186, {msg_name=NULL, msg_namelen=0, msg_iov=[{iov_base="P\0\0\0\1\0a\0\1\0\0\0@\0\0\0\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377\377"..., iov_len=64}, {iov_base="\0\0\0\0\0\0\0\0\320L-\252M\0}\30\244\332\24\216\243>o\200\266?\246\266\322V\320G"..., iov_len=64}], msg_iovlen=2, msg_controllen=0, msg_flags=0}, MSG_DONTWAIT) = 128
