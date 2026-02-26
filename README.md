@@ -726,7 +726,4 @@ sudo bpftool map dump id 188
 
 
 
-lev@lev-VirtualBox:~/bpfgo$ sudo bpftool map show id 20
-20: lru_hash  name tls_peek_map  flags 0x0
-        key 8B  value 288B  max_entries 65536  memlock 23594048B
-        btf_id 107
+CLOSE TCP   pid=4226(Socket Thread) cookie=35670  10.0.2.15(lev-VirtualBox):34902 -> 140.82.114.26(lb-140-82-114-26-iad.github.com):443  out=30B/1p in=26B/2p  age=5.445s reason=idle last=sendto last_send=sendto last_recv=recvfrom
