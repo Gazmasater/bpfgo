@@ -705,7 +705,6 @@ sudo strace -f -e trace=sendmsg,write -p <PID>
 
 
 lev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
-2026/02/26 11:12:42 dotenv loaded: .env
-2026/02/26 11:12:42.341122 hostsPrefill: added=7 from /etc/hosts
-2026/02/26 11:12:42.751367 failed to load bpf objects: field TraceWriteExit: program trace_write_exit: load program: permission denied: invalid access to map value, value_size=512 off=513 size=1: R2 max value is outside of the allowed memory range (761 line(s) omitted)
-lev@lev-VirtualBox:~/bpfgo$ 
+2026/02/26 11:15:05 dotenv loaded: .env
+2026/02/26 11:15:05.193022 hostsPrefill: added=7 from /etc/hosts
+2026/02/26 11:15:05.635285 failed to load bpf objects: field TraceWriteExit: program trace_write_exit: load program: permission denied: invalid access to map value, value_size=2048 off=2049 size=1: R2 max value is outside of the allowed memory range (761 line(s) omitted)
