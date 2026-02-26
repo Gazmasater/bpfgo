@@ -870,4 +870,4 @@ cleanup:
 
 
 
-lopenssl s_client -connect example.com:443 -servername example.com </dev/null >/dev/null
+curl -sS https://example.com/ --http1.1 >/dev/null
