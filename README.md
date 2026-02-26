@@ -1037,15 +1037,42 @@ ev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -ty
 /home/lev/bpfgo/trace.c:142:9: note: previous definition is here
 #define EV_TLS_SNI 60
         ^
-/home/lev/bpfgo/trace.c:1484:8: error: redefinition of 'tls_sni_event'
-struct tls_sni_event {
-       ^
-/home/lev/bpfgo/trace.c:145:8: note: previous definition is here
-struct tls_sni_event {
-       ^
-/home/lev/bpfgo/trace.c:1748:57: warning: passing 'const volatile struct tls_acc_t *' to parameter of type 'const void *' discards qualifiers [-Wincompatible-pointer-types-discards-qualifiers]
+/home/lev/bpfgo/trace.c:1732:57: warning: passing 'const volatile struct tls_acc_t *' to parameter of type 'const void *' discards qualifiers [-Wincompatible-pointer-types-discards-qualifiers]
         bpf_map_update_elem(&tls_acc_map, &info.cookie, &zero_tls_acc, BPF_NOEXIST);
                                                         ^~~~~~~~~~~~~
-2 warnings and 1 error generated.
+./trace.c:1647:13: warning: loop not unrolled: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering [-Wpass-failed=transform-warning]
+            for (int i = 0; i < TLS_SNI_MAX - 1; i++) {
+            ^
+./trace.c:1691:5: note: could not determine the original source location for ./trace.c:0:0
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1691:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1691:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:738:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+    info->cookie = cookie_from_fd(fd);
+                 ^
+./trace.c:738:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:738:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:738:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:741:9: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+        __builtin_memcpy(info->comm, comm64_opt, sizeof(info->comm));
+        ^
+./trace.c:741:9: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:1770:13: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+            bpf_perf_event_output(ctx, &tls_events, BPF_F_CURRENT_CPU, &ev, sizeof(ev));
+            ^
+./trace.c:716:13: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+            __builtin_memcpy(info->src_ip6, &st->lip6, 16);
+            ^
+./trace.c:1691:5: note: could not determine the original source location for ./trace.c:0:0
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1691:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1691:5: note: could not determine the original source location for ./trace.c:0:0
+3 warnings and 10 errors generated.
 Error: compile: exit status 1
 lev@lev-VirtualBox:~/bpfgo$ 
