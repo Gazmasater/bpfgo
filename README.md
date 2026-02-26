@@ -1076,9 +1076,15 @@ cleanup:
 
 
 
-lev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -type tls_sni_event  -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
-./trace.c:1673:13: warning: loop not unrolled: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering [-Wpass-failed=transform-warning]
-            for (int i = 0; i < TLS_SNI_MAX - 1; i++) {
-            ^
-1 warning generated.
-lev@lev-VirtualBox:~/bpfgo$ 
+#pragma clang loop unroll(full)
+for (int i = 0; i < TLS_SNI_MAX - 1; i++) {
+    /* если i >= copy — пишем 0, иначе байт */
+    __u32 ii = (__u32)i;
+    char c = 0;
+    if (ii < copy) {
+        c = (char)rd_u8_acc(a, q + ii);
+    }
+    out[i] = c;
+}
+/* гарантируем терминацию */
+out[TLS_SNI_MAX - 1] = 0;
