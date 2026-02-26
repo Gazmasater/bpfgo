@@ -706,142 +706,19 @@ sudo strace -f -e trace=sendmsg,write -p <PID>
 
 
 
-#define TLS_PEEK_MAX 256
-
-struct write_args_t {
-    __u32 fd;
-    __u32 _pad;
-    __u64 buf;   // user pointer
-    __u64 cnt;   // requested count
-};
-
-struct tls_peek_t {
-    __u64 ts_ns;
-    __u32 tgid;
-    __u32 tid;
-    __u32 fd;
-    __u32 len;
-
-    __u16 sport;
-    __u16 dport;
-    __u8  proto;
-    __u8  _pad[3];
-
-    __u8  data[TLS_PEEK_MAX];
-};
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 16384);
-    __type(key, __u64);              // pid_tgid
-    __type(value, struct write_args_t);
-} write_args_map SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_LRU_HASH);
-    __uint(max_entries, 65536);
-    __type(key, __u64);              // cookie
-    __type(value, struct tls_peek_t);
-} tls_peek_map SEC(".maps");
-
-
-
-
-SEC("tracepoint/syscalls/sys_enter_write")
-int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-    int fd = (int)ctx->args[0];
-
-    if (!is_socket_fd(fd))
-        return 0;
-
-    // оставляем как было
-    struct conn_info_t ci = {};
-    ci.tgid = tgid;
-    ci.fd   = (__u32)fd;
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
-
-    // ДОБАВЛЯЕМ: args для чтения буфера на exit
-    struct write_args_t wa = {};
-    wa.fd  = (__u32)fd;
-    wa.buf = (__u64)ctx->args[1];
-    wa.cnt = (__u64)ctx->args[2];
-    bpf_map_update_elem(&write_args_map, &id, &wa, BPF_ANY);
-
-    return 0;
-}
-
-
-SEC("tracepoint/syscalls/sys_exit_write")
+ev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+/home/lev/bpfgo/trace.c:1516:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
 int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
-        goto cleanup;
-
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci)
-        goto cleanup;
-
-    struct trace_info info = {};
-    info.event = EV_WRITE;
-    info.fd    = ci->fd;
-    info.ret   = ret;
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
-        goto cleanup;
-
-    // === ДОБАВЛЕННАЯ ОПЦИЯ: peek первых байт write() и сохранить в tls_peek_map ===
-    {
-        struct write_args_t *wa = bpf_map_lookup_elem(&write_args_map, &id);
-        if (wa && wa->buf) {
-            // (опционально) сужаем шум: только TCP:443
-            if (info.proto == IPPROTO_TCP && info.dport == 443) {
-                __u32 n = (__u32)ret;
-                if (n > TLS_PEEK_MAX) n = TLS_PEEK_MAX;
-
-                struct tls_peek_t v = {};
-                v.ts_ns = bpf_ktime_get_ns();
-                v.tgid  = tgid;
-                v.tid   = (__u32)id;
-                v.fd    = wa->fd;
-                v.len   = n;
-
-                v.proto = info.proto;
-                v.sport = info.sport;
-                v.dport = info.dport;
-
-                if (bpf_probe_read_user(v.data, n, (void *)wa->buf) == 0) {
-                    // ключ = cookie (как у тебя: inode i_ino через fd)
-                    __u64 cookie = info.cookie;
-                    if (cookie)
-                        bpf_map_update_elem(&tls_peek_map, &cookie, &v, BPF_ANY);
-
-                    // если хочешь — быстрый маркер:
-                    // bpf_printk("TLS peek cookie=%llu len=%u first=%x %x %x %x %x",
-                    //           cookie, v.len, v.data[0], v.data[1], v.data[2], v.data[3], v.data[4]);
-                }
-            }
-        }
-    }
-    // === конец опции ===
-
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-cleanup:
-    bpf_map_delete_elem(&write_args_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
+    ^
+/home/lev/bpfgo/trace.c:1516:5: note: could not determine the original source location for ./trace.c:0:0
+/home/lev/bpfgo/trace.c:1516:5: note: could not determine the original source location for ./trace.c:0:0
+/home/lev/bpfgo/trace.c:1516:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+/home/lev/bpfgo/trace.c:1516:5: note: could not determine the original source location for ./trace.c:0:0
+2 errors generated.
+Error: compile: exit status 1
+lev@lev-VirtualBox:~/bpfgo$ 
 
 
 
