@@ -704,1529 +704,356 @@ sudo strace -f -e trace=sendmsg,write -p <PID>
 
 
 
-package main
+/* EVENT (to userspace) */
+struct trace_info {
+    __u64 ts_ns;
+    __u64 cookie;
 
-import (
-	"bufio"
-	"bytes"
-	"context"
-	"encoding/binary"
-	"errors"
-	"flag"
-	"fmt"
-	"io"
-	"log"
-	"math/bits"
-	"net"
-	"net/http"
-	_ "net/http/pprof"
-	"os"
-	"os/signal"
-	"path/filepath"
-	"runtime"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"syscall"
-	"time"
-	"unsafe"
+    __u32 tgid;
+    __u32 tid;
 
-	"github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/link"
-	"github.com/cilium/ebpf/perf"
-	"github.com/cilium/ebpf/rlimit"
-)
+    __u32 fd;
+    __s32 _pad0;
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target amd64 -type trace_info bpf trace.c -- -I.
+    __s64 ret;
 
-var objs bpfObjects
+    __u16 family;
+    __u16 sport;
+    __u16 dport;
 
-const (
-	AF_INET  = 2
-	AF_INET6 = 10
+    __u8  proto;
+    __u8  event;
+    __u8  state;
+    __u8  _pad1;
 
-	IPPROTO_ICMP   = 1
-	IPPROTO_TCP    = 6
-	IPPROTO_UDP    = 17
-	IPPROTO_ICMPV6 = 58
+    __u32 src_ip4;
+    __u32 dst_ip4;
+    __u8  src_ip6[16];
+    __u8  dst_ip6[16];
 
-	EV_SENDTO   = 1
-	EV_RECVFROM = 2
-	EV_CONNECT  = 3
-	EV_ACCEPT   = 4
-	EV_BINDOK   = 20
-	EV_SENDMSG  = 11
-	EV_RECVMSG  = 12
-	EV_SENDMMSG = 13
-	EV_RECVMMSG = 14
-	EV_READ     = 21
-	EV_WRITE    = 22
-	EV_CLOSE    = 30
+    __u32 src_scope;
+    __u32 dst_scope;
 
-	// new: skb-derived L3 hint (real selected src IP)
-	EV_SKB_OUT = 40
-)
+    char  comm[32];
+};
 
-var (
-	// perfMB = общий бюджет, делим на CPU + fallback.
-	flgPerfMB    = flag.Int("perfMB", 8, "perf buffer total budget in MB (divided per-CPU with fallback)")
-	flgPprof     = flag.Bool("pprof", true, "enable pprof")
-	flgPprofAddr = flag.String("pprofAddr", ":6060", "pprof listen addr")
+const struct trace_info *unused __attribute__((unused));
 
-	flgTTL   = flag.Duration("ttl", 5*time.Second, "idle TTL for flow close")
-	flgSweep = flag.Duration("print", 1*time.Second, "TTL sweep interval + perf-loss rate logging interval")
 
-	flgOnlyPID  = flag.Int("pid", 0, "only this pid (0=all)")
-	flgOnlyComm = flag.String("comm", "", "only comm containing substring (empty=all)")
+/* ===== TLS SNI event ===== */
 
-	flgRW   = flag.Bool("rw", true, "trace read/write on socket fds")
-	flgMmsg = flag.Bool("mmsg", true, "trace sendmmsg/recvmmsg")
+#define EV_TLS_SNI 60
+#define SNI_MAX 128
 
-	// PTR resolve
-	flgResolve        = flag.Bool("resolve", true, "reverse DNS resolve IPs (PTR) async")
-	flgResolveTTL     = flag.Duration("resolveTTL", 30*time.Minute, "PTR cache TTL (positive)")
-	flgResolveNegTTL  = flag.Duration("resolveNegTTL", 5*time.Minute, "PTR negative TTL (NXDOMAIN only)")
-	flgResolveWorkers = flag.Int("resolveWorkers", 4, "PTR workers")
-	flgResolveTimeout = flag.Duration("resolveTimeout", 2*time.Second, "PTR timeout")
-	flgResolveQ       = flag.Int("resolveQ", 4096, "PTR queue size")
-	flgHostState      = flag.Bool("hostState", true, "show alias state: pending/miss/no-ptr/skip")
+struct tls_sni_event {
+    __u64 ts_ns;
+    __u64 cookie;
 
-	// known names from /etc/hosts
-	flgHostsPrefill = flag.Bool("hostsPrefill", true, "prefill names from /etc/hosts")
-	flgHostsFile    = flag.String("hostsFile", "/etc/hosts", "hosts file")
-	flgHostsTTL     = flag.Duration("hostsTTL", 24*time.Hour, "hosts prefill TTL")
+    __u32 tgid;
+    __u32 tid;
+    __u32 fd;
+    __u32 _pad0;
 
-	// dns cache sweep
-	flgResolveSweepEach = flag.Int("resolveSweepEach", 500, "dns cache sweep per tick")
-	flgResolvePokeEach  = flag.Int("resolvePokeEach", 256, "poke flows per tick to resolve alias")
+    __u16 family;
+    __u16 sport;
+    __u16 dport;
+    __u8  proto;     // TCP
+    __u8  event;     // EV_TLS_SNI
+    __u16 sni_len;
 
-	// L3-hint cache ttl + OPEN delay to wait for skb-hint (to avoid *(any))
-	flgL3TTL       = flag.Duration("l3ttl", 10*time.Second, "TTL for skb-derived L3 hints (cookie->src/dst)")
-	flgOpenDelay   = flag.Duration("openDelay", 200*time.Millisecond, "delay OPEN print (max) to wait for skb hint to fill src ip")
-	flgL3SweepEach = flag.Int("l3SweepEach", 500, "l3 hint sweep per tick")
-)
+    __u32 src_ip4;
+    __u32 dst_ip4;
+    __u8  src_ip6[16];
+    __u8  dst_ip6[16];
 
-/* ===== basic helpers ===== */
+    char  comm[32];
+    char  sni[SNI_MAX];
+};
 
-func commString(c [32]int8) string {
-	var b [32]byte
-	for i := 0; i < 32; i++ {
-		b[i] = byte(c[i])
-	}
-	n := bytes.IndexByte(b[:], 0)
-	if n < 0 {
-		n = len(b)
-	}
-	return string(b[:n])
+const struct tls_sni_event *unused_sni __attribute__((unused));
+
+
+
+
+/* ===== WRITE TLS SNI accumulator ===== */
+
+#define TLS_ACC_MAX     2048
+#define TLS_ACC_STEP    256
+#define TLS_ACC_STEPS   8   // 8*256=2048 (если verifier ругнётся — поставь 4)
+
+struct write_args_t {
+    __u32 tgid;
+    __u32 fd;
+    __u64 buf;   // user pointer
+    __u64 cnt;   // size_t
+    char  comm[64];
+};
+
+struct tls_acc_t {
+    __u64 ts_ns;
+    __u32 len;
+    __u8  done;
+    __u8  _pad[3];
+    __u8  buf[TLS_ACC_MAX];
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 16384);
+    __type(key, __u64);                 // pid_tgid
+    __type(value, struct write_args_t);
+} write_args_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    __uint(max_entries, 65536);
+    __type(key, __u64);                 // cookie
+    __type(value, struct tls_acc_t);
+} tls_acc_map SEC(".maps");
+
+
+
+static __always_inline __u32 min_u32(__u32 a, __u32 b) { return a < b ? a : b; }
+
+static __always_inline void acc_copy_256(__u8 *dst, const __u8 *src, __u32 n)
+{
+#pragma clang loop unroll(full)
+    for (int i = 0; i < TLS_ACC_STEP; i++) {
+        if ((__u32)i >= n) break;
+        dst[i] = src[i];
+    }
 }
 
-func protoAllowed(p uint8) bool {
-	switch p {
-	case IPPROTO_TCP, IPPROTO_UDP, IPPROTO_ICMP, IPPROTO_ICMPV6:
-		return true
-	default:
-		return false
-	}
+static __always_inline void tls_acc_append(struct tls_acc_t *acc, __u64 ubuf, __u32 avail)
+{
+    if (!acc || !ubuf) return;
+    if (acc->done) return;
+
+    __u32 left = TLS_ACC_MAX - acc->len;
+    if (left == 0) return;
+
+#pragma clang loop unroll(full)
+    for (int step = 0; step < TLS_ACC_STEPS; step++) {
+        if (avail == 0 || left == 0) break;
+
+        __u32 n = avail;
+        if (n > left) n = left;
+        if (n > TLS_ACC_STEP) n = TLS_ACC_STEP;
+
+        __u8 tmp[TLS_ACC_STEP] = {};
+        if (bpf_probe_read_user(tmp, n, (void *)(ubuf + (__u64)step * TLS_ACC_STEP)) != 0)
+            break;
+
+        acc_copy_256(&acc->buf[acc->len], tmp, n);
+
+        acc->len += n;
+        avail -= n;
+        left  -= n;
+    }
+
+    acc->ts_ns = bpf_ktime_get_ns();
 }
 
-func protoStr(p uint8) string {
-	switch p {
-	case IPPROTO_TCP:
-		return "TCP"
-	case IPPROTO_UDP:
-		return "UDP"
-	case IPPROTO_ICMP:
-		return "ICMP"
-	case IPPROTO_ICMPV6:
-		return "ICMPv6"
-	default:
-		return fmt.Sprintf("P%d", p)
-	}
+
+
+static __always_inline __u16 be16(const __u8 *p) { return ((__u16)p[0] << 8) | p[1]; }
+static __always_inline __u32 be24(const __u8 *p) { return ((__u32)p[0] << 16) | ((__u32)p[1] << 8) | p[2]; }
+
+static __always_inline int tls_extract_sni(const __u8 *b, __u32 n, char out[SNI_MAX])
+{
+    if (!b || n < 9) return -1;
+
+    if (b[0] != 0x16) return -1;         // TLS Handshake record
+    if (b[5] != 0x01) return -1;         // ClientHello
+
+    __u32 off = 9;
+
+    if (off + 2 + 32 > n) return -1;     // version + random
+    off += 2 + 32;
+
+    if (off + 1 > n) return -1;
+    __u8 sid_len = b[off];
+    off += 1;
+    if (off + sid_len > n) return -1;
+    off += sid_len;
+
+    if (off + 2 > n) return -1;
+    __u16 cs_len = be16(&b[off]);
+    off += 2;
+    if (off + cs_len > n) return -1;
+    off += cs_len;
+
+    if (off + 1 > n) return -1;
+    __u8 comp_len = b[off];
+    off += 1;
+    if (off + comp_len > n) return -1;
+    off += comp_len;
+
+    if (off + 2 > n) return -1;
+    __u16 ext_len = be16(&b[off]);
+    off += 2;
+    if (off + ext_len > n) return -1;
+
+    __u32 ext_end = off + ext_len;
+
+#pragma clang loop unroll(full)
+    for (int i = 0; i < 32; i++) {
+        if (off + 4 > ext_end) break;
+
+        __u16 et = be16(&b[off]);
+        __u16 el = be16(&b[off + 2]);
+        off += 4;
+
+        if (off + el > ext_end) break;
+
+        if (et == 0x0000) { // server_name
+            if (el < 2) return -1;
+            __u32 p = off;
+
+            __u16 sll = be16(&b[p]);
+            p += 2;
+            if (p + sll > off + el) return -1;
+
+            if (p + 3 > off + el) return -1;
+            __u8 nt = b[p];
+            __u16 nl = be16(&b[p + 1]);
+            p += 3;
+
+            if (nt != 0) return -1;
+            if (nl == 0 || p + nl > off + el) return -1;
+
+            __u32 copy = nl;
+            if (copy >= SNI_MAX) copy = SNI_MAX - 1;
+
+#pragma clang loop unroll(full)
+            for (int k = 0; k < SNI_MAX; k++) {
+                if ((__u32)k >= copy) break;
+                out[k] = (char)b[p + k];
+            }
+            out[copy] = 0;
+            return (int)copy;
+        }
+
+        off += el;
+    }
+
+    return -1;
 }
 
-func isSend(ev uint8) bool {
-	return ev == EV_SENDTO || ev == EV_SENDMSG || ev == EV_SENDMMSG || ev == EV_WRITE
-}
-func isRecv(ev uint8) bool {
-	return ev == EV_RECVFROM || ev == EV_RECVMSG || ev == EV_RECVMMSG || ev == EV_READ
-}
 
-func isAllZero16(b [16]byte) bool {
-	for i := 0; i < 16; i++ {
-		if b[i] != 0 {
-			return false
-		}
-	}
-	return true
-}
+SEC("tracepoint/syscalls/sys_enter_write")
+int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
 
-// IPv4 u32 from kernel is network-order but looks swapped on little-endian.
-func ip4KeyFromU32Net(x uint32) (key [16]byte) {
-	var b4 [4]byte
-	binary.LittleEndian.PutUint32(b4[:], x)
-	copy(key[:4], b4[:])
-	return
+    int fd = (int)ctx->args[0];
+    if (!is_socket_fd(fd))
+        return 0;
+
+    struct write_args_t wa = {};
+    wa.tgid = tgid;
+    wa.fd   = (__u32)fd;
+    wa.buf  = (__u64)ctx->args[1];
+    wa.cnt  = (__u64)ctx->args[2];
+    bpf_get_current_comm(&wa.comm, sizeof(wa.comm));
+
+    bpf_map_update_elem(&write_args_map, &id, &wa, BPF_ANY);
+    return 0;
 }
 
-func fmtIPv4FromKey(k [16]byte) string {
-	return fmt.Sprintf("%d.%d.%d.%d", k[0], k[1], k[2], k[3])
-}
-
-func fmtIPv6Full(b [16]byte) string {
-	return fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x",
-		uint16(b[0])<<8|uint16(b[1]),
-		uint16(b[2])<<8|uint16(b[3]),
-		uint16(b[4])<<8|uint16(b[5]),
-		uint16(b[6])<<8|uint16(b[7]),
-		uint16(b[8])<<8|uint16(b[9]),
-		uint16(b[10])<<8|uint16(b[11]),
-		uint16(b[12])<<8|uint16(b[13]),
-		uint16(b[14])<<8|uint16(b[15]),
-	)
-}
-
-func isIPv6LinkLocalUnicast(ip [16]byte) bool { return ip[0] == 0xfe && (ip[1]&0xc0) == 0x80 }
-func isIPv6LinkLocalMulticast(ip [16]byte) bool {
-	return ip[0] == 0xff && (ip[1]&0x0f) == 0x02
-}
-func needsScope6(ip [16]byte) bool { return isIPv6LinkLocalUnicast(ip) || isIPv6LinkLocalMulticast(ip) }
-
-func isIPv6Loopback(ip [16]byte) bool {
-	for i := 0; i < 15; i++ {
-		if ip[i] != 0 {
-			return false
-		}
-	}
-	return ip[15] == 1 // ::1
-}
-
-type ifResolver struct {
-	mu sync.Mutex
-	m  map[uint32]string
-}
-
-func (r *ifResolver) name(ifidx uint32) string {
-	if ifidx == 0 {
-		return ""
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.m == nil {
-		r.m = make(map[uint32]string, 32)
-	}
-	if s, ok := r.m[ifidx]; ok {
-		return s
-	}
-	ifi, err := net.InterfaceByIndex(int(ifidx))
-	if err != nil || ifi == nil || ifi.Name == "" {
-		s := fmt.Sprintf("if%d", ifidx)
-		r.m[ifidx] = s
-		return s
-	}
-	r.m[ifidx] = ifi.Name
-	return ifi.Name
-}
-
-var ifr ifResolver
-
-func srcKeyFromEvent(ev bpfTraceInfo) (k [16]byte) {
-	if uint16(ev.Family) == AF_INET {
-		return ip4KeyFromU32Net(ev.SrcIp4)
-	}
-	copy(k[:], ev.SrcIp6[:])
-	return
-}
-func dstKeyFromEvent(ev bpfTraceInfo) (k [16]byte) {
-	if uint16(ev.Family) == AF_INET {
-		return ip4KeyFromU32Net(ev.DstIp4)
-	}
-	copy(k[:], ev.DstIp6[:])
-	return
-}
-
-func srcScopeFromEvent(ev bpfTraceInfo) uint32 {
-	if uint16(ev.Family) == AF_INET6 {
-		return uint32(ev.SrcScope)
-	}
-	return 0
-}
-func dstScopeFromEvent(ev bpfTraceInfo) uint32 {
-	if uint16(ev.Family) == AF_INET6 {
-		return uint32(ev.DstScope)
-	}
-	return 0
-}
-
-/* ===== .env loader (no deps) ===== */
-
-func fileExists(path string) bool {
-	st, err := os.Stat(path)
-	return err == nil && !st.IsDir()
-}
-
-func loadDotEnvFile(path string, override bool) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	return loadDotEnvReader(f, override)
-}
-
-func loadDotEnvReader(r io.Reader, override bool) error {
-	sc := bufio.NewScanner(r)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if i := strings.Index(line, " #"); i >= 0 {
-			line = strings.TrimSpace(line[:i])
-		}
-		if strings.HasPrefix(line, "export ") {
-			line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
-		}
-		i := strings.IndexByte(line, '=')
-		if i <= 0 {
-			continue
-		}
-		key := strings.TrimSpace(line[:i])
-		val := strings.TrimSpace(line[i+1:])
-		if len(val) >= 2 {
-			if (val[0] == '"' && val[len(val)-1] == '"') || (val[0] == '\'' && val[len(val)-1] == '\'') {
-				val = val[1 : len(val)-1]
-			}
-		}
-		if key == "" {
-			continue
-		}
-		if !override {
-			if _, exists := os.LookupEnv(key); exists {
-				continue
-			}
-		}
-		_ = os.Setenv(key, val)
-	}
-	return sc.Err()
-}
-
-func loadDotEnvAuto() (string, error) {
-	if p, ok := os.LookupEnv("BPFGO_DOTENV"); ok && strings.TrimSpace(p) != "" {
-		p = strings.TrimSpace(p)
-		if fileExists(p) {
-			return p, loadDotEnvFile(p, false)
-		}
-		return p, fmt.Errorf("BPFGO_DOTENV set but file not found: %s", p)
-	}
-	if fileExists(".env") {
-		return ".env", loadDotEnvFile(".env", false)
-	}
-	if exe, err := os.Executable(); err == nil {
-		dir := filepath.Dir(exe)
-		p := filepath.Join(dir, ".env")
-		if fileExists(p) {
-			return p, loadDotEnvFile(p, false)
-		}
-	}
-	return "", nil
-}
-
-func applyEnvToFlags() {
-	set := func(flagName, envName string) {
-		if v, ok := os.LookupEnv(envName); ok && strings.TrimSpace(v) != "" {
-			_ = flag.Set(flagName, strings.TrimSpace(v))
-		}
-	}
-
-	set("perfMB", "BPFGO_PERF_MB")
-	set("pprof", "BPFGO_PPROF")
-	set("pprofAddr", "BPFGO_PPROF_ADDR")
-	set("ttl", "BPFGO_TTL")
-	set("print", "BPFGO_SWEEP")
-	set("pid", "BPFGO_ONLY_PID")
-	set("comm", "BPFGO_ONLY_COMM")
-	set("rw", "BPFGO_RW")
-	set("mmsg", "BPFGO_MMSG")
-
-	set("resolve", "BPFGO_RESOLVE")
-	set("resolveTTL", "BPFGO_RESOLVE_TTL")
-	set("resolveNegTTL", "BPFGO_RESOLVE_NEG_TTL")
-	set("resolveWorkers", "BPFGO_RESOLVE_WORKERS")
-	set("resolveTimeout", "BPFGO_RESOLVE_TIMEOUT")
-	set("resolveQ", "BPFGO_RESOLVE_Q")
-	set("hostState", "BPFGO_HOST_STATE")
-
-	set("hostsPrefill", "BPFGO_HOSTS_PREFILL")
-	set("hostsFile", "BPFGO_HOSTS_FILE")
-	set("hostsTTL", "BPFGO_HOSTS_TTL")
-
-	set("resolveSweepEach", "BPFGO_RESOLVE_SWEEP_EACH")
-	set("resolvePokeEach", "BPFGO_RESOLVE_POKE_EACH")
-
-	set("l3ttl", "BPFGO_L3_TTL")
-	set("openDelay", "BPFGO_OPEN_DELAY")
-	set("l3SweepEach", "BPFGO_L3_SWEEP_EACH")
-}
-
-/* ===== PTR resolver cache ===== */
-
-type dnsKey struct {
-	Family uint16
-	IP     [16]byte
-}
-
-type dnsEntry struct {
-	Name    string
-	Exp     time.Time
-	Pending bool
-	Neg     bool
-}
-
-type dnsResolver struct {
-	mu     sync.Mutex
-	m      map[dnsKey]*dnsEntry
-	q      chan dnsKey
-	ttl    time.Duration
-	negTtl time.Duration
-	to     time.Duration
-	wg     sync.WaitGroup
-}
-
-func newDNSResolver(qsize, workers int, ttl, negTtl, timeout time.Duration) *dnsResolver {
-	if workers < 1 {
-		workers = 1
-	}
-	if qsize < 64 {
-		qsize = 64
-	}
-	r := &dnsResolver{
-		m:      make(map[dnsKey]*dnsEntry, 8192),
-		q:      make(chan dnsKey, qsize),
-		ttl:    ttl,
-		negTtl: negTtl,
-		to:     timeout,
-	}
-	r.wg.Add(workers)
-	for i := 0; i < workers; i++ {
-		go func() { defer r.wg.Done(); r.worker() }()
-	}
-	return r
-}
-
-func (r *dnsResolver) Close() { close(r.q); r.wg.Wait() }
-
-func ipToNetIP(family uint16, ip [16]byte) net.IP {
-	if family == AF_INET {
-		return net.IPv4(ip[0], ip[1], ip[2], ip[3]).To4()
-	}
-	b := make([]byte, 16)
-	copy(b, ip[:])
-	return net.IP(b)
-}
-
-func shouldResolveIP(family uint16, ip [16]byte) bool {
-	if isAllZero16(ip) {
-		return false
-	}
-	nip := ipToNetIP(family, ip)
-	if nip == nil {
-		return false
-	}
-	if nip.IsLoopback() || nip.IsMulticast() || nip.IsUnspecified() {
-		return false
-	}
-	if family == AF_INET6 && needsScope6(ip) {
-		return false
-	}
-	return true
-}
-
-func trimDot(s string) string {
-	s = strings.TrimSpace(s)
-	for strings.HasSuffix(s, ".") {
-		s = strings.TrimSuffix(s, ".")
-	}
-	return s
-}
-
-func (r *dnsResolver) SetKnown(family uint16, ip [16]byte, name string, ttl time.Duration) {
-	name = trimDot(name)
-	if name == "" {
-		return
-	}
-	k := dnsKey{Family: family, IP: ip}
-	r.mu.Lock()
-	r.m[k] = &dnsEntry{Name: name, Exp: time.Now().Add(ttl)}
-	r.mu.Unlock()
-}
-
-func (r *dnsResolver) Get(family uint16, ip [16]byte) (string, bool) {
-	if !shouldResolveIP(family, ip) {
-		return "", false
-	}
-	k := dnsKey{Family: family, IP: ip}
-	now := time.Now()
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	e := r.m[k]
-	if e == nil {
-		return "", false
-	}
-	if now.After(e.Exp) && !e.Pending {
-		delete(r.m, k)
-		return "", false
-	}
-	if e.Neg || e.Name == "" {
-		return "", false
-	}
-	return e.Name, true
-}
-
-func (r *dnsResolver) Peek(family uint16, ip [16]byte) (name string, pending bool, neg bool, ok bool) {
-	if !shouldResolveIP(family, ip) {
-		return "", false, false, false
-	}
-	k := dnsKey{Family: family, IP: ip}
-	now := time.Now()
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	e := r.m[k]
-	if e == nil {
-		return "", false, false, false
-	}
-	if now.After(e.Exp) && !e.Pending {
-		delete(r.m, k)
-		return "", false, false, false
-	}
-	return e.Name, e.Pending, e.Neg, true
-}
-
-func (r *dnsResolver) Ensure(family uint16, ip [16]byte) {
-	if !shouldResolveIP(family, ip) {
-		return
-	}
-	k := dnsKey{Family: family, IP: ip}
-	now := time.Now()
-
-	r.mu.Lock()
-	if e := r.m[k]; e != nil {
-		if e.Pending || now.Before(e.Exp) {
-			r.mu.Unlock()
-			return
-		}
-		e.Pending = true
-		e.Name = ""
-		e.Neg = false
-		r.mu.Unlock()
-	} else {
-		r.m[k] = &dnsEntry{Pending: true}
-		r.mu.Unlock()
-	}
-
-	select {
-	case r.q <- k:
-	default:
-		r.mu.Lock()
-		if e := r.m[k]; e != nil {
-			e.Pending = false
-			e.Exp = time.Now().Add(500 * time.Millisecond)
-		}
-		r.mu.Unlock()
-	}
-}
-
-func (r *dnsResolver) worker() {
-	for k := range r.q {
-		ip := ipToNetIP(k.Family, k.IP)
-		name := ""
-		neg := false
-		retrySoon := false
-
-		ctx, cancel := context.WithTimeout(context.Background(), r.to)
-		names, err := net.DefaultResolver.LookupAddr(ctx, ip.String())
-		cancel()
-
-		if err != nil {
-			// ВАЖНО: timeout/temporary НЕ кэшируем как neg на 5 минут
-			if dnsErr, ok := err.(*net.DNSError); ok {
-				if dnsErr.IsNotFound {
-					neg = true
-				} else if dnsErr.IsTimeout || dnsErr.IsTemporary {
-					retrySoon = true
-				} else {
-					retrySoon = true
-				}
-			} else {
-				retrySoon = true
-			}
-		}
-
-		if len(names) > 0 {
-			name = trimDot(names[0])
-			if name == "" {
-				neg = true
-				retrySoon = false
-			}
-		} else {
-			if !retrySoon {
-				neg = true
-			}
-		}
-
-		exp := time.Now().Add(r.ttl)
-		if neg {
-			exp = time.Now().Add(r.negTtl)
-		} else if retrySoon {
-			exp = time.Now().Add(2 * time.Second)
-		}
-
-		r.mu.Lock()
-		e := r.m[k]
-		if e == nil {
-			e = &dnsEntry{}
-			r.m[k] = e
-		}
-		e.Pending = false
-		e.Neg = neg
-		e.Name = name
-		e.Exp = exp
-		r.mu.Unlock()
-	}
-}
-
-func (r *dnsResolver) SweepExpired(limit int) {
-	if limit <= 0 {
-		return
-	}
-	now := time.Now()
-	n := 0
-	r.mu.Lock()
-	for k, e := range r.m {
-		if !e.Pending && now.After(e.Exp) {
-			delete(r.m, k)
-			n++
-			if n >= limit {
-				break
-			}
-		}
-	}
-	r.mu.Unlock()
-}
-
-func parseHostsPrefill(path string, ttl time.Duration, r *dnsResolver) {
-	f, err := os.Open(path)
-	if err != nil {
-		log.Printf("hostsPrefill: open %s: %v", path, err)
-		return
-	}
-	defer f.Close()
-
-	sc := bufio.NewScanner(f)
-	added := 0
-	for sc.Scan() {
-		line := sc.Text()
-		if i := strings.IndexByte(line, '#'); i >= 0 {
-			line = line[:i]
-		}
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-		ipStr := fields[0]
-		name := fields[1]
-		ip := net.ParseIP(ipStr)
-		if ip == nil {
-			continue
-		}
-		if v4 := ip.To4(); v4 != nil {
-			var key [16]byte
-			copy(key[:4], v4)
-			r.SetKnown(AF_INET, key, name, ttl)
-			added++
-			continue
-		}
-		if v6 := ip.To16(); v6 != nil {
-			var key [16]byte
-			copy(key[:], v6)
-			r.SetKnown(AF_INET6, key, name, ttl)
-			added++
-		}
-	}
-	if err := sc.Err(); err != nil {
-		log.Printf("hostsPrefill: scan %s: %v", path, err)
-	}
-	log.Printf("hostsPrefill: added=%d from %s", added, path)
-}
-
-var dnsr *dnsResolver
-
-/* ===== L3 hint cache (cookie -> real src/dst) ===== */
-
-type l3Info struct {
-	Family uint16
-	Proto  uint8
-	Src    [16]byte
-	Sport  uint16
-	SrcSc  uint32
-	Dst    [16]byte
-	Dport  uint16
-	DstSc  uint32
-	Seen   time.Time
-}
-
-func (l l3Info) expired(now time.Time, ttl time.Duration) bool {
-	return now.Sub(l.Seen) > ttl
-}
-
-/* ===== unified endpoint printing: ip(alias):port ===== */
-
-func specialAlias(family uint16, ip [16]byte) (string, bool) {
-	if family == AF_INET {
-		// localhost
-		if ip[0] == 127 && ip[1] == 0 && ip[2] == 0 && ip[3] == 1 {
-			return "localhost", true
-		}
-		// systemd-resolved stub
-		if ip[0] == 127 && ip[1] == 0 && ip[2] == 0 && ip[3] == 53 {
-			return "dnsstub", true
-		}
-		// VirtualBox NAT defaults
-		if ip[0] == 10 && ip[1] == 0 && ip[2] == 2 && ip[3] == 2 {
-			return "vboxgw", true
-		}
-		if ip[0] == 10 && ip[1] == 0 && ip[2] == 2 && ip[3] == 3 {
-			return "vboxdns", true
-		}
-	}
-	if family == AF_INET6 && isIPv6Loopback(ip) {
-		return "localhost", true
-	}
-	return "", false
-}
-
-func addrStr(family uint16, ip [16]byte, scope uint32) string {
-	if isAllZero16(ip) {
-		return "*"
-	}
-	if family == AF_INET6 {
-		s := fmtIPv6Full(ip)
-		if needsScope6(ip) && scope != 0 {
-			s += "%" + ifr.name(scope)
-		}
-		return s
-	}
-	return fmtIPv4FromKey(ip)
-}
-
-// aliasForIP: всегда возвращает alias (или состояние), может дернуть Ensure().
-func aliasForIP(family uint16, ip [16]byte) string {
-	if isAllZero16(ip) {
-		return "any"
-	}
-	if a, ok := specialAlias(family, ip); ok {
-		return a
-	}
-	if dnsr == nil {
-		return "?"
-	}
-	if !shouldResolveIP(family, ip) {
-		return "skip"
-	}
-	if h, ok := dnsr.Get(family, ip); ok && h != "" {
-		return h
-	}
-	if name, pending, neg, ok := dnsr.Peek(family, ip); ok {
-		if name != "" && !neg {
-			return name
-		}
-		if pending {
-			if *flgHostState {
-				return "pending"
-			}
-			return "?"
-		}
-		if neg {
-			if *flgHostState {
-				return "no-ptr"
-			}
-			return "?"
-		}
-	}
-	dnsr.Ensure(family, ip)
-	if *flgHostState {
-		// чтобы "miss" не залипал — можно сразу peek; но достаточно так
-		return "miss"
-	}
-	return "?"
-}
-
-func fmtEndpointAll(family uint16, ip [16]byte, port uint16, scope uint32, proto uint8, alias string) string {
-	isICMP := proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6
-	a := addrStr(family, ip, scope)
-	if alias == "" {
-		alias = "?"
-	}
-	if isICMP {
-		return fmt.Sprintf("%s(%s)", a, alias)
-	}
-	if family == AF_INET6 && !isAllZero16(ip) {
-		return fmt.Sprintf("[%s](%s):%d", a, alias, port)
-	}
-	return fmt.Sprintf("%s(%s):%d", a, alias, port)
-}
-
-/* ===== FLOW ===== */
-
-type FlowKey struct {
-	TGID   uint32
-	Cookie uint64
-	Proto  uint8
-	Family uint16
-
-	PeerMode uint8
-	Rport    uint16
-	Remote   [16]byte
-	Rscope   uint32
-}
-
-type Flow struct {
-	Key  FlowKey
-	Comm string
-
-	Local      [16]byte
-	Lport      uint16
-	LocalScope uint32
-
-	Remote      [16]byte
-	Rport       uint16
-	RemoteScope uint32
-
-	FirstSeen time.Time
-	LastSeen  time.Time
-
-	InBytes  uint64
-	OutBytes uint64
-	InPkts   uint64
-	OutPkts  uint64
-
-	OpenedPrinted bool
-	GenStart      uint64
-
-	RemoteHost string // per-flow cache for real resolved name (not miss/pending/no-ptr)
-}
-
-func makeKey(ev bpfTraceInfo) FlowKey {
-	k := FlowKey{
-		TGID:   ev.Tgid,
-		Cookie: ev.Cookie,
-		Proto:  uint8(ev.Proto),
-		Family: uint16(ev.Family),
-	}
-
-	evt := uint8(ev.Event)
-
-	if k.Proto == IPPROTO_UDP {
-		var remote [16]byte
-		var rport uint16
-		var rscope uint32
-
-		if isRecv(evt) {
-			remote = srcKeyFromEvent(ev)
-			rport = uint16(ev.Sport)
-			rscope = srcScopeFromEvent(ev)
-		} else {
-			remote = dstKeyFromEvent(ev)
-			rport = uint16(ev.Dport)
-			rscope = dstScopeFromEvent(ev)
-		}
-
-		if rport != 0 && !isAllZero16(remote) {
-			k.PeerMode = 1
-			k.Remote = remote
-			k.Rport = rport
-			if k.Family == AF_INET6 && needsScope6(remote) && rscope != 0 {
-				k.Rscope = rscope
-			}
-		}
-	}
-
-	if k.Proto == IPPROTO_ICMP || k.Proto == IPPROTO_ICMPV6 {
-		var remote [16]byte
-		var rscope uint32
-		if isRecv(evt) {
-			remote = srcKeyFromEvent(ev)
-			rscope = srcScopeFromEvent(ev)
-		} else {
-			remote = dstKeyFromEvent(ev)
-			rscope = dstScopeFromEvent(ev)
-		}
-		if !isAllZero16(remote) {
-			k.PeerMode = 1
-			k.Remote = remote
-			if k.Family == AF_INET6 && needsScope6(remote) && rscope != 0 {
-				k.Rscope = rscope
-			}
-		}
-	}
-
-	return k
-}
-
-func applyEndpoints(f *Flow, ev bpfTraceInfo) {
-	evt := uint8(ev.Event)
-
-	var localIP, remoteIP [16]byte
-	var lport, rport uint16
-	var localScope, remoteScope uint32
-
-	switch {
-	case isSend(evt) || evt == EV_CONNECT:
-		localIP = srcKeyFromEvent(ev)
-		remoteIP = dstKeyFromEvent(ev)
-		lport = uint16(ev.Sport)
-		rport = uint16(ev.Dport)
-		localScope = srcScopeFromEvent(ev)
-		remoteScope = dstScopeFromEvent(ev)
-
-	case isRecv(evt):
-		localIP = dstKeyFromEvent(ev)
-		remoteIP = srcKeyFromEvent(ev)
-		lport = uint16(ev.Dport)
-		rport = uint16(ev.Sport)
-		localScope = dstScopeFromEvent(ev)
-		remoteScope = srcScopeFromEvent(ev)
-
-	case evt == EV_BINDOK:
-		localIP = srcKeyFromEvent(ev)
-		lport = uint16(ev.Sport)
-		localScope = srcScopeFromEvent(ev)
-
-	case evt == EV_ACCEPT:
-		localIP = dstKeyFromEvent(ev)
-		remoteIP = srcKeyFromEvent(ev)
-		lport = uint16(ev.Dport)
-		rport = uint16(ev.Sport)
-		localScope = dstScopeFromEvent(ev)
-		remoteScope = srcScopeFromEvent(ev)
-	}
-
-	if f.Lport == 0 && lport != 0 {
-		f.Lport = lport
-	}
-	if isAllZero16(f.Local) && !isAllZero16(localIP) {
-		f.Local = localIP
-	}
-	if f.LocalScope == 0 && localScope != 0 && needsScope6(localIP) {
-		f.LocalScope = localScope
-	}
-
-	if f.Rport == 0 && rport != 0 {
-		f.Rport = rport
-	}
-	if isAllZero16(f.Remote) && !isAllZero16(remoteIP) {
-		f.Remote = remoteIP
-	}
-	if f.RemoteScope == 0 && remoteScope != 0 && needsScope6(remoteIP) {
-		f.RemoteScope = remoteScope
-	}
-}
-
-// apply skb-hint to fill missing local ip (and sometimes remote too)
-func applyL3HintToFlow(f *Flow, h l3Info) {
-	if h.Family != f.Key.Family || h.Proto != f.Key.Proto {
-		return
-	}
-
-	// If we already know remote, try to match either direction
-	if !isAllZero16(f.Remote) {
-		// send direction: remote == dst
-		if f.Rport != 0 && f.Rport == h.Dport && bytes.Equal(f.Remote[:], h.Dst[:]) {
-			if isAllZero16(f.Local) && !isAllZero16(h.Src) {
-				f.Local = h.Src
-				f.LocalScope = h.SrcSc
-			}
-			if f.Lport == 0 && h.Sport != 0 {
-				f.Lport = h.Sport
-			}
-			return
-		}
-		// recv direction: remote == src
-		if f.Rport != 0 && f.Rport == h.Sport && bytes.Equal(f.Remote[:], h.Src[:]) {
-			if isAllZero16(f.Local) && !isAllZero16(h.Dst) {
-				f.Local = h.Dst
-				f.LocalScope = h.DstSc
-			}
-			if f.Lport == 0 && h.Dport != 0 {
-				f.Lport = h.Dport
-			}
-			return
-		}
-	}
-
-	// If remote is unknown, we can still fill local from src (best effort)
-	if isAllZero16(f.Local) && !isAllZero16(h.Src) {
-		f.Local = h.Src
-		f.LocalScope = h.SrcSc
-		if f.Lport == 0 && h.Sport != 0 {
-			f.Lport = h.Sport
-		}
-	}
-}
-
-func flowReadyToOpenBase(f *Flow) bool {
-	if isAllZero16(f.Remote) {
-		return false
-	}
-	switch f.Key.Proto {
-	case IPPROTO_TCP, IPPROTO_UDP:
-		return f.Lport != 0 && f.Rport != 0
-	default:
-		return true
-	}
-}
-
-func flowReadyToPrintOpen(f *Flow) bool {
-	if !flowReadyToOpenBase(f) {
-		return false
-	}
-	// if local ip still unknown, wait a bit for skb-hint
-	if isAllZero16(f.Local) && time.Since(f.FirstSeen) < *flgOpenDelay {
-		return false
-	}
-	return true
-}
-
-var lostTotal uint64
-var lostGen uint64
-
-func maybeLostNote(f *Flow) string {
-	if f.InBytes == 0 && f.OutBytes == 0 && f.GenStart != atomic.LoadUint64(&lostGen) {
-		return " maybe_lost=1"
-	}
-	return ""
-}
-
-func incompleteNote(f *Flow) string {
-	switch f.Key.Proto {
-	case IPPROTO_TCP, IPPROTO_UDP:
-		if isAllZero16(f.Remote) || f.Lport == 0 || f.Rport == 0 {
-			return " incomplete=1"
-		}
-	case IPPROTO_ICMP, IPPROTO_ICMPV6:
-		if isAllZero16(f.Remote) {
-			return " incomplete=1"
-		}
-	}
-	return ""
-}
-
-func dropZeroFlow(f *Flow) bool {
-	if f.InBytes != 0 || f.OutBytes != 0 {
-		return false
-	}
-	if f.Key.Proto == IPPROTO_UDP || f.Key.Proto == IPPROTO_ICMP || f.Key.Proto == IPPROTO_ICMPV6 {
-		return f.GenStart == atomic.LoadUint64(&lostGen)
-	}
-	return false
-}
-
-func remoteAliasCached(f *Flow) string {
-	if f.RemoteHost != "" {
-		return f.RemoteHost
-	}
-	a := aliasForIP(f.Key.Family, f.Remote)
-	switch a {
-	case "", "?", "any", "skip", "pending", "no-ptr", "miss":
-		return a
-	default:
-		f.RemoteHost = a
-		return a
-	}
-}
-
-func printOpen(f *Flow) {
-	lAlias := aliasForIP(f.Key.Family, f.Local)
-	rAlias := remoteAliasCached(f)
-
-	fmt.Printf("OPEN  %-5s pid=%d(%s) cookie=%d  %s -> %s%s%s\n",
-		protoStr(f.Key.Proto),
-		f.Key.TGID, f.Comm, f.Key.Cookie,
-		fmtEndpointAll(f.Key.Family, f.Local, f.Lport, f.LocalScope, f.Key.Proto, lAlias),
-		fmtEndpointAll(f.Key.Family, f.Remote, f.Rport, f.RemoteScope, f.Key.Proto, rAlias),
-		incompleteNote(f),
-		maybeLostNote(f),
-	)
-}
-
-func printClose(f *Flow, reason string) {
-	lAlias := aliasForIP(f.Key.Family, f.Local)
-	rAlias := remoteAliasCached(f)
-
-	age := time.Since(f.FirstSeen).Truncate(time.Millisecond)
-	fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s reason=%s%s%s\n",
-		protoStr(f.Key.Proto),
-		f.Key.TGID, f.Comm, f.Key.Cookie,
-		fmtEndpointAll(f.Key.Family, f.Local, f.Lport, f.LocalScope, f.Key.Proto, lAlias),
-		fmtEndpointAll(f.Key.Family, f.Remote, f.Rport, f.RemoteScope, f.Key.Proto, rAlias),
-		f.OutBytes, f.OutPkts, f.InBytes, f.InPkts,
-		age, reason,
-		incompleteNote(f),
-		maybeLostNote(f),
-	)
-}
-
-/* ===== perf reader: total budget -> per-CPU + fallback ===== */
-
-func openPerfReaderTotalBudget(events *ebpf.Map, totalMB int) (*perf.Reader, int, error) {
-	totalBytes := totalMB * 1024 * 1024
-	if totalBytes < 256*1024 {
-		totalBytes = 256 * 1024
-	}
-
-	nCPU := runtime.NumCPU()
-	perCPU := totalBytes / nCPU
-	if perCPU < 256*1024 {
-		perCPU = 256 * 1024
-	}
-
-	page := os.Getpagesize()
-	pages := perCPU / page
-	if pages < 8 {
-		pages = 8
-	}
-	p2 := 1 << (bits.Len(uint(pages)) - 1)
-	try := p2 * page
-
-	var rd *perf.Reader
-	var err error
-	for try >= 256*1024 {
-		rd, err = perf.NewReader(events, try)
-		if err == nil {
-			return rd, try, nil
-		}
-		if strings.Contains(err.Error(), "cannot allocate memory") || strings.Contains(err.Error(), "can't mmap") {
-			try /= 2
-			continue
-		}
-		break
-	}
-	return nil, 0, err
-}
-
-/* ===== main ===== */
-
-func main() {
-	if p, err := loadDotEnvAuto(); err != nil {
-		log.Printf("dotenv: %v", err)
-	} else if p != "" {
-		log.Printf("dotenv loaded: %s", p)
-	}
-
-	applyEnvToFlags()
-	flag.Parse()
-
-	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
-
-	if *flgResolve {
-		dnsr = newDNSResolver(*flgResolveQ, *flgResolveWorkers, *flgResolveTTL, *flgResolveNegTTL, *flgResolveTimeout)
-		defer dnsr.Close()
-		if *flgHostsPrefill {
-			parseHostsPrefill(*flgHostsFile, *flgHostsTTL, dnsr)
-		}
-	}
-
-	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatalf("failed to remove memlock: %v", err)
-	}
-	if err := loadBpfObjects(&objs, nil); err != nil {
-		log.Fatalf("failed to load bpf objects: %v", err)
-	}
-	defer objs.Close()
-
-	if *flgPprof {
-		go func() {
-			log.Printf("pprof on %s", *flgPprofAddr)
-			_ = http.ListenAndServe(*flgPprofAddr, nil)
-		}()
-	}
-
-	selfName := filepath.Base(os.Args[0])
-
-	var links []link.Link
-	defer func() {
-		for _, l := range links {
-			_ = l.Close()
-		}
-	}()
-
-	attach := func(cat, name string, prog *ebpf.Program) {
-		l, err := link.Tracepoint(cat, name, prog, nil)
-		if err != nil {
-			log.Fatalf("attach %s/%s: %v", cat, name, err)
-		}
-		links = append(links, l)
-	}
-
-	attach("syscalls", "sys_enter_bind", objs.TraceBindEnter)
-	attach("syscalls", "sys_exit_bind", objs.TraceBindExit)
-
-	attach("syscalls", "sys_enter_connect", objs.TraceConnectEnter)
-	attach("syscalls", "sys_exit_connect", objs.TraceConnectExit)
-
-	attach("syscalls", "sys_enter_accept4", objs.TraceAccept4Enter)
-	attach("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit)
-	attach("syscalls", "sys_enter_accept", objs.TraceAcceptEnter)
-	attach("syscalls", "sys_exit_accept", objs.TraceAcceptExit)
-
-	attach("syscalls", "sys_enter_close", objs.TraceCloseEnter)
-
-	attach("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter)
-	attach("syscalls", "sys_exit_sendto", objs.TraceSendtoExit)
-	attach("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter)
-	attach("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit)
-
-	attach("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter)
-	attach("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit)
-	attach("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter)
-	attach("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit)
-
-	if *flgMmsg {
-		attach("syscalls", "sys_enter_sendmmsg", objs.TraceSendmmsgEnter)
-		attach("syscalls", "sys_exit_sendmmsg", objs.TraceSendmmsgExit)
-		attach("syscalls", "sys_enter_recvmmsg", objs.TraceRecvmmsgEnter)
-		attach("syscalls", "sys_exit_recvmmsg", objs.TraceRecvmmsgExit)
-	}
-	if *flgRW {
-		attach("syscalls", "sys_enter_write", objs.TraceWriteEnter)
-		attach("syscalls", "sys_exit_write", objs.TraceWriteExit)
-		attach("syscalls", "sys_enter_read", objs.TraceReadEnter)
-		attach("syscalls", "sys_exit_read", objs.TraceReadExit)
-	}
-
-	// NEW: attach skb-out hint
-	attach("net", "net_dev_queue", objs.TraceNetDevQueue)
-
-	rd, perCPUBytes, err := openPerfReaderTotalBudget(objs.TraceEvents, *flgPerfMB)
-	if err != nil {
-		log.Fatalf("perf.NewReader: %v", err)
-	}
-	defer rd.Close()
-
-	log.Printf("perf ring per-cpu=%dKB total~=%dMB cpus=%d",
-		perCPUBytes/1024, (perCPUBytes*runtime.NumCPU())/(1024*1024), runtime.NumCPU())
-
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-
-	type evWrap struct {
-		ev  bpfTraceInfo
-		now time.Time
-	}
-
-	evCh := make(chan evWrap, 16384)
-
-	go func() {
-		defer close(evCh)
-		for {
-			rec, e := rd.Read()
-			if e != nil {
-				if errors.Is(e, perf.ErrClosed) {
-					return
-				}
-				continue
-			}
-			if rec.LostSamples != 0 {
-				total := atomic.AddUint64(&lostTotal, rec.LostSamples)
-				gen := atomic.AddUint64(&lostGen, 1)
-				log.Printf("PERF_LOST chunk=%d total=%d gen=%d", rec.LostSamples, total, gen)
-			}
-			if len(rec.RawSample) < int(unsafe.Sizeof(bpfTraceInfo{})) {
-				continue
-			}
-			ev := *(*bpfTraceInfo)(unsafe.Pointer(&rec.RawSample[0]))
-			evCh <- evWrap{ev: ev, now: time.Now()}
-		}
-	}()
-
-	flows := make(map[FlowKey]*Flow, 8192)
-	l3ByCookie := make(map[uint64]l3Info, 8192)
-
-	ticker := time.NewTicker(*flgSweep)
-	defer ticker.Stop()
-
-	log.Println("OPEN/CLOSE (TCP/UDP/ICMP) + PTR + skb-hint. Ctrl+C to exit")
-
-	shouldKeep := func(pid uint32, comm string) bool {
-		if comm == "" || comm == selfName {
-			return false
-		}
-		if *flgOnlyPID != 0 && int(pid) != *flgOnlyPID {
-			return false
-		}
-		if *flgOnlyComm != "" && !strings.Contains(comm, *flgOnlyComm) {
-			return false
-		}
-		return true
-	}
-
-	upgradeKeyIfNeeded := func(key FlowKey) (FlowKey, *Flow) {
-		if key.PeerMode != 1 {
-			return key, nil
-		}
-		if key.Proto != IPPROTO_UDP && key.Proto != IPPROTO_ICMP && key.Proto != IPPROTO_ICMPV6 {
-			return key, nil
-		}
-		base := key
-		base.PeerMode = 0
-		base.Rport = 0
-		base.Rscope = 0
-		for i := range base.Remote {
-			base.Remote[i] = 0
-		}
-		if fb := flows[base]; fb != nil {
-			delete(flows, base)
-			fb.Key = key
-			flows[key] = fb
-			return key, fb
-		}
-		return key, nil
-	}
-
-	closeByCookie := func(tgid uint32, cookie uint64, reason string) {
-		for k, f := range flows {
-			if k.TGID == tgid && k.Cookie == cookie {
-				// try l3 fill before printing
-				if h, ok := l3ByCookie[cookie]; ok {
-					applyL3HintToFlow(f, h)
-				}
-
-				if dropZeroFlow(f) {
-					delete(flows, k)
-					continue
-				}
-				if !f.OpenedPrinted && flowReadyToPrintOpen(f) {
-					printOpen(f)
-					f.OpenedPrinted = true
-				}
-				if f.OpenedPrinted {
-					printClose(f, reason)
-				}
-				delete(flows, k)
-			}
-		}
-	}
-
-	lastLost := uint64(0)
-	lastTick := time.Now()
-
-	for {
-		select {
-		case <-stop:
-			_ = rd.Close()
-			log.Printf("PERF_LOST_TOTAL total=%d gen=%d", atomic.LoadUint64(&lostTotal), atomic.LoadUint64(&lostGen))
-			for _, f := range flows {
-				if dropZeroFlow(f) {
-					continue
-				}
-				if f.OpenedPrinted {
-					printClose(f, "signal")
-				}
-			}
-			log.Println("Exiting...")
-			return
-
-		case <-ticker.C:
-			now := time.Now()
-
-			total := atomic.LoadUint64(&lostTotal)
-			delta := total - lastLost
-			dt := now.Sub(lastTick)
-			if delta > 0 {
-				log.Printf("PERF_LOST_RATE lost=%d in=%s total=%d gen=%d evCh=%d/%d flows=%d",
-					delta, dt.Truncate(time.Millisecond),
-					total, atomic.LoadUint64(&lostGen),
-					len(evCh), cap(evCh), len(flows),
-				)
-			}
-			lastLost = total
-			lastTick = now
-
-			if dnsr != nil && *flgResolveSweepEach > 0 {
-				dnsr.SweepExpired(*flgResolveSweepEach)
-			}
-
-			// sweep L3 hints
-			if *flgL3SweepEach > 0 {
-				n := 0
-				for c, h := range l3ByCookie {
-					if h.expired(now, *flgL3TTL) {
-						delete(l3ByCookie, c)
-						n++
-						if n >= *flgL3SweepEach {
-							break
-						}
-					}
-				}
-			}
-
-			// poke some flows for resolve + l3 fill
-			if *flgResolvePokeEach > 0 {
-				n := 0
-				for _, f := range flows {
-					if h, ok := l3ByCookie[f.Key.Cookie]; ok {
-						applyL3HintToFlow(f, h)
-					}
-					_ = remoteAliasCached(f)
-					n++
-					if n >= *flgResolvePokeEach {
-						break
-					}
-				}
-			}
-
-			// TTL sweep flows
-			for k, f := range flows {
-				if now.Sub(f.LastSeen) > *flgTTL {
-					if h, ok := l3ByCookie[f.Key.Cookie]; ok {
-						applyL3HintToFlow(f, h)
-					}
-					if dropZeroFlow(f) {
-						delete(flows, k)
-						continue
-					}
-					if !f.OpenedPrinted && flowReadyToPrintOpen(f) {
-						printOpen(f)
-						f.OpenedPrinted = true
-					}
-					if f.OpenedPrinted {
-						printClose(f, "idle")
-					}
-					delete(flows, k)
-				}
-			}
-
-		case w, ok := <-evCh:
-			if !ok {
-				return
-			}
-
-			ev := w.ev
-			evt := uint8(ev.Event)
-			proto := uint8(ev.Proto)
-			family := uint16(ev.Family)
-
-			// handle skb-out hint first (no printing, no comm filtering)
-			if evt == EV_SKB_OUT {
-				if !protoAllowed(proto) || (family != AF_INET && family != AF_INET6) || ev.Cookie == 0 {
-					continue
-				}
-				h := l3Info{
-					Family: family,
-					Proto:  proto,
-					Src:    srcKeyFromEvent(ev),
-					Sport:  uint16(ev.Sport),
-					SrcSc:  srcScopeFromEvent(ev),
-					Dst:    dstKeyFromEvent(ev),
-					Dport:  uint16(ev.Dport),
-					DstSc:  dstScopeFromEvent(ev),
-					Seen:   w.now,
-				}
-				l3ByCookie[ev.Cookie] = h
-				// also try to update existing flows with same cookie
-				for _, f := range flows {
-					if f.Key.Cookie == ev.Cookie {
-						applyL3HintToFlow(f, h)
-					}
-				}
-				continue
-			}
-
-			comm := commString(ev.Comm)
-			if !shouldKeep(ev.Tgid, comm) {
-				continue
-			}
-
-			if !protoAllowed(proto) {
-				continue
-			}
-			if family != AF_INET && family != AF_INET6 {
-				continue
-			}
-
-			if evt == EV_CLOSE {
-				closeByCookie(ev.Tgid, ev.Cookie, "close()")
-				continue
-			}
-
-			key := makeKey(ev)
-			key, upgraded := upgradeKeyIfNeeded(key)
-
-			f := flows[key]
-			if f == nil {
-				if upgraded != nil {
-					f = upgraded
-				} else {
-					f = &Flow{
-						Key:       key,
-						Comm:      comm,
-						FirstSeen: w.now,
-						LastSeen:  w.now,
-						GenStart:  atomic.LoadUint64(&lostGen),
-					}
-					flows[key] = f
-				}
-			}
-
-			f.LastSeen = w.now
-			applyEndpoints(f, ev)
-
-			// try fill local ip from skb hints
-			if h, ok := l3ByCookie[f.Key.Cookie]; ok {
-				applyL3HintToFlow(f, h)
-			}
-
-			// accounting
-			switch evt {
-			case EV_SENDMMSG:
-				if ev.Ret > 0 {
-					f.OutBytes += uint64(ev.Ret)
-				}
-				if ev.State > 0 {
-					f.OutPkts += uint64(ev.State)
-				} else {
-					f.OutPkts++
-				}
-			case EV_RECVMMSG:
-				if ev.Ret > 0 {
-					f.InBytes += uint64(ev.Ret)
-				}
-				if ev.State > 0 {
-					f.InPkts += uint64(ev.State)
-				} else {
-					f.InPkts++
-				}
-			default:
-				if isSend(evt) && ev.Ret > 0 {
-					f.OutBytes += uint64(ev.Ret)
-					f.OutPkts++
-				} else if isRecv(evt) && ev.Ret > 0 {
-					f.InBytes += uint64(ev.Ret)
-					f.InPkts++
-				}
-			}
-
-			if !f.OpenedPrinted && flowReadyToPrintOpen(f) {
-				printOpen(f)
-				f.OpenedPrinted = true
-			}
-		}
-	}
+SEC("tracepoint/syscalls/sys_exit_write")
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
+        goto cleanup;
+
+    struct write_args_t *wa = bpf_map_lookup_elem(&write_args_map, &id);
+    if (!wa)
+        goto cleanup;
+
+    /* ---- EV_WRITE (как у тебя) ---- */
+    struct trace_info info = {};
+    info.event = EV_WRITE;
+    info.fd    = wa->fd;
+    info.ret   = ret;
+
+    fill_ids_comm_cookie(&info, id, (int)wa->fd, wa->comm);
+
+    if (fill_from_fd_state_map(&info, tgid, (int)wa->fd, 1 /* send */) < 0)
+        goto cleanup;
+
+    loopback_fallback(&info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+    /* ---- TLS SNI accumulation (TCP client->server :443) ---- */
+    if (info.proto != IPPROTO_TCP)
+        goto cleanup;
+
+    if (info.dport != 443)
+        goto cleanup;
+
+    if (info.cookie == 0)
+        goto cleanup;
+
+    struct tls_acc_t *acc = bpf_map_lookup_elem(&tls_acc_map, &info.cookie);
+    if (!acc) {
+        struct tls_acc_t init = {};
+        init.ts_ns = bpf_ktime_get_ns();
+        bpf_map_update_elem(&tls_acc_map, &info.cookie, &init, BPF_ANY);
+        acc = bpf_map_lookup_elem(&tls_acc_map, &info.cookie);
+    }
+    if (!acc || acc->done)
+        goto cleanup;
+
+    __u32 avail = (__u32)ret;
+    if (wa->cnt < (__u64)avail)
+        avail = (__u32)wa->cnt;
+
+    tls_acc_append(acc, wa->buf, avail);
+
+    if (acc->len >= 64) {
+        char sni[SNI_MAX] = {};
+        int sni_len = tls_extract_sni(acc->buf, acc->len, sni);
+
+        if (sni_len > 0) {
+            struct tls_sni_event se = {};
+            se.ts_ns   = bpf_ktime_get_ns();
+            se.cookie  = info.cookie;
+            se.tgid    = tgid;
+            se.tid     = (__u32)id;
+            se.fd      = wa->fd;
+
+            se.family  = info.family;
+            se.sport   = info.sport;
+            se.dport   = info.dport;
+            se.proto   = IPPROTO_TCP;
+            se.event   = EV_TLS_SNI;
+            se.sni_len = (__u16)sni_len;
+
+            se.src_ip4 = info.src_ip4;
+            se.dst_ip4 = info.dst_ip4;
+            __builtin_memcpy(se.src_ip6, info.src_ip6, 16);
+            __builtin_memcpy(se.dst_ip6, info.dst_ip6, 16);
+
+            __builtin_memcpy(se.comm, wa->comm, sizeof(se.comm));
+            __builtin_memcpy(se.sni, sni, SNI_MAX);
+
+            bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &se, sizeof(se));
+
+            acc->done = 1;
+            bpf_map_delete_elem(&tls_acc_map, &info.cookie);
+        } else if (acc->len >= TLS_ACC_MAX) {
+            acc->done = 1;
+            bpf_map_delete_elem(&tls_acc_map, &info.cookie);
+        }
+    }
+
+cleanup:
+    bpf_map_delete_elem(&write_args_map, &id);
+    return 0;
 }
