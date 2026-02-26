@@ -867,3 +867,10 @@ cleanup:
     bpf_map_delete_elem(&conn_info_map, &id);
     return 0;
 }
+
+
+
+lev@lev-VirtualBox:~/bpfgo$ sudo bpftool map show |grep tls_peek -n
+48:187: percpu_array  name tls_peek_scratc  flags 0x0
+51:188: lru_hash  name tls_peek_map  flags 0x0
+lev@lev-VirtualBox:~/bpfgo$ sudo bpftool map dump id 188
