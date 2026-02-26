@@ -704,10 +704,7 @@ sudo strace -f -e trace=sendmsg,write -p <PID>
 
 
 
-/* ===================== KERNEL-ONLY SNI FROM write() (Variant A) ===================== */
-/* Parses TLS ClientHello SNI from a single write() buffer and stores into sni_map.
- * No perf/ringbuf/userspace output for SNI.
- */
+/* ===================== KERNEL-ONLY SNI FROM write() (Variant A, NO userspace) ===================== */
 
 #define SNI_MAX       64
 #define TLS_SCAN_MAX  512
@@ -721,10 +718,14 @@ struct write_args_t {
 };
 
 struct sni_val_t {
-    __u8  found;   // 1 if found
-    __u8  len;     // hostname length (clamped)
+    __u8  found;
+    __u8  len;
     __u16 _pad;
     char  name[SNI_MAX];
+};
+
+struct tls_scratch_t {
+    __u8 data[TLS_SCAN_MAX];
 };
 
 /* pid_tgid -> write args */
@@ -743,7 +744,15 @@ struct {
     __type(value, struct sni_val_t);
 } sni_map SEC(".maps");
 
-/* ---- bounded TLS SNI parser ---- */
+/* per-cpu scratch for TLS_SCAN_MAX bytes (removes 512B from stack) */
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, struct tls_scratch_t);
+} tls_scratch_map SEC(".maps");
+
+/* ---- bounded TLS SNI parser (NO memcpy/memset) ---- */
 
 static __always_inline __u16 rd_u16be(const __u8 *p)
 {
@@ -755,129 +764,92 @@ static __always_inline __u32 rd_u24be(const __u8 *p)
     return ((__u32)p[0] << 16) | ((__u32)p[1] << 8) | p[2];
 }
 
-/* Returns 0 if SNI extracted into out, else -1 */
 static __always_inline int try_parse_sni(const __u8 *b, __u32 n, struct sni_val_t *out)
 {
-    /* TLS record header: type(1)=0x16, ver(2), len(2) */
-    if (n < 5)
-        return -1;
-    if (b[0] != 0x16)
-        return -1; /* not Handshake record */
+    if (n < 5) return -1;
+    if (b[0] != 0x16) return -1; /* TLS Handshake record */
 
     __u16 rec_len = rd_u16be(&b[3]);
-    if ((__u32)rec_len + 5 > n)
-        return -1; /* record not fully inside this chunk */
+    if ((__u32)rec_len + 5 > n) return -1; /* record not fully in this chunk */
 
     __u32 p = 5;
 
-    /* Handshake: msg_type(1)=0x01, len(3) */
-    if (p + 4 > n)
-        return -1;
-    if (b[p] != 0x01)
-        return -1; /* not ClientHello */
+    /* Handshake header */
+    if (p + 4 > n) return -1;
+    if (b[p] != 0x01) return -1; /* ClientHello */
     __u32 hs_len = rd_u24be(&b[p + 1]);
     p += 4;
-    if (p + hs_len > n)
-        return -1;
+    if (p + hs_len > n) return -1;
 
-    /* ClientHello:
-     * legacy_version(2) + random(32)
-     */
-    if (p + 2 + 32 > n)
-        return -1;
+    /* legacy_version + random */
+    if (p + 2 + 32 > n) return -1;
     p += 2 + 32;
 
     /* session_id */
-    if (p + 1 > n)
-        return -1;
-    __u8 sid_len = b[p];
-    p += 1;
-    if (p + sid_len > n)
-        return -1;
+    if (p + 1 > n) return -1;
+    __u8 sid_len = b[p]; p += 1;
+    if (p + sid_len > n) return -1;
     p += sid_len;
 
     /* cipher_suites */
-    if (p + 2 > n)
-        return -1;
-    __u16 cs_len = rd_u16be(&b[p]);
-    p += 2;
-    if (p + cs_len > n)
-        return -1;
+    if (p + 2 > n) return -1;
+    __u16 cs_len = rd_u16be(&b[p]); p += 2;
+    if (p + cs_len > n) return -1;
     p += cs_len;
 
     /* compression_methods */
-    if (p + 1 > n)
-        return -1;
-    __u8 comp_len = b[p];
-    p += 1;
-    if (p + comp_len > n)
-        return -1;
+    if (p + 1 > n) return -1;
+    __u8 comp_len = b[p]; p += 1;
+    if (p + comp_len > n) return -1;
     p += comp_len;
 
     /* extensions */
-    if (p + 2 > n)
-        return -1;
-    __u16 ext_len = rd_u16be(&b[p]);
-    p += 2;
-    if (p + ext_len > n)
-        return -1;
+    if (p + 2 > n) return -1;
+    __u16 ext_len = rd_u16be(&b[p]); p += 2;
+    if (p + ext_len > n) return -1;
 
     __u32 ext_end = p + ext_len;
 
 #pragma clang loop unroll(full)
     for (int step = 0; step < MAX_EXT_STEPS; step++) {
-        if (p + 4 > ext_end)
-            break;
+        if (p + 4 > ext_end) break;
 
         __u16 etype = rd_u16be(&b[p]);
         __u16 elen  = rd_u16be(&b[p + 2]);
         p += 4;
 
-        if (p + elen > ext_end)
-            break;
+        if (p + elen > ext_end) break;
 
         if (etype == 0x0000) { /* server_name */
-            if (elen < 2)
-                return -1;
+            if (elen < 2) return -1;
 
             __u32 q = p;
 
-            /* server_name_list length */
-            __u16 list_len = rd_u16be(&b[q]);
-            q += 2;
-            if (q + list_len > p + elen)
-                return -1;
+            __u16 list_len = rd_u16be(&b[q]); q += 2;
+            if (q + list_len > p + elen) return -1;
 
-            /* first entry: name_type(1), name_len(2), name */
-            if (q + 3 > p + elen)
-                return -1;
+            if (q + 3 > p + elen) return -1;
+            __u8  name_type = b[q]; q += 1;
+            __u16 name_len  = rd_u16be(&b[q]); q += 2;
 
-            __u8  name_type = b[q];
-            q += 1;
-
-            __u16 name_len = rd_u16be(&b[q]);
-            q += 2;
-
-            if (name_type != 0)
-                return -1;
-            if (q + name_len > p + elen)
-                return -1;
+            if (name_type != 0) return -1;
+            if (q + name_len > p + elen) return -1;
 
             __u32 copy = name_len;
-            if (copy >= SNI_MAX)
-                copy = SNI_MAX - 1;
+            if (copy >= SNI_MAX) copy = SNI_MAX - 1;
 
-            __builtin_memset(out, 0, sizeof(*out));
             out->found = 1;
             out->len   = (__u8)copy;
 
+            /* Bounded copy WITHOUT break (prevents clang -> memcpy) */
 #pragma clang loop unroll(full)
             for (int i = 0; i < SNI_MAX; i++) {
-                if (i >= (int)copy)
-                    break;
-                out->name[i] = (char)b[q + i];
+                if (i < (int)copy)
+                    out->name[i] = (char)b[q + i];
+                else
+                    out->name[i] = 0;
             }
-            out->name[copy] = 0;
+            out->name[SNI_MAX - 1] = 0;
             return 0;
         }
 
@@ -887,7 +859,7 @@ static __always_inline int try_parse_sni(const __u8 *b, __u32 n, struct sni_val_
     return -1;
 }
 
-/* ===================== write() enter/exit (replace yours with these) ===================== */
+/* ===================== write() enter/exit (replace your versions) ===================== */
 
 SEC("tracepoint/syscalls/sys_enter_write")
 int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
@@ -899,7 +871,7 @@ int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
     if (!is_socket_fd(fd))
         return 0;
 
-    /* save write args for exit */
+    /* save args for exit */
     struct write_args_t wa = {};
     wa.fd    = (__u32)fd;
     wa.buf   = (__u64)ctx->args[1];
@@ -930,7 +902,7 @@ int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
     if (!ci)
         goto cleanup;
 
-    /* your existing userspace event for WRITE stays as-is */
+    /* Your existing perf event (WRITE) stays */
     struct trace_info info = {};
     info.event = EV_WRITE;
     info.fd    = ci->fd;
@@ -945,17 +917,19 @@ int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
     if (info.proto == IPPROTO_TCP && (info.dport == 443 || info.sport == 443)) {
         struct write_args_t *wa = bpf_map_lookup_elem(&write_args_map, &id);
         if (wa && wa->buf) {
-            __u8 buf[TLS_SCAN_MAX] = {};
-            __u32 n = (__u32)ret;
-            if (n > TLS_SCAN_MAX)
-                n = TLS_SCAN_MAX;
+            __u32 k0 = 0;
+            struct tls_scratch_t *sc = bpf_map_lookup_elem(&tls_scratch_map, &k0);
+            if (sc) {
+                __u32 n = (__u32)ret;
+                if (n > TLS_SCAN_MAX) n = TLS_SCAN_MAX;
 
-            if (bpf_probe_read_user(buf, n, (void *)wa->buf) == 0) {
-                struct sni_val_t sni = {};
-                if (try_parse_sni(buf, n, &sni) == 0 && sni.found) {
-                    __u64 ck = cookie_from_fd((int)wa->fd);
-                    if (ck)
-                        bpf_map_update_elem(&sni_map, &ck, &sni, BPF_ANY);
+                if (bpf_probe_read_user(sc->data, n, (void *)wa->buf) == 0) {
+                    struct sni_val_t sni = {};
+                    if (try_parse_sni(sc->data, n, &sni) == 0 && sni.found) {
+                        __u64 ck = cookie_from_fd((int)wa->fd);
+                        if (ck)
+                            bpf_map_update_elem(&sni_map, &ck, &sni, BPF_ANY);
+                    }
                 }
             }
         }
@@ -969,61 +943,8 @@ cleanup:
     bpf_map_delete_elem(&conn_info_map, &id);
     return 0;
 }
+
 /* ===================== END KERNEL-ONLY SNI FROM write() ===================== */
 
 
 
-ev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
-./trace.c:1615:30: error: A call to built-in function 'memcpy' is not supported.
-                out->name[i] = (char)b[q + i];
-                             ^
-./trace.c:1657:5: note: could not determine the original source location for ./trace.c:0:0
-int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
-    ^
-./trace.c:1657:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
-    ^
-./trace.c:1657:5: note: could not determine the original source location for ./trace.c:0:0
-./trace.c:1657:5: note: could not determine the original source location for ./trace.c:0:0
-./trace.c:1657:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
-    ^
-./trace.c:1657:5: note: could not determine the original source location for ./trace.c:0:0
-./trace.c:1657:5: note: could not determine the original source location for ./trace.c:0:0
-./trace.c:1657:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
-    ^
-./trace.c:1657:5: note: could not determine the original source location for ./trace.c:0:0
-./trace.c:705:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-    info->cookie = cookie_from_fd(fd);
-                 ^
-./trace.c:705:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-./trace.c:705:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-./trace.c:705:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-./trace.c:705:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-./trace.c:708:9: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-        __builtin_memcpy(info->comm, comm64_opt, sizeof(info->comm));
-        ^
-./trace.c:705:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-    info->cookie = cookie_from_fd(fd);
-                 ^
-./trace.c:708:9: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-        __builtin_memcpy(info->comm, comm64_opt, sizeof(info->comm));
-        ^
-./trace.c:1678:54: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
-                                                     ^
-./trace.c:643:25: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-    struct fd_key_t k = { .tgid = tgid, .fd = fd };
-                        ^
-./trace.c:645:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-    struct fd_state_t tmp = {};
-                      ^
-./trace.c:645:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-./trace.c:645:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-./trace.c:645:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-./trace.c:645:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
-fatal error: too many errors emitted, stopping now [-ferror-limit=]
-20 errors generated.
-Error: compile: exit status 1
-lev@lev-VirtualBox:~/bpfgo$ 
