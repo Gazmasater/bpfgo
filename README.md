@@ -870,7 +870,4 @@ cleanup:
 
 
 
-lev@lev-VirtualBox:~/bpfgo$ sudo bpftool map show |grep tls_peek -n
-48:187: percpu_array  name tls_peek_scratc  flags 0x0
-51:188: lru_hash  name tls_peek_map  flags 0x0
-lev@lev-VirtualBox:~/bpfgo$ sudo bpftool map dump id 188
+lopenssl s_client -connect example.com:443 -servername example.com </dev/null >/dev/null
