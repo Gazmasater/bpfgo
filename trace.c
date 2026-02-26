@@ -57,6 +57,9 @@
 #define CMSG_ALIGN(len) (((len) + sizeof(__u64) - 1) & ~(sizeof(__u64) - 1))
 #define EV_SKB_OUT 40
 
+#define TLS_PEEK_MAX 256
+
+
 struct tp_net_dev_queue {
     __u16 common_type;
     __u8  common_flags;
@@ -139,6 +142,31 @@ const struct trace_info *unused __attribute__((unused));
 
 /* ---- userspace ABI (amd64) ---- */
 
+
+struct write_args_t {
+    __u32 fd;
+    __u32 _pad;
+    __u64 buf;   // user pointer
+    __u64 cnt;   // requested count
+};
+
+struct tls_peek_t {
+    __u64 ts_ns;
+    __u32 tgid;
+    __u32 tid;
+    __u32 fd;
+    __u32 len;
+
+    __u16 sport;
+    __u16 dport;
+    __u8  proto;
+    __u8  _pad[3];
+
+    __u8  data[TLS_PEEK_MAX];
+};
+
+
+
 struct user_msghdr64 {
     __u64 msg_name;       // void*
     __u32 msg_namelen;    // socklen_t (fits)
@@ -210,6 +238,29 @@ struct mmsg_ptrvlen_t {
 };
 
 /* ====== maps ====== */
+
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 16384);
+    __type(key, __u64);              // pid_tgid
+    __type(value, struct write_args_t);
+} write_args_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    __uint(max_entries, 65536);
+    __type(key, __u64);              // cookie
+    __type(value, struct tls_peek_t);
+} tls_peek_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, struct tls_peek_t);
+} tls_peek_scratch SEC(".maps");
+
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
@@ -1154,15 +1205,29 @@ cleanup:
 
 /* ====== sendmsg ====== */
 
+/* ===== sendmsg(): EV_SENDMSG + TLS peek into tls_peek_map (LRU), verifier-friendly =====
+ *
+ * Uses:
+ *  - msgSend_map: pid_tgid -> user msghdr*
+ *  - tls_peek_scratch: per-cpu tls_peek_t
+ *  - tls_peek_map: cookie -> tls_peek_t
+ *
+ * Assumes:
+ *  - TLS_PEEK_MAX = 256 (power of two)
+ *  - struct user_msghdr64 already defined
+ *  - struct tls_peek_t / tls_peek_map / tls_peek_scratch already defined (as in write)
+ */
+
+
 SEC("tracepoint/syscalls/sys_enter_sendmsg")
 int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx)
 {
-    __u64 id = bpf_get_current_pid_tgid();
+    __u64 id   = bpf_get_current_pid_tgid();
     __u32 tgid = id >> 32;
 
     struct conn_info_t ci = {};
     ci.tgid = tgid;
-    ci.fd = (__u32)ctx->args[0];
+    ci.fd   = (__u32)ctx->args[0];
     bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
     bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
 
@@ -1176,7 +1241,7 @@ int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx)
 SEC("tracepoint/syscalls/sys_exit_sendmsg")
 int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
 {
-    __u64 id = bpf_get_current_pid_tgid();
+    __u64 id   = bpf_get_current_pid_tgid();
     __u32 tgid = id >> 32;
 
     __s64 ret = 0;
@@ -1187,10 +1252,11 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (!ci)
         goto cleanup;
 
+    /* ===== EV_SENDMSG (as before) ===== */
     struct trace_info info = {};
     info.event = EV_SENDMSG;
-    info.fd = ci->fd;
-    info.ret = ret;
+    info.fd    = ci->fd;
+    info.ret   = ret;
 
     fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
 
@@ -1211,6 +1277,65 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
 
     loopback_fallback(&info, 1);
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+    /* ===== TLS peek (no userspace parsing) ===== */
+    // (info.dport == 443 || info.sport == 443))
+    if (info.cookie && info.proto == IPPROTO_TCP ) {
+
+        /* read msghdr again (safe, bounded) */
+        __u64 *msgp2 = bpf_map_lookup_elem(&msgSend_map, &id);
+        if (msgp2 && *msgp2) {
+            struct user_msghdr64 mh2 = {};
+            if (read_msghdr64(*msgp2, &mh2) == 0) {
+
+                if (mh2.msg_iov && mh2.msg_iovlen) {
+                    /* read first iovec only */
+                    struct user_iovec64 iv0 = {};
+                    if (bpf_probe_read_user(&iv0, sizeof(iv0), (void *)(unsigned long)mh2.msg_iov) == 0) {
+
+                        /* bytes to copy: clamp syscall ret to 1..255 (verifier-friendly) */
+                        __u32 n = (__u32)ret;
+                        n &= (TLS_PEEK_MAX - 1);          /* 0..255 */
+                        if (n == 0) n = TLS_PEEK_MAX - 1; /* 255 (fix ret%256==0) */
+
+                        /* additionally clamp by iov_len (also 1..255) */
+                        __u32 ilen = (__u32)iv0.iov_len;
+                        ilen &= (TLS_PEEK_MAX - 1);
+                        if (ilen == 0) ilen = TLS_PEEK_MAX - 1;
+
+                        if (n > ilen) n = ilen;
+
+                        if (iv0.iov_base && n) {
+                            __u32 zero = 0;
+                            struct tls_peek_t *v = bpf_map_lookup_elem(&tls_peek_scratch, &zero);
+                            if (v) {
+                                __builtin_memset(v, 0, sizeof(*v));
+
+                                v->ts_ns = bpf_ktime_get_ns();
+                                v->tgid  = tgid;
+                                v->tid   = (__u32)id;
+                                v->fd    = ci->fd;
+                                v->len   = n;
+
+                                v->proto = info.proto;
+                                v->sport = info.sport;
+                                v->dport = info.dport;
+
+                                if (bpf_probe_read_user(v->data, n, (void *)(unsigned long)iv0.iov_base) == 0) {
+                                    /* OPTIONAL: keep only TLS Handshake records (ClientHello): */
+                                    /* if (v->data[0] != 0x16) goto done_peek; */
+
+                                    __u64 cookie = info.cookie;
+                                    bpf_map_update_elem(&tls_peek_map, &cookie, v, BPF_ANY);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+/*done_peek: ;*/
 
 cleanup:
     bpf_map_delete_elem(&msgSend_map, &id);
@@ -1449,50 +1574,8 @@ cleanup:
  *  - we accept TCP where sport==443 OR dport==443 (client/server)
  */
 
-#define TLS_PEEK_MAX 256
 
-struct write_args_t {
-    __u32 fd;
-    __u32 _pad;
-    __u64 buf;   // user pointer
-    __u64 cnt;   // requested count
-};
 
-struct tls_peek_t {
-    __u64 ts_ns;
-    __u32 tgid;
-    __u32 tid;
-    __u32 fd;
-    __u32 len;
-
-    __u16 sport;
-    __u16 dport;
-    __u8  proto;
-    __u8  _pad[3];
-
-    __u8  data[TLS_PEEK_MAX];
-};
-
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 16384);
-    __type(key, __u64);              // pid_tgid
-    __type(value, struct write_args_t);
-} write_args_map SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_LRU_HASH);
-    __uint(max_entries, 65536);
-    __type(key, __u64);              // cookie
-    __type(value, struct tls_peek_t);
-} tls_peek_map SEC(".maps");
-
-struct {
-    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
-    __uint(max_entries, 1);
-    __type(key, __u32);
-    __type(value, struct tls_peek_t);
-} tls_peek_scratch SEC(".maps");
 
 
 SEC("tracepoint/syscalls/sys_enter_write")
