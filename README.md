@@ -708,6 +708,9 @@ sudo ss -tnp | grep "pid=3215"
 sudo strace -ff -p 3215 -e trace=write,writev,sendmsg,sendmmsg -s 0 2>&1 \
  | egrep ' (write|writev|sendmsg|sendmmsg)\((22|108|127|109|129|124|107|112),'
 
+ sudo bpftool map show | grep -n "tls_peek"
+ sudo bpftool map dump id <ID>
+
 
 
 while true; do
