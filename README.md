@@ -1057,3 +1057,17 @@ cleanup:
     bpf_map_delete_elem(&write_args_map, &id);
     return 0;
 }
+
+
+
+
+lev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -type tls_sni_event  -go-package=main -ta
+rget amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+/home/lev/bpfgo/trace.c:1515:30: error: redefinition of 'min_u32'
+static __always_inline __u32 min_u32(__u32 a, __u32 b) { return a < b ? a : b; }
+                             ^
+/home/lev/bpfgo/trace.c:333:30: note: previous definition is here
+static __always_inline __u32 min_u32(__u32 a, __u32 b) { return a < b ? a : b; }
+                             ^
+1 error generated.
+Error: compile: exit status 1
