@@ -1017,3 +1017,25 @@ cleanup:
 }
 
 /* ===================== END WRITE ===================== */
+
+
+
+lev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+/home/lev/bpfgo/trace.c:1760:5: error: redefinition of 'trace_write_enter'
+int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
+    ^
+/home/lev/bpfgo/trace.c:1676:5: note: previous definition is here
+int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
+    ^
+/home/lev/bpfgo/trace.c:1785:5: error: redefinition of 'trace_write_exit'
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+/home/lev/bpfgo/trace.c:1701:5: note: previous definition is here
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+/home/lev/bpfgo/trace.c:1821:25: warning: implicit declaration of function 'try_parse_sni_cap' is invalid in C99 [-Wimplicit-function-declaration]
+                    if (try_parse_sni_cap(sc->data, n, cap, &sni) == 0 && sni.found) {
+                        ^
+1 warning and 2 errors generated.
+Error: compile: exit status 1
+lev@lev-VirtualBox:~/bpfgo$ 
