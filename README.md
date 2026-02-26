@@ -704,247 +704,211 @@ sudo strace -f -e trace=sendmsg,write -p <PID>
 
 
 
-/* ===================== WRITE + TLS SNI (FULL) ===================== */
+#define TLS_ACC_MAX 2048
+#define TLS_SNI_MAX 64      // <= 63 chars + '\0' (без warning)
+#define EV_TLS_SNI  50
 
-/* event id */
-#ifndef EV_TLS_SNI
-#define EV_TLS_SNI  60
-#endif
-
-/* limits */
-#define TLS_ACC_MAX   2048   /* 1–2KB, как ты хотел */
-#define TLS_SNI_MAX    256   /* max hostname bytes incl. \0 */
-#define ACC_COPY_STEP   64   /* chunk size for bounded copy */
-#define TLS_PARSE_STEPS 64   /* bounded ext scan steps */
-
-/* userspace ABI: write args */
-struct write_args_t {
-    __s32 fd;
-    __u32 _pad;
-    __u64 buf;   /* user ptr */
-    __u64 cnt;   /* size_t */
-};
-
-/* TLS accumulator (cookie -> first bytes of stream) */
 struct tls_acc_t {
-    __u32 len;
-    __u32 _pad;
-    __u64 ts_ns;
-    __u8  data[TLS_ACC_MAX];
+    __u32 len;     // bytes accumulated
+    __u8  done;    // 1 if sni already emitted / parsing finished
+    __u8  _pad[3];
+    __u8  buf[TLS_ACC_MAX];
 };
 
+struct tls_sni_event {
+    __u64 ts_ns;
+    __u64 cookie;
+    __u32 tgid;
+    __u32 tid;
+    __u16 family;
+    __u8  proto;
+    __u8  _pad0;
+    char  comm[16];
+    char  sni[TLS_SNI_MAX];
+};
+
+const struct tls_sni_event *unused_sni __attribute__((unused));
 
 
-/* ---- maps ---- */
+struct write_enter_t {
+    __s32 fd;
+    __u32 _pad0;
+    __u64 buf;    // user pointer
+    __u64 count;  // user count
+};
 
-/* pid_tgid -> write args */
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 16384);
-    __type(key, __u64);
-    __type(value, struct write_args_t);
-} write_args_map SEC(".maps");
+    __type(key, __u64);                 // pid_tgid
+    __type(value, struct write_enter_t);
+} write_enter_map SEC(".maps");
 
-/* cookie -> tls accumulator */
 struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
     __uint(max_entries, 65536);
-    __type(key, __u64);
+    __type(key, __u64);                 // cookie
     __type(value, struct tls_acc_t);
 } tls_acc_map SEC(".maps");
 
-/* perf events for TLS SNI */
 struct {
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
     __uint(max_entries, 128);
 } tls_events SEC(".maps");
 
-/* scratch per-cpu to avoid stack overflow */
-struct scratch_t {
-    struct trace_info    info;
-    struct tls_sni_event sni;
-};
 
-struct {
-    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
-    __uint(max_entries, 1);
-    __type(key, __u32);
-    __type(value, struct scratch_t);
-} scratch_map SEC(".maps");
 
-/* zero const (NO volatile) */
-const struct tls_acc_t zero_tls_acc = {};
 
-/* ---- small bounded helpers (NO memcpy/memset builtins) ---- */
-
-static __always_inline __u8 rd_u8_acc(const struct tls_acc_t *a, __u32 i)
+static __always_inline void zero_sni(char out[TLS_SNI_MAX])
 {
-    if (!a || i >= a->len) return 0;
-    return a->data[i];
-}
-
-static __always_inline __u16 rd_be16_acc(const struct tls_acc_t *a, __u32 i)
-{
-    __u16 hi = rd_u8_acc(a, i);
-    __u16 lo = rd_u8_acc(a, i + 1);
-    return (__u16)((hi << 8) | lo);
-}
-
-static __always_inline __u32 rd_be24_acc(const struct tls_acc_t *a, __u32 i)
-{
-    __u32 b0 = rd_u8_acc(a, i);
-    __u32 b1 = rd_u8_acc(a, i + 1);
-    __u32 b2 = rd_u8_acc(a, i + 2);
-    return (b0 << 16) | (b1 << 8) | b2;
-}
-
-/* bounded copy from user into accumulator (avoid variable-size probe_read) */
-static __always_inline void acc_copy_user(struct tls_acc_t *a, __u64 uptr, __u32 off, __u32 n)
-{
-    if (!a || !uptr || n == 0) return;
-    if (off >= TLS_ACC_MAX) return;
-    if (n > TLS_ACC_MAX - off) n = TLS_ACC_MAX - off;
-
 #pragma clang loop unroll(full)
-    for (int step = 0; step < (TLS_ACC_MAX / ACC_COPY_STEP); step++) {
-        __u32 base = (__u32)step * ACC_COPY_STEP;
-        if (base >= n) break;
-
-        __u32 want = n - base;
-        if (want > ACC_COPY_STEP) want = ACC_COPY_STEP;
-
-        /* copy fixed 64 bytes, but only "want" is valid;
-           still safe because we cap to TLS_ACC_MAX and user ptr range is checked by helper */
-        bpf_probe_read_user(&a->data[off + base], want, (void *)(uptr + base));
-    }
+    for (int i = 0; i < TLS_SNI_MAX; i++) out[i] = 0;
 }
 
-/* parse SNI from TLS ClientHello, write into out[TLS_SNI_MAX] (out must be zeroed) */
-static __always_inline int tls_try_parse_sni_into(const struct tls_acc_t *a, char out[TLS_SNI_MAX])
+
+
+
+static __always_inline int tls_try_parse_sni(const struct tls_acc_t *a, char out[TLS_SNI_MAX])
 {
-    if (!a) return -1;
-    if (a->len < 5) return -1;
+    zero_sni(out);
 
-    /* TLS record header */
-    __u8 ct = rd_u8_acc(a, 0);
-    if (ct != 22) return -1;              /* handshake */
+    __u32 n = a->len;
+    if (n < 5) return 0;
 
-    __u16 rec_len = rd_be16_acc(a, 3);
-    if (rec_len < 4) return -1;
-    if (5 + (__u32)rec_len > a->len) return -1;
+    // TLS record header
+    __u8 ct = rd_acc_u8(a, 0);
+    __u16 ver = ((__u16)rd_acc_u8(a, 1) << 8) | rd_acc_u8(a, 2);
+    __u16 rlen = ((__u16)rd_acc_u8(a, 3) << 8) | rd_acc_u8(a, 4);
 
-    /* handshake header */
-    __u8 hs_type = rd_u8_acc(a, 5);
-    if (hs_type != 1) return -1;          /* ClientHello */
+    if (ct != 22) return 0;                       // handshake
+    if (ver < 0x0301 || ver > 0x0304) return 0;   // TLS1.0..1.3 record
+    if (5u + (__u32)rlen > n) return 0;
 
-    __u32 hs_len = rd_be24_acc(a, 6);
-    if (hs_len < 42) return -1;
-    if (9 + hs_len > a->len) return -1;
+    // Handshake header
+    if (n < 9) return 0;
+    __u8 hs = rd_acc_u8(a, 5);
+    if (hs != 1) return 0; // client_hello
+
+    __u32 hlen = ((__u32)rd_acc_u8(a, 6) << 16) | ((__u32)rd_acc_u8(a, 7) << 8) | rd_acc_u8(a, 8);
+    if (9u + hlen > 5u + rlen) return 0;
 
     __u32 p = 9;
 
-    /* client_version(2) + random(32) */
-    p += 2 + 32;
-    if (p + 1 > a->len) return -1;
+    // client_version(2) + random(32)
+    if (p + 34 > n) return 0;
+    p += 34;
 
-    /* session_id */
-    __u8 sid_len = rd_u8_acc(a, p); p += 1;
-    p += sid_len;
-    if (p + 2 > a->len) return -1;
+    // session_id
+    if (p + 1 > n) return 0;
+    __u8 sid = rd_acc_u8(a, p); p += 1;
+    if (p + sid > n) return 0;
+    p += sid;
 
-    /* cipher_suites */
-    __u16 cs_len = rd_be16_acc(a, p); p += 2;
-    p += cs_len;
-    if (p + 1 > a->len) return -1;
+    // cipher_suites
+    if (p + 2 > n) return 0;
+    __u16 cslen = ((__u16)rd_acc_u8(a, p) << 8) | rd_acc_u8(a, p + 1);
+    p += 2;
+    if (p + cslen > n) return 0;
+    p += cslen;
 
-    /* compression_methods */
-    __u8 comp_len = rd_u8_acc(a, p); p += 1;
-    p += comp_len;
-    if (p + 2 > a->len) return -1;
+    // compression_methods
+    if (p + 1 > n) return 0;
+    __u8 cmlen = rd_acc_u8(a, p); p += 1;
+    if (p + cmlen > n) return 0;
+    p += cmlen;
 
-    /* extensions */
-    __u16 ext_len = rd_be16_acc(a, p); p += 2;
-    if (p + ext_len > a->len) return -1;
+    // extensions length
+    if (p + 2 > n) return 0;
+    __u16 extlen = ((__u16)rd_acc_u8(a, p) << 8) | rd_acc_u8(a, p + 1);
+    p += 2;
+    if (p + extlen > n) return 0;
 
-    __u32 ext_end = p + ext_len;
+    __u32 ext_end = p + extlen;
 
+    // scan extensions (fixed steps, no break)
+    int done = 0;
 #pragma clang loop unroll(full)
-    for (int step = 0; step < TLS_PARSE_STEPS; step++) {
-        if (p + 4 > ext_end) break;
+    for (int step = 0; step < 16; step++) {
+        if (done) {
+            // no-op
+        } else if (p + 4 > ext_end) {
+            done = 1;
+        } else {
+            __u16 et = ((__u16)rd_acc_u8(a, p) << 8) | rd_acc_u8(a, p + 1);
+            __u16 el = ((__u16)rd_acc_u8(a, p + 2) << 8) | rd_acc_u8(a, p + 3);
+            p += 4;
 
-        __u16 et = rd_be16_acc(a, p);
-        __u16 el = rd_be16_acc(a, p + 2);
-        p += 4;
+            if (p + el > ext_end) {
+                done = 1;
+            } else if (et == 0 && el >= 2) {
+                // server_name
+                __u32 q = p;
 
-        if (p + el > ext_end) break;
+                __u16 list_len = ((__u16)rd_acc_u8(a, q) << 8) | rd_acc_u8(a, q + 1);
+                q += 2;
+                if (q + list_len > p + el) {
+                    done = 1;
+                } else if (q + 3 > p + el) {
+                    done = 1;
+                } else {
+                    __u8 name_type = rd_acc_u8(a, q); q += 1;
+                    __u16 name_len = ((__u16)rd_acc_u8(a, q) << 8) | rd_acc_u8(a, q + 1);
+                    q += 2;
 
-        /* server_name extension */
-        if (et == 0x0000) {
-            if (el < 2) return -1;
+                    if (name_type != 0) {
+                        done = 1;
+                    } else if (q + name_len > p + el) {
+                        done = 1;
+                    } else {
+                        __u32 copy = name_len;
+                        if (copy > (TLS_SNI_MAX - 1)) copy = TLS_SNI_MAX - 1;
 
-            __u16 list_len = rd_be16_acc(a, p);
-            __u32 q = p + 2;
-            __u32 list_end = p + 2 + list_len;
-            __u32 hard_end = p + el;
-            if (list_end > hard_end) list_end = hard_end;
-
-            if (q + 3 > list_end) return -1;
-
-            __u8  nt = rd_u8_acc(a, q); q += 1;     /* name_type */
-            __u16 nl = rd_be16_acc(a, q); q += 2;   /* name_len */
-
-            if (nt != 0) return -1;                 /* host_name */
-            if (q + nl > list_end) return -1;
-
-            __u32 copy = nl;
-            if (copy > (TLS_SNI_MAX - 1)) copy = TLS_SNI_MAX - 1;
-
+                        // copy fixed 63 bytes (no big loops)
 #pragma clang loop unroll(full)
-            for (int i = 0; i < TLS_SNI_MAX - 1; i++) {
-                if ((__u32)i >= copy) break;
-                out[i] = (char)rd_u8_acc(a, q + (__u32)i);
+                        for (int i = 0; i < TLS_SNI_MAX - 1; i++) {
+                            __u32 ii = (__u32)i;
+                            char c = 0;
+                            if (ii < copy) c = (char)rd_acc_u8(a, q + ii);
+                            out[i] = c;
+                        }
+                        out[TLS_SNI_MAX - 1] = 0;
+                        return 1;
+                    }
+                }
+                done = 1;
+            } else {
+                p += el;
             }
-            out[copy] = 0;
-            return 0;
         }
-
-        p += el;
     }
-
-    return -1;
-}
-
-/* ===================== write enter/exit ===================== */
-
-/* sys_enter_write(fd, buf, count) */
-SEC("tracepoint/syscalls/sys_enter_write")
-int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    int fd = (int)ctx->args[0];
-
-    /* если хочешь строгий фильтр "только сокеты" — оставь.
-       если начнёт грузить стек/верификатор — можно заменить на sock_from_fd(fd)!=0 */
-    if (!is_socket_fd(fd))
-        return 0;
-
-    struct write_args_t wa = {};
-    wa.fd  = fd;
-    wa.buf = (__u64)ctx->args[1];
-    wa.cnt = (__u64)ctx->args[2];
-    bpf_map_update_elem(&write_args_map, &id, &wa, BPF_ANY);
-
-    /* conn_info_map: fd + comm (как у тебя везде) */
-    struct conn_info_t ci = {};
-    ci.tgid = tgid;
-    ci.fd   = (__u32)fd;
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
 
     return 0;
 }
+
+
+SEC("tracepoint/syscalls/sys_enter_write")
+int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+    int fd = (int)ctx->args[0];
+
+    if (!is_socket_fd(fd))
+        return 0;
+
+    struct write_enter_t we = {};
+    we.fd    = fd;
+    we.buf   = (__u64)ctx->args[1];
+    we.count = (__u64)ctx->args[2];
+
+    bpf_map_update_elem(&write_enter_map, &id, &we, BPF_ANY);
+
+    // если тебе нужен conn_info_map для обычного EV_WRITE — оставь как было:
+    // struct conn_info_t ci = {...}; bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+
+    return 0;
+}
+
+
 
 SEC("tracepoint/syscalls/sys_exit_write")
 int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
@@ -956,129 +920,83 @@ int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
     if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
         goto cleanup;
 
-    struct write_args_t *wa = bpf_map_lookup_elem(&write_args_map, &id);
-    struct conn_info_t  *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!wa || !ci)
+    struct write_enter_t *we = bpf_map_lookup_elem(&write_enter_map, &id);
+    if (!we)
         goto cleanup;
 
-    /* ---- per-cpu scratch: NO big stack frames ---- */
-    __u32 z = 0;
-    struct scratch_t *sc = bpf_map_lookup_elem(&scratch_map, &z);
-    if (!sc)
+    int fd = we->fd;
+
+    /* ======= (A) ТВОЙ EV_WRITE trace_info =======
+       Тут вставь ровно то, что у тебя уже было в trace_write_exit:
+       - fill_ids_comm_cookie()
+       - fill_from_fd_state_map(..., is_send=1)
+       - perf_event_output(&trace_events, ...)
+       Я не дублирую целиком, чтобы не сломать твою текущую структуру trace_info.
+    */
+
+    /* ======= (B) TLS SNI на TCP write ======= */
+    struct fd_state_t st = {};
+    if (fill_fd_state(fd, &st) < 0)
         goto cleanup;
 
-    struct trace_info *info = &sc->info;
-
-    /* минимальная инициализация без memset */
-    info->event = EV_WRITE;
-    info->fd    = ci->fd;
-    info->ret   = ret;
-
-    info->ts_ns  = bpf_ktime_get_ns();
-    info->tgid   = tgid;
-    info->tid    = (__u32)id;
-    info->cookie = cookie_from_fd((int)ci->fd);
-
-    /* comm: копия без memcpy */
-#pragma clang loop unroll(full)
-    for (int i = 0; i < 32; i++)
-        info->comm[i] = ci->comm[i];
-
-    /* endpoints */
-    if (fill_from_fd_state_map(info, tgid, (int)ci->fd, 1) == 0) {
-        loopback_fallback(info, 1);
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, info, sizeof(*info));
-    } else {
-        goto cleanup;
-    }
-
-    /* ---- TLS accumulate + parse SNI (TCP only, port 443) ---- */
-    if (info->proto != IPPROTO_TCP || info->cookie == 0)
+    if (st.proto != IPPROTO_TCP)
         goto cleanup;
 
-    if (!(info->dport == 443 || info->sport == 443))
+    __u64 cookie = cookie_from_fd(fd);
+    if (!cookie)
         goto cleanup;
 
-    /* clamp how many bytes we try to take from this write */
-    __u32 n = (__u32)ret;
-    if (n > TLS_ACC_MAX) n = TLS_ACC_MAX;
-
-    struct tls_acc_t *acc = bpf_map_lookup_elem(&tls_acc_map, &info->cookie);
+    struct tls_acc_t *acc = bpf_map_lookup_elem(&tls_acc_map, &cookie);
     if (!acc) {
-        bpf_map_update_elem(&tls_acc_map, &info->cookie, &zero_tls_acc, BPF_NOEXIST);
-        acc = bpf_map_lookup_elem(&tls_acc_map, &info->cookie);
-        if (!acc) goto cleanup;
-        acc->len   = 0;
-        acc->ts_ns = bpf_ktime_get_ns();
+        struct tls_acc_t z = {};
+        bpf_map_update_elem(&tls_acc_map, &cookie, &z, BPF_ANY);
+        acc = bpf_map_lookup_elem(&tls_acc_map, &cookie);
+        if (!acc)
+            goto cleanup;
     }
 
-    __u32 off = acc->len;
-    if (off < TLS_ACC_MAX) {
-        __u32 add = n;
-        if (add > (TLS_ACC_MAX - off)) add = TLS_ACC_MAX - off;
+    if (!acc->done && acc->len < TLS_ACC_MAX && we->buf) {
+        __u32 have = acc->len;
+        __u32 want = (__u32)ret;
+        __u32 left = TLS_ACC_MAX - have;
+        __u32 ncpy = min_u32(want, left);
 
-        /* bounded user copy */
-        acc_copy_user(acc, wa->buf, off, add);
-        acc->len = off + add;
-    }
-
-    /* try parse when enough bytes */
-    if (acc->len >= 200) {
-        struct tls_sni_event *sev = &sc->sni;
-
-        sev->ts_ns  = bpf_ktime_get_ns();
-        sev->cookie = info->cookie;
-        sev->tgid   = tgid;
-        sev->tid    = (__u32)id;
-
-        sev->family = info->family;
-        sev->proto  = info->proto;
-        sev->event  = EV_TLS_SNI;
-
-        sev->sport  = info->sport;
-        sev->dport  = info->dport;
-
-        /* copy addrs */
-        sev->src_ip4 = info->src_ip4;
-        sev->dst_ip4 = info->dst_ip4;
-
-#pragma clang loop unroll(full)
-        for (int i = 0; i < 16; i++) {
-            sev->src_ip6[i] = info->src_ip6[i];
-            sev->dst_ip6[i] = info->dst_ip6[i];
+        if (ncpy > 0) {
+            // user -> map value (safe: have+ncpy <= TLS_ACC_MAX)
+            if (bpf_probe_read_user(&acc->buf[have], ncpy, (void *)we->buf) == 0) {
+                acc->len = have + ncpy;
+            }
         }
 
-        /* comm */
-#pragma clang loop unroll(full)
-        for (int i = 0; i < 32; i++)
-            sev->comm[i] = info->comm[i];
+        if (acc->len >= 5) {
+            char sni[TLS_SNI_MAX];
+            if (tls_try_parse_sni(acc, sni) == 1) {
+                struct tls_sni_event ev = {};
+                ev.ts_ns  = bpf_ktime_get_ns();
+                ev.cookie = cookie;
+                ev.tgid   = tgid;
+                ev.tid    = (__u32)id;
+                ev.family = st.family;
+                ev.proto  = st.proto;
+                bpf_get_current_comm(&ev.comm, sizeof(ev.comm));
 
-        /* zero sni without memset */
 #pragma clang loop unroll(full)
-        for (int i = 0; i < TLS_SNI_MAX; i++)
-            sev->sni[i] = 0;
+                for (int i = 0; i < TLS_SNI_MAX; i++) {
+                    ev.sni[i] = sni[i];
+                }
 
-        if (tls_try_parse_sni_into(acc, sev->sni) == 0) {
-            bpf_perf_event_output(ctx, &tls_events, BPF_F_CURRENT_CPU, sev, sizeof(*sev));
-            bpf_map_delete_elem(&tls_acc_map, &info->cookie);
-        } else {
-            /* если уже забили весь буфер и не нашли — выкидываем */
-            if (acc->len >= TLS_ACC_MAX)
-                bpf_map_delete_elem(&tls_acc_map, &info->cookie);
+                bpf_perf_event_output(ctx, &tls_events, BPF_F_CURRENT_CPU, &ev, sizeof(ev));
+                acc->done = 1;
+            }
         }
     }
 
 cleanup:
-    bpf_map_delete_elem(&write_args_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
+    bpf_map_delete_elem(&write_enter_map, &id);
+    // если ты заводил conn_info_map на write_enter — удаляй и его тут:
+    // bpf_map_delete_elem(&conn_info_map, &id);
     return 0;
 }
 
 
 
-ev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
-[sudo] password for lev: 
-2026/02/26 08:37:33 dotenv loaded: .env
-2026/02/26 08:37:33.636228 hostsPrefill: added=7 from /etc/hosts
-2026/02/26 08:37:34.547911 failed to load bpf objects: field TraceWriteExit: program trace_write_exit: load program: permission denied: invalid access to map value, value_size=2064 off=2063 size=64: R1 max value is outside of the allowed memory range (697 line(s) omitted)
-lev@lev-VirtualBox:~/bpfgo$ 
