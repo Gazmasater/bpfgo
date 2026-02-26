@@ -706,6 +706,89 @@ sudo strace -f -e trace=sendmsg,write -p <PID>
 
 
 
+/* ===== write(): EV_WRITE + TLS peek into map, verifier-friendly =====
+ *
+ * Требования:
+ *  - write_args_map: pid_tgid -> {fd, buf, cnt}
+ *  - tls_peek_map:  cookie   -> tls_peek_t (LRU)
+ *  - tls_peek_scratch: per-cpu scratch for tls_peek_t (stack-safe)
+ *
+ * Важно: TLS_PEEK_MAX = 256 (степень двойки), чтобы clamp через &255
+ */
+
+#define TLS_PEEK_MAX 256
+
+struct write_args_t {
+    __u32 fd;
+    __u32 _pad;
+    __u64 buf;   // user pointer
+    __u64 cnt;   // requested count
+};
+
+struct tls_peek_t {
+    __u64 ts_ns;
+    __u32 tgid;
+    __u32 tid;
+    __u32 fd;
+    __u32 len;
+
+    __u16 sport;
+    __u16 dport;
+    __u8  proto;
+    __u8  _pad[3];
+
+    __u8  data[TLS_PEEK_MAX];
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 16384);
+    __type(key, __u64);              // pid_tgid
+    __type(value, struct write_args_t);
+} write_args_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    __uint(max_entries, 65536);
+    __type(key, __u64);              // cookie
+    __type(value, struct tls_peek_t);
+} tls_peek_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, struct tls_peek_t);
+} tls_peek_scratch SEC(".maps");
+
+
+SEC("tracepoint/syscalls/sys_enter_write")
+int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+    int fd     = (int)ctx->args[0];
+
+    if (!is_socket_fd(fd))
+        return 0;
+
+    /* как было: conn_info для EV_WRITE */
+    struct conn_info_t ci = {};
+    ci.tgid = tgid;
+    ci.fd   = (__u32)fd;
+    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+
+    /* добавили: args write() для peek */
+    struct write_args_t wa = {};
+    wa.fd  = (__u32)fd;
+    wa.buf = (__u64)ctx->args[1];
+    wa.cnt = (__u64)ctx->args[2];
+    bpf_map_update_elem(&write_args_map, &id, &wa, BPF_ANY);
+
+    return 0;
+}
+
 SEC("tracepoint/syscalls/sys_exit_write")
 int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
 {
@@ -720,7 +803,7 @@ int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
     if (!ci)
         goto cleanup;
 
-    /* --- original EV_WRITE event (unchanged) --- */
+    /* ===== EV_WRITE (как было) ===== */
     struct trace_info info = {};
     info.event = EV_WRITE;
     info.fd    = ci->fd;
@@ -734,33 +817,38 @@ int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
     loopback_fallback(&info, 1);
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
-    /* --- optional peek bytes into tls_peek_map (no userspace parsing needed) --- */
+    /* ===== TLS peek (без perf events, просто сохранить в map) ===== */
     struct write_args_t *wa = bpf_map_lookup_elem(&write_args_map, &id);
     if (wa && wa->buf) {
-        /* keep noise low: only TCP:443 (remove if you want all) */
-        if (info.proto == IPPROTO_TCP && info.dport == 443 && info.cookie) {
+        /* шум режем: только TCP:443 и только если есть cookie */
+        if (info.cookie && info.proto == IPPROTO_TCP && info.dport == 443) {
+
+            /* verifier-friendly bound: 0..255 */
             __u32 n = (__u32)ret;
-            if (n > TLS_PEEK_MAX) n = TLS_PEEK_MAX;
+            n &= (TLS_PEEK_MAX - 1);     // &255
+            if (n == 0)
+                goto cleanup;
 
             __u32 zero = 0;
             struct tls_peek_t *v = bpf_map_lookup_elem(&tls_peek_scratch, &zero);
-            if (v) {
-                __builtin_memset(v, 0, sizeof(*v));
+            if (!v)
+                goto cleanup;
 
-                v->ts_ns = bpf_ktime_get_ns();
-                v->tgid  = tgid;
-                v->tid   = (__u32)id;
-                v->fd    = wa->fd;
-                v->len   = n;
+            __builtin_memset(v, 0, sizeof(*v));
 
-                v->proto = info.proto;
-                v->sport = info.sport;
-                v->dport = info.dport;
+            v->ts_ns = bpf_ktime_get_ns();
+            v->tgid  = tgid;
+            v->tid   = (__u32)id;
+            v->fd    = wa->fd;
+            v->len   = n;
 
-                if (bpf_probe_read_user(v->data, n, (void *)wa->buf) == 0) {
-                    __u64 cookie = info.cookie; /* inode cookie from fd */
-                    bpf_map_update_elem(&tls_peek_map, &cookie, v, BPF_ANY);
-                }
+            v->proto = info.proto;
+            v->sport = info.sport;
+            v->dport = info.dport;
+
+            if (bpf_probe_read_user(v->data, n, (void *)(unsigned long)wa->buf) == 0) {
+                __u64 cookie = info.cookie;
+                bpf_map_update_elem(&tls_peek_map, &cookie, v, BPF_ANY);
             }
         }
     }
@@ -770,4 +858,3 @@ cleanup:
     bpf_map_delete_elem(&conn_info_map, &id);
     return 0;
 }
-
