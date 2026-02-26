@@ -780,3 +780,8 @@ int main(int argc, char **argv) {
 
 gcc -O2 -Wall sendmsg_tcp.c -o sendmsg_tcp
 ./sendmsg_tcp example.com 443
+
+
+sudo bpftool map show | grep -n "tls_peek_map"
+
+sudo bpftool map dump id 188
