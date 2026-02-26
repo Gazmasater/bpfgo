@@ -948,3 +948,9 @@ cleanup:
 
 
 
+ev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
+[sudo] password for lev: 
+2026/02/26 11:04:31 dotenv loaded: .env
+2026/02/26 11:04:31.949595 hostsPrefill: added=7 from /etc/hosts
+2026/02/26 11:04:32.408899 failed to load bpf objects: field TraceWriteExit: program trace_write_exit: load program: permission denied: invalid access to map value, value_size=512 off=513 size=1: R1 max value is outside of the allowed memory range (735 line(s) omitted)
+
