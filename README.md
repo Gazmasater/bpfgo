@@ -1061,11 +1061,68 @@ cleanup:
 
 
 
-lev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -type tls_sni_event  -go-package=main -ta
-rget amd64 bpf $(pwd)/trace.c -- -I$(pwd)
-/home/lev/bpfgo/trace.c:1515:30: error: redefinition of 'min_u32'
-static __always_inline __u32 min_u32(__u32 a, __u32 b) { return a < b ? a : b; }
-                             ^
+ev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -type tls_sni_event  -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+./trace.c:1703:26: error: A call to built-in function 'memset' is not supported.
+        struct tls_acc_t init = {};
+                         ^
+./trace.c:1521:16: error: A call to built-in function 'memcpy' is not supported.
+        dst[i] = src[i];
+               ^
+./trace.c:1521:16: error: A call to built-in function 'memcpy' is not supported.
+./trace.c:1521:16: error: A call to built-in function 'memcpy' is not supported.
+./trace.c:1521:16: error: A call to built-in function 'memcpy' is not supported.
+./trace.c:1521:16: error: A call to built-in function 'memcpy' is not supported.
+./trace.c:1521:16: error: A call to built-in function 'memcpy' is not supported.
+./trace.c:1521:16: error: A call to built-in function 'memcpy' is not supported.
+./trace.c:1521:16: error: A call to built-in function 'memcpy' is not supported.
+./trace.c:1629:24: error: A call to built-in function 'memcpy' is not supported.
+                out[k] = (char)b[p + k];
+                       ^
+./trace.c:1664:5: note: could not determine the original source location for ./trace.c:0:0
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1664:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1664:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:1664:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:1664:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1664:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:1664:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:1664:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1664:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:1664:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:1664:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1664:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:1664:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:1664:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1664:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:1664:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:1664:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1664:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:1664:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:1664:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1664:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:738:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+    info->cookie = cookie_from_fd(fd);
+                 ^
+./trace.c:738:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+fatal error: too many errors emitted, stopping now [-ferror-limit=]
+20 errors generated.
+Error: compile: exit status 1
+lev@lev-VirtualBox:~/bpfgo$ 
 /home/lev/bpfgo/trace.c:333:30: note: previous definition is here
 static __always_inline __u32 min_u32(__u32 a, __u32 b) { return a < b ? a : b; }
                              ^
