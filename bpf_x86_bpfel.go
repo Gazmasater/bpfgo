@@ -62,29 +62,6 @@ type bpfMsgPtrflagsT struct {
 	Pad   uint32
 }
 
-type bpfTlsChunkT struct {
-	TsNs   uint64
-	Cookie uint64
-	Tgid   uint32
-	Tid    uint32
-	Fd     uint32
-	Pad0   uint32
-	Family uint16
-	Sport  uint16
-	Dport  uint16
-	Proto  uint8
-	Event  uint8
-	Pad1   uint16
-	_      [2]byte
-	Len    uint32
-	Data   [512]uint8
-}
-
-type bpfTlsNeedT struct {
-	Left  uint32
-	Total uint32
-}
-
 type bpfTraceInfo struct {
 	TsNs     uint64
 	Cookie   uint64
@@ -109,11 +86,6 @@ type bpfTraceInfo struct {
 	DstScope uint32
 	Comm     [32]int8
 	_        [4]byte
-}
-
-type bpfWriteMetaT struct {
-	Buf uint64
-	Cnt uint64
 }
 
 // loadBpf returns the embedded CollectionSpec for bpf.
@@ -201,20 +173,14 @@ type bpfMapSpecs struct {
 	MmsgSendMap    *ebpf.MapSpec `ebpf:"mmsgSend_map"`
 	MsgRecvMap     *ebpf.MapSpec `ebpf:"msgRecv_map"`
 	MsgSendMap     *ebpf.MapSpec `ebpf:"msgSend_map"`
-	ScratchInfo    *ebpf.MapSpec `ebpf:"scratch_info"`
-	ScratchTls     *ebpf.MapSpec `ebpf:"scratch_tls"`
-	TlsEvents      *ebpf.MapSpec `ebpf:"tls_events"`
-	TlsNeedMap     *ebpf.MapSpec `ebpf:"tls_need_map"`
 	TraceEvents    *ebpf.MapSpec `ebpf:"trace_events"`
-	WriteMetaMap   *ebpf.MapSpec `ebpf:"write_meta_map"`
 }
 
 // bpfVariableSpecs contains global variables before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfVariableSpecs struct {
-	Unused    *ebpf.VariableSpec `ebpf:"unused"`
-	UnusedTls *ebpf.VariableSpec `ebpf:"unused_tls"`
+	Unused *ebpf.VariableSpec `ebpf:"unused"`
 }
 
 // bpfObjects contains all objects after they have been loaded into the kernel.
@@ -248,12 +214,7 @@ type bpfMaps struct {
 	MmsgSendMap    *ebpf.Map `ebpf:"mmsgSend_map"`
 	MsgRecvMap     *ebpf.Map `ebpf:"msgRecv_map"`
 	MsgSendMap     *ebpf.Map `ebpf:"msgSend_map"`
-	ScratchInfo    *ebpf.Map `ebpf:"scratch_info"`
-	ScratchTls     *ebpf.Map `ebpf:"scratch_tls"`
-	TlsEvents      *ebpf.Map `ebpf:"tls_events"`
-	TlsNeedMap     *ebpf.Map `ebpf:"tls_need_map"`
 	TraceEvents    *ebpf.Map `ebpf:"trace_events"`
-	WriteMetaMap   *ebpf.Map `ebpf:"write_meta_map"`
 }
 
 func (m *bpfMaps) Close() error {
@@ -269,12 +230,7 @@ func (m *bpfMaps) Close() error {
 		m.MmsgSendMap,
 		m.MsgRecvMap,
 		m.MsgSendMap,
-		m.ScratchInfo,
-		m.ScratchTls,
-		m.TlsEvents,
-		m.TlsNeedMap,
 		m.TraceEvents,
-		m.WriteMetaMap,
 	)
 }
 
@@ -282,8 +238,7 @@ func (m *bpfMaps) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfVariables struct {
-	Unused    *ebpf.Variable `ebpf:"unused"`
-	UnusedTls *ebpf.Variable `ebpf:"unused_tls"`
+	Unused *ebpf.Variable `ebpf:"unused"`
 }
 
 // bpfPrograms contains all programs after they have been loaded into the kernel.
