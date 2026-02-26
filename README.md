@@ -708,13 +708,5 @@ sudo ss -tnp | grep "pid=3215"
 
 
 
-lev@lev-VirtualBox:~/bpfgo$ sudo ss -tnp | grep "pid=3215"
-ESTAB 0      0          10.0.2.15:38666  34.107.243.93:443  users:(("firefox",pid=3215,fd=22)) 
-ESTAB 0      0          10.0.2.15:45518  140.82.113.25:443  users:(("firefox",pid=3215,fd=108))
-ESTAB 0      0          10.0.2.15:58008 151.101.193.91:443  users:(("firefox",pid=3215,fd=127))
-ESTAB 0      0          10.0.2.15:36004  151.101.65.91:443  users:(("firefox",pid=3215,fd=109))
-ESTAB 0      0          10.0.2.15:59206   146.75.53.91:443  users:(("firefox",pid=3215,fd=129))
-ESTAB 0      0          10.0.2.15:42872  140.82.113.21:443  users:(("firefox",pid=3215,fd=124))
-ESTAB 0      0          10.0.2.15:54460   140.82.121.4:443  users:(("firefox",pid=3215,fd=107))
-ESTAB 0      0          10.0.2.15:36968   140.82.121.5:443  users:(("firefox",pid=3215,fd=112))
-lev@lev-VirtualBox:~/bpfgo$ 
+sudo strace -ff -p 3215 -e trace=write,writev,sendmsg,sendmmsg -s 0 2>&1 \
+ | egrep ' (write|writev|sendmsg|sendmmsg)\((22|108|127|109|129|124|107|112),'
