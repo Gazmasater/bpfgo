@@ -704,7 +704,12 @@ sudo strace -f -e trace=sendmsg,write -p <PID>
 
 
 
-/* ===================== KERNEL-ONLY SNI FROM write() (Variant A, NO userspace) ===================== */
+/* ===================== WRITE: kernel-only SNI (no userspace for SNI) ===================== */
+/* Fixes:
+ *  - no large stack buffers (uses per-cpu scratch map 512B)
+ *  - verifier-safe bounds for ALL reads from scratch (qi < n, p+k < n)
+ *  - no memcpy/memset (unrolled copy with guards)
+ */
 
 #define SNI_MAX       64
 #define TLS_SCAN_MAX  512
@@ -744,7 +749,7 @@ struct {
     __type(value, struct sni_val_t);
 } sni_map SEC(".maps");
 
-/* per-cpu scratch for TLS_SCAN_MAX bytes (removes 512B from stack) */
+/* per-cpu scratch for TLS_SCAN_MAX bytes */
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
     __uint(max_entries, 1);
@@ -752,60 +757,72 @@ struct {
     __type(value, struct tls_scratch_t);
 } tls_scratch_map SEC(".maps");
 
-/* ---- bounded TLS SNI parser (NO memcpy/memset) ---- */
+/* ---- verifier-friendly big-endian reads with explicit bounds ---- */
 
-static __always_inline __u16 rd_u16be(const __u8 *p)
+static __always_inline int rd_u16be_at(const __u8 *b, __u32 n, __u32 off, __u16 *out)
 {
-    return ((__u16)p[0] << 8) | p[1];
+    if (off + 2 > n) return -1;
+    *out = ((__u16)b[off] << 8) | b[off + 1];
+    return 0;
 }
 
-static __always_inline __u32 rd_u24be(const __u8 *p)
+static __always_inline int rd_u24be_at(const __u8 *b, __u32 n, __u32 off, __u32 *out)
 {
-    return ((__u32)p[0] << 16) | ((__u32)p[1] << 8) | p[2];
+    if (off + 3 > n) return -1;
+    *out = ((__u32)b[off] << 16) | ((__u32)b[off + 1] << 8) | b[off + 2];
+    return 0;
 }
 
-static __always_inline int try_parse_sni(const __u8 *b, __u32 n, struct sni_val_t *out)
+/* Returns 0 and fills out if SNI found; else -1 */
+static __always_inline int try_parse_sni_vsafe(const __u8 *b, __u32 n, struct sni_val_t *out)
 {
+    /* TLS record header: 5 bytes */
     if (n < 5) return -1;
-    if (b[0] != 0x16) return -1; /* TLS Handshake record */
+    if (b[0] != 0x16) return -1; /* Handshake record */
 
-    __u16 rec_len = rd_u16be(&b[3]);
+    __u16 rec_len = 0;
+    if (rd_u16be_at(b, n, 3, &rec_len) < 0) return -1;
     if ((__u32)rec_len + 5 > n) return -1; /* record not fully in this chunk */
 
     __u32 p = 5;
 
-    /* Handshake header */
+    /* Handshake header: type + len(3) */
     if (p + 4 > n) return -1;
     if (b[p] != 0x01) return -1; /* ClientHello */
-    __u32 hs_len = rd_u24be(&b[p + 1]);
+    __u32 hs_len = 0;
+    if (rd_u24be_at(b, n, p + 1, &hs_len) < 0) return -1;
     p += 4;
     if (p + hs_len > n) return -1;
 
-    /* legacy_version + random */
-    if (p + 2 + 32 > n) return -1;
-    p += 2 + 32;
+    /* legacy_version(2) + random(32) */
+    if (p + 34 > n) return -1;
+    p += 34;
 
     /* session_id */
     if (p + 1 > n) return -1;
-    __u8 sid_len = b[p]; p += 1;
+    __u8 sid_len = b[p];
+    p += 1;
     if (p + sid_len > n) return -1;
     p += sid_len;
 
     /* cipher_suites */
-    if (p + 2 > n) return -1;
-    __u16 cs_len = rd_u16be(&b[p]); p += 2;
+    __u16 cs_len = 0;
+    if (rd_u16be_at(b, n, p, &cs_len) < 0) return -1;
+    p += 2;
     if (p + cs_len > n) return -1;
     p += cs_len;
 
     /* compression_methods */
     if (p + 1 > n) return -1;
-    __u8 comp_len = b[p]; p += 1;
+    __u8 comp_len = b[p];
+    p += 1;
     if (p + comp_len > n) return -1;
     p += comp_len;
 
-    /* extensions */
-    if (p + 2 > n) return -1;
-    __u16 ext_len = rd_u16be(&b[p]); p += 2;
+    /* extensions length */
+    __u16 ext_len = 0;
+    if (rd_u16be_at(b, n, p, &ext_len) < 0) return -1;
+    p += 2;
     if (p + ext_len > n) return -1;
 
     __u32 ext_end = p + ext_len;
@@ -814,38 +831,52 @@ static __always_inline int try_parse_sni(const __u8 *b, __u32 n, struct sni_val_
     for (int step = 0; step < MAX_EXT_STEPS; step++) {
         if (p + 4 > ext_end) break;
 
-        __u16 etype = rd_u16be(&b[p]);
-        __u16 elen  = rd_u16be(&b[p + 2]);
+        __u16 etype = 0, elen = 0;
+        if (rd_u16be_at(b, n, p, &etype) < 0) return -1;
+        if (rd_u16be_at(b, n, p + 2, &elen) < 0) return -1;
         p += 4;
 
-        if (p + elen > ext_end) break;
+        if (p + (__u32)elen > ext_end) break;
 
         if (etype == 0x0000) { /* server_name */
-            if (elen < 2) return -1;
+            /* layout: list_len(2) + entries... */
+            if ((__u32)elen < 2) return -1;
 
             __u32 q = p;
 
-            __u16 list_len = rd_u16be(&b[q]); q += 2;
-            if (q + list_len > p + elen) return -1;
+            __u16 list_len = 0;
+            if (rd_u16be_at(b, n, q, &list_len) < 0) return -1;
+            q += 2;
 
-            if (q + 3 > p + elen) return -1;
-            __u8  name_type = b[q]; q += 1;
-            __u16 name_len  = rd_u16be(&b[q]); q += 2;
+            if (q + (__u32)list_len > p + (__u32)elen) return -1;
+
+            /* first entry: name_type(1) + name_len(2) + name */
+            if (q + 3 > p + (__u32)elen) return -1;
+            if (q + 3 > n) return -1;
+
+            __u8 name_type = b[q];
+            q += 1;
+
+            __u16 name_len = 0;
+            if (rd_u16be_at(b, n, q, &name_len) < 0) return -1;
+            q += 2;
 
             if (name_type != 0) return -1;
-            if (q + name_len > p + elen) return -1;
+            if (q + (__u32)name_len > p + (__u32)elen) return -1;
+            if (q > n) return -1;
 
-            __u32 copy = name_len;
+            __u32 copy = (__u32)name_len;
             if (copy >= SNI_MAX) copy = SNI_MAX - 1;
 
             out->found = 1;
             out->len   = (__u8)copy;
 
-            /* Bounded copy WITHOUT break (prevents clang -> memcpy) */
+            /* unrolled copy, verifier-safe: (q+i)<n guard */
 #pragma clang loop unroll(full)
             for (int i = 0; i < SNI_MAX; i++) {
-                if (i < (int)copy)
-                    out->name[i] = (char)b[q + i];
+                __u32 qi = q + (__u32)i;
+                if (i < (int)copy && qi < n)
+                    out->name[i] = (char)b[qi];
                 else
                     out->name[i] = 0;
             }
@@ -853,13 +884,13 @@ static __always_inline int try_parse_sni(const __u8 *b, __u32 n, struct sni_val_
             return 0;
         }
 
-        p += elen;
+        p += (__u32)elen;
     }
 
     return -1;
 }
 
-/* ===================== write() enter/exit (replace your versions) ===================== */
+/* ===================== replace your write enter/exit with these ===================== */
 
 SEC("tracepoint/syscalls/sys_enter_write")
 int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
@@ -878,7 +909,7 @@ int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
     wa.count = (__u64)ctx->args[2];
     bpf_map_update_elem(&write_args_map, &id, &wa, BPF_ANY);
 
-    /* keep your existing conn_info_map behavior */
+    /* keep your existing conn_info behavior */
     struct conn_info_t ci = {};
     ci.tgid = tgid;
     ci.fd   = (__u32)fd;
@@ -902,7 +933,6 @@ int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
     if (!ci)
         goto cleanup;
 
-    /* Your existing perf event (WRITE) stays */
     struct trace_info info = {};
     info.event = EV_WRITE;
     info.fd    = ci->fd;
@@ -913,7 +943,7 @@ int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
         goto cleanup;
 
-    /* ===== kernel-only SNI attempt (Variant A) ===== */
+    /* ===== kernel-only SNI attempt (no userspace output) ===== */
     if (info.proto == IPPROTO_TCP && (info.dport == 443 || info.sport == 443)) {
         struct write_args_t *wa = bpf_map_lookup_elem(&write_args_map, &id);
         if (wa && wa->buf) {
@@ -925,7 +955,7 @@ int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
 
                 if (bpf_probe_read_user(sc->data, n, (void *)wa->buf) == 0) {
                     struct sni_val_t sni = {};
-                    if (try_parse_sni(sc->data, n, &sni) == 0 && sni.found) {
+                    if (try_parse_sni_vsafe(sc->data, n, &sni) == 0 && sni.found) {
                         __u64 ck = cookie_from_fd((int)wa->fd);
                         if (ck)
                             bpf_map_update_elem(&sni_map, &ck, &sni, BPF_ANY);
@@ -935,6 +965,7 @@ int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
         }
     }
 
+    /* keep your existing WRITE event to userspace (optional) */
     loopback_fallback(&info, 1);
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
@@ -944,13 +975,5 @@ cleanup:
     return 0;
 }
 
-/* ===================== END KERNEL-ONLY SNI FROM write() ===================== */
-
-
-
-ev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
-[sudo] password for lev: 
-2026/02/26 11:04:31 dotenv loaded: .env
-2026/02/26 11:04:31.949595 hostsPrefill: added=7 from /etc/hosts
-2026/02/26 11:04:32.408899 failed to load bpf objects: field TraceWriteExit: program trace_write_exit: load program: permission denied: invalid access to map value, value_size=512 off=513 size=1: R1 max value is outside of the allowed memory range (735 line(s) omitted)
+/* ===================== END WRITE: kernel-only SNI ===================== */
 
