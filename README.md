@@ -714,3 +714,17 @@ while true; do
   openssl s_client -connect example.com:443 -servername example.com </dev/null >/dev/null 2>&1
 done
 sudo strace -f -e trace=sendmsg -s 0 openssl s_client -connect example.com:443 -servername example.com </dev/null >/dev/null
+
+
+
+ev@lev-VirtualBox:~/bpfgo$ sudo strace -f -e trace=sendmsg -s 0 openssl s_client -connect example.com:443 -servername example.com </dev/null >/dev/null
+depth=3 C = GB, ST = Greater Manchester, L = Salford, O = Comodo CA Limited, CN = AAA Certificate Services
+verify return:1
+depth=2 C = US, O = SSL Corporation, CN = SSL.com TLS Transit ECC CA R2
+verify return:1
+depth=1 C = US, O = SSL Corporation, CN = Cloudflare TLS Issuing ECC CA 3
+verify return:1
+depth=0 CN = example.com
+verify return:1
+DONE
++++ exited with 0 +++
