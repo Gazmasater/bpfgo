@@ -710,6 +710,7 @@ sudo strace -ff -p 3215 -e trace=write,writev,sendmsg,sendmmsg -s 0 2>&1 \
 
 
 
-openssl s_client -connect example.com:443 -servername example.com </dev/null >/dev/null
-
+while true; do
+  openssl s_client -connect example.com:443 -servername example.com </dev/null >/dev/null 2>&1
+done
 sudo strace -f -e trace=sendmsg -s 0 openssl s_client -connect example.com:443 -servername example.com </dev/null >/dev/null
