@@ -704,7 +704,14 @@ sudo strace -f -e trace=sendmsg,write -p <PID>
 
 
 
-/* ===================== WRITE: kernel-only SNI (verifier hard-safe) ===================== */
+/* ===================== WRITE: kernel-only SNI (verifier hard-safe, single definition) ===================== */
+/* - Keeps your existing EV_WRITE perf output.
+ * - Does NOT send SNI to userspace; stores SNI into sni_map by cookie.
+ * - Uses per-cpu scratch (TLS_SCAN_MAX) to avoid stack >512.
+ * - Uses only "off > CONST-k" bounds checks (no off+K) to satisfy verifier.
+ *
+ * IMPORTANT: Remove/disable any previous trace_write_enter/trace_write_exit blocks.
+ */
 
 #define SNI_MAX       64
 #define TLS_SCAN_MAX  2048
@@ -758,7 +765,7 @@ static __always_inline __u32 min_u32_local(__u32 a, __u32 b) { return a < b ? a 
 
 static __always_inline int rd_u16be_tls(const __u8 *b, __u32 off, __u16 *out)
 {
-    /* need off..off+1 inside [0, TLS_SCAN_MAX-1] */
+    /* need b[off], b[off+1] within 0..TLS_SCAN_MAX-1 */
     if (off > (TLS_SCAN_MAX - 2))
         return -1;
     *out = ((__u16)b[off] << 8) | b[off + 1];
@@ -767,7 +774,7 @@ static __always_inline int rd_u16be_tls(const __u8 *b, __u32 off, __u16 *out)
 
 static __always_inline int rd_u24be_tls(const __u8 *b, __u32 off, __u32 *out)
 {
-    /* need off..off+2 */
+    /* need b[off], b[off+1], b[off+2] */
     if (off > (TLS_SCAN_MAX - 3))
         return -1;
     *out = ((__u32)b[off] << 16) | ((__u32)b[off + 1] << 8) | b[off + 2];
@@ -775,32 +782,29 @@ static __always_inline int rd_u24be_tls(const __u8 *b, __u32 off, __u32 *out)
 }
 
 /* Returns 0 if SNI found; else -1
- * n = bytes actually copied from user into scratch (<= TLS_SCAN_MAX)
+ * n = bytes copied from user into scratch (<= TLS_SCAN_MAX)
  */
 static __always_inline int try_parse_sni_tls(const __u8 *b, __u32 n, struct sni_val_t *out)
 {
     if (n < 5)
         return -1;
 
-    /* safe: b[0] exists because n>=5 */
-    if (b[0] != 0x16)
+    if (b[0] != 0x16) /* Handshake record */
         return -1;
 
     __u16 rec_len = 0;
     if (rd_u16be_tls(b, 3, &rec_len) < 0)
         return -1;
 
-    /* whole record must be in captured bytes */
     if ((__u32)rec_len + 5 > n)
         return -1;
 
     __u32 p = 5;
 
-    /* handshake header must be present */
     if (p + 4 > n)
         return -1;
 
-    if (b[p] != 0x01)
+    if (b[p] != 0x01) /* ClientHello */
         return -1;
 
     __u32 hs_len = 0;
@@ -811,7 +815,7 @@ static __always_inline int try_parse_sni_tls(const __u8 *b, __u32 n, struct sni_
     if (p + hs_len > n)
         return -1;
 
-    /* legacy_version + random */
+    /* legacy_version(2) + random(32) */
     if (p + 34 > n)
         return -1;
     p += 34;
@@ -891,6 +895,7 @@ static __always_inline int try_parse_sni_tls(const __u8 *b, __u32 n, struct sni_
 
             if (q + (__u32)list_len > p + (__u32)elen)
                 return -1;
+
             if (q + 3 > p + (__u32)elen)
                 return -1;
             if (q + 3 > n)
@@ -906,12 +911,13 @@ static __always_inline int try_parse_sni_tls(const __u8 *b, __u32 n, struct sni_
 
             if (name_type != 0)
                 return -1;
+
             if (q + (__u32)name_len > p + (__u32)elen)
                 return -1;
             if (q + (__u32)name_len > n)
                 return -1;
 
-            /* ===== memory safety MUST be against TLS_SCAN_MAX constant ===== */
+            /* memory safety bound vs TLS_SCAN_MAX constant */
             if (q > (TLS_SCAN_MAX - SNI_MAX))
                 return -1;
 
@@ -1006,7 +1012,7 @@ int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
         }
     }
 
-    /* your existing WRITE event */
+    /* your existing WRITE event to userspace */
     loopback_fallback(&info, 1);
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
@@ -1019,23 +1025,3 @@ cleanup:
 /* ===================== END WRITE ===================== */
 
 
-
-lev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
-/home/lev/bpfgo/trace.c:1760:5: error: redefinition of 'trace_write_enter'
-int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
-    ^
-/home/lev/bpfgo/trace.c:1676:5: note: previous definition is here
-int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
-    ^
-/home/lev/bpfgo/trace.c:1785:5: error: redefinition of 'trace_write_exit'
-int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
-    ^
-/home/lev/bpfgo/trace.c:1701:5: note: previous definition is here
-int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
-    ^
-/home/lev/bpfgo/trace.c:1821:25: warning: implicit declaration of function 'try_parse_sni_cap' is invalid in C99 [-Wimplicit-function-declaration]
-                    if (try_parse_sni_cap(sc->data, n, cap, &sni) == 0 && sni.found) {
-                        ^
-1 warning and 2 errors generated.
-Error: compile: exit status 1
-lev@lev-VirtualBox:~/bpfgo$ 
