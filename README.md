@@ -970,3 +970,60 @@ cleanup:
     return 0;
 }
 /* ===================== END KERNEL-ONLY SNI FROM write() ===================== */
+
+
+
+ev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+./trace.c:1615:30: error: A call to built-in function 'memcpy' is not supported.
+                out->name[i] = (char)b[q + i];
+                             ^
+./trace.c:1657:5: note: could not determine the original source location for ./trace.c:0:0
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1657:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1657:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:1657:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:1657:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1657:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:1657:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:1657:5: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+./trace.c:1657:5: note: could not determine the original source location for ./trace.c:0:0
+./trace.c:705:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+    info->cookie = cookie_from_fd(fd);
+                 ^
+./trace.c:705:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:705:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:705:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:705:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:708:9: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+        __builtin_memcpy(info->comm, comm64_opt, sizeof(info->comm));
+        ^
+./trace.c:705:18: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+    info->cookie = cookie_from_fd(fd);
+                 ^
+./trace.c:708:9: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+        __builtin_memcpy(info->comm, comm64_opt, sizeof(info->comm));
+        ^
+./trace.c:1678:54: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
+                                                     ^
+./trace.c:643:25: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+    struct fd_key_t k = { .tgid = tgid, .fd = fd };
+                        ^
+./trace.c:645:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+    struct fd_state_t tmp = {};
+                      ^
+./trace.c:645:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:645:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:645:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+./trace.c:645:23: error: Looks like the BPF stack limit of 512 bytes is exceeded. Please move large on stack variables into BPF per-cpu array map.
+fatal error: too many errors emitted, stopping now [-ferror-limit=]
+20 errors generated.
+Error: compile: exit status 1
+lev@lev-VirtualBox:~/bpfgo$ 
