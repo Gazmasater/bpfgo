@@ -1027,3 +1027,25 @@ cleanup:
     bpf_map_delete_elem(&conn_info_map, &id);
     return 0;
 }
+
+
+
+ev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info -type tls_sni_event  -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+/home/lev/bpfgo/trace.c:1482:9: warning: 'EV_TLS_SNI' macro redefined [-Wmacro-redefined]
+#define EV_TLS_SNI  50
+        ^
+/home/lev/bpfgo/trace.c:142:9: note: previous definition is here
+#define EV_TLS_SNI 60
+        ^
+/home/lev/bpfgo/trace.c:1484:8: error: redefinition of 'tls_sni_event'
+struct tls_sni_event {
+       ^
+/home/lev/bpfgo/trace.c:145:8: note: previous definition is here
+struct tls_sni_event {
+       ^
+/home/lev/bpfgo/trace.c:1748:57: warning: passing 'const volatile struct tls_acc_t *' to parameter of type 'const void *' discards qualifiers [-Wincompatible-pointer-types-discards-qualifiers]
+        bpf_map_update_elem(&tls_acc_map, &info.cookie, &zero_tls_acc, BPF_NOEXIST);
+                                                        ^~~~~~~~~~~~~
+2 warnings and 1 error generated.
+Error: compile: exit status 1
+lev@lev-VirtualBox:~/bpfgo$ 
