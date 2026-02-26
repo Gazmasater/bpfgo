@@ -1076,15 +1076,9 @@ cleanup:
 
 
 
-#pragma clang loop unroll(full)
-for (int i = 0; i < TLS_SNI_MAX - 1; i++) {
-    /* если i >= copy — пишем 0, иначе байт */
-    __u32 ii = (__u32)i;
-    char c = 0;
-    if (ii < copy) {
-        c = (char)rd_u8_acc(a, q + ii);
-    }
-    out[i] = c;
-}
-/* гарантируем терминацию */
-out[TLS_SNI_MAX - 1] = 0;
+ev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
+[sudo] password for lev: 
+2026/02/26 08:37:33 dotenv loaded: .env
+2026/02/26 08:37:33.636228 hostsPrefill: added=7 from /etc/hosts
+2026/02/26 08:37:34.547911 failed to load bpf objects: field TraceWriteExit: program trace_write_exit: load program: permission denied: invalid access to map value, value_size=2064 off=2063 size=64: R1 max value is outside of the allowed memory range (697 line(s) omitted)
+lev@lev-VirtualBox:~/bpfgo$ 
