@@ -62,6 +62,19 @@ type bpfMsgPtrflagsT struct {
 	Pad   uint32
 }
 
+type bpfTlsPeekT struct {
+	TsNs  uint64
+	Tgid  uint32
+	Tid   uint32
+	Fd    uint32
+	Len   uint32
+	Sport uint16
+	Dport uint16
+	Proto uint8
+	Pad   [3]uint8
+	Data  [256]uint8
+}
+
 type bpfTraceInfo struct {
 	TsNs     uint64
 	Cookie   uint64
@@ -86,6 +99,13 @@ type bpfTraceInfo struct {
 	DstScope uint32
 	Comm     [32]int8
 	_        [4]byte
+}
+
+type bpfWriteArgsT struct {
+	Fd  uint32
+	Pad uint32
+	Buf uint64
+	Cnt uint64
 }
 
 // loadBpf returns the embedded CollectionSpec for bpf.
@@ -173,7 +193,10 @@ type bpfMapSpecs struct {
 	MmsgSendMap    *ebpf.MapSpec `ebpf:"mmsgSend_map"`
 	MsgRecvMap     *ebpf.MapSpec `ebpf:"msgRecv_map"`
 	MsgSendMap     *ebpf.MapSpec `ebpf:"msgSend_map"`
+	TlsPeekMap     *ebpf.MapSpec `ebpf:"tls_peek_map"`
+	TlsPeekScratch *ebpf.MapSpec `ebpf:"tls_peek_scratch"`
 	TraceEvents    *ebpf.MapSpec `ebpf:"trace_events"`
+	WriteArgsMap   *ebpf.MapSpec `ebpf:"write_args_map"`
 }
 
 // bpfVariableSpecs contains global variables before they are loaded into the kernel.
@@ -214,7 +237,10 @@ type bpfMaps struct {
 	MmsgSendMap    *ebpf.Map `ebpf:"mmsgSend_map"`
 	MsgRecvMap     *ebpf.Map `ebpf:"msgRecv_map"`
 	MsgSendMap     *ebpf.Map `ebpf:"msgSend_map"`
+	TlsPeekMap     *ebpf.Map `ebpf:"tls_peek_map"`
+	TlsPeekScratch *ebpf.Map `ebpf:"tls_peek_scratch"`
 	TraceEvents    *ebpf.Map `ebpf:"trace_events"`
+	WriteArgsMap   *ebpf.Map `ebpf:"write_args_map"`
 }
 
 func (m *bpfMaps) Close() error {
@@ -230,7 +256,10 @@ func (m *bpfMaps) Close() error {
 		m.MmsgSendMap,
 		m.MsgRecvMap,
 		m.MsgSendMap,
+		m.TlsPeekMap,
+		m.TlsPeekScratch,
 		m.TraceEvents,
+		m.WriteArgsMap,
 	)
 }
 

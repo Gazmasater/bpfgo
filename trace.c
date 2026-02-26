@@ -1441,23 +1441,83 @@ cleanup:
     return 0;
 }
 
-/* ====== write/read (ONLY SOCKETS) ====== */
+/* ===== write(): EV_WRITE + TLS peek into tls_peek_map (LRU),
+ * stack-safe + verifier-friendly + no "n==0 on 256 multiples" bug.
+ *
+ * Notes:
+ *  - TLS_PEEK_MAX must be power-of-two (256) for & (TLS_PEEK_MAX-1)
+ *  - we accept TCP where sport==443 OR dport==443 (client/server)
+ */
+
+#define TLS_PEEK_MAX 256
+
+struct write_args_t {
+    __u32 fd;
+    __u32 _pad;
+    __u64 buf;   // user pointer
+    __u64 cnt;   // requested count
+};
+
+struct tls_peek_t {
+    __u64 ts_ns;
+    __u32 tgid;
+    __u32 tid;
+    __u32 fd;
+    __u32 len;
+
+    __u16 sport;
+    __u16 dport;
+    __u8  proto;
+    __u8  _pad[3];
+
+    __u8  data[TLS_PEEK_MAX];
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 16384);
+    __type(key, __u64);              // pid_tgid
+    __type(value, struct write_args_t);
+} write_args_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    __uint(max_entries, 65536);
+    __type(key, __u64);              // cookie
+    __type(value, struct tls_peek_t);
+} tls_peek_map SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, struct tls_peek_t);
+} tls_peek_scratch SEC(".maps");
+
 
 SEC("tracepoint/syscalls/sys_enter_write")
 int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
 {
     __u64 id   = bpf_get_current_pid_tgid();
     __u32 tgid = id >> 32;
-    int fd = (int)ctx->args[0];
+    int fd     = (int)ctx->args[0];
 
     if (!is_socket_fd(fd))
         return 0;
 
+    /* keep existing EV_WRITE path */
     struct conn_info_t ci = {};
     ci.tgid = tgid;
     ci.fd   = (__u32)fd;
     bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
     bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+
+    /* save write args for exit */
+    struct write_args_t wa = {};
+    wa.fd  = (__u32)fd;
+    wa.buf = (__u64)ctx->args[1];
+    wa.cnt = (__u64)ctx->args[2];
+    bpf_map_update_elem(&write_args_map, &id, &wa, BPF_ANY);
 
     return 0;
 }
@@ -1476,6 +1536,7 @@ int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
     if (!ci)
         goto cleanup;
 
+    /* ===== EV_WRITE (unchanged) ===== */
     struct trace_info info = {};
     info.event = EV_WRITE;
     info.fd    = ci->fd;
@@ -1489,7 +1550,55 @@ int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
     loopback_fallback(&info, 1);
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
+    /* ===== TLS peek into map ===== */
+    struct write_args_t *wa = bpf_map_lookup_elem(&write_args_map, &id);
+    if (!wa || !wa->buf)
+        goto cleanup;
+
+    /* only TCP, only if we have cookie, and either side is 443 */
+    if (!info.cookie || info.proto != IPPROTO_TCP)
+        goto cleanup;
+
+    if (!(info.dport == 443 || info.sport == 443))
+        goto cleanup;
+
+    /* verifier-friendly: ensure bounded size via '& const'
+       IMPORTANT: fix "multiples of 256 => n==0" by mapping 0 -> 255 */
+    __u32 n = (__u32)ret;
+    n &= (TLS_PEEK_MAX - 1);      // 0..255
+    if (n == 0)
+        n = TLS_PEEK_MAX - 1;     // 255
+
+    __u32 zero = 0;
+    struct tls_peek_t *v = bpf_map_lookup_elem(&tls_peek_scratch, &zero);
+    if (!v)
+        goto cleanup;
+
+    __builtin_memset(v, 0, sizeof(*v));
+
+    v->ts_ns = bpf_ktime_get_ns();
+    v->tgid  = tgid;
+    v->tid   = (__u32)id;
+    v->fd    = wa->fd;
+    v->len   = n;
+
+    v->proto = info.proto;
+    v->sport = info.sport;
+    v->dport = info.dport;
+
+    if (bpf_probe_read_user(v->data, n, (void *)(unsigned long)wa->buf) == 0) {
+        __u64 cookie = info.cookie;
+        bpf_map_update_elem(&tls_peek_map, &cookie, v, BPF_ANY);
+
+        /* optional debug:
+         * bpf_printk("TLSPEEK cookie=%llu pid=%u fd=%u n=%u first=%02x %02x %02x %02x %02x",
+         *            cookie, tgid, v->fd, n,
+         *            v->data[0], v->data[1], v->data[2], v->data[3], v->data[4]);
+         */
+    }
+
 cleanup:
+    bpf_map_delete_elem(&write_args_map, &id);
     bpf_map_delete_elem(&conn_info_map, &id);
     return 0;
 }
