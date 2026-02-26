@@ -706,11 +706,68 @@ sudo strace -f -e trace=sendmsg,write -p <PID>
 
 
 
-ev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
-[sudo] password for lev: 
-2026/02/26 11:48:03 dotenv loaded: .env
-2026/02/26 11:48:03.876619 hostsPrefill: added=7 from /etc/hosts
-2026/02/26 11:48:04.391042 failed to load bpf objects: field TraceWriteExit: program trace_write_exit: load program: permission denied: 881: (85) call bpf_probe_read_user#112: R2 min value is negative, either use unsigned or 'var &= const' (699 line(s) omitted)
+SEC("tracepoint/syscalls/sys_exit_write")
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
 
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
+        goto cleanup;
 
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+    /* --- original EV_WRITE event (unchanged) --- */
+    struct trace_info info = {};
+    info.event = EV_WRITE;
+    info.fd    = ci->fd;
+    info.ret   = ret;
+
+    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
+        goto cleanup;
+
+    loopback_fallback(&info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+    /* --- optional peek bytes into tls_peek_map (no userspace parsing needed) --- */
+    struct write_args_t *wa = bpf_map_lookup_elem(&write_args_map, &id);
+    if (wa && wa->buf) {
+        /* keep noise low: only TCP:443 (remove if you want all) */
+        if (info.proto == IPPROTO_TCP && info.dport == 443 && info.cookie) {
+            __u32 n = (__u32)ret;
+            if (n > TLS_PEEK_MAX) n = TLS_PEEK_MAX;
+
+            __u32 zero = 0;
+            struct tls_peek_t *v = bpf_map_lookup_elem(&tls_peek_scratch, &zero);
+            if (v) {
+                __builtin_memset(v, 0, sizeof(*v));
+
+                v->ts_ns = bpf_ktime_get_ns();
+                v->tgid  = tgid;
+                v->tid   = (__u32)id;
+                v->fd    = wa->fd;
+                v->len   = n;
+
+                v->proto = info.proto;
+                v->sport = info.sport;
+                v->dport = info.dport;
+
+                if (bpf_probe_read_user(v->data, n, (void *)wa->buf) == 0) {
+                    __u64 cookie = info.cookie; /* inode cookie from fd */
+                    bpf_map_update_elem(&tls_peek_map, &cookie, v, BPF_ANY);
+                }
+            }
+        }
+    }
+
+cleanup:
+    bpf_map_delete_elem(&write_args_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
 
