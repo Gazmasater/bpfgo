@@ -710,13 +710,9 @@ sudo strace -ff -p 3215 -e trace=write,writev,sendmsg,sendmmsg -s 0 2>&1 \
 
 
 
- ev@lev-VirtualBox:~/bpfgo$ sudo strace -ff -p 3215 -e trace=write,writev,sendmsg,sendmmsg -s 0 2>&1 \
- | egrep ' (write|writev|sendmsg|sendmmsg)\((22|108|127|109|129|124|107|112),'
-[pid  3333] write(107, ""..., 366811 <unfinished ...>
-[pid  6280] write(107, ""..., 123424)   = 123424
-[pid  3658] sendmsg(107, {msg_name=NULL, msg_namelen=0, msg_iov=[...], msg_iovlen=1, msg_control=[{cmsg_len=20, cmsg_level=SOL_SOCKET, cmsg_type=SCM_RIGHTS, cmsg_data=[...]}], msg_controllen=24, msg_flags=0}, MSG_NOSIGNAL) = 4
-[pid  3658] sendmsg(107, {msg_name=NULL, msg_namelen=0, msg_iov=[...], msg_iovlen=1, msg_control=[{cmsg_len=20, cmsg_level=SOL_SOCKET, cmsg_type=SCM_RIGHTS, cmsg_data=[...]}], msg_controllen=24, msg_flags=0}, MSG_NOSIGNAL) = -1 EPIPE (Broken pipe)
-[pid  3658] sendmsg(107, {msg_name=NULL, msg_namelen=0, msg_iov=[...], msg_iovlen=1, msg_control=[{cmsg_len=20, cmsg_level=SOL_SOCKET, cmsg_type=SCM_RIGHTS, cmsg_data=[...]}], msg_controllen=24, msg_flags=0}, MSG_NOSIGNAL) = 4
-[pid  3658] sendmsg(107, {msg_name=NULL, msg_namelen=0, msg_iov=[...], msg_iovlen=1, msg_control=[{cmsg_len=20, cmsg_level=SOL_SOCKET, cmsg_type=SCM_RIGHTS, cmsg_data=[...]}], msg_controllen=24, msg_flags=0}, MSG_NOSIGNAL) = -1 EPIPE (Broken pipe)
-[pid  3333] write(107, ""..., 366875)   = 366875
-[pid  3333] write(107, ""..., 366875 <unfinished ...>
+ev@lev-VirtualBox:~/bpfgo$ git add .
+lev@lev-VirtualBox:~/bpfgo$ git commit - m "add tls write"
+error: pathspec '-' did not match any file(s) known to git
+error: pathspec 'm' did not match any file(s) known to git
+error: pathspec 'add tls write' did not match any file(s) known to git
+lev@lev-VirtualBox:~/bpfgo$ 
