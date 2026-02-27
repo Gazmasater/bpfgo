@@ -835,3 +835,102 @@ if (ret > 0) {
     __u32 n = (__u32)uret;
     emit_tls_chunk(ctx, id, tgid, ci, &info, (void *)wa->buf, n);
 }
+
+
+
+
+
+SEC("tracepoint/syscalls/sys_exit_sendmsg")
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+    struct trace_info info = {};
+    info.event = EV_SENDMSG;
+    info.fd = ci->fd;
+    info.ret = ret;
+
+    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
+        goto cleanup;
+
+    loopback_fallback(&info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+#if TLS_FROM_SENDMSG
+    // TLS chunk from cached iov0 (BOUNDED)
+    struct sendmsg_iov_t *st = bpf_map_lookup_elem(&msgSend_map, &id);
+    if (st && st->base) {
+        // clamp ret to TLS_CHUNK_MAX AND to st->len (both bounded)
+        __u32 n = (__u32)ret;
+        if (n > TLS_CHUNK_MAX)
+            n = TLS_CHUNK_MAX;
+        if (n > st->len)
+            n = st->len;
+
+        if (n > 0) {
+            // emit_tls_chunk сам еще раз жестко bound-ит
+            (void)emit_tls_chunk(ctx, id, tgid, ci, &info,
+                                 (void *)(unsigned long)st->base, (__s64)n);
+        }
+    }
+#endif
+
+cleanup:
+    bpf_map_delete_elem(&msgSend_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
+
+
+
+SEC("tracepoint/syscalls/sys_exit_write")
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+    struct trace_info info = {};
+    info.event = EV_WRITE;
+    info.fd    = ci->fd;
+    info.ret   = ret;
+
+    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
+        goto cleanup;
+
+    loopback_fallback(&info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+    // NEW: TLS chunk from write(buf)
+    struct write_args_t *wa = bpf_map_lookup_elem(&write_args_map, &id);
+    if (wa && wa->buf) {
+        (void)emit_tls_chunk(ctx, id, tgid, ci, &info, (void *)(unsigned long)wa->buf, ret);
+    }
+
+cleanup:
+    bpf_map_delete_elem(&write_args_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
