@@ -729,85 +729,68 @@ strace -f -e trace=write,writev,sendmsg,sendto -s 200 openssl s_client -connect 
 
 
 
-/* ===== verifier-safe helpers (tiny) ===== */
+/* =======================================================================
+   sendmsg()
+   Главная идея: на enter читаем msghdr + iov0 и сохраняем (base,len) в msgSend_map.
+   На exit НЕ читаем msghdr вообще => verifier счастлив.
+   ======================================================================= */
 
-static __always_inline __u32 clamp_u32(__u32 v, __u32 max)
-{
-    if (v > max) v = max;
-    return v;
-}
-
-/* Convert sys_exit ret to bounded __u32.
- * - rejects <=0
- * - caps to some sane upper bound so verifier doesn't go crazy
- */
-static __always_inline int sysret_to_u32_bounded(const struct trace_event_raw_sys_exit *ctx, __u32 *out)
-{
-    __s64 sret = 0;
-    if (read_sys_exit_ret((struct trace_event_raw_sys_exit *)ctx, &sret) < 0)
-        return -1;
-    if (sret <= 0)
-        return -1;
-
-    /* hard cap (constant) */
-    if (sret > (1 << 20)) /* 1MB */
-        sret = (1 << 20);
-
-    *out = (__u32)sret;
-    return 0;
-}
-
-/* ===== write() =====
- * enter: cache buf + count (count is already size_t in syscall, but keep as u32)
- * exit : emit TLS chunk FIRST (no dependency on fd_state), then optional trace_info
- */
-
-struct write_args_t {
-    __u64 buf;
-    __u32 count;
-};
-
-/* sys_enter_write: кладём conn_info_map + write_args_map */
-SEC("tracepoint/syscalls/sys_enter_write")
-int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
+SEC("tracepoint/syscalls/sys_enter_sendmsg")
+int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx)
 {
     __u64 id   = bpf_get_current_pid_tgid();
     __u32 tgid = id >> 32;
 
-    __s64 fd_s  = (__s64)ctx->args[0];
-    __u64 buf_u = (__u64)ctx->args[1];
-    __u64 cnt_u = (__u64)ctx->args[2];
+    __s64 fd_s = (__s64)ctx->args[0];
+    __u64 msg_u = (__u64)ctx->args[1];
 
-    if (fd_s < 0 || buf_u == 0)
+    if (fd_s < 0)
         return 0;
 
     __s32 fd = (__s32)fd_s;
-    if (!is_socket_fd(fd))
-        return 0;
 
-    /* положи conn_info_map сам */
+    /* кладём conn_info_map сами */
     struct conn_info_t ci = {};
     ci.tgid = tgid;
     ci.fd   = (__u32)fd;
     bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
     bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
 
-    /* положи write args */
-    struct write_args_t wa = {};
-    wa.buf = buf_u;
+#if TLS_FROM_SENDMSG
+    if (!msg_u)
+        return 0;
 
-    __u32 n = (__u32)cnt_u;
+    /* читаем msghdr и iov0 только на enter */
+    struct user_msghdr64 mh = {};
+    if (read_msghdr64(msg_u, &mh) != 0)
+        return 0;
+
+    if (!mh.msg_iov || mh.msg_iovlen == 0)
+        return 0;
+
+    struct user_iovec64 iv0 = {};
+    if (bpf_probe_read_user(&iv0, sizeof(iv0), (void *)(unsigned long)mh.msg_iov) != 0)
+        return 0;
+
+    if (!iv0.iov_base || iv0.iov_len == 0)
+        return 0;
+
+    struct sendmsg_iov_t st = {};
+    st.base = iv0.iov_base;
+
+    __u32 n = (__u32)iv0.iov_len;   /* cast в u32 убирает "negative" */
     if (n > TLS_CHUNK_MAX)
         n = TLS_CHUNK_MAX;
-    wa.count = n;
+    st.len = n;
 
-    bpf_map_update_elem(&write_args_map, &id, &wa, BPF_ANY);
+    bpf_map_update_elem(&msgSend_map, &id, &st, BPF_ANY);
+#endif
+
     return 0;
 }
 
-/* sys_exit_write: n = min(ret, wa.count) and all bounded */
-SEC("tracepoint/syscalls/sys_exit_write")
-int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+SEC("tracepoint/syscalls/sys_exit_sendmsg")
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
 {
     __u64 id   = bpf_get_current_pid_tgid();
     __u32 tgid = id >> 32;
@@ -821,7 +804,7 @@ int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
         goto cleanup;
 
     struct trace_info info = {};
-    info.event = EV_WRITE;
+    info.event = EV_SENDMSG;
     info.fd    = ci->fd;
     info.ret   = ret;
 
@@ -833,135 +816,20 @@ int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
     loopback_fallback(&info, 1);
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
-    /* TLS chunk from write(buf) */
-    struct write_args_t *wa = bpf_map_lookup_elem(&write_args_map, &id);
-    if (wa && wa->buf && wa->count) {
-        __u32 n = wa->count;          /* already <= TLS_CHUNK_MAX */
-        __u32 r = (__u32)ret;         /* ret > 0 checked => safe cast */
+#if TLS_FROM_SENDMSG
+    struct sendmsg_iov_t *st = bpf_map_lookup_elem(&msgSend_map, &id);
+    if (st && st->base && st->len) {
+        __u32 n = st->len;
+        __u32 r = (__u32)ret;
         if (r < n)
             n = r;
 
         if (n > 0) {
             (void)emit_tls_chunk(ctx, id, tgid, ci, &info,
-                                 (void *)(unsigned long)wa->buf, (__s64)n);
-        }
-    }
-
-cleanup:
-    bpf_map_delete_elem(&write_args_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
-
-/* ===== sendmsg() =====
- * enter: cache fd + iov0.base + iov0.len (BOUND it here!)
- * exit : same pattern — TLS FIRST, trace_info second
- *
- * ВАЖНО: основная причина твоей ошибки:
- *  - ret был __s64 и где-то использовался как size аргумент для bpf_probe_read_user
- *  - verifier видел "может быть отрицательным" => R2 min value is negative
- * Решение:
- *  - ret -> __u32 через sysret_to_u32_bounded()
- *  - len в map хранить как __u32, уже bound-нутый на enter
- */
-
-SEC("tracepoint/syscalls/sys_enter_sendmsg")
-int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id = bpf_get_current_pid_tgid();
-
-    __s64 fd = (__s64)ctx->args[0];
-    __u64 umsg = (__u64)ctx->args[1];
-
-    if (fd < 0 || umsg == 0)
-        return 0;
-
-    /* сохраним conn_info_map (fd/comm), если у тебя это не делается в общем enter */
-    struct conn_info_t ci = {};
-    ci.fd = (__s32)fd;
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
-
-#if TLS_FROM_SENDMSG
-    struct sendmsg_iov_t st = {};
-    st.fd = (__s32)fd;
-
-    /* читаем msghdr */
-    struct user_msghdr hdr = {};
-    if (bpf_probe_read_user(&hdr, sizeof(hdr), (void *)(unsigned long)umsg) < 0)
-        return 0;
-
-    /* читаем первый iovec */
-    struct iovec iov0 = {};
-    if (hdr.msg_iov && hdr.msg_iovlen > 0) {
-        if (bpf_probe_read_user(&iov0, sizeof(iov0), (void *)(unsigned long)hdr.msg_iov) < 0)
-            return 0;
-
-        if (iov0.iov_base) {
-            st.base = (__u64)(unsigned long)iov0.iov_base;
-
-            /* bound len сразу константами */
-            __u32 n = (__u32)iov0.iov_len;
-            n = clamp_u32(n, TLS_CHUNK_MAX);
-            st.len = n;
-
-            bpf_map_update_elem(&msgSend_map, &id, &st, BPF_ANY);
-        }
-    }
-#endif
-    return 0;
-}
-
-SEC("tracepoint/syscalls/sys_exit_sendmsg")
-int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __u32 ret = 0;
-    if (sysret_to_u32_bounded(ctx, &ret) < 0)
-        goto cleanup;
-
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci)
-        goto cleanup;
-
-#if TLS_FROM_SENDMSG
-    /* === TLS FIRST (не зависит от fd_state) === */
-    struct sendmsg_iov_t *st = bpf_map_lookup_elem(&msgSend_map, &id);
-    if (st && st->base) {
-        __u32 n = ret;
-
-        /* жестко bound в константы + в st->len */
-        n = clamp_u32(n, TLS_CHUNK_MAX);
-        if (st->len && n > st->len)
-            n = st->len;
-
-        if (n > 0) {
-            struct trace_info dummy = {};
-            dummy.event = EV_SENDMSG;
-            dummy.fd    = ci->fd;
-            dummy.ret   = ret;
-            fill_ids_comm_cookie(&dummy, id, (int)ci->fd, ci->comm);
-
-            (void)emit_tls_chunk(ctx, id, tgid, ci, &dummy,
                                  (void *)(unsigned long)st->base, (__s64)n);
         }
     }
 #endif
-
-    /* === trace_info second === */
-    struct trace_info info = {};
-    info.event = EV_SENDMSG;
-    info.fd    = ci->fd;
-    info.ret   = ret;
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) == 0) {
-        loopback_fallback(&info, 1);
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    }
 
 cleanup:
     bpf_map_delete_elem(&msgSend_map, &id);
