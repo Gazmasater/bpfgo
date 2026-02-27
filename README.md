@@ -726,13 +726,8 @@ sudo bpftool map dump id 188
 
 
 
-lev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info   -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
-/home/lev/bpfgo/trace.c:1334:17: warning: implicit declaration of function 'parse_pktinfo_cmsg' is invalid in C99 [-Wimplicit-function-declaration]
-                parse_pktinfo_cmsg(&info, mh.msg_control, mh.msg_controllen, 1 /* set DST (local) */);
-                ^
-/home/lev/bpfgo/trace.c:1409:13: warning: implicit declaration of function 'parse_pktinfo_cmsg' is invalid in C99 [-Wimplicit-function-declaration]
-            parse_pktinfo_cmsg(&info, m0.msg_hdr.msg_control, m0.msg_hdr.msg_controllen, 0 /* set SRC */);
-            ^
-/home/lev/bpfgo/trace.c:1486:13: warning: implicit declaration of function 'parse_pktinfo_cmsg' is invalid in C99 [-Wimplicit-function-declaration]
-            parse_pktinfo_cmsg(&info, m0.msg_hdr.msg_control, m0.msg_hdr.msg_controllen, 1 /* set DST(local) */);
+static __always_inline void parse_pktinfo_cmsg(struct trace_info *info,
+                                               __u64 cmsg_u,
+                                               __u64 cmsg_len,
+                                               int set_dst_local);
             ^
