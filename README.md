@@ -762,75 +762,64 @@ static __always_inline int sysret_to_u32_bounded(const struct trace_event_raw_sy
  * exit : emit TLS chunk FIRST (no dependency on fd_state), then optional trace_info
  */
 
+struct write_args_t {
+    __u64 buf;
+    __u32 count;
+};
+
+/* sys_enter_write: кладём conn_info_map + write_args_map */
 SEC("tracepoint/syscalls/sys_enter_write")
 int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
 {
-    __u64 id = bpf_get_current_pid_tgid();
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
 
-    struct write_args_t wa = {};
-    /* args: fd, buf, count */
-    __s64 fd = (__s64)ctx->args[0];
-    __u64 buf = (__u64)ctx->args[1];
-    __u64 cnt = (__u64)ctx->args[2];
+    __s64 fd_s  = (__s64)ctx->args[0];
+    __u64 buf_u = (__u64)ctx->args[1];
+    __u64 cnt_u = (__u64)ctx->args[2];
 
-    if (fd < 0 || buf == 0)
+    if (fd_s < 0 || buf_u == 0)
         return 0;
 
-    wa.fd  = (__s32)fd;
-    wa.buf = buf;
+    __s32 fd = (__s32)fd_s;
+    if (!is_socket_fd(fd))
+        return 0;
 
-    /* bound count */
-    __u32 n = (__u32)cnt;
-    n = clamp_u32(n, TLS_CHUNK_MAX);
-    wa.len = n;
+    /* положи conn_info_map сам */
+    struct conn_info_t ci = {};
+    ci.tgid = tgid;
+    ci.fd   = (__u32)fd;
+    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+
+    /* положи write args */
+    struct write_args_t wa = {};
+    wa.buf = buf_u;
+
+    __u32 n = (__u32)cnt_u;
+    if (n > TLS_CHUNK_MAX)
+        n = TLS_CHUNK_MAX;
+    wa.count = n;
 
     bpf_map_update_elem(&write_args_map, &id, &wa, BPF_ANY);
-
-    /* conn_info_map должен уже заполняться у тебя в другом месте;
-       если нет — можешь тут тоже положить fd/comm */
     return 0;
 }
 
+/* sys_exit_write: n = min(ret, wa.count) and all bounded */
 SEC("tracepoint/syscalls/sys_exit_write")
 int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
 {
     __u64 id   = bpf_get_current_pid_tgid();
     __u32 tgid = id >> 32;
 
-    __u32 ret = 0;
-    if (sysret_to_u32_bounded(ctx, &ret) < 0)
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
         goto cleanup;
 
     struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    /* если ci нет — всё равно почистим write_args_map */
     if (!ci)
         goto cleanup;
 
-    /* === TLS chunk FIRST (не зависит от fd_state) === */
-    struct write_args_t *wa = bpf_map_lookup_elem(&write_args_map, &id);
-    if (wa && wa->buf) {
-        __u32 n = ret;
-
-        /* жестко bound в константы + в wa->len */
-        n = clamp_u32(n, TLS_CHUNK_MAX);
-        if (wa->len && n > wa->len)
-            n = wa->len;
-
-        if (n > 0) {
-            struct trace_info dummy = {};
-            dummy.event = EV_WRITE;
-            dummy.fd    = ci->fd;
-            dummy.ret   = ret;
-            fill_ids_comm_cookie(&dummy, id, (int)ci->fd, ci->comm);
-
-            /* emit_tls_chunk внутри должен использовать n (u32),
-               и читать не больше TLS_CHUNK_MAX */
-            (void)emit_tls_chunk(ctx, id, tgid, ci, &dummy,
-                                 (void *)(unsigned long)wa->buf, (__s64)n);
-        }
-    }
-
-    /* === trace_info (как раньше) === */
     struct trace_info info = {};
     info.event = EV_WRITE;
     info.fd    = ci->fd;
@@ -838,9 +827,24 @@ int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
 
     fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
 
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) == 0) {
-        loopback_fallback(&info, 1);
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
+        goto cleanup;
+
+    loopback_fallback(&info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+    /* TLS chunk from write(buf) */
+    struct write_args_t *wa = bpf_map_lookup_elem(&write_args_map, &id);
+    if (wa && wa->buf && wa->count) {
+        __u32 n = wa->count;          /* already <= TLS_CHUNK_MAX */
+        __u32 r = (__u32)ret;         /* ret > 0 checked => safe cast */
+        if (r < n)
+            n = r;
+
+        if (n > 0) {
+            (void)emit_tls_chunk(ctx, id, tgid, ci, &info,
+                                 (void *)(unsigned long)wa->buf, (__s64)n);
+        }
     }
 
 cleanup:
