@@ -726,48 +726,6 @@ sudo bpftool map dump id 188
 
 
 
-SEC("tracepoint/syscalls/sys_exit_sendmsg")
-int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id = pid_tgid();
-    struct sendmsg_state *st = bpf_map_lookup_elem(&sendmsg_map, &id);
-    if (!st)
-        return 0;
-
-    long ret = ctx->ret;
-    if (ret <= 0) {
-        bpf_map_delete_elem(&sendmsg_map, &id);
-        return 0;
-    }
-
-    // 1) clamp по константе MAX_COPY
-    __u32 to_copy = (__u32)ret;
-    if (to_copy > MAX_COPY)
-        to_copy = MAX_COPY;
-
-    // 2) clamp по iov_len (который мы уже заранее ограничили)
-    if (to_copy > st->iov_len)
-        to_copy = st->iov_len;
-
-    // финальная страховка (иногда помогает верификатору видеть bound)
-    if (to_copy == 0 || to_copy > MAX_COPY) {
-        bpf_map_delete_elem(&sendmsg_map, &id);
-        return 0;
-    }
-
-    __u8 buf[MAX_COPY] = {};
-    if (bpf_probe_read_user(buf, to_copy, (void *)(unsigned long)st->iov_base)) {
-        bpf_map_delete_elem(&sendmsg_map, &id);
-        return 0;
-    }
-
-    // ... дальше твоя логика: эвент, cookie, порты, TLS parse и т.д.
-
-    bpf_map_delete_elem(&sendmsg_map, &id);
-    return 0;
-}
-
-
 /* ===== perf output ===== */
 struct {
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
@@ -860,6 +818,22 @@ static __always_inline int emit_tls_chunk(void *ctx,
 
 
 
+/* NEW: sendmsg cached first iov for bounded TLS read */
+struct sendmsg_iov_t {
+    __u64 base;
+    __u32 len;   // already clamped
+    __u32 _pad;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 16384);
+    __type(key, __u64);              // pid_tgid
+    __type(value, struct sendmsg_iov_t);
+} msgSend_map SEC(".maps");
+
+
+
 SEC("tracepoint/syscalls/sys_enter_sendmsg")
 int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx)
 {
@@ -906,6 +880,60 @@ int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx)
     bpf_map_update_elem(&msgSend_map, &id, &st, BPF_ANY);
     return 0;
 }
+
+
+SEC("tracepoint/syscalls/sys_exit_sendmsg")
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+    struct trace_info info = {};
+    info.event = EV_SENDMSG;
+    info.fd = ci->fd;
+    info.ret = ret;
+
+    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
+        goto cleanup;
+
+    loopback_fallback(&info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+#if TLS_FROM_SENDMSG
+    // TLS chunk from cached iov0 (BOUNDED)
+    struct sendmsg_iov_t *st = bpf_map_lookup_elem(&msgSend_map, &id);
+    if (st && st->base) {
+        // clamp ret to TLS_CHUNK_MAX AND to st->len (both bounded)
+        __u32 n = (__u32)ret;
+        if (n > TLS_CHUNK_MAX)
+            n = TLS_CHUNK_MAX;
+        if (n > st->len)
+            n = st->len;
+
+        if (n > 0) {
+            // emit_tls_chunk сам еще раз жестко bound-ит
+            (void)emit_tls_chunk(ctx, id, tgid, ci, &info,
+                                 (void *)(unsigned long)st->base, (__s64)n);
+        }
+    }
+#endif
+
+cleanup:
+    bpf_map_delete_elem(&msgSend_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
 
 
 
