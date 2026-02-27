@@ -725,6 +725,4 @@ sudo bpftool map dump id 188
 
 
 
-OPEN  TCP   pid=5217(openssl) cookie=40120  10.0.2.15(lev-VirtualBox):33452 -> 8.6.112.0(no-ptr):443
-TLS_CHUNK cookie=40120 seq=0 len=80 33452->443 ct=0x14 head=14 03 03 00 01
-TLS_CHUNK cookie=40120 seq=1 len=24 33452->443 ct=0x17 head=17 03 03 00 13
+strace -f -e trace=write,writev,sendmsg,sendto -s 200 openssl s_client -connect example.com:443 -servername example.com </dev/null >/dev/null
