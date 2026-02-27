@@ -769,3 +769,9 @@ go func() {
 		tlsCh <- tlsWrap{ev: ev, now: time.Now()}
 	}
 }()
+
+
+
+OPEN  TCP   pid=21088(openssl) cookie=78083  10.0.2.15(lev-VirtualBox):36012 -> 8.6.112.6(no-ptr):443
+TLS_CHUNK cookie=78083 seq=0 len=80 36012->443 head=14 03 03 00 01
+TLS_CHUNK cookie=78083 seq=1 len=24 36012->443 head=17 03 03 00 13
