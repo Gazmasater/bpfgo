@@ -726,9 +726,112 @@ sudo bpftool map dump id 188
 
 
 
-ev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
-[sudo] password for lev: 
-2026/02/27 14:40:31 dotenv loaded: .env
-2026/02/27 14:40:31.746622 hostsPrefill: added=7 from /etc/hosts
-2026/02/27 14:40:32.347215 failed to load bpf objects: field TraceSendmsgExit: program trace_sendmsg_exit: load program: permission denied: 700: (85) call bpf_probe_read_user#112: R2 min value is negative, either use unsigned or 'var &= const' (791 line(s) omitted)
-lev@lev-VirtualBox:~/bpfgo$ 
+static __always_inline int emit_tls_chunk(void *ctx,
+                                          __u64 id,
+                                          __u32 tgid,
+                                          struct conn_info_t *ci,
+                                          struct trace_info *info,
+                                          const void *user_ptr,
+                                          __u32 nbytes)
+{
+    if (!user_ptr)
+        return 0;
+
+    if (!info->cookie || info->proto != IPPROTO_TCP)
+        return 0;
+
+    if (!(info->dport == 443 || info->sport == 443))
+        return 0;
+
+    __u32 n = nbytes;
+    if (n > TLS_CHUNK_MAX)
+        n = TLS_CHUNK_MAX;
+    if (n == 0)
+        return 0;
+
+    __u64 cookie = info->cookie;
+
+    __u8 *done = bpf_map_lookup_elem(&tls_done_map, &cookie);
+    if (done && *done)
+        return 0;
+
+    __u32 key0 = 0;
+    struct tls_chunk_event *ev = bpf_map_lookup_elem(&tls_chunk_scratch, &key0);
+    if (!ev)
+        return 0;
+
+    __builtin_memset(ev, 0, sizeof(*ev));
+
+    ev->cookie = cookie;
+    ev->ts_ns  = bpf_ktime_get_ns();
+    ev->tgid   = tgid;
+    ev->tid    = (__u32)id;
+    ev->fd     = (__s32)ci->fd;
+    ev->proto  = info->proto;
+    ev->event  = EV_TLS_CHUNK;
+    ev->sport  = info->sport;
+    ev->dport  = info->dport;
+    ev->len    = n;
+
+    __u32 *seqp = bpf_map_lookup_elem(&tls_seq_map, &cookie);
+    __u32 seq = seqp ? *seqp : 0;
+    ev->seq = seq;
+    seq++;
+    bpf_map_update_elem(&tls_seq_map, &cookie, &seq, BPF_ANY);
+
+    // !!! size = __u32 n => verifier OK
+    if (bpf_probe_read_user(ev->data, n, user_ptr) != 0)
+        return 0;
+
+    bpf_perf_event_output(ctx, &tls_events, BPF_F_CURRENT_CPU, ev, sizeof(*ev));
+    return 0;
+}
+
+
+
+
+Исправление №2: в trace_sendmsg_exit передавать __u32, а не __s64
+
+Сейчас у тебя ret — __s64. Даже если проверяешь ret <= 0, verifier может не поверить при кастах.
+
+Сделай так:
+
+__s64 ret = 0;
+if (read_sys_exit_ret(ctx, &ret) < 0)
+    goto cleanup;
+
+// вынеси в unsigned строго после проверки
+if (ret <= 0)
+    goto cleanup;
+
+__u64 uret = (__u64)ret;   // ret > 0 => uret safe
+__u32 n = (__u32)uret;
+if (n > TLS_CHUNK_MAX)
+    n = TLS_CHUNK_MAX;
+if (st && n > st->len)
+    n = st->len;
+
+if (n > 0) {
+    emit_tls_chunk(ctx, id, tgid, ci, &info,
+                   (void *)(unsigned long)st->base, n);
+}
+
+Ключевые моменты:
+
+не передавать ret (signed) внутрь emit_tls_chunk
+
+все размеры должны стать __u32 / __u64, без __s64 рядом с bpf_probe_read_user
+
+Исправление №3: аналогично для write_exit (если там тоже TLS)
+
+Если у тебя в write_exit есть что-то вроде:
+
+emit_tls_chunk(ctx, id, tgid, ci, &info, (void *)wa->buf, ret);
+
+замени на:
+
+if (ret > 0) {
+    __u64 uret = (__u64)ret;
+    __u32 n = (__u32)uret;
+    emit_tls_chunk(ctx, id, tgid, ci, &info, (void *)wa->buf, n);
+}
