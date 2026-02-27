@@ -730,4 +730,73 @@ static __always_inline void parse_pktinfo_cmsg(struct trace_info *info,
                                                __u64 cmsg_u,
                                                __u64 cmsg_len,
                                                int set_dst_local);
-            ^
+
+
+
+static __always_inline void parse_pktinfo_cmsg(struct trace_info *info,
+                                               __u64 cmsg_u,
+                                               __u64 cmsg_len,
+                                               int set_dst_local)
+{
+    if (!cmsg_u || cmsg_len < sizeof(struct user_cmsghdr64))
+        return;
+
+    __u64 off = 0;
+
+#pragma clang loop unroll(full)
+    for (int it = 0; it < MAX_CMSG_ITERS; it++) {
+        if (off + sizeof(struct user_cmsghdr64) > cmsg_len)
+            break;
+
+        struct user_cmsghdr64 ch = {};
+        if (bpf_probe_read_user(&ch, sizeof(ch), (void *)(unsigned long)(cmsg_u + off)) != 0)
+            break;
+
+        // sanity
+        if (ch.cmsg_len < sizeof(struct user_cmsghdr64))
+            break;
+
+        __u64 this_len = ch.cmsg_len;
+        if (off + this_len > cmsg_len)
+            break;
+
+        __u64 data_off = off + sizeof(struct user_cmsghdr64);
+
+        // IPv4 pktinfo -> local dst for recvmsg / specified src for sendmsg
+        if (ch.cmsg_level == SOL_IP && ch.cmsg_type == IP_PKTINFO) {
+            struct user_in_pktinfo pi = {};
+            if (data_off + sizeof(pi) <= cmsg_len &&
+                bpf_probe_read_user(&pi, sizeof(pi), (void *)(unsigned long)(cmsg_u + data_off)) == 0) {
+
+                info->family = AF_INET;
+                if (set_dst_local) {
+                    // local address (dst) for receive path
+                    info->dst_ip4 = pi.ipi_spec_dst ? pi.ipi_spec_dst : pi.ipi_addr;
+                } else {
+                    // src hint for send path
+                    info->src_ip4 = pi.ipi_spec_dst ? pi.ipi_spec_dst : pi.ipi_addr;
+                }
+            }
+        }
+
+        // IPv6 pktinfo
+        if (ch.cmsg_level == SOL_IPV6 && ch.cmsg_type == IPV6_PKTINFO) {
+            struct user_in6_pktinfo pi6 = {};
+            if (data_off + sizeof(pi6) <= cmsg_len &&
+                bpf_probe_read_user(&pi6, sizeof(pi6), (void *)(unsigned long)(cmsg_u + data_off)) == 0) {
+
+                info->family = AF_INET6;
+                if (set_dst_local) {
+                    __builtin_memcpy(info->dst_ip6, pi6.ipi6_addr, 16);
+                } else {
+                    __builtin_memcpy(info->src_ip6, pi6.ipi6_addr, 16);
+                }
+            }
+        }
+
+        // move to next cmsg (aligned)
+        off += CMSG_ALIGN(this_len);
+        if (off >= cmsg_len)
+            break;
+    }
+}
