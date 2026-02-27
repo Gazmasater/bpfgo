@@ -732,6 +732,9 @@ static __always_inline void parse_pktinfo_cmsg(struct trace_info *info,
                                                int set_dst_local);
 
 
+#define MAX_CMSG_ITERS 6
+
+
 
 static __always_inline void parse_pktinfo_cmsg(struct trace_info *info,
                                                __u64 cmsg_u,
