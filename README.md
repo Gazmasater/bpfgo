@@ -840,14 +840,20 @@ if (ret > 0) {
 
 
 
+/* =========================
+ * sendmsg exit (FIXED)
+ * ========================= */
+
 SEC("tracepoint/syscalls/sys_exit_sendmsg")
 int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
 {
-    __u64 id = bpf_get_current_pid_tgid();
+    __u64 id   = bpf_get_current_pid_tgid();
     __u32 tgid = id >> 32;
 
     __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
+    if (read_sys_exit_ret(ctx, &ret) < 0)
+        goto cleanup;
+    if (ret <= 0)
         goto cleanup;
 
     struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
@@ -856,8 +862,8 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
 
     struct trace_info info = {};
     info.event = EV_SENDMSG;
-    info.fd = ci->fd;
-    info.ret = ret;
+    info.fd    = ci->fd;
+    info.ret   = ret;
 
     fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
 
@@ -868,20 +874,28 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
 #if TLS_FROM_SENDMSG
-    // TLS chunk from cached iov0 (BOUNDED)
+    /* TLS chunk from cached iov0 (BOUNDED) */
     struct sendmsg_iov_t *st = bpf_map_lookup_elem(&msgSend_map, &id);
     if (st && st->base) {
-        // clamp ret to TLS_CHUNK_MAX AND to st->len (both bounded)
-        __u32 n = (__u32)ret;
+        /* IMPORTANT:
+         * - make size strictly unsigned
+         * - clamp using constants or bounded map values
+         * - NEVER pass signed ret into bpf_probe_read_user path
+         */
+        __u64 uret = (__u64)ret;     /* safe because ret>0 */
+        __u32 n    = (__u32)uret;
+
         if (n > TLS_CHUNK_MAX)
             n = TLS_CHUNK_MAX;
-        if (n > st->len)
+
+        /* st->len must be __u32 in map value; verifier treats it bounded */
+        if (st->len && n > st->len)
             n = st->len;
 
         if (n > 0) {
-            // emit_tls_chunk сам еще раз жестко bound-ит
+            /* emit_tls_chunk MUST accept __u32 nbytes (see below) */
             (void)emit_tls_chunk(ctx, id, tgid, ci, &info,
-                                 (void *)(unsigned long)st->base, (__s64)n);
+                                 (void *)(unsigned long)st->base, n);
         }
     }
 #endif
@@ -893,7 +907,9 @@ cleanup:
 }
 
 
-
+/* =========================
+ * write exit (FIXED)
+ * ========================= */
 
 SEC("tracepoint/syscalls/sys_exit_write")
 int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
@@ -902,7 +918,9 @@ int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
     __u32 tgid = id >> 32;
 
     __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
+    if (read_sys_exit_ret(ctx, &ret) < 0)
+        goto cleanup;
+    if (ret <= 0)
         goto cleanup;
 
     struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
@@ -922,10 +940,23 @@ int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
     loopback_fallback(&info, 1);
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
-    // NEW: TLS chunk from write(buf)
+    /* TLS chunk from write(buf) */
     struct write_args_t *wa = bpf_map_lookup_elem(&write_args_map, &id);
     if (wa && wa->buf) {
-        (void)emit_tls_chunk(ctx, id, tgid, ci, &info, (void *)(unsigned long)wa->buf, ret);
+        __u64 uret = (__u64)ret; /* ret>0 => safe */
+        __u32 n    = (__u32)uret;
+
+        if (n > TLS_CHUNK_MAX)
+            n = TLS_CHUNK_MAX;
+
+        /* optional: also clamp to wa->count if you store it */
+        if (wa->count && n > (__u32)wa->count)
+            n = (__u32)wa->count;
+
+        if (n > 0) {
+            (void)emit_tls_chunk(ctx, id, tgid, ci, &info,
+                                 (void *)(unsigned long)wa->buf, n);
+        }
     }
 
 cleanup:
