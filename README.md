@@ -730,9 +730,174 @@ strace -f -e trace=write,writev,sendmsg,sendto -s 200 openssl s_client -connect 
 
 
 
-ev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
-[sudo] password for lev: 
-2026/02/27 18:21:46 dotenv loaded: .env
-2026/02/27 18:21:46.460603 hostsPrefill: added=7 from /etc/hosts
-2026/02/27 18:21:46.907338 failed to load bpf objects: field TraceSendmsgExit: program trace_sendmsg_exit: load program: permission denied: 969: (85) call bpf_probe_read_user#112: R2 unbounded memory access, use 'var &= const' or 'if (var < const)' (800 line(s) omitted)
-lev@lev-VirtualBox:~/bpfgo$ 
+static __always_inline int emit_tls_chunk(void *ctx,
+                                          __u64 id,
+                                          __u32 tgid,
+                                          struct conn_info_t *ci,
+                                          struct trace_info *info,
+                                          const void *user_ptr,
+                                          __u32 nbytes)
+{
+    if (!user_ptr)
+        return 0;
+
+    if (!info->cookie || info->proto != IPPROTO_TCP)
+        return 0;
+
+    __u64 cookie = info->cookie;
+
+    __u8 *done = bpf_map_lookup_elem(&tls_done_map, &cookie);
+    if (done && *done)
+        return 0;
+
+    /* ---- HARD BOUND (verifier-friendly) ----
+     * TLS_CHUNK_MAX = 256 -> mask 255 => range 0..255 (always bounded const)
+     */
+    __u32 n = nbytes;
+    n &= (TLS_CHUNK_MAX - 1);
+    if (n == 0)
+        return 0;
+
+    /* опционально: быстро отфильтровать “не TLS” */
+    if (!looks_like_tls_record(user_ptr, n))
+        return 0;
+
+    __u32 key0 = 0;
+    struct tls_chunk_event *ev = bpf_map_lookup_elem(&tls_chunk_scratch, &key0);
+    if (!ev)
+        return 0;
+
+    __builtin_memset(ev, 0, sizeof(*ev));
+
+    ev->cookie = cookie;
+    ev->ts_ns  = bpf_ktime_get_ns();
+    ev->tgid   = tgid;
+    ev->tid    = (__u32)id;
+    ev->fd     = (__s32)ci->fd;
+
+    ev->proto  = info->proto;
+    ev->event  = EV_TLS_CHUNK;
+    ev->sport  = info->sport;
+    ev->dport  = info->dport;
+
+    ev->len    = n;
+
+    __u32 *seqp = bpf_map_lookup_elem(&tls_seq_map, &cookie);
+    __u32 seq = seqp ? *seqp : 0;
+    ev->seq = seq;
+    seq++;
+    bpf_map_update_elem(&tls_seq_map, &cookie, &seq, BPF_ANY);
+
+    /* n гарантированно bounded константой */
+    if (bpf_probe_read_user(ev->data, n, user_ptr) != 0)
+        return 0;
+
+    bpf_perf_event_output(ctx, &tls_events, BPF_F_CURRENT_CPU, ev, sizeof(*ev));
+    return 0;
+}
+
+
+
+
+SEC("tracepoint/syscalls/sys_exit_sendmsg")
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 sret = 0;
+    if (read_sys_exit_ret(ctx, &sret) < 0 || sret <= 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+    struct trace_info info = {};
+    info.event = EV_SENDMSG;
+    info.fd    = ci->fd;
+    info.ret   = sret;
+
+    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
+        goto cleanup;
+
+    loopback_fallback(&info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+#if TLS_FROM_SENDMSG
+    struct sendmsg_iov_t *st = bpf_map_lookup_elem(&msgSend_map, &id);
+    if (st && st->base) {
+        __u32 n = st->len;          // verifier считает unbounded (из map)
+        __u32 r = (__u32)sret;      // sret > 0 -> safe cast
+
+        if (r < n)
+            n = r;
+
+        /* HARD BOUND перед любыми user reads */
+        n &= (TLS_CHUNK_MAX - 1);
+
+        if (n > 0) {
+            (void)emit_tls_chunk(ctx, id, tgid, ci, &info,
+                                 (void *)(unsigned long)st->base, n);
+        }
+    }
+#endif
+
+cleanup:
+    bpf_map_delete_elem(&msgSend_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
+
+
+SEC("tracepoint/syscalls/sys_exit_write")
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 sret = 0;
+    if (read_sys_exit_ret(ctx, &sret) < 0 || sret <= 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+    struct trace_info info = {};
+    info.event = EV_WRITE;
+    info.fd    = ci->fd;
+    info.ret   = sret;
+
+    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
+        goto cleanup;
+
+    loopback_fallback(&info, 1);
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+    struct write_args_t *wa = bpf_map_lookup_elem(&write_args_map, &id);
+    if (wa && wa->buf) {
+        __u32 n = wa->count;        // тоже из map
+        __u32 r = (__u32)sret;
+
+        if (r < n)
+            n = r;
+
+        n &= (TLS_CHUNK_MAX - 1);
+
+        if (n > 0) {
+            (void)emit_tls_chunk(ctx, id, tgid, ci, &info,
+                                 (void *)(unsigned long)wa->buf, n);
+        }
+    }
+
+cleanup:
+    bpf_map_delete_elem(&write_args_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
