@@ -730,183 +730,19 @@ strace -f -e trace=write,writev,sendmsg,sendto -s 200 openssl s_client -connect 
 
 
 
-/* =========================
- * TLS EMIT (verifier-proof)
- * ========================= */
-
-static __always_inline int emit_tls_chunk(void *ctx,
-                                          __u64 id,
-                                          __u32 tgid,
-                                          const struct conn_info_t *ci,
-                                          const struct trace_info *info_opt,
-                                          int fd,
-                                          const void *user_ptr,
-                                          __u32 nbytes)
-{
-    if (!user_ptr)
-        return 0;
-
-    /* cookie можно получить даже если fd_state ещё не готов */
-    __u64 cookie = cookie_from_fd(fd);
-    if (!cookie)
-        return 0;
-
-    /* если userspace уже сказал "хватит" */
-    __u8 *done = bpf_map_lookup_elem(&tls_done_map, &cookie);
-    if (done && *done)
-        return 0;
-
-    /* жестко ограничим длину (без маски, обычный clamp) */
-    __u32 n = nbytes;
-    if (n > TLS_CHUNK_MAX)
-        n = TLS_CHUNK_MAX;
-    if (n == 0)
-        return 0;
-
-    __u32 key0 = 0;
-    struct tls_chunk_event *ev = bpf_map_lookup_elem(&tls_chunk_scratch, &key0);
-    if (!ev)
-        return 0;
-
-    __builtin_memset(ev, 0, sizeof(*ev));
-
-    ev->cookie = cookie;
-    ev->ts_ns  = bpf_ktime_get_ns();
-    ev->tgid   = tgid;
-    ev->tid    = (__u32)id;
-    ev->fd     = (__s32)fd;
-
-    ev->proto  = IPPROTO_TCP;
-    ev->event  = EV_TLS_CHUNK;
-
-    /* порты optional: если info_opt есть и порты заполнены — добавим */
-    if (info_opt) {
-        ev->sport = info_opt->sport;
-        ev->dport = info_opt->dport;
-        ev->proto = info_opt->proto ? info_opt->proto : IPPROTO_TCP;
-    }
-
-    ev->len = n;
-
-    __u32 *seqp = bpf_map_lookup_elem(&tls_seq_map, &cookie);
-    __u32 seq = seqp ? *seqp : 0;
-    ev->seq = seq;
-    seq++;
-    bpf_map_update_elem(&tls_seq_map, &cookie, &seq, BPF_ANY);
-
-    /* ВАЖНО: читаем по 1 байту — verifier всегда доволен */
-#pragma clang loop unroll(full)
-    for (int i = 0; i < TLS_CHUNK_MAX; i++) {
-        if ((__u32)i >= n)
-            break;
-        __u8 b = 0;
-        if (bpf_probe_read_user(&b, 1, (const void *)((const char *)user_ptr + i)) != 0)
-            break;
-        ev->data[i] = b;
-    }
-
-    bpf_perf_event_output(ctx, &tls_events, BPF_F_CURRENT_CPU, ev, sizeof(*ev));
-    return 0;
-}
-
-/* =========================
- * sendmsg
- * ========================= */
-
-SEC("tracepoint/syscalls/sys_exit_sendmsg")
-int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
-        goto cleanup;
-
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci)
-        goto cleanup;
-
-    int fd = (int)ci->fd;
-
-#if TLS_FROM_SENDMSG
-    /* 1) TLS chunk ПЕРВЫМ делом: не зависит от fd_state/портов */
-    struct sendmsg_iov_t *st = bpf_map_lookup_elem(&msgSend_map, &id);
-    if (st && st->base && st->len) {
-        __u32 n = st->len;          /* уже <= TLS_CHUNK_MAX */
-        __u32 r = (__u32)ret;       /* ret>0 => safe */
-        if (r < n) n = r;
-        if (n) {
-            (void)emit_tls_chunk(ctx, id, tgid, ci, 0 /*info_opt*/, fd,
-                                 (const void *)(unsigned long)st->base, n);
-        }
-    }
-#endif
-
-    /* 2) Обычный trace_info (может фейлиться — TLS уже отправили) */
-    struct trace_info info = {};
-    info.event = EV_SENDMSG;
-    info.fd    = ci->fd;
-    info.ret   = ret;
-    fill_ids_comm_cookie(&info, id, fd, ci->comm);
-
-    if (fill_from_fd_state_map(&info, tgid, fd, 1) == 0) {
-        loopback_fallback(&info, 1);
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    }
-
-cleanup:
-    bpf_map_delete_elem(&msgSend_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
-
-/* =========================
- * write
- * ========================= */
-
-SEC("tracepoint/syscalls/sys_exit_write")
+ev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info   -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
+/home/lev/bpfgo/trace.c:1623:5: error: redefinition of 'trace_write_exit'
 int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
+    ^
+/home/lev/bpfgo/trace.c:1409:5: note: previous definition is here
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+    ^
+/home/lev/bpfgo/trace.c:1661:67: error: too few arguments to function call, expected 8, have 7
+                                 (void *)(unsigned long)wa->buf, n);
+                                                                  ^
+/home/lev/bpfgo/trace.c:843:28: note: 'emit_tls_chunk' declared here
+static __always_inline int emit_tls_chunk(void *ctx,
+                           ^
+2 errors generated.
+Error: compile: exit status 1
 
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
-        goto cleanup;
-
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci)
-        goto cleanup;
-
-    int fd = (int)ci->fd;
-
-    /* 1) TLS chunk ПЕРВЫМ делом */
-    struct write_args_t *wa = bpf_map_lookup_elem(&write_args_map, &id);
-    if (wa && wa->buf && wa->count) {
-        __u32 n = (__u32)wa->count; /* already clamped in enter */
-        __u32 r = (__u32)ret;
-        if (r < n) n = r;
-        if (n) {
-            (void)emit_tls_chunk(ctx, id, tgid, ci, 0 /*info_opt*/, fd,
-                                 (const void *)(unsigned long)wa->buf, n);
-        }
-    }
-
-    /* 2) Обычный trace_info */
-    struct trace_info info = {};
-    info.event = EV_WRITE;
-    info.fd    = ci->fd;
-    info.ret   = ret;
-    fill_ids_comm_cookie(&info, id, fd, ci->comm);
-
-    if (fill_from_fd_state_map(&info, tgid, fd, 1) == 0) {
-        loopback_fallback(&info, 1);
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    }
-
-cleanup:
-    bpf_map_delete_elem(&write_args_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
