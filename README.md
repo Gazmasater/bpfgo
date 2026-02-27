@@ -729,110 +729,63 @@ strace -f -e trace=write,writev,sendmsg,sendto -s 200 openssl s_client -connect 
 
 
 
-/* =======================================================================
-   sendmsg()
-   Главная идея: на enter читаем msghdr + iov0 и сохраняем (base,len) в msgSend_map.
-   На exit НЕ читаем msghdr вообще => verifier счастлив.
-   ======================================================================= */
 
-SEC("tracepoint/syscalls/sys_enter_sendmsg")
-int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
+    void *head = (void *)BPF_CORE_READ(skb, head);
+    __u16 nh   = BPF_CORE_READ(skb, network_header);
+    __u16 th   = BPF_CORE_READ(skb, transport_header);
 
-    __s64 fd_s = (__s64)ctx->args[0];
-    __u64 msg_u = (__u64)ctx->args[1];
+    if (family == AF_INET) {
+        struct iphdr iph = {};
+        if (!head) return 0;
+        bpf_probe_read_kernel(&iph, sizeof(iph), head + nh);
+        if (iph.version != 4) return 0;
 
-    if (fd_s < 0)
-        return 0;
+        e.proto   = iph.protocol;
+        e.src_ip4 = iph.saddr; // network order
+        e.dst_ip4 = iph.daddr; // network order
 
-    __s32 fd = (__s32)fd_s;
-
-    /* кладём conn_info_map сами */
-    struct conn_info_t ci = {};
-    ci.tgid = tgid;
-    ci.fd   = (__u32)fd;
-    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
-    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
-
-#if TLS_FROM_SENDMSG
-    if (!msg_u)
-        return 0;
-
-    /* читаем msghdr и iov0 только на enter */
-    struct user_msghdr64 mh = {};
-    if (read_msghdr64(msg_u, &mh) != 0)
-        return 0;
-
-    if (!mh.msg_iov || mh.msg_iovlen == 0)
-        return 0;
-
-    struct user_iovec64 iv0 = {};
-    if (bpf_probe_read_user(&iv0, sizeof(iv0), (void *)(unsigned long)mh.msg_iov) != 0)
-        return 0;
-
-    if (!iv0.iov_base || iv0.iov_len == 0)
-        return 0;
-
-    struct sendmsg_iov_t st = {};
-    st.base = iv0.iov_base;
-
-    __u32 n = (__u32)iv0.iov_len;   /* cast в u32 убирает "negative" */
-    if (n > TLS_CHUNK_MAX)
-        n = TLS_CHUNK_MAX;
-    st.len = n;
-
-    bpf_map_update_elem(&msgSend_map, &id, &st, BPF_ANY);
-#endif
-
-    return 0;
-}
-
-SEC("tracepoint/syscalls/sys_exit_sendmsg")
-int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
-
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
-        goto cleanup;
-
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci)
-        goto cleanup;
-
-    struct trace_info info = {};
-    info.event = EV_SENDMSG;
-    info.fd    = ci->fd;
-    info.ret   = ret;
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
-        goto cleanup;
-
-    loopback_fallback(&info, 1);
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-
-#if TLS_FROM_SENDMSG
-    struct sendmsg_iov_t *st = bpf_map_lookup_elem(&msgSend_map, &id);
-    if (st && st->base && st->len) {
-        __u32 n = st->len;
-        __u32 r = (__u32)ret;
-        if (r < n)
-            n = r;
-
-        if (n > 0) {
-            (void)emit_tls_chunk(ctx, id, tgid, ci, &info,
-                                 (void *)(unsigned long)st->base, (__s64)n);
+        if (e.proto == IPPROTO_UDP) {
+            struct udphdr uh = {};
+            bpf_probe_read_kernel(&uh, sizeof(uh), head + th);
+            e.sport = bpf_ntohs(uh.source);
+            e.dport = bpf_ntohs(uh.dest);
+        } else if (e.proto == IPPROTO_TCP) {
+            struct tcphdr thh = {};
+            bpf_probe_read_kernel(&thh, sizeof(thh), head + th);
+            e.sport = bpf_ntohs(thh.source);
+            e.dport = bpf_ntohs(thh.dest);
         }
-    }
-#endif
+    } else if (family == AF_INET6) {
+        struct ipv6hdr ip6h = {};
+        if (!head) return 0;
+        bpf_probe_read_kernel(&ip6h, sizeof(ip6h), head + nh);
 
-cleanup:
-    bpf_map_delete_elem(&msgSend_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
+        e.proto = ip6h.nexthdr;
+        __builtin_memcpy(e.src_ip6, &ip6h.saddr, sizeof(e.src_ip6));
+        __builtin_memcpy(e.dst_ip6, &ip6h.daddr, sizeof(e.dst_ip6));
+
+
+        if (e.proto == IPPROTO_UDP) {
+            struct udphdr uh = {};
+            bpf_probe_read_kernel(&uh, sizeof(uh), head + th);
+            e.sport = bpf_ntohs(uh.source);
+            e.dport = bpf_ntohs(uh.dest);
+        } else if (e.proto == IPPROTO_TCP) {
+            struct tcphdr thh = {};
+            bpf_probe_read_kernel(&thh, sizeof(thh), head + th);
+            e.sport = bpf_ntohs(thh.source);
+            e.dport = bpf_ntohs(thh.dest);
+        }
+    } else {
+        return 0;
+    }
+
+    // we only care TCP/UDP/ICMP(v6) like in user space
+    // (ICMP has no ports; you can still emit src/dst if you want)
+    if (e.proto != IPPROTO_TCP && e.proto != IPPROTO_UDP && e.proto != IPPROTO_ICMP && e.proto != IPPROTO_ICMPV6) {
+        return 0;
+    }
+
+    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &e, sizeof(e));
     return 0;
 }
