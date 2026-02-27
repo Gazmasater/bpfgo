@@ -725,53 +725,11 @@ sudo bpftool map dump id 188
 
 
 
-rec, e := tlsRD.Read()
-...
-ev := *(*bpfTlsChunkEvent)(unsafe.Pointer(&rec.RawSample[0]))
-tlsCh <- tlsWrap{ev: ev, now: time.Now()}
-
-
-go func() {
-	defer close(tlsCh)
-	for {
-		rec, e := tlsRD.Read()
-		if e != nil {
-			if errors.Is(e, perf.ErrClosed) {
-				return
-			}
-			continue
-		}
-		if len(rec.RawSample) < int(unsafe.Sizeof(bpfTlsChunkEvent{})) {
-			continue
-		}
-
-		ev := *(*bpfTlsChunkEvent)(unsafe.Pointer(&rec.RawSample[0]))
-
-		// ---- DEBUG PRINT ----
-		n := int(ev.Len)
-		if n < 0 {
-			n = 0
-		}
-		if n > len(ev.Data) {
-			n = len(ev.Data)
-		}
-		head := 5
-		if n < head {
-			head = n
-		}
-		fmt.Printf("TLS_CHUNK cookie=%d seq=%d len=%d %d->%d head=%s\n",
-			ev.Cookie, ev.Seq, n,
-			ev.Sport, ev.Dport,
-			fmt.Sprintf("% x", ev.Data[:head]),
-		)
-		// ---------------------
-
-		tlsCh <- tlsWrap{ev: ev, now: time.Now()}
-	}
-}()
-
-
-
-OPEN  TCP   pid=21088(openssl) cookie=78083  10.0.2.15(lev-VirtualBox):36012 -> 8.6.112.6(no-ptr):443
-TLS_CHUNK cookie=78083 seq=0 len=80 36012->443 head=14 03 03 00 01
-TLS_CHUNK cookie=78083 seq=1 len=24 36012->443 head=17 03 03 00 13
+ct := byte(0)
+if n > 0 {
+    ct = ev.Data[0]
+}
+fmt.Printf("TLS_CHUNK cookie=%d seq=%d len=%d %d->%d ct=0x%02x head=%s\n",
+    ev.Cookie, ev.Seq, n, ev.Sport, ev.Dport, ct,
+    fmt.Sprintf("% x", ev.Data[:head]),
+)
