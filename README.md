@@ -729,238 +729,238 @@ strace -f -e trace=write,writev,sendmsg,sendto -s 200 openssl s_client -connect 
 
 
 
-lev@lev-VirtualBox:~/bpfgo$ strace -f -e trace=write,writev,sendmsg,sendto -s 200 openssl s_client -connect example.com:443 -servername example.com </dev/null >/dev/null
-sendto(3, [{nlmsg_len=20, nlmsg_type=RTM_GETADDR, nlmsg_flags=NLM_F_REQUEST|NLM_F_DUMP, nlmsg_seq=1772206493, nlmsg_pid=0}, {ifa_family=AF_UNSPEC, ...}], 20, 0, {sa_family=AF_NETLINK, nl_pid=0, nl_groups=00000000}, 12) = 20
-write(3, "\26\3\1\0014\1\0\0010\3\3\313\357y\203\354a\267\360\256\336.)\272\336\275h\4\356k\210\223\354\277\230\213\3144\5\316z\255\367 \320\221M\353V`\237z\354\25~*.\10,\370o\223\364l\303\360\266\375w[\335\324\0\316\216O\0>\23\2\23\3\23\1\300,\3000\0\237\314\251\314\250\314\252\300+\300/\0\236\300$\300(\0k\300#\300'\0g\300\n\300\24\09\300\t\300\23\0003\0\235\0\234\0=\0<\0005\0/\0\377\1\0\0\251\0\0\0\20\0\16\0\0\vexample.com\0\v\0\4\3\0\1\2\0\n\0\26\0\24\0\35\0\27\0\36\0\31\0\30\1\0\1\1\1\2\1\3\1\4\0#"..., 313) = 313
-write(2, "depth=3 ", 8depth=3 )                 = 8
-write(2, "C", 1C)                        = 1
-write(2, " = ", 3 = )                      = 3
-write(2, "G", 1G)                        = 1
-write(2, "B", 1B)                        = 1
-write(2, ", ", 2, )                       = 2
-write(2, "ST", 2ST)                       = 2
-write(2, " = ", 3 = )                      = 3
-write(2, "G", 1G)                        = 1
-write(2, "r", 1r)                        = 1
-write(2, "e", 1e)                        = 1
-write(2, "a", 1a)                        = 1
-write(2, "t", 1t)                        = 1
-write(2, "e", 1e)                        = 1
-write(2, "r", 1r)                        = 1
-write(2, " ", 1 )                        = 1
-write(2, "M", 1M)                        = 1
-write(2, "a", 1a)                        = 1
-write(2, "n", 1n)                        = 1
-write(2, "c", 1c)                        = 1
-write(2, "h", 1h)                        = 1
-write(2, "e", 1e)                        = 1
-write(2, "s", 1s)                        = 1
-write(2, "t", 1t)                        = 1
-write(2, "e", 1e)                        = 1
-write(2, "r", 1r)                        = 1
-write(2, ", ", 2, )                       = 2
-write(2, "L", 1L)                        = 1
-write(2, " = ", 3 = )                      = 3
-write(2, "S", 1S)                        = 1
-write(2, "a", 1a)                        = 1
-write(2, "l", 1l)                        = 1
-write(2, "f", 1f)                        = 1
-write(2, "o", 1o)                        = 1
-write(2, "r", 1r)                        = 1
-write(2, "d", 1d)                        = 1
-write(2, ", ", 2, )                       = 2
-write(2, "O", 1O)                        = 1
-write(2, " = ", 3 = )                      = 3
-write(2, "C", 1C)                        = 1
-write(2, "o", 1o)                        = 1
-write(2, "m", 1m)                        = 1
-write(2, "o", 1o)                        = 1
-write(2, "d", 1d)                        = 1
-write(2, "o", 1o)                        = 1
-write(2, " ", 1 )                        = 1
-write(2, "C", 1C)                        = 1
-write(2, "A", 1A)                        = 1
-write(2, " ", 1 )                        = 1
-write(2, "L", 1L)                        = 1
-write(2, "i", 1i)                        = 1
-write(2, "m", 1m)                        = 1
-write(2, "i", 1i)                        = 1
-write(2, "t", 1t)                        = 1
-write(2, "e", 1e)                        = 1
-write(2, "d", 1d)                        = 1
-write(2, ", ", 2, )                       = 2
-write(2, "CN", 2CN)                       = 2
-write(2, " = ", 3 = )                      = 3
-write(2, "A", 1A)                        = 1
-write(2, "A", 1A)                        = 1
-write(2, "A", 1A)                        = 1
-write(2, " ", 1 )                        = 1
-write(2, "C", 1C)                        = 1
-write(2, "e", 1e)                        = 1
-write(2, "r", 1r)                        = 1
-write(2, "t", 1t)                        = 1
-write(2, "i", 1i)                        = 1
-write(2, "f", 1f)                        = 1
-write(2, "i", 1i)                        = 1
-write(2, "c", 1c)                        = 1
-write(2, "a", 1a)                        = 1
-write(2, "t", 1t)                        = 1
-write(2, "e", 1e)                        = 1
-write(2, " ", 1 )                        = 1
-write(2, "S", 1S)                        = 1
-write(2, "e", 1e)                        = 1
-write(2, "r", 1r)                        = 1
-write(2, "v", 1v)                        = 1
-write(2, "i", 1i)                        = 1
-write(2, "c", 1c)                        = 1
-write(2, "e", 1e)                        = 1
-write(2, "s", 1s)                        = 1
-write(2, "\n", 1
-)                       = 1
-write(2, "verify return:1\n", 16verify return:1
-)       = 16
-write(2, "depth=2 ", 8depth=2 )                 = 8
-write(2, "C", 1C)                        = 1
-write(2, " = ", 3 = )                      = 3
-write(2, "U", 1U)                        = 1
-write(2, "S", 1S)                        = 1
-write(2, ", ", 2, )                       = 2
-write(2, "O", 1O)                        = 1
-write(2, " = ", 3 = )                      = 3
-write(2, "S", 1S)                        = 1
-write(2, "S", 1S)                        = 1
-write(2, "L", 1L)                        = 1
-write(2, " ", 1 )                        = 1
-write(2, "C", 1C)                        = 1
-write(2, "o", 1o)                        = 1
-write(2, "r", 1r)                        = 1
-write(2, "p", 1p)                        = 1
-write(2, "o", 1o)                        = 1
-write(2, "r", 1r)                        = 1
-write(2, "a", 1a)                        = 1
-write(2, "t", 1t)                        = 1
-write(2, "i", 1i)                        = 1
-write(2, "o", 1o)                        = 1
-write(2, "n", 1n)                        = 1
-write(2, ", ", 2, )                       = 2
-write(2, "CN", 2CN)                       = 2
-write(2, " = ", 3 = )                      = 3
-write(2, "S", 1S)                        = 1
-write(2, "S", 1S)                        = 1
-write(2, "L", 1L)                        = 1
-write(2, ".", 1.)                        = 1
-write(2, "c", 1c)                        = 1
-write(2, "o", 1o)                        = 1
-write(2, "m", 1m)                        = 1
-write(2, " ", 1 )                        = 1
-write(2, "T", 1T)                        = 1
-write(2, "L", 1L)                        = 1
-write(2, "S", 1S)                        = 1
-write(2, " ", 1 )                        = 1
-write(2, "T", 1T)                        = 1
-write(2, "r", 1r)                        = 1
-write(2, "a", 1a)                        = 1
-write(2, "n", 1n)                        = 1
-write(2, "s", 1s)                        = 1
-write(2, "i", 1i)                        = 1
-write(2, "t", 1t)                        = 1
-write(2, " ", 1 )                        = 1
-write(2, "E", 1E)                        = 1
-write(2, "C", 1C)                        = 1
-write(2, "C", 1C)                        = 1
-write(2, " ", 1 )                        = 1
-write(2, "C", 1C)                        = 1
-write(2, "A", 1A)                        = 1
-write(2, " ", 1 )                        = 1
-write(2, "R", 1R)                        = 1
-write(2, "2", 12)                        = 1
-write(2, "\n", 1
-)                       = 1
-write(2, "verify return:1\n", 16verify return:1
-)       = 16
-write(2, "depth=1 ", 8depth=1 )                 = 8
-write(2, "C", 1C)                        = 1
-write(2, " = ", 3 = )                      = 3
-write(2, "U", 1U)                        = 1
-write(2, "S", 1S)                        = 1
-write(2, ", ", 2, )                       = 2
-write(2, "O", 1O)                        = 1
-write(2, " = ", 3 = )                      = 3
-write(2, "S", 1S)                        = 1
-write(2, "S", 1S)                        = 1
-write(2, "L", 1L)                        = 1
-write(2, " ", 1 )                        = 1
-write(2, "C", 1C)                        = 1
-write(2, "o", 1o)                        = 1
-write(2, "r", 1r)                        = 1
-write(2, "p", 1p)                        = 1
-write(2, "o", 1o)                        = 1
-write(2, "r", 1r)                        = 1
-write(2, "a", 1a)                        = 1
-write(2, "t", 1t)                        = 1
-write(2, "i", 1i)                        = 1
-write(2, "o", 1o)                        = 1
-write(2, "n", 1n)                        = 1
-write(2, ", ", 2, )                       = 2
-write(2, "CN", 2CN)                       = 2
-write(2, " = ", 3 = )                      = 3
-write(2, "C", 1C)                        = 1
-write(2, "l", 1l)                        = 1
-write(2, "o", 1o)                        = 1
-write(2, "u", 1u)                        = 1
-write(2, "d", 1d)                        = 1
-write(2, "f", 1f)                        = 1
-write(2, "l", 1l)                        = 1
-write(2, "a", 1a)                        = 1
-write(2, "r", 1r)                        = 1
-write(2, "e", 1e)                        = 1
-write(2, " ", 1 )                        = 1
-write(2, "T", 1T)                        = 1
-write(2, "L", 1L)                        = 1
-write(2, "S", 1S)                        = 1
-write(2, " ", 1 )                        = 1
-write(2, "I", 1I)                        = 1
-write(2, "s", 1s)                        = 1
-write(2, "s", 1s)                        = 1
-write(2, "u", 1u)                        = 1
-write(2, "i", 1i)                        = 1
-write(2, "n", 1n)                        = 1
-write(2, "g", 1g)                        = 1
-write(2, " ", 1 )                        = 1
-write(2, "E", 1E)                        = 1
-write(2, "C", 1C)                        = 1
-write(2, "C", 1C)                        = 1
-write(2, " ", 1 )                        = 1
-write(2, "C", 1C)                        = 1
-write(2, "A", 1A)                        = 1
-write(2, " ", 1 )                        = 1
-write(2, "3", 13)                        = 1
-write(2, "\n", 1
-)                       = 1
-write(2, "verify return:1\n", 16verify return:1
-)       = 16
-write(2, "depth=0 ", 8depth=0 )                 = 8
-write(2, "CN", 2CN)                       = 2
-write(2, " = ", 3 = )                      = 3
-write(2, "e", 1e)                        = 1
-write(2, "x", 1x)                        = 1
-write(2, "a", 1a)                        = 1
-write(2, "m", 1m)                        = 1
-write(2, "p", 1p)                        = 1
-write(2, "l", 1l)                        = 1
-write(2, "e", 1e)                        = 1
-write(2, ".", 1.)                        = 1
-write(2, "c", 1c)                        = 1
-write(2, "o", 1o)                        = 1
-write(2, "m", 1m)                        = 1
-write(2, "\n", 1
-)                       = 1
-write(2, "verify return:1\n", 16verify return:1
-)       = 16
-write(3, "\24\3\3\0\1\1\27\3\3\0E76\360\241\263\4\343\274\324\211\377\366_\247I\330Z|\204\274\355\337\346:\237\333\331D\0\31\335\361V\374!\314(x\16\7\244aIX\34\224O\261\262\17\304\305\234 \6\365\360h\274\6\326\257\333\357\37H\230\363>", 80) = 80
-write(1, "CONNECTED(00000003)\n---\nCertificate chain\n 0 s:CN = example.com\n   i:C = US, O = SSL Corporation, CN = Cloudflare TLS Issuing ECC CA 3\n   a:PKEY: id-ecPublicKey, 256 (bit); sigalg: ecdsa-with-SHA256\n "..., 2828) = 2828
-write(2, "DONE\n", 5DONE
-)                   = 5
-write(3, "\27\3\3\0\23RLz\22;\316@\257Y\224i\201$f\202\245\350J\36", 24) = 24
-+++ exited with 0 +++
-lev@lev-VirtualBox:~/bpfgo$ 
+/* ===== verifier-safe helpers (tiny) ===== */
+
+static __always_inline __u32 clamp_u32(__u32 v, __u32 max)
+{
+    if (v > max) v = max;
+    return v;
+}
+
+/* Convert sys_exit ret to bounded __u32.
+ * - rejects <=0
+ * - caps to some sane upper bound so verifier doesn't go crazy
+ */
+static __always_inline int sysret_to_u32_bounded(const struct trace_event_raw_sys_exit *ctx, __u32 *out)
+{
+    __s64 sret = 0;
+    if (read_sys_exit_ret((struct trace_event_raw_sys_exit *)ctx, &sret) < 0)
+        return -1;
+    if (sret <= 0)
+        return -1;
+
+    /* hard cap (constant) */
+    if (sret > (1 << 20)) /* 1MB */
+        sret = (1 << 20);
+
+    *out = (__u32)sret;
+    return 0;
+}
+
+/* ===== write() =====
+ * enter: cache buf + count (count is already size_t in syscall, but keep as u32)
+ * exit : emit TLS chunk FIRST (no dependency on fd_state), then optional trace_info
+ */
+
+SEC("tracepoint/syscalls/sys_enter_write")
+int trace_write_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+
+    struct write_args_t wa = {};
+    /* args: fd, buf, count */
+    __s64 fd = (__s64)ctx->args[0];
+    __u64 buf = (__u64)ctx->args[1];
+    __u64 cnt = (__u64)ctx->args[2];
+
+    if (fd < 0 || buf == 0)
+        return 0;
+
+    wa.fd  = (__s32)fd;
+    wa.buf = buf;
+
+    /* bound count */
+    __u32 n = (__u32)cnt;
+    n = clamp_u32(n, TLS_CHUNK_MAX);
+    wa.len = n;
+
+    bpf_map_update_elem(&write_args_map, &id, &wa, BPF_ANY);
+
+    /* conn_info_map должен уже заполняться у тебя в другом месте;
+       если нет — можешь тут тоже положить fd/comm */
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_write")
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __u32 ret = 0;
+    if (sysret_to_u32_bounded(ctx, &ret) < 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    /* если ci нет — всё равно почистим write_args_map */
+    if (!ci)
+        goto cleanup;
+
+    /* === TLS chunk FIRST (не зависит от fd_state) === */
+    struct write_args_t *wa = bpf_map_lookup_elem(&write_args_map, &id);
+    if (wa && wa->buf) {
+        __u32 n = ret;
+
+        /* жестко bound в константы + в wa->len */
+        n = clamp_u32(n, TLS_CHUNK_MAX);
+        if (wa->len && n > wa->len)
+            n = wa->len;
+
+        if (n > 0) {
+            struct trace_info dummy = {};
+            dummy.event = EV_WRITE;
+            dummy.fd    = ci->fd;
+            dummy.ret   = ret;
+            fill_ids_comm_cookie(&dummy, id, (int)ci->fd, ci->comm);
+
+            /* emit_tls_chunk внутри должен использовать n (u32),
+               и читать не больше TLS_CHUNK_MAX */
+            (void)emit_tls_chunk(ctx, id, tgid, ci, &dummy,
+                                 (void *)(unsigned long)wa->buf, (__s64)n);
+        }
+    }
+
+    /* === trace_info (как раньше) === */
+    struct trace_info info = {};
+    info.event = EV_WRITE;
+    info.fd    = ci->fd;
+    info.ret   = ret;
+
+    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) == 0) {
+        loopback_fallback(&info, 1);
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    }
+
+cleanup:
+    bpf_map_delete_elem(&write_args_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
+/* ===== sendmsg() =====
+ * enter: cache fd + iov0.base + iov0.len (BOUND it here!)
+ * exit : same pattern — TLS FIRST, trace_info second
+ *
+ * ВАЖНО: основная причина твоей ошибки:
+ *  - ret был __s64 и где-то использовался как size аргумент для bpf_probe_read_user
+ *  - verifier видел "может быть отрицательным" => R2 min value is negative
+ * Решение:
+ *  - ret -> __u32 через sysret_to_u32_bounded()
+ *  - len в map хранить как __u32, уже bound-нутый на enter
+ */
+
+SEC("tracepoint/syscalls/sys_enter_sendmsg")
+int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id = bpf_get_current_pid_tgid();
+
+    __s64 fd = (__s64)ctx->args[0];
+    __u64 umsg = (__u64)ctx->args[1];
+
+    if (fd < 0 || umsg == 0)
+        return 0;
+
+    /* сохраним conn_info_map (fd/comm), если у тебя это не делается в общем enter */
+    struct conn_info_t ci = {};
+    ci.fd = (__s32)fd;
+    bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
+    bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
+
+#if TLS_FROM_SENDMSG
+    struct sendmsg_iov_t st = {};
+    st.fd = (__s32)fd;
+
+    /* читаем msghdr */
+    struct user_msghdr hdr = {};
+    if (bpf_probe_read_user(&hdr, sizeof(hdr), (void *)(unsigned long)umsg) < 0)
+        return 0;
+
+    /* читаем первый iovec */
+    struct iovec iov0 = {};
+    if (hdr.msg_iov && hdr.msg_iovlen > 0) {
+        if (bpf_probe_read_user(&iov0, sizeof(iov0), (void *)(unsigned long)hdr.msg_iov) < 0)
+            return 0;
+
+        if (iov0.iov_base) {
+            st.base = (__u64)(unsigned long)iov0.iov_base;
+
+            /* bound len сразу константами */
+            __u32 n = (__u32)iov0.iov_len;
+            n = clamp_u32(n, TLS_CHUNK_MAX);
+            st.len = n;
+
+            bpf_map_update_elem(&msgSend_map, &id, &st, BPF_ANY);
+        }
+    }
+#endif
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_sendmsg")
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __u32 ret = 0;
+    if (sysret_to_u32_bounded(ctx, &ret) < 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+#if TLS_FROM_SENDMSG
+    /* === TLS FIRST (не зависит от fd_state) === */
+    struct sendmsg_iov_t *st = bpf_map_lookup_elem(&msgSend_map, &id);
+    if (st && st->base) {
+        __u32 n = ret;
+
+        /* жестко bound в константы + в st->len */
+        n = clamp_u32(n, TLS_CHUNK_MAX);
+        if (st->len && n > st->len)
+            n = st->len;
+
+        if (n > 0) {
+            struct trace_info dummy = {};
+            dummy.event = EV_SENDMSG;
+            dummy.fd    = ci->fd;
+            dummy.ret   = ret;
+            fill_ids_comm_cookie(&dummy, id, (int)ci->fd, ci->comm);
+
+            (void)emit_tls_chunk(ctx, id, tgid, ci, &dummy,
+                                 (void *)(unsigned long)st->base, (__s64)n);
+        }
+    }
+#endif
+
+    /* === trace_info second === */
+    struct trace_info info = {};
+    info.event = EV_SENDMSG;
+    info.fd    = ci->fd;
+    info.ret   = ret;
+
+    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) == 0) {
+        loopback_fallback(&info, 1);
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    }
+
+cleanup:
+    bpf_map_delete_elem(&msgSend_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
