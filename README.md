@@ -725,6 +725,47 @@ sudo bpftool map dump id 188
 
 
 
+rec, e := tlsRD.Read()
+...
+ev := *(*bpfTlsChunkEvent)(unsafe.Pointer(&rec.RawSample[0]))
+tlsCh <- tlsWrap{ev: ev, now: time.Now()}
 
 
-sudo bpftool map show | grep tls_events -n
+go func() {
+	defer close(tlsCh)
+	for {
+		rec, e := tlsRD.Read()
+		if e != nil {
+			if errors.Is(e, perf.ErrClosed) {
+				return
+			}
+			continue
+		}
+		if len(rec.RawSample) < int(unsafe.Sizeof(bpfTlsChunkEvent{})) {
+			continue
+		}
+
+		ev := *(*bpfTlsChunkEvent)(unsafe.Pointer(&rec.RawSample[0]))
+
+		// ---- DEBUG PRINT ----
+		n := int(ev.Len)
+		if n < 0 {
+			n = 0
+		}
+		if n > len(ev.Data) {
+			n = len(ev.Data)
+		}
+		head := 5
+		if n < head {
+			head = n
+		}
+		fmt.Printf("TLS_CHUNK cookie=%d seq=%d len=%d %d->%d head=%s\n",
+			ev.Cookie, ev.Seq, n,
+			ev.Sport, ev.Dport,
+			fmt.Sprintf("% x", ev.Data[:head]),
+		)
+		// ---------------------
+
+		tlsCh <- tlsWrap{ev: ev, now: time.Now()}
+	}
+}()
