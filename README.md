@@ -726,8 +726,126 @@ sudo bpftool map dump id 188
 
 
 
-ev@lev-VirtualBox:~/bpfgo$ sudo ./bpfgo
-[sudo] password for lev: 
-2026/02/27 14:13:57 dotenv loaded: .env
-2026/02/27 14:13:57.669763 hostsPrefill: added=7 from /etc/hosts
-2026/02/27 14:13:58.211199 failed to load bpf objects: field TraceSendmsgExit: program trace_sendmsg_exit: load program: permission denied: 720: (85) call bpf_probe_read_user#112: R2 unbounded memory access, use 'var &= const' or 'if (var < const)' (806 line(s) omitted)
+#define MAX_IOV  1
+#define MAX_COPY 256
+
+struct sendmsg_state {
+    __u64 iov_base;
+    __u32 iov_len;
+    __u32 _pad;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_LRU_HASH);
+    __uint(max_entries, 65536);
+    __type(key, __u64);              // pid_tgid + fd или pid_tgid
+    __type(value, struct sendmsg_state);
+} sendmsg_map SEC(".maps");
+
+static __always_inline __u64 pid_tgid(void) { return bpf_get_current_pid_tgid(); }
+
+SEC("tracepoint/syscalls/sys_enter_sendmsg")
+int trace_sendmsg_enter(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 id = pid_tgid();
+
+    // args: (int fd, struct user_msghdr __user *msg, unsigned flags)
+    void *msgp = (void *)ctx->args[1];
+    if (!msgp)
+        return 0;
+
+    // user_msghdr layout (userspace)
+    struct user_msghdr {
+        __u64 msg_name;
+        __u32 msg_namelen;
+        __u32 __pad1;
+        __u64 msg_iov;
+        __u64 msg_iovlen;
+        __u64 msg_control;
+        __u64 msg_controllen;
+        __u32 msg_flags;
+        __u32 __pad2;
+    } mh = {};
+
+    if (bpf_probe_read_user(&mh, sizeof(mh), msgp))
+        return 0;
+
+    // iovlen ограничиваем до MAX_IOV (иначе цикл/индексация = боль)
+    __u64 iovlen64 = mh.msg_iovlen;
+    if (iovlen64 == 0)
+        return 0;
+    if (iovlen64 > MAX_IOV)
+        iovlen64 = MAX_IOV;
+
+    // читаем только iov[0]
+    struct user_iovec {
+        __u64 iov_base;
+        __u64 iov_len;
+    } iov = {};
+
+    void *iovp = (void *)(unsigned long)mh.msg_iov;
+    if (!iovp)
+        return 0;
+
+    if (bpf_probe_read_user(&iov, sizeof(iov), iovp))
+        return 0;
+
+    struct sendmsg_state st = {};
+    st.iov_base = iov.iov_base;
+
+    // iov_len тоже режем константой (важно!)
+    __u64 iov_len64 = iov.iov_len;
+    if (iov_len64 > MAX_COPY)
+        iov_len64 = MAX_COPY;
+    st.iov_len = (__u32)iov_len64;
+
+    if (st.iov_base == 0 || st.iov_len == 0)
+        return 0;
+
+    bpf_map_update_elem(&sendmsg_map, &id, &st, BPF_ANY);
+    return 0;
+}
+
+
+
+
+SEC("tracepoint/syscalls/sys_exit_sendmsg")
+int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id = pid_tgid();
+    struct sendmsg_state *st = bpf_map_lookup_elem(&sendmsg_map, &id);
+    if (!st)
+        return 0;
+
+    long ret = ctx->ret;
+    if (ret <= 0) {
+        bpf_map_delete_elem(&sendmsg_map, &id);
+        return 0;
+    }
+
+    // 1) clamp по константе MAX_COPY
+    __u32 to_copy = (__u32)ret;
+    if (to_copy > MAX_COPY)
+        to_copy = MAX_COPY;
+
+    // 2) clamp по iov_len (который мы уже заранее ограничили)
+    if (to_copy > st->iov_len)
+        to_copy = st->iov_len;
+
+    // финальная страховка (иногда помогает верификатору видеть bound)
+    if (to_copy == 0 || to_copy > MAX_COPY) {
+        bpf_map_delete_elem(&sendmsg_map, &id);
+        return 0;
+    }
+
+    __u8 buf[MAX_COPY] = {};
+    if (bpf_probe_read_user(buf, to_copy, (void *)(unsigned long)st->iov_base)) {
+        bpf_map_delete_elem(&sendmsg_map, &id);
+        return 0;
+    }
+
+    // ... дальше твоя логика: эвент, cookie, порты, TLS parse и т.д.
+
+    bpf_map_delete_elem(&sendmsg_map, &id);
+    return 0;
+}
