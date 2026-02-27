@@ -31,7 +31,7 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 )
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target amd64 -type trace_info bpf trace.c -- -I.
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target amd64 -type trace_info -type tls_chunk_event bpf trace.c -- -I.
 
 var objs bpfObjects
 
@@ -57,12 +57,11 @@ const (
 	EV_WRITE    = 22
 	EV_CLOSE    = 30
 
-	// new: skb-derived L3 hint (real selected src IP)
+	// skb-derived L3 hint (real selected src IP)
 	EV_SKB_OUT = 40
 )
 
 var (
-	// perfMB = общий бюджет, делим на CPU + fallback.
 	flgPerfMB    = flag.Int("perfMB", 8, "perf buffer total budget in MB (divided per-CPU with fallback)")
 	flgPprof     = flag.Bool("pprof", true, "enable pprof")
 	flgPprofAddr = flag.String("pprofAddr", ":6060", "pprof listen addr")
@@ -98,6 +97,11 @@ var (
 	flgL3TTL       = flag.Duration("l3ttl", 10*time.Second, "TTL for skb-derived L3 hints (cookie->src/dst)")
 	flgOpenDelay   = flag.Duration("openDelay", 200*time.Millisecond, "delay OPEN print (max) to wait for skb hint to fill src ip")
 	flgL3SweepEach = flag.Int("l3SweepEach", 500, "l3 hint sweep per tick")
+
+	// SNI
+	flgSNI        = flag.Bool("sni", true, "parse TLS ClientHello SNI from tls chunk events")
+	flgSNITTL     = flag.Duration("sniTTL", 10*time.Minute, "TTL for cookie->SNI cache")
+	flgSNIMaxKeep = flag.Int("sniMax", 200000, "max cookie->SNI entries in memory (best effort)")
 )
 
 /* ===== basic helpers ===== */
@@ -360,6 +364,10 @@ func applyEnvToFlags() {
 	set("l3ttl", "BPFGO_L3_TTL")
 	set("openDelay", "BPFGO_OPEN_DELAY")
 	set("l3SweepEach", "BPFGO_L3_SWEEP_EACH")
+
+	set("sni", "BPFGO_SNI")
+	set("sniTTL", "BPFGO_SNI_TTL")
+	set("sniMax", "BPFGO_SNI_MAX")
 }
 
 /* ===== PTR resolver cache ===== */
@@ -545,7 +553,6 @@ func (r *dnsResolver) worker() {
 		cancel()
 
 		if err != nil {
-			// ВАЖНО: timeout/temporary НЕ кэшируем как neg на 5 минут
 			if dnsErr, ok := err.(*net.DNSError); ok {
 				if dnsErr.IsNotFound {
 					neg = true
@@ -662,7 +669,7 @@ func parseHostsPrefill(path string, ttl time.Duration, r *dnsResolver) {
 
 var dnsr *dnsResolver
 
-/* ===== L3 hint cache (cookie -> real src/dst) ===== */
+/* ===== L3 hint cache ===== */
 
 type l3Info struct {
 	Family uint16
@@ -680,19 +687,115 @@ func (l l3Info) expired(now time.Time, ttl time.Duration) bool {
 	return now.Sub(l.Seen) > ttl
 }
 
-/* ===== unified endpoint printing: ip(alias):port ===== */
+/* ===== SNI cache (cookie -> sni) ===== */
+
+type sniEntry struct {
+	SNI string
+	Exp time.Time
+}
+
+type sniCache struct {
+	mu   sync.Mutex
+	m    map[uint64]sniEntry
+	ttl  time.Duration
+	maxN int
+}
+
+func newSNICache(ttl time.Duration, maxN int) *sniCache {
+	if maxN < 1000 {
+		maxN = 1000
+	}
+	return &sniCache{
+		m:    make(map[uint64]sniEntry, 8192),
+		ttl:  ttl,
+		maxN: maxN,
+	}
+}
+
+func (c *sniCache) Get(cookie uint64) (string, bool) {
+	if cookie == 0 {
+		return "", false
+	}
+	now := time.Now()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.m[cookie]
+	if !ok {
+		return "", false
+	}
+	if now.After(e.Exp) {
+		delete(c.m, cookie)
+		return "", false
+	}
+	return e.SNI, e.SNI != ""
+}
+
+func (c *sniCache) Put(cookie uint64, sni string) {
+	if cookie == 0 || sni == "" {
+		return
+	}
+	now := time.Now()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// best-effort cap
+	if len(c.m) >= c.maxN {
+		// sweep a little
+		n := 0
+		for k, e := range c.m {
+			if now.After(e.Exp) {
+				delete(c.m, k)
+				n++
+				if n >= 1024 {
+					break
+				}
+			}
+		}
+		// still too big -> random delete a few (map order is random)
+		if len(c.m) >= c.maxN {
+			n = 0
+			for k := range c.m {
+				delete(c.m, k)
+				n++
+				if n >= 1024 {
+					break
+				}
+			}
+		}
+	}
+
+	c.m[cookie] = sniEntry{SNI: sni, Exp: now.Add(c.ttl)}
+}
+
+func (c *sniCache) Sweep(limit int) {
+	if limit <= 0 {
+		return
+	}
+	now := time.Now()
+	n := 0
+	c.mu.Lock()
+	for k, e := range c.m {
+		if now.After(e.Exp) {
+			delete(c.m, k)
+			n++
+			if n >= limit {
+				break
+			}
+		}
+	}
+	c.mu.Unlock()
+}
+
+/* ===== endpoint printing ===== */
 
 func specialAlias(family uint16, ip [16]byte) (string, bool) {
 	if family == AF_INET {
-		// localhost
 		if ip[0] == 127 && ip[1] == 0 && ip[2] == 0 && ip[3] == 1 {
 			return "localhost", true
 		}
-		// systemd-resolved stub
 		if ip[0] == 127 && ip[1] == 0 && ip[2] == 0 && ip[3] == 53 {
 			return "dnsstub", true
 		}
-		// VirtualBox NAT defaults
 		if ip[0] == 10 && ip[1] == 0 && ip[2] == 2 && ip[3] == 2 {
 			return "vboxgw", true
 		}
@@ -720,7 +823,6 @@ func addrStr(family uint16, ip [16]byte, scope uint32) string {
 	return fmtIPv4FromKey(ip)
 }
 
-// aliasForIP: всегда возвращает alias (или состояние), может дернуть Ensure().
 func aliasForIP(family uint16, ip [16]byte) string {
 	if isAllZero16(ip) {
 		return "any"
@@ -756,7 +858,6 @@ func aliasForIP(family uint16, ip [16]byte) string {
 	}
 	dnsr.Ensure(family, ip)
 	if *flgHostState {
-		// чтобы "miss" не залипал — можно сразу peek; но достаточно так
 		return "miss"
 	}
 	return "?"
@@ -814,7 +915,8 @@ type Flow struct {
 	OpenedPrinted bool
 	GenStart      uint64
 
-	RemoteHost string // per-flow cache for real resolved name (not miss/pending/no-ptr)
+	RemoteHost string
+	SNI        string
 }
 
 func makeKey(ev bpfTraceInfo) FlowKey {
@@ -933,15 +1035,12 @@ func applyEndpoints(f *Flow, ev bpfTraceInfo) {
 	}
 }
 
-// apply skb-hint to fill missing local ip (and sometimes remote too)
 func applyL3HintToFlow(f *Flow, h l3Info) {
 	if h.Family != f.Key.Family || h.Proto != f.Key.Proto {
 		return
 	}
 
-	// If we already know remote, try to match either direction
 	if !isAllZero16(f.Remote) {
-		// send direction: remote == dst
 		if f.Rport != 0 && f.Rport == h.Dport && bytes.Equal(f.Remote[:], h.Dst[:]) {
 			if isAllZero16(f.Local) && !isAllZero16(h.Src) {
 				f.Local = h.Src
@@ -952,7 +1051,6 @@ func applyL3HintToFlow(f *Flow, h l3Info) {
 			}
 			return
 		}
-		// recv direction: remote == src
 		if f.Rport != 0 && f.Rport == h.Sport && bytes.Equal(f.Remote[:], h.Src[:]) {
 			if isAllZero16(f.Local) && !isAllZero16(h.Dst) {
 				f.Local = h.Dst
@@ -965,7 +1063,6 @@ func applyL3HintToFlow(f *Flow, h l3Info) {
 		}
 	}
 
-	// If remote is unknown, we can still fill local from src (best effort)
 	if isAllZero16(f.Local) && !isAllZero16(h.Src) {
 		f.Local = h.Src
 		f.LocalScope = h.SrcSc
@@ -991,7 +1088,6 @@ func flowReadyToPrintOpen(f *Flow) bool {
 	if !flowReadyToOpenBase(f) {
 		return false
 	}
-	// if local ip still unknown, wait a bit for skb-hint
 	if isAllZero16(f.Local) && time.Since(f.FirstSeen) < *flgOpenDelay {
 		return false
 	}
@@ -1046,15 +1142,23 @@ func remoteAliasCached(f *Flow) string {
 	}
 }
 
+func sniNote(f *Flow) string {
+	if f.SNI == "" {
+		return ""
+	}
+	return " sni=" + f.SNI
+}
+
 func printOpen(f *Flow) {
 	lAlias := aliasForIP(f.Key.Family, f.Local)
 	rAlias := remoteAliasCached(f)
 
-	fmt.Printf("OPEN  %-5s pid=%d(%s) cookie=%d  %s -> %s%s%s\n",
+	fmt.Printf("OPEN  %-5s pid=%d(%s) cookie=%d  %s -> %s%s%s%s\n",
 		protoStr(f.Key.Proto),
 		f.Key.TGID, f.Comm, f.Key.Cookie,
 		fmtEndpointAll(f.Key.Family, f.Local, f.Lport, f.LocalScope, f.Key.Proto, lAlias),
 		fmtEndpointAll(f.Key.Family, f.Remote, f.Rport, f.RemoteScope, f.Key.Proto, rAlias),
+		sniNote(f),
 		incompleteNote(f),
 		maybeLostNote(f),
 	)
@@ -1065,13 +1169,14 @@ func printClose(f *Flow, reason string) {
 	rAlias := remoteAliasCached(f)
 
 	age := time.Since(f.FirstSeen).Truncate(time.Millisecond)
-	fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s reason=%s%s%s\n",
+	fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s reason=%s%s%s%s\n",
 		protoStr(f.Key.Proto),
 		f.Key.TGID, f.Comm, f.Key.Cookie,
 		fmtEndpointAll(f.Key.Family, f.Local, f.Lport, f.LocalScope, f.Key.Proto, lAlias),
 		fmtEndpointAll(f.Key.Family, f.Remote, f.Rport, f.RemoteScope, f.Key.Proto, rAlias),
 		f.OutBytes, f.OutPkts, f.InBytes, f.InPkts,
 		age, reason,
+		sniNote(f),
 		incompleteNote(f),
 		maybeLostNote(f),
 	)
@@ -1113,6 +1218,241 @@ func openPerfReaderTotalBudget(events *ebpf.Map, totalMB int) (*perf.Reader, int
 		break
 	}
 	return nil, 0, err
+}
+
+/* ===== TLS SNI parser from chunk stream =====
+   We parse TLS record (Handshake) ClientHello and extract SNI (server_name).
+   Works on partial chunks: we keep small per-cookie reassembly buffer.
+*/
+
+type tlsReasm struct {
+	buf   []byte
+	seen  time.Time
+	done  bool
+	sni   string
+	stage string
+}
+
+type tlsAssembler struct {
+	mu        sync.Mutex
+	byCookie  map[uint64]*tlsReasm
+	ttl       time.Duration
+	maxCookie int
+}
+
+func newTLSAssembler(ttl time.Duration, maxN int) *tlsAssembler {
+	if maxN < 1000 {
+		maxN = 1000
+	}
+	return &tlsAssembler{
+		byCookie:  make(map[uint64]*tlsReasm, 8192),
+		ttl:       ttl,
+		maxCookie: maxN,
+	}
+}
+
+func (a *tlsAssembler) Sweep(limit int) {
+	if limit <= 0 {
+		return
+	}
+	now := time.Now()
+	n := 0
+	a.mu.Lock()
+	for k, v := range a.byCookie {
+		if now.Sub(v.seen) > a.ttl {
+			delete(a.byCookie, k)
+			n++
+			if n >= limit {
+				break
+			}
+		}
+	}
+	a.mu.Unlock()
+}
+
+func (a *tlsAssembler) Push(cookie uint64, data []byte) (sni string, ok bool) {
+	if cookie == 0 || len(data) == 0 {
+		return "", false
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	ra := a.byCookie[cookie]
+	if ra == nil {
+		ra = &tlsReasm{buf: make([]byte, 0, 2048)}
+		a.byCookie[cookie] = ra
+	}
+	ra.seen = time.Now()
+	if ra.done {
+		return ra.sni, ra.sni != ""
+	}
+
+	// cap buffer to avoid memory blow
+	const maxBuf = 16 * 1024
+	if len(ra.buf)+len(data) > maxBuf {
+		// drop oldest, keep last part
+		need := (len(ra.buf) + len(data)) - maxBuf
+		if need < len(ra.buf) {
+			ra.buf = ra.buf[need:]
+		} else {
+			ra.buf = ra.buf[:0]
+		}
+	}
+	ra.buf = append(ra.buf, data...)
+
+	sni = tryParseSNIFromTLS(ra.buf)
+	if sni != "" {
+		ra.done = true
+		ra.sni = sni
+		return sni, true
+	}
+	return "", false
+}
+
+// minimal TLS ClientHello SNI extraction (best-effort)
+func tryParseSNIFromTLS(b []byte) string {
+	// TLS record header: 5 bytes
+	// content_type(1)=0x16, version(2), length(2)
+	// handshake: type(1)=0x01, length(3), ...
+	i := 0
+	for {
+		if len(b)-i < 5 {
+			return ""
+		}
+		ct := b[i]
+		if ct != 0x16 { // Handshake
+			// skip this record
+			if len(b)-i < 5 {
+				return ""
+			}
+			recLen := int(binary.BigEndian.Uint16(b[i+3 : i+5]))
+			i += 5 + recLen
+			if i >= len(b) {
+				return ""
+			}
+			continue
+		}
+		recLen := int(binary.BigEndian.Uint16(b[i+3 : i+5]))
+		if len(b)-i < 5+recLen {
+			return ""
+		}
+		rec := b[i+5 : i+5+recLen]
+
+		// handshake header inside record
+		if len(rec) < 4 {
+			return ""
+		}
+		if rec[0] != 0x01 { // ClientHello
+			i += 5 + recLen
+			continue
+		}
+		hsLen := int(rec[1])<<16 | int(rec[2])<<8 | int(rec[3])
+		if len(rec) < 4+hsLen {
+			return ""
+		}
+		ch := rec[4 : 4+hsLen]
+
+		// ClientHello:
+		// version(2) + random(32) + session_id_len(1)+session_id + cipher_suites_len(2)+... + comp_len(1)+... + ext_len(2)+ext...
+		p := 0
+		if len(ch) < p+2+32 {
+			return ""
+		}
+		p += 2 + 32
+
+		if len(ch) < p+1 {
+			return ""
+		}
+		sidLen := int(ch[p])
+		p += 1
+		if len(ch) < p+sidLen {
+			return ""
+		}
+		p += sidLen
+
+		if len(ch) < p+2 {
+			return ""
+		}
+		csLen := int(binary.BigEndian.Uint16(ch[p : p+2]))
+		p += 2
+		if len(ch) < p+csLen {
+			return ""
+		}
+		p += csLen
+
+		if len(ch) < p+1 {
+			return ""
+		}
+		compLen := int(ch[p])
+		p += 1
+		if len(ch) < p+compLen {
+			return ""
+		}
+		p += compLen
+
+		if len(ch) < p+2 {
+			return ""
+		}
+		extLen := int(binary.BigEndian.Uint16(ch[p : p+2]))
+		p += 2
+		if len(ch) < p+extLen {
+			return ""
+		}
+		ext := ch[p : p+extLen]
+
+		// Extensions: [type(2), len(2), data(len)]...
+		q := 0
+		for q+4 <= len(ext) {
+			et := binary.BigEndian.Uint16(ext[q : q+2])
+			el := int(binary.BigEndian.Uint16(ext[q+2 : q+4]))
+			q += 4
+			if q+el > len(ext) {
+				return ""
+			}
+			if et == 0x0000 { // server_name
+				sni := parseSNIExt(ext[q : q+el])
+				if sni != "" {
+					return sni
+				}
+				return ""
+			}
+			q += el
+		}
+		return ""
+	}
+}
+
+func parseSNIExt(b []byte) string {
+	// server_name ext:
+	// list_len(2) + [name_type(1)=0, name_len(2), name(name_len)]...
+	if len(b) < 2 {
+		return ""
+	}
+	listLen := int(binary.BigEndian.Uint16(b[:2]))
+	if len(b) < 2+listLen {
+		return ""
+	}
+	p := 2
+	end := 2 + listLen
+	for p+3 <= end {
+		nt := b[p]
+		nl := int(binary.BigEndian.Uint16(b[p+1 : p+3]))
+		p += 3
+		if p+nl > end {
+			return ""
+		}
+		if nt == 0 { // host_name
+			name := string(b[p : p+nl])
+			name = strings.TrimSpace(name)
+			// простая валидация
+			if name != "" && !strings.ContainsAny(name, " \t\r\n") {
+				return name
+			}
+		}
+		p += nl
+	}
+	return ""
 }
 
 /* ===== main ===== */
@@ -1205,17 +1545,39 @@ func main() {
 		attach("syscalls", "sys_exit_read", objs.TraceReadExit)
 	}
 
-	// NEW: attach skb-out hint
 	attach("net", "net_dev_queue", objs.TraceNetDevQueue)
 
+	// main flow perf reader
 	rd, perCPUBytes, err := openPerfReaderTotalBudget(objs.TraceEvents, *flgPerfMB)
 	if err != nil {
-		log.Fatalf("perf.NewReader: %v", err)
+		log.Fatalf("perf.NewReader(trace_events): %v", err)
 	}
 	defer rd.Close()
 
-	log.Printf("perf ring per-cpu=%dKB total~=%dMB cpus=%d",
+	log.Printf("perf ring trace_events per-cpu=%dKB total~=%dMB cpus=%d",
 		perCPUBytes/1024, (perCPUBytes*runtime.NumCPU())/(1024*1024), runtime.NumCPU())
+
+	// --- TLS reader (SNI) ---
+	// IMPORTANT:
+	// In your generated bpfMaps there is no tls_events perf map right now.
+	// Add it in trace.c and regenerate bpf2go.
+	//
+	// Once you add map like: TlsEvents *ebpf.Map `ebpf:"tls_events"`,
+	// rename here accordingly.
+	var tlsRD *perf.Reader
+	var tlsAssembler *tlsAssembler
+	sniC := newSNICache(*flgSNITTL, *flgSNIMaxKeep)
+
+	// TODO: if you expose map in bpfMaps as TlsEvents, uncomment:
+	// if *flgSNI && objs.TlsEvents != nil {
+	//     tlsRD, _, err = openPerfReaderTotalBudget(objs.TlsEvents, max(1, *flgPerfMB/2))
+	//     if err != nil { log.Printf("tls perf reader disabled: %v", err); tlsRD=nil }
+	// }
+
+	_ = tlsRD
+	if *flgSNI {
+		tlsAssembler = newTLSAssembler(30*time.Second, *flgSNIMaxKeep)
+	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -1224,7 +1586,6 @@ func main() {
 		ev  bpfTraceInfo
 		now time.Time
 	}
-
 	evCh := make(chan evWrap, 16384)
 
 	go func() {
@@ -1250,13 +1611,42 @@ func main() {
 		}
 	}()
 
+	// tlsCh (only if tlsRD enabled)
+	type tlsWrap struct {
+		ev  bpfTlsChunkEvent
+		now time.Time
+	}
+	tlsCh := make(chan tlsWrap, 8192)
+
+	if tlsRD != nil {
+		go func() {
+			defer close(tlsCh)
+			for {
+				rec, e := tlsRD.Read()
+				if e != nil {
+					if errors.Is(e, perf.ErrClosed) {
+						return
+					}
+					continue
+				}
+				if len(rec.RawSample) < int(unsafe.Sizeof(bpfTlsChunkEvent{})) {
+					continue
+				}
+				ev := *(*bpfTlsChunkEvent)(unsafe.Pointer(&rec.RawSample[0]))
+				tlsCh <- tlsWrap{ev: ev, now: time.Now()}
+			}
+		}()
+	} else {
+		close(tlsCh)
+	}
+
 	flows := make(map[FlowKey]*Flow, 8192)
 	l3ByCookie := make(map[uint64]l3Info, 8192)
 
 	ticker := time.NewTicker(*flgSweep)
 	defer ticker.Stop()
 
-	log.Println("OPEN/CLOSE (TCP/UDP/ICMP) + PTR + skb-hint. Ctrl+C to exit")
+	log.Println("OPEN/CLOSE (TCP/UDP/ICMP) + PTR + skb-hint (+SNI if tls_events enabled). Ctrl+C to exit")
 
 	shouldKeep := func(pid uint32, comm string) bool {
 		if comm == "" || comm == selfName {
@@ -1297,9 +1687,11 @@ func main() {
 	closeByCookie := func(tgid uint32, cookie uint64, reason string) {
 		for k, f := range flows {
 			if k.TGID == tgid && k.Cookie == cookie {
-				// try l3 fill before printing
 				if h, ok := l3ByCookie[cookie]; ok {
 					applyL3HintToFlow(f, h)
+				}
+				if s, ok := sniC.Get(cookie); ok && f.SNI == "" {
+					f.SNI = s
 				}
 
 				if dropZeroFlow(f) {
@@ -1325,6 +1717,9 @@ func main() {
 		select {
 		case <-stop:
 			_ = rd.Close()
+			if tlsRD != nil {
+				_ = tlsRD.Close()
+			}
 			log.Printf("PERF_LOST_TOTAL total=%d gen=%d", atomic.LoadUint64(&lostTotal), atomic.LoadUint64(&lostGen))
 			for _, f := range flows {
 				if dropZeroFlow(f) {
@@ -1336,6 +1731,46 @@ func main() {
 			}
 			log.Println("Exiting...")
 			return
+
+		case tw, ok := <-tlsCh:
+			if !ok {
+				// tls reader disabled/closed
+				// continue serving flow events
+				tlsCh = nil
+				continue
+			}
+			if !*flgSNI || tlsAssembler == nil {
+				continue
+			}
+
+			ev := tw.ev
+			if ev.Cookie == 0 || ev.Proto != IPPROTO_TCP {
+				continue
+			}
+			// usually only dport=443 matters
+			if ev.Dport != 443 && ev.Sport != 443 {
+				continue
+			}
+
+			n := int(ev.Len)
+			if n <= 0 {
+				continue
+			}
+			if n > len(ev.Data) {
+				n = len(ev.Data)
+			}
+			chunk := make([]byte, n)
+			copy(chunk, ev.Data[:n])
+
+			if s, ok := tlsAssembler.Push(ev.Cookie, chunk); ok && s != "" {
+				sniC.Put(ev.Cookie, s)
+				// update live flows
+				for _, f := range flows {
+					if f.Key.Cookie == ev.Cookie && f.SNI == "" {
+						f.SNI = s
+					}
+				}
+			}
 
 		case <-ticker.C:
 			now := time.Now()
@@ -1371,12 +1806,23 @@ func main() {
 				}
 			}
 
-			// poke some flows for resolve + l3 fill
+			// sweep sni cache + tls assembler (best effort)
+			if *flgSNI {
+				sniC.Sweep(2000)
+				if tlsAssembler != nil {
+					tlsAssembler.Sweep(2000)
+				}
+			}
+
+			// poke some flows for resolve + l3 fill + sni fill
 			if *flgResolvePokeEach > 0 {
 				n := 0
 				for _, f := range flows {
 					if h, ok := l3ByCookie[f.Key.Cookie]; ok {
 						applyL3HintToFlow(f, h)
+					}
+					if s, ok := sniC.Get(f.Key.Cookie); ok && f.SNI == "" {
+						f.SNI = s
 					}
 					_ = remoteAliasCached(f)
 					n++
@@ -1391,6 +1837,9 @@ func main() {
 				if now.Sub(f.LastSeen) > *flgTTL {
 					if h, ok := l3ByCookie[f.Key.Cookie]; ok {
 						applyL3HintToFlow(f, h)
+					}
+					if s, ok := sniC.Get(f.Key.Cookie); ok && f.SNI == "" {
+						f.SNI = s
 					}
 					if dropZeroFlow(f) {
 						delete(flows, k)
@@ -1417,7 +1866,7 @@ func main() {
 			proto := uint8(ev.Proto)
 			family := uint16(ev.Family)
 
-			// handle skb-out hint first (no printing, no comm filtering)
+			// skb-out hint first
 			if evt == EV_SKB_OUT {
 				if !protoAllowed(proto) || (family != AF_INET && family != AF_INET6) || ev.Cookie == 0 {
 					continue
@@ -1434,7 +1883,6 @@ func main() {
 					Seen:   w.now,
 				}
 				l3ByCookie[ev.Cookie] = h
-				// also try to update existing flows with same cookie
 				for _, f := range flows {
 					if f.Key.Cookie == ev.Cookie {
 						applyL3HintToFlow(f, h)
@@ -1482,12 +1930,14 @@ func main() {
 			f.LastSeen = w.now
 			applyEndpoints(f, ev)
 
-			// try fill local ip from skb hints
 			if h, ok := l3ByCookie[f.Key.Cookie]; ok {
 				applyL3HintToFlow(f, h)
 			}
+			if s, ok := sniC.Get(f.Key.Cookie); ok && f.SNI == "" {
+				f.SNI = s
+			}
 
-			// accounting
+			// accounting by ev.Ret (this is correct for trace_info)
 			switch evt {
 			case EV_SENDMMSG:
 				if ev.Ret > 0 {

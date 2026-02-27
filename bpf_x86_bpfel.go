@@ -62,6 +62,23 @@ type bpfMsgPtrflagsT struct {
 	Pad   uint32
 }
 
+type bpfTlsChunkEvent struct {
+	Cookie uint64
+	TsNs   uint64
+	Tgid   uint32
+	Tid    uint32
+	Fd     int32
+	Seq    uint32
+	Proto  uint8
+	Event  uint8
+	Sport  uint16
+	Dport  uint16
+	_      [2]byte
+	Len    uint32
+	Data   [256]uint8
+	_      [4]byte
+}
+
 type bpfTraceInfo struct {
 	TsNs     uint64
 	Cookie   uint64
@@ -86,6 +103,11 @@ type bpfTraceInfo struct {
 	DstScope uint32
 	Comm     [32]int8
 	_        [4]byte
+}
+
+type bpfWriteArgsT struct {
+	Buf   uint64
+	Count uint64
 }
 
 // loadBpf returns the embedded CollectionSpec for bpf.
@@ -162,18 +184,22 @@ type bpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
-	AddrBindMap    *ebpf.MapSpec `ebpf:"addrBind_map"`
-	AddrConnectMap *ebpf.MapSpec `ebpf:"addrConnect_map"`
-	AddrRecvMap    *ebpf.MapSpec `ebpf:"addrRecv_map"`
-	AddrSendMap    *ebpf.MapSpec `ebpf:"addrSend_map"`
-	ConnInfoMap    *ebpf.MapSpec `ebpf:"conn_info_map"`
-	ConnectFdMap   *ebpf.MapSpec `ebpf:"connect_fd_map"`
-	FdStateMap     *ebpf.MapSpec `ebpf:"fd_state_map"`
-	MmsgRecvMap    *ebpf.MapSpec `ebpf:"mmsgRecv_map"`
-	MmsgSendMap    *ebpf.MapSpec `ebpf:"mmsgSend_map"`
-	MsgRecvMap     *ebpf.MapSpec `ebpf:"msgRecv_map"`
-	MsgSendMap     *ebpf.MapSpec `ebpf:"msgSend_map"`
-	TraceEvents    *ebpf.MapSpec `ebpf:"trace_events"`
+	AddrBindMap     *ebpf.MapSpec `ebpf:"addrBind_map"`
+	AddrConnectMap  *ebpf.MapSpec `ebpf:"addrConnect_map"`
+	AddrRecvMap     *ebpf.MapSpec `ebpf:"addrRecv_map"`
+	AddrSendMap     *ebpf.MapSpec `ebpf:"addrSend_map"`
+	ConnInfoMap     *ebpf.MapSpec `ebpf:"conn_info_map"`
+	ConnectFdMap    *ebpf.MapSpec `ebpf:"connect_fd_map"`
+	FdStateMap      *ebpf.MapSpec `ebpf:"fd_state_map"`
+	MmsgRecvMap     *ebpf.MapSpec `ebpf:"mmsgRecv_map"`
+	MmsgSendMap     *ebpf.MapSpec `ebpf:"mmsgSend_map"`
+	MsgRecvMap      *ebpf.MapSpec `ebpf:"msgRecv_map"`
+	MsgSendMap      *ebpf.MapSpec `ebpf:"msgSend_map"`
+	TlsChunkScratch *ebpf.MapSpec `ebpf:"tls_chunk_scratch"`
+	TlsDoneMap      *ebpf.MapSpec `ebpf:"tls_done_map"`
+	TlsSeqMap       *ebpf.MapSpec `ebpf:"tls_seq_map"`
+	TraceEvents     *ebpf.MapSpec `ebpf:"trace_events"`
+	WriteArgsMap    *ebpf.MapSpec `ebpf:"write_args_map"`
 }
 
 // bpfVariableSpecs contains global variables before they are loaded into the kernel.
@@ -203,18 +229,22 @@ func (o *bpfObjects) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
-	AddrBindMap    *ebpf.Map `ebpf:"addrBind_map"`
-	AddrConnectMap *ebpf.Map `ebpf:"addrConnect_map"`
-	AddrRecvMap    *ebpf.Map `ebpf:"addrRecv_map"`
-	AddrSendMap    *ebpf.Map `ebpf:"addrSend_map"`
-	ConnInfoMap    *ebpf.Map `ebpf:"conn_info_map"`
-	ConnectFdMap   *ebpf.Map `ebpf:"connect_fd_map"`
-	FdStateMap     *ebpf.Map `ebpf:"fd_state_map"`
-	MmsgRecvMap    *ebpf.Map `ebpf:"mmsgRecv_map"`
-	MmsgSendMap    *ebpf.Map `ebpf:"mmsgSend_map"`
-	MsgRecvMap     *ebpf.Map `ebpf:"msgRecv_map"`
-	MsgSendMap     *ebpf.Map `ebpf:"msgSend_map"`
-	TraceEvents    *ebpf.Map `ebpf:"trace_events"`
+	AddrBindMap     *ebpf.Map `ebpf:"addrBind_map"`
+	AddrConnectMap  *ebpf.Map `ebpf:"addrConnect_map"`
+	AddrRecvMap     *ebpf.Map `ebpf:"addrRecv_map"`
+	AddrSendMap     *ebpf.Map `ebpf:"addrSend_map"`
+	ConnInfoMap     *ebpf.Map `ebpf:"conn_info_map"`
+	ConnectFdMap    *ebpf.Map `ebpf:"connect_fd_map"`
+	FdStateMap      *ebpf.Map `ebpf:"fd_state_map"`
+	MmsgRecvMap     *ebpf.Map `ebpf:"mmsgRecv_map"`
+	MmsgSendMap     *ebpf.Map `ebpf:"mmsgSend_map"`
+	MsgRecvMap      *ebpf.Map `ebpf:"msgRecv_map"`
+	MsgSendMap      *ebpf.Map `ebpf:"msgSend_map"`
+	TlsChunkScratch *ebpf.Map `ebpf:"tls_chunk_scratch"`
+	TlsDoneMap      *ebpf.Map `ebpf:"tls_done_map"`
+	TlsSeqMap       *ebpf.Map `ebpf:"tls_seq_map"`
+	TraceEvents     *ebpf.Map `ebpf:"trace_events"`
+	WriteArgsMap    *ebpf.Map `ebpf:"write_args_map"`
 }
 
 func (m *bpfMaps) Close() error {
@@ -230,7 +260,11 @@ func (m *bpfMaps) Close() error {
 		m.MmsgSendMap,
 		m.MsgRecvMap,
 		m.MsgSendMap,
+		m.TlsChunkScratch,
+		m.TlsDoneMap,
+		m.TlsSeqMap,
 		m.TraceEvents,
+		m.WriteArgsMap,
 	)
 }
 
