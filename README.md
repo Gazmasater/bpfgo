@@ -730,19 +730,122 @@ strace -f -e trace=write,writev,sendmsg,sendto -s 200 openssl s_client -connect 
 
 
 
-ev@lev-VirtualBox:~/bpfgo$ bpf2go -output-dir . -tags linux -type trace_info   -go-package=main -target amd64 bpf $(pwd)/trace.c -- -I$(pwd)
-/home/lev/bpfgo/trace.c:1623:5: error: redefinition of 'trace_write_exit'
-int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
-    ^
-/home/lev/bpfgo/trace.c:1409:5: note: previous definition is here
-int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
-    ^
-/home/lev/bpfgo/trace.c:1661:67: error: too few arguments to function call, expected 8, have 7
-                                 (void *)(unsigned long)wa->buf, n);
-                                                                  ^
-/home/lev/bpfgo/trace.c:843:28: note: 'emit_tls_chunk' declared here
 static __always_inline int emit_tls_chunk(void *ctx,
-                           ^
-2 errors generated.
-Error: compile: exit status 1
+                                          __u64 id,
+                                          __u32 tgid,
+                                          struct conn_info_t *ci,
+                                          struct trace_info *info,
+                                          const void *user_ptr,
+                                          __u32 nbytes,
+                                          __u32 _unused_flags)
+{
+    (void)_unused_flags;
 
+    if (!user_ptr || !ci || !info)
+        return 0;
+
+    if (!info->cookie)
+        return 0;
+
+    __u64 cookie = info->cookie;
+
+    __u8 *done = bpf_map_lookup_elem(&tls_done_map, &cookie);
+    if (done && *done)
+        return 0;
+
+    __u32 n = nbytes;
+    if (n > TLS_CHUNK_MAX)
+        n = TLS_CHUNK_MAX;
+    if (n == 0)
+        return 0;
+
+    __u32 key0 = 0;
+    struct tls_chunk_event *ev = bpf_map_lookup_elem(&tls_chunk_scratch, &key0);
+    if (!ev)
+        return 0;
+
+    __builtin_memset(ev, 0, sizeof(*ev));
+
+    ev->cookie = cookie;
+    ev->ts_ns  = bpf_ktime_get_ns();
+    ev->tgid   = tgid;
+    ev->tid    = (__u32)id;
+    ev->fd     = (__s32)ci->fd;
+
+    ev->proto  = info->proto ? info->proto : IPPROTO_TCP;
+    ev->event  = EV_TLS_CHUNK;
+    ev->sport  = info->sport;
+    ev->dport  = info->dport;
+    ev->len    = n;
+
+    __u32 *seqp = bpf_map_lookup_elem(&tls_seq_map, &cookie);
+    __u32 seq = seqp ? *seqp : 0;
+    ev->seq = seq;
+    seq++;
+    bpf_map_update_elem(&tls_seq_map, &cookie, &seq, BPF_ANY);
+
+#pragma clang loop unroll(full)
+    for (int i = 0; i < TLS_CHUNK_MAX; i++) {
+        if ((__u32)i >= n)
+            break;
+        __u8 b = 0;
+        if (bpf_probe_read_user(&b, 1, (const void *)((const char *)user_ptr + i)) != 0)
+            break;
+        ev->data[i] = b;
+    }
+
+    bpf_perf_event_output(ctx, &tls_events, BPF_F_CURRENT_CPU, ev, sizeof(*ev));
+    return 0;
+}
+
+
+
+SEC("tracepoint/syscalls/sys_exit_write")
+int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
+{
+    __u64 id   = bpf_get_current_pid_tgid();
+    __u32 tgid = id >> 32;
+
+    __s64 ret = 0;
+    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
+        goto cleanup;
+
+    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
+    if (!ci)
+        goto cleanup;
+
+    struct trace_info info = {};
+    info.event = EV_WRITE;
+    info.fd    = ci->fd;
+    info.ret   = ret;
+
+    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
+
+    /* 1) TLS CHUNK СНАЧАЛА: НЕ зависит от fd_state/портов */
+    struct write_args_t *wa = bpf_map_lookup_elem(&write_args_map, &id);
+    if (wa && wa->buf) {
+        __u32 n = (wa->count > TLS_CHUNK_MAX) ? TLS_CHUNK_MAX : (__u32)wa->count;
+        __u32 r = (__u32)ret;
+        if (r < n) n = r;
+        if (n) {
+            (void)emit_tls_chunk(ctx, id, tgid, ci, &info,
+                                 (const void *)(unsigned long)wa->buf, n, 0);
+        }
+    }
+
+    /* 2) trace_info (best-effort) */
+    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) == 0) {
+        loopback_fallback(&info, 1);
+        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+    }
+
+cleanup:
+    bpf_map_delete_elem(&write_args_map, &id);
+    bpf_map_delete_elem(&conn_info_map, &id);
+    return 0;
+}
+
+
+
+(void)emit_tls_chunk(ctx, id, tgid, ci, &info,
+                     (const void *)(unsigned long)st->base, n, 0);
