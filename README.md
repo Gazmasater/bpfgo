@@ -1508,3 +1508,53 @@ func main() {
 		}
 	}
 }
+
+
+
+[{
+	"resource": "/home/lev/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"code": {
+		"value": "MissingFieldOrMethod",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "MissingFieldOrMethod"
+		}
+	},
+	"severity": 8,
+	"message": "ev.Len undefined (type bpfTraceInfo has no field or method Len)",
+	"source": "compiler",
+	"startLineNumber": 262,
+	"startColumn": 14,
+	"endLineNumber": 262,
+	"endColumn": 17,
+	"modelVersionId": 87,
+	"origin": "extHost1"
+}]
+
+[{
+	"resource": "/home/lev/bpfgo/main.go",
+	"owner": "_generated_diagnostic_collection_name_#1",
+	"code": {
+		"value": "UndeclaredName",
+		"target": {
+			"$mid": 1,
+			"path": "/golang.org/x/tools/internal/typesinternal",
+			"scheme": "https",
+			"authority": "pkg.go.dev",
+			"fragment": "UndeclaredName"
+		}
+	},
+	"severity": 8,
+	"message": "undefined: selfName",
+	"source": "compiler",
+	"startLineNumber": 567,
+	"startColumn": 28,
+	"endLineNumber": 567,
+	"endColumn": 36,
+	"modelVersionId": 87,
+	"origin": "extHost1"
+}]
