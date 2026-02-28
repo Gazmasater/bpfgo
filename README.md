@@ -1164,17 +1164,25 @@ http://localhost:3000/lipeck/remont/protherm/oshybka-f28
 
 
 
-Nuxt 4.3.1 (with Nitro 2.13.1, Vite 7.3.1 and Vue 3.5.29)
-                                                                                                                           10:20:37 AM
-  ➜ Local:    http://localhost:3000/
-  ➜ Network:  use --host to expose
+pages/index.vue
+<script setup lang="ts">
+useHead({ title: "Gazmaster" });
+</script>
 
-  ➜ DevTools: press Shift + Alt + D in the browser (v3.2.2)                                                                10:20:37 AM
+<template>
+  <main style="max-width:920px;margin:0 auto;padding:24px 16px;">
+    <h1 style="font-size:32px;line-height:1.15;margin:0 0 16px;">Gazmaster</h1>
+    <p style="color:#666;line-height:1.5;margin:0 0 16px;">
+      Выберите регион и перейдите в раздел ремонта.
+    </p>
 
-✔ Vite client built in 24ms                                                                                               10:20:38 AM
-✔ Vite server built in 43ms                                                                                               10:20:38 AM
-✔ Nuxt Nitro server built in 485ms                                                                                  nitro 10:20:38 AM
-ℹ Vite server warmed up in 0ms                                                                                            10:20:38 AM
-ℹ Vite client warmed up in 2ms                                                                                            10:20:38 AM
- WARN  [Vue Router warn]: No match found for location with path "/"    
-
+    <ul style="margin:0;padding-left:18px;">
+      <li>
+        <NuxtLink to="/lipeck/remont/">Липецк → Ремонт</NuxtLink>
+      </li>
+      <li>
+        <NuxtLink to="/lipeck/remont/protherm/oshybka-f28">Protherm → Ошибка F28</NuxtLink>
+      </li>
+    </ul>
+  </main>
+</template>
