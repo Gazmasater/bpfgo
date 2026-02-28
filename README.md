@@ -738,67 +738,54 @@ strace -f -e trace=write,writev,sendmsg,sendto -s 200 openssl s_client -connect 
 
 
 
-<script setup lang="ts">
-type Props = {
-  title: string
-  subtitle: string
-  img?: string
-  alt?: string
-  bullets?: string[]
-}
+●  Nuxt 4.3.1 (with Nitro 2.13.1, Vite 7.3.1 and Vue 3.5.29)
+                                                                                                                            1:43:16 PM
+  ➜ Local:    http://localhost:3000/
+  ➜ Network:  use --host to expose
 
-const props = withDefaults(defineProps<Props>(), {
-  img: undefined,
-  alt: '',
-  bullets: () => [],
-})
-</script>
+ℹ Using default Tailwind CSS file                                                                         nuxt:tailwindcss 1:43:16 PM
+  ➜ DevTools: press Shift + Alt + D in the browser (v3.2.2)                                                                 1:43:16 PM
 
-<template>
-  <section class="overflow-hidden rounded-3xl border bg-white">
-    <div class="grid md:grid-cols-2">
-      <!-- Text -->
-      <div class="p-6 md:p-8">
-        <h1 class="text-3xl md:text-4xl font-semibold tracking-tight">
-          {{ props.title }}
-        </h1>
+✔ Vite client built in 24ms                                                                                                1:43:17 PM
+✔ Vite server built in 48ms                                                                                                1:43:17 PM
+✔ Nuxt Nitro server built in 534ms                                                                                   nitro 1:43:18 PM
+ℹ Vite server warmed up in 0ms                                                                                             1:43:18 PM
+ℹ Vite client warmed up in 1ms                                                                                             1:43:18 PM
+ WARN  [Vue Router warn]: uncaught error during route navigation:                                                           1:43:26 PM
+ ERROR  { [Error: Single file component can contain only one <script setup> element]                                        1:43:26 PM
+  data:
+   { code: 'VITE_ERROR',
+     id: '/components/blocks/CausesBlock.vue',
+     stack:
+      'SyntaxError: Single file component can contain only one <script setup> element\n    at createDuplicateBlockError (/home/gaz358/myprog/gazmaster-site/node_modules/@vue/compiler-sfc/dist/compiler-sfc.cjs.js:1954:15)\n    at /home/gaz358/myprog/gazmaster-site/node_modules/@vue/compiler-sfc/dist/compiler-sfc.cjs.js:1874:21\n    at Array.forEach (<anonymous>)\n    at Object.parse$1 [as parse] (/home/gaz358/myprog/gazmaster-site/node_modules/@vue/compiler-sfc/dist/compiler-sfc.cjs.js:1832:16)\n    at createDescriptor (file:///home/gaz358/myprog/gazmaster-site/node_modules/@vitejs/plugin-vue/dist/index.mjs:54:42)\n    at transformMain (file:///home/gaz358/myprog/gazmaster-site/node_modules/@vitejs/plugin-vue/dist/index.mjs:1319:33)\n    at TransformPluginContext.handler (file:///home/gaz358/myprog/gazmaster-site/node_modules/@vitejs/plugin-vue/dist/index.mjs:1722:27)\n    at file:///home/gaz358/myprog/gazmaster-site/node_modules/vite-plugin-inspect/dist/shared/vite-plugin-inspect.BzUKaD4x.mjs:403:26\n    at hook.handler (file:///home/gaz358/myprog/gazmaster-site/node_modules/vite-plugin-inspect/dist/shared/vite-plugin-inspect.BzUKaD4x.mjs:376:14)\n    at EnvironmentPluginContainer.transform (file:///home/gaz358/myprog/gazmaster-site/node_modules/vite/dist/node/chunks/config.js:28797:51)',
+     message: 'Single file component can contain only one <script setup> element' },
+  status: undefined,
+  statusCode: undefined }
+ WARN  [Vue Router warn]: uncaught error during route navigation:                                                           1:43:26 PM
+ ERROR  Single file component can contain only one <script setup> element                                                   1:43:26 PM
+[1:43:26 PM]  WARN  [nuxt] Failed to stringify dev server logs. Received DevalueError: Cannot stringify arbitrary non-POJOs. You can define your own reducer/reviver for rich types following the instructions in https://nuxt.com/docs/4.x/api/composables/use-nuxt-app#payload.
+ ERROR  Cannot read properties of undefined (reading 'replace')                                                             1:43:26 PM
 
-        <p class="mt-3 leading-relaxed text-neutral-600">
-          {{ props.subtitle }}
-        </p>
+    at #getRelativeFileName (node_modules/youch/build/src/templates/error_stack/main.js:21:19)
+    at #getEditorLink (node_modules/youch/build/src/templates/error_stack/main.js:33:35)
+    at #renderFrameLocation (node_modules/youch/build/src/templates/error_stack/main.js:37:45)
+    at #renderStackFrame (node_modules/youch/build/src/templates/error_stack/main.js:58:36)
+    at node_modules/youch/build/src/templates/error_stack/main.js:114:33
+    at Array.map (<anonymous>)
+    at ErrorStack.toHTML (node_modules/youch/build/src/templates/error_stack/main.js:113:59)
+    at #tmplToHTML (node_modules/youch/build/index.js:83:20)
+    at async Object.children (node_modules/youch/build/index.js:106:102)
+    at async Layout.toHTML (node_modules/youch/build/src/templates/layout/main.js:17:13)
+ ERROR  Cannot read properties of undefined (reading 'replace')                                                             1:43:26 PM
 
-        <ul
-          v-if="props.bullets.length"
-          class="mt-5 space-y-2 text-sm text-neutral-700"
-        >
-          <li v-for="(b, i) in props.bullets" :key="i" class="flex gap-2">
-            <span class="mt-1 h-2 w-2 shrink-0 rounded-full bg-neutral-900" />
-            <span>{{ b }}</span>
-          </li>
-        </ul>
-
-        <div class="mt-6 flex flex-wrap gap-3">
-          <slot name="actions" />
-        </div>
-      </div>
-
-      <!-- Media -->
-      <div class="relative min-h-[240px] bg-neutral-100 md:min-h-[320px]">
-        <img
-          v-if="props.img"
-          :src="props.img"
-          :alt="props.alt"
-          class="absolute inset-0 h-full w-full object-cover"
-          loading="lazy"
-        />
-
-        <div
-          v-else
-          class="absolute inset-0 grid place-items-center text-sm text-neutral-500"
-        >
-          (сюда фото объекта/мастера)
-        </div>
-      </div>
-    </div>
-  </section>
-</template>
+    at #getRelativeFileName (node_modules/youch/build/src/templates/error_stack/main.js:21:19)
+    at #getEditorLink (node_modules/youch/build/src/templates/error_stack/main.js:33:35)
+    at #renderFrameLocation (node_modules/youch/build/src/templates/error_stack/main.js:37:45)
+    at #renderStackFrame (node_modules/youch/build/src/templates/error_stack/main.js:58:36)
+    at node_modules/youch/build/src/templates/error_stack/main.js:114:33
+    at Array.map (<anonymous>)
+    at ErrorStack.toHTML (node_modules/youch/build/src/templates/error_stack/main.js:113:59)
+    at #tmplToHTML (node_modules/youch/build/index.js:83:20)
+    at async Object.children (node_modules/youch/build/index.js:106:102)
+    at async Layout.toHTML (node_modules/youch/build/src/templates/layout/main.js:17:13)
+ℹ hmr update /@fs/home/gaz358/myprog/gazmaster-site/node_modules/tailwindcss/tailwind.css      
