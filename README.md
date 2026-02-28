@@ -1164,22 +1164,7 @@ http://localhost:3000/lipeck/remont/protherm/oshobka-f28
 
 
 
-yarn run v1.22.22
-$ nuxt dev
-│                                                                                                                           9:29:12 AM
-●  Nuxt 4.3.1 (with Nitro 2.13.1, Vite 7.3.1 and Vue 3.5.29)
-                                                                                                                            9:29:12 AM
-  ➜ Local:    http://localhost:3000/
-  ➜ Network:  use --host to expose
-
-  ➜ DevTools: press Shift + Alt + D in the browser (v3.2.2)                                                                 9:29:12 AM
-
-✔ Vite client built in 24ms                                                                                                9:29:13 AM
-✔ Vite server built in 57ms                                                                                                9:29:13 AM
-✔ Nuxt Nitro server built in 497ms                                                                                   nitro 9:29:13 AM
-ℹ Vite server warmed up in 1ms                                                                                             9:29:13 AM
-ℹ Vite client warmed up in 1ms    
-
+ls -la pages/[region]/remont/[brand]/
 
 
 
