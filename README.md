@@ -1164,90 +1164,21 @@ http://localhost:3000/lipeck/remont/protherm/oshobka-f28
 
 
 
-1) Проверь Node.js
-node -v
-npm -v
+yarn run v1.22.22
+$ nuxt dev
+│                                                                                                                           9:29:12 AM
+●  Nuxt 4.3.1 (with Nitro 2.13.1, Vite 7.3.1 and Vue 3.5.29)
+                                                                                                                            9:29:12 AM
+  ➜ Local:    http://localhost:3000/
+  ➜ Network:  use --host to expose
 
-Если Node есть — ставим Yarn через npm (самый простой и правильный путь).
+  ➜ DevTools: press Shift + Alt + D in the browser (v3.2.2)                                                                 9:29:12 AM
 
-2) Установи Yarn (Classic)
-sudo npm i -g yarn
-yarn -v
-3) Запусти проект
-
-В папке gazmaster-site:
-
-yarn dev
-Если sudo npm i -g yarn ругается на права/политику
-
-Тогда ставим через Corepack (лучше для современных окружений):
-
-corepack enable
-corepack prepare yarn@stable --activate
-yarn -v
-yarn dev
-Если вдруг corepack не найден
-
-Значит Node старый. Тогда обнови Node до LTS и снова:
-
-sudo apt-get update
-sudo apt-get install -y nodejs npm
-sudo npm i -g yarn
-
-После yarn dev открой http://localhost:3000.
-
-Напиши, что выводит node -v (одна строка) и сработал ли sudo npm i -g yarn — и двинемся дальше к странице /lipeck/remont/protherm/oshobka-f28.
-
-yarn dev
-
-
-Отлично: .nuxt уже есть, tsconfig.json тоже есть — значит проблема почти наверняка в том, что VS Code/tsserver не подцепил nuxt types (классика).
-
-Сделай вот так — по порядку:
-
-1) Проверь tsconfig.json (должен расширять .nuxt)
-
-Открой tsconfig.json. Он должен быть таким:
-
-{
-  "extends": "./.nuxt/tsconfig.json"
-}
-
-Если другой — замени на этот.
-
-2) Перезапусти TypeScript Server
-
-В VS Code:
-
-Ctrl+Shift+P → TypeScript: Restart TS Server
-
-Если не помогло:
-
-Ctrl+Shift+P → Developer: Reload Window
-
-3) Если всё равно ругается — используй импорт из #app (железно)
-
-В обоих файлах замени:
-
-import { useHead } from "#imports";
-
-на:
-
-import { useHead } from "#app";
-
-Это полностью нормальный вариант.
-
-Почему так происходит
-
-Nuxt даёт автo-imports, но редактор иногда не видит #imports, пока не обновит “проектную модель” TypeScript. Перезапуск TS server обычно чинит.
-
-Если после этого появятся такие же ошибки на useFetch, createError, computed — делай то же самое:
-
-либо перезапуск TS Server
-
-либо импортируй из #app (или из vue для computed).
-
-Напиши, что выбрал: (A) перезапуск помог или (B) перешли на #app, и двинемся дальше — сделаем хабы /lipeck/remont/ и /lipeck/remont/protherm/ + добавим F29/F75 без копипаста.
+✔ Vite client built in 24ms                                                                                                9:29:13 AM
+✔ Vite server built in 57ms                                                                                                9:29:13 AM
+✔ Nuxt Nitro server built in 497ms                                                                                   nitro 9:29:13 AM
+ℹ Vite server warmed up in 1ms                                                                                             9:29:13 AM
+ℹ Vite client warmed up in 1ms    
 
 
 
