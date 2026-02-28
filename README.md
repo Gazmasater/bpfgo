@@ -738,54 +738,64 @@ strace -f -e trace=write,writev,sendmsg,sendto -s 200 openssl s_client -connect 
 
 
 
-●  Nuxt 4.3.1 (with Nitro 2.13.1, Vite 7.3.1 and Vue 3.5.29)
-                                                                                                                            1:43:16 PM
-  ➜ Local:    http://localhost:3000/
-  ➜ Network:  use --host to expose
+<script setup lang="ts">
+type CauseItem = {
+  title: string
+  text: string
+  icon?: string // например: "🔥" или "⚠️"
+}
 
-ℹ Using default Tailwind CSS file                                                                         nuxt:tailwindcss 1:43:16 PM
-  ➜ DevTools: press Shift + Alt + D in the browser (v3.2.2)                                                                 1:43:16 PM
+type Props = {
+  title?: string
+  subtitle?: string
+  items: CauseItem[]
+}
 
-✔ Vite client built in 24ms                                                                                                1:43:17 PM
-✔ Vite server built in 48ms                                                                                                1:43:17 PM
-✔ Nuxt Nitro server built in 534ms                                                                                   nitro 1:43:18 PM
-ℹ Vite server warmed up in 0ms                                                                                             1:43:18 PM
-ℹ Vite client warmed up in 1ms                                                                                             1:43:18 PM
- WARN  [Vue Router warn]: uncaught error during route navigation:                                                           1:43:26 PM
- ERROR  { [Error: Single file component can contain only one <script setup> element]                                        1:43:26 PM
-  data:
-   { code: 'VITE_ERROR',
-     id: '/components/blocks/CausesBlock.vue',
-     stack:
-      'SyntaxError: Single file component can contain only one <script setup> element\n    at createDuplicateBlockError (/home/gaz358/myprog/gazmaster-site/node_modules/@vue/compiler-sfc/dist/compiler-sfc.cjs.js:1954:15)\n    at /home/gaz358/myprog/gazmaster-site/node_modules/@vue/compiler-sfc/dist/compiler-sfc.cjs.js:1874:21\n    at Array.forEach (<anonymous>)\n    at Object.parse$1 [as parse] (/home/gaz358/myprog/gazmaster-site/node_modules/@vue/compiler-sfc/dist/compiler-sfc.cjs.js:1832:16)\n    at createDescriptor (file:///home/gaz358/myprog/gazmaster-site/node_modules/@vitejs/plugin-vue/dist/index.mjs:54:42)\n    at transformMain (file:///home/gaz358/myprog/gazmaster-site/node_modules/@vitejs/plugin-vue/dist/index.mjs:1319:33)\n    at TransformPluginContext.handler (file:///home/gaz358/myprog/gazmaster-site/node_modules/@vitejs/plugin-vue/dist/index.mjs:1722:27)\n    at file:///home/gaz358/myprog/gazmaster-site/node_modules/vite-plugin-inspect/dist/shared/vite-plugin-inspect.BzUKaD4x.mjs:403:26\n    at hook.handler (file:///home/gaz358/myprog/gazmaster-site/node_modules/vite-plugin-inspect/dist/shared/vite-plugin-inspect.BzUKaD4x.mjs:376:14)\n    at EnvironmentPluginContainer.transform (file:///home/gaz358/myprog/gazmaster-site/node_modules/vite/dist/node/chunks/config.js:28797:51)',
-     message: 'Single file component can contain only one <script setup> element' },
-  status: undefined,
-  statusCode: undefined }
- WARN  [Vue Router warn]: uncaught error during route navigation:                                                           1:43:26 PM
- ERROR  Single file component can contain only one <script setup> element                                                   1:43:26 PM
-[1:43:26 PM]  WARN  [nuxt] Failed to stringify dev server logs. Received DevalueError: Cannot stringify arbitrary non-POJOs. You can define your own reducer/reviver for rich types following the instructions in https://nuxt.com/docs/4.x/api/composables/use-nuxt-app#payload.
- ERROR  Cannot read properties of undefined (reading 'replace')                                                             1:43:26 PM
+const props = withDefaults(defineProps<Props>(), {
+  title: 'Причины неисправности',
+  subtitle: '',
+})
+</script>
 
-    at #getRelativeFileName (node_modules/youch/build/src/templates/error_stack/main.js:21:19)
-    at #getEditorLink (node_modules/youch/build/src/templates/error_stack/main.js:33:35)
-    at #renderFrameLocation (node_modules/youch/build/src/templates/error_stack/main.js:37:45)
-    at #renderStackFrame (node_modules/youch/build/src/templates/error_stack/main.js:58:36)
-    at node_modules/youch/build/src/templates/error_stack/main.js:114:33
-    at Array.map (<anonymous>)
-    at ErrorStack.toHTML (node_modules/youch/build/src/templates/error_stack/main.js:113:59)
-    at #tmplToHTML (node_modules/youch/build/index.js:83:20)
-    at async Object.children (node_modules/youch/build/index.js:106:102)
-    at async Layout.toHTML (node_modules/youch/build/src/templates/layout/main.js:17:13)
- ERROR  Cannot read properties of undefined (reading 'replace')                                                             1:43:26 PM
+<template>
+  <section class="rounded-3xl border bg-white p-6 md:p-8">
+    <header class="max-w-2xl">
+      <h2 class="text-2xl md:text-3xl font-semibold tracking-tight">
+        {{ props.title }}
+      </h2>
+      <p v-if="props.subtitle" class="mt-2 text-neutral-600">
+        {{ props.subtitle }}
+      </p>
+    </header>
 
-    at #getRelativeFileName (node_modules/youch/build/src/templates/error_stack/main.js:21:19)
-    at #getEditorLink (node_modules/youch/build/src/templates/error_stack/main.js:33:35)
-    at #renderFrameLocation (node_modules/youch/build/src/templates/error_stack/main.js:37:45)
-    at #renderStackFrame (node_modules/youch/build/src/templates/error_stack/main.js:58:36)
-    at node_modules/youch/build/src/templates/error_stack/main.js:114:33
-    at Array.map (<anonymous>)
-    at ErrorStack.toHTML (node_modules/youch/build/src/templates/error_stack/main.js:113:59)
-    at #tmplToHTML (node_modules/youch/build/index.js:83:20)
-    at async Object.children (node_modules/youch/build/index.js:106:102)
-    at async Layout.toHTML (node_modules/youch/build/src/templates/layout/main.js:17:13)
-ℹ hmr update /@fs/home/gaz358/myprog/gazmaster-site/node_modules/tailwindcss/tailwind.css      
+    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <article
+        v-for="(it, i) in props.items"
+        :key="i"
+        class="rounded-2xl border bg-neutral-50 p-4"
+      >
+        <div class="flex items-start gap-3">
+          <div
+            class="grid h-10 w-10 place-items-center rounded-xl border bg-white text-lg"
+            aria-hidden="true"
+          >
+            {{ it.icon ?? '•' }}
+          </div>
+
+          <div class="min-w-0">
+            <h3 class="font-medium leading-snug">
+              {{ it.title }}
+            </h3>
+            <p class="mt-1 text-sm leading-relaxed text-neutral-600">
+              {{ it.text }}
+            </p>
+          </div>
+        </div>
+      </article>
+    </div>
+
+    <div class="mt-6">
+      <slot name="note" />
+    </div>
+  </section>
+</template>
