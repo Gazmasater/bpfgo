@@ -1165,3 +1165,46 @@ http://localhost:3000/lipeck/remont/protherm/oshybka-f28
 
 
 npx nuxi routes
+
+
+gaz358@gaz358-BOD-WXX9:~/myprog/gazmaster-site$ npx nuxi routes
+Nuxt CLI (nuxi v3.33.1)                                                                                           10:51:15 AM
+
+USAGE nuxi [OPTIONS] [COMMAND] add|add-template|analyze|build|cleanup|_dev|dev|devtools|generate|info|init|module|prepare|preview|start|test|typecheck|upgrade|complete
+
+ARGUMENTS
+
+  COMMAND        
+
+OPTIONS
+
+  --cwd=<directory>    Specify the working directory
+
+COMMANDS
+
+           add    Add Nuxt modules                                                     
+  add-template    Create a new template file.                                          
+       analyze    Build nuxt and analyze production bundle (experimental)              
+         build    Build Nuxt for production deployment                                 
+       cleanup    Clean up generated Nuxt files and caches                             
+          _dev    Run Nuxt development server (internal command to start child process)
+           dev    Run Nuxt development server                                          
+      devtools    Enable or disable devtools in a Nuxt project                         
+      generate    Build Nuxt and prerender all routes                                  
+          info    Get information about Nuxt project                                   
+          init    Initialize a fresh project                                           
+        module    Manage Nuxt modules                                                  
+       prepare    Prepare Nuxt for development/build                                   
+       preview    Launches Nitro server for local testing after nuxi build.          
+         start    Launches Nitro server for local testing after nuxi build.          
+          test    Run tests                                                            
+     typecheck    Runs vue-tsc to check types throughout your app.                   
+       upgrade    Upgrade Nuxt                                                         
+      complete    Generate shell completion scripts                                    
+
+Use nuxi <command> --help for more information about a command.
+
+
+ ERROR  Unknown command routes                                                                                    10:51:15 AM
+
+gaz358@gaz358-BOD-WXX9:~/myprog/gazmaster-site$ 
