@@ -779,7 +779,7 @@ yarn dev
 
 A) Страница
 
-pages/[region]/remont/[brand]/oshobka-[code].vue
+pages/[region]/remont/[brand]/oshybka-[code].vue
 
 <script setup lang="ts">
 import { useRoute } from "vue-router";
@@ -1197,6 +1197,24 @@ sudo npm i -g yarn
 После yarn dev открой http://localhost:3000.
 
 Напиши, что выводит node -v (одна строка) и сработал ли sudo npm i -g yarn — и двинемся дальше к странице /lipeck/remont/protherm/oshobka-f28.
+
+
+[{
+	"resource": "/home/gaz358/myprog/gazmaster-site/composables/useJsonLd.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "Cannot find name 'useHead'.",
+	"source": "ts",
+	"startLineNumber": 27,
+	"startColumn": 3,
+	"endLineNumber": 27,
+	"endColumn": 10,
+	"modelVersionId": 2,
+	"origin": "extHost1"
+}]
+
+
 
 
 
