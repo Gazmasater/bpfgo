@@ -784,3 +784,15 @@ npm run dev
 npm i -g yarn
 yarn -v
 “nuxi: not found”
+
+
+
+
+◇  Templates loaded
+│
+◆  Which template would you like to use?
+│  ○ content – Content-driven website
+│  ● minimal – Minimal setup for Nuxt 4 (recommended)
+│  ○ module – Nuxt module
+│  ○ ui – App using Nuxt UI
+└
