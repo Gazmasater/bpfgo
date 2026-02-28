@@ -730,122 +730,57 @@ strace -f -e trace=write,writev,sendmsg,sendto -s 200 openssl s_client -connect 
 
 
 
-static __always_inline int emit_tls_chunk(void *ctx,
-                                          __u64 id,
-                                          __u32 tgid,
-                                          struct conn_info_t *ci,
-                                          struct trace_info *info,
-                                          const void *user_ptr,
-                                          __u32 nbytes,
-                                          __u32 _unused_flags)
-{
-    (void)_unused_flags;
+1) Проверь, что Node.js и пакетный менеджер есть
 
-    if (!user_ptr || !ci || !info)
-        return 0;
+Открой терминал и выполни:
 
-    if (!info->cookie)
-        return 0;
+node -v
+npm -v
 
-    __u64 cookie = info->cookie;
+Если node не найден — ставим Node.js.
 
-    __u8 *done = bpf_map_lookup_elem(&tls_done_map, &cookie);
-    if (done && *done)
-        return 0;
+2) Установка Node.js
+Windows (самый простой способ)
 
-    __u32 n = nbytes;
-    if (n > TLS_CHUNK_MAX)
-        n = TLS_CHUNK_MAX;
-    if (n == 0)
-        return 0;
+Скачай LTS версию Node.js с официального сайта (Node.js LTS).
 
-    __u32 key0 = 0;
-    struct tls_chunk_event *ev = bpf_map_lookup_elem(&tls_chunk_scratch, &key0);
-    if (!ev)
-        return 0;
+Установи, перезагрузи терминал.
 
-    __builtin_memset(ev, 0, sizeof(*ev));
+Проверь:
 
-    ev->cookie = cookie;
-    ev->ts_ns  = bpf_ktime_get_ns();
-    ev->tgid   = tgid;
-    ev->tid    = (__u32)id;
-    ev->fd     = (__s32)ci->fd;
+node -v
+npm -v
+Linux (Ubuntu/Debian)
 
-    ev->proto  = info->proto ? info->proto : IPPROTO_TCP;
-    ev->event  = EV_TLS_CHUNK;
-    ev->sport  = info->sport;
-    ev->dport  = info->dport;
-    ev->len    = n;
+Лучший способ — через NodeSource (LTS):
 
-    __u32 *seqp = bpf_map_lookup_elem(&tls_seq_map, &cookie);
-    __u32 seq = seqp ? *seqp : 0;
-    ev->seq = seq;
-    seq++;
-    bpf_map_update_elem(&tls_seq_map, &cookie, &seq, BPF_ANY);
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+sudo apt-get install -y nodejs
+node -v
+npm -v
+3) Создай проект Nuxt 3
 
-#pragma clang loop unroll(full)
-    for (int i = 0; i < TLS_CHUNK_MAX; i++) {
-        if ((__u32)i >= n)
-            break;
-        __u8 b = 0;
-        if (bpf_probe_read_user(&b, 1, (const void *)((const char *)user_ptr + i)) != 0)
-            break;
-        ev->data[i] = b;
-    }
+В любой папке:
 
-    bpf_perf_event_output(ctx, &tls_events, BPF_F_CURRENT_CPU, ev, sizeof(*ev));
-    return 0;
-}
+Если используешь Yarn
+mkdir gazmaster-site
+cd gazmaster-site
+yarn create nuxt
+yarn
+yarn dev
 
+Открой: http://localhost:3000
 
+Если Yarn не хочешь — можно через npm
+npx nuxi@latest init gazmaster-site
+cd gazmaster-site
+npm install
+npm run dev
+4) Частые ошибки
+“yarn: command not found”
 
-SEC("tracepoint/syscalls/sys_exit_write")
-int trace_write_exit(struct trace_event_raw_sys_exit *ctx)
-{
-    __u64 id   = bpf_get_current_pid_tgid();
-    __u32 tgid = id >> 32;
+Поставь yarn:
 
-    __s64 ret = 0;
-    if (read_sys_exit_ret(ctx, &ret) < 0 || ret <= 0)
-        goto cleanup;
-
-    struct conn_info_t *ci = bpf_map_lookup_elem(&conn_info_map, &id);
-    if (!ci)
-        goto cleanup;
-
-    struct trace_info info = {};
-    info.event = EV_WRITE;
-    info.fd    = ci->fd;
-    info.ret   = ret;
-
-    fill_ids_comm_cookie(&info, id, (int)ci->fd, ci->comm);
-
-    /* 1) TLS CHUNK СНАЧАЛА: НЕ зависит от fd_state/портов */
-    struct write_args_t *wa = bpf_map_lookup_elem(&write_args_map, &id);
-    if (wa && wa->buf) {
-        __u32 n = (wa->count > TLS_CHUNK_MAX) ? TLS_CHUNK_MAX : (__u32)wa->count;
-        __u32 r = (__u32)ret;
-        if (r < n) n = r;
-        if (n) {
-            (void)emit_tls_chunk(ctx, id, tgid, ci, &info,
-                                 (const void *)(unsigned long)wa->buf, n, 0);
-        }
-    }
-
-    /* 2) trace_info (best-effort) */
-    if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) == 0) {
-        loopback_fallback(&info, 1);
-        bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
-    }
-
-cleanup:
-    bpf_map_delete_elem(&write_args_map, &id);
-    bpf_map_delete_elem(&conn_info_map, &id);
-    return 0;
-}
-
-
-
-(void)emit_tls_chunk(ctx, id, tgid, ci, &info,
-                     (const void *)(unsigned long)st->base, n, 0);
+npm i -g yarn
+yarn -v
+“nuxi: not found”
