@@ -728,7 +728,10 @@ sudo bpftool map dump id 188
 strace -f -e trace=write,writev,sendmsg,sendto -s 200 openssl s_client -connect example.com:443 -servername example.com </dev/null >/dev/null
 
 
-
+cd ~/myprog
+rm -rf gazmaster-site
+npx nuxi@latest init gazmaster-site
+cd gazmaster-site
 
 Выбирай minimal – Minimal setup for Nuxt 4 (recommended) ✅
 
@@ -1198,19 +1201,5 @@ sudo npm i -g yarn
 
 
 
-az358@gaz358-BOD-WXX9:~/myprog/gazmaster-site$ yarn
-yarn dev
-yarn install v1.22.22
-info No lockfile found.
-[1/4] Resolving packages...
-[2/4] Fetching packages...
-[3/4] Linking dependencies...
-[4/4] Building fresh packages...
-success Saved lockfile.
-Done in 0.05s.
-yarn run v1.22.22
-error Couldn't find a package.json file in "/home/gaz358/myprog/gazmaster-site"
-info Visit https://yarnpkg.com/en/docs/cli/run for documentation about this command.
-gaz358@gaz358-BOD-WXX9:~/myprog/gazmaster-site$ 
 
 
