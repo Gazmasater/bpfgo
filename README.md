@@ -730,293 +730,356 @@ strace -f -e trace=write,writev,sendmsg,sendto -s 200 openssl s_client -connect 
 
 
 
-1) Layout: шапка + футер + контейнер
-
-Создай файл:
-
-app/layouts/default.vue
-<script setup lang="ts">
-const region = "Липецк"; // потом сделаем динамически из cookie/route
-const phone = "+7 900 000-00-00";
-</script>
-
 <template>
-  <div class="min-h-screen bg-neutral-50 text-neutral-900">
-    <header class="sticky top-0 z-50 border-b bg-white/80 backdrop-blur">
-      <div class="mx-auto max-w-5xl px-4 py-4 flex items-center justify-between gap-4">
-        <NuxtLink to="/" class="flex items-center gap-3">
-          <div class="h-9 w-9 rounded-xl bg-neutral-900 text-white grid place-items-center font-semibold">G</div>
-          <div class="leading-tight">
-            <div class="font-semibold tracking-tight">Gazmaster</div>
-            <div class="text-xs text-neutral-500">Ремонт котлов · {{" "}} {{ region }}</div>
-          </div>
-        </NuxtLink>
-
-        <nav class="hidden sm:flex items-center gap-4 text-sm text-neutral-600">
-          <NuxtLink to="/lipeck/remont/" class="hover:text-neutral-900">Ремонт</NuxtLink>
-          <NuxtLink to="/parts" class="hover:text-neutral-900">Запчасти</NuxtLink>
-          <NuxtLink to="/contacts" class="hover:text-neutral-900">Контакты</NuxtLink>
-        </nav>
-
-        <div class="flex items-center gap-3">
-          <a
-            :href="`tel:${phone.replace(/\\s+/g,'')}`"
-            class="hidden md:inline-flex items-center rounded-xl border bg-white px-3 py-2 text-sm hover:bg-neutral-50"
-            title="Позвонить"
-          >
-            {{ phone }}
-          </a>
-          <a
-            :href="`tel:${phone.replace(/\\s+/g,'')}`"
-            class="inline-flex items-center rounded-xl bg-neutral-900 px-4 py-2 text-sm text-white hover:bg-neutral-800"
-          >
-            Вызвать мастера
-          </a>
-        </div>
-      </div>
-    </header>
-
-    <main class="mx-auto max-w-5xl px-4 py-6">
-      <NuxtPage />
-    </main>
-
-    <footer class="border-t bg-white">
-      <div class="mx-auto max-w-5xl px-4 py-8 grid gap-6 sm:grid-cols-2">
-        <div>
-          <div class="font-semibold">Gazmaster</div>
-          <div class="mt-2 text-sm text-neutral-600">
-            Диагностика и ремонт газовых котлов. Региональные контакты + централизованные продажи.
-          </div>
-        </div>
-
-        <div class="text-sm text-neutral-600">
-          <div class="font-medium text-neutral-900">Контакты</div>
-          <div class="mt-2">Регион: {{ region }}</div>
-          <div>Телефон: {{ phone }}</div>
-          <div class="mt-3 text-xs text-neutral-500">© {{ new Date().getFullYear() }}</div>
-        </div>
-      </div>
-    </footer>
-  </div>
+  <NuxtLayout>
+    <NuxtPage />
+  </NuxtLayout>
 </template>
-2) Красивые блоки страницы (конструктор)
 
-Создай:
 
-app/components/PageRenderer.vue
-<script setup lang="ts">
+
+// server/api/repair/page/[slug].get.ts
+// Универсальный мок-API под страницы вида:
+// /:region/remont/:brand/oshybka-:code
+// slug формируем так:  remont-${brand}-oshybka-${code}-${region}
+// пример: remont-protherm-oshybka-f28-lipeck
+
+type Safety = "low" | "med" | "high";
+
 type Block =
-  | { type: "hero"; title: string; subtitle: string; img?: string; alt?: string; bullets?: string[] }
+  | {
+      type: "hero";
+      title: string;
+      subtitle: string;
+      img?: string;
+      alt?: string;
+      bullets?: string[];
+    }
   | { type: "intro"; text: string }
   | { type: "causes"; items: { title: string; probability?: number }[] }
-  | { type: "steps"; items: { step: number; title: string; safety?: "low"|"med"|"high"; can_user_do?: boolean }[] }
-  | { type: "faq"; items: { q: string; a: string }[] }
-  | { type: "cta"; primary: string; phone: string; region: string; brand: string; code: string };
+  | {
+      type: "steps";
+      items: { step: number; title: string; safety?: Safety; can_user_do?: boolean }[];
+    }
+  | {
+      type: "cta";
+      primary: string;
+      phone: string;
+      region: string;
+      brand: string;
+      code: string;
+    }
+  | { type: "faq"; items: { q: string; a: string }[] };
 
-defineProps<{ blocks: Block[] }>();
-
-const map: Record<string, any> = {
-  hero: resolveComponent("blocks-HeroBlock"),
-  intro: resolveComponent("blocks-IntroBlock"),
-  causes: resolveComponent("blocks-CausesBlock"),
-  steps: resolveComponent("blocks-StepsBlock"),
-  faq: resolveComponent("blocks-FaqBlock"),
-  cta: resolveComponent("blocks-CtaBlock"),
-};
-</script>
-
-<template>
-  <div class="space-y-4">
-    <component v-for="(b, i) in blocks" :key="i" :is="map[b.type]" v-bind="b" />
-  </div>
-</template>
-
-Создай папку: app/components/blocks/ и файлы:
-
-app/components/blocks/HeroBlock.vue
-<script setup lang="ts">
-defineProps<{
+type PageDto = {
+  slug: string;
   title: string;
-  subtitle: string;
-  img?: string;
-  alt?: string;
-  bullets?: string[];
-}>();
-</script>
+  h1: string;
+  meta_description: string;
+  canonical_url: string;
+  breadcrumbs: { title: string; url: string }[];
+  local_business?: any;
+  blocks: Block[];
+};
 
-<template>
-  <section class="rounded-3xl border bg-white overflow-hidden">
-    <div class="grid md:grid-cols-2">
-      <div class="p-6 md:p-8">
-        <h1 class="text-3xl md:text-4xl font-semibold tracking-tight">
-          {{ title }}
-        </h1>
-        <p class="mt-3 text-neutral-600 leading-relaxed">
-          {{ subtitle }}
-        </p>
+function cap(s: string) {
+  if (!s) return s;
+  return s.slice(0, 1).toUpperCase() + s.slice(1);
+}
 
-        <ul v-if="bullets?.length" class="mt-5 space-y-2 text-sm text-neutral-700">
-          <li v-for="(b, i) in bullets" :key="i" class="flex gap-2">
-            <span class="mt-1 h-2 w-2 rounded-full bg-neutral-900"></span>
-            <span>{{ b }}</span>
-          </li>
-        </ul>
+function normCode(codeRaw: string) {
+  // "f28" -> "F28"
+  const c = codeRaw.trim().toUpperCase();
+  return c.startsWith("F") ? c : `F${c}`;
+}
 
-        <div class="mt-6 flex flex-wrap gap-3">
-          <slot name="actions" />
-        </div>
-      </div>
+function regionName(regionSlug: string) {
+  // пока мок: добавишь регионы как хочешь
+  const map: Record<string, string> = {
+    lipeck: "Липецк",
+    moscow: "Москва",
+    spb: "Санкт-Петербург",
+  };
+  return map[regionSlug] || cap(regionSlug);
+}
 
-      <div class="relative min-h-[240px] md:min-h-[320px] bg-neutral-100">
-        <img
-          v-if="img"
-          :src="img"
-          :alt="alt || ''"
-          class="absolute inset-0 h-full w-full object-cover"
-        />
-        <div v-else class="absolute inset-0 grid place-items-center text-neutral-500 text-sm">
-          (сюда фото объекта/мастера)
-        </div>
-      </div>
-    </div>
-  </section>
-</template>
-app/components/blocks/IntroBlock.vue
-<script setup lang="ts">
-defineProps<{ text: string }>();
-</script>
+function brandName(brandSlug: string) {
+  const map: Record<string, string> = {
+    protherm: "Protherm",
+    baxi: "Baxi",
+    vaillant: "Vaillant",
+    viessmann: "Viessmann",
+  };
+  return map[brandSlug] || cap(brandSlug);
+}
 
-<template>
-  <section class="rounded-2xl border bg-white p-5">
-    <p class="text-neutral-800 leading-relaxed">{{ text }}</p>
-  </section>
-</template>
-app/components/blocks/CausesBlock.vue
-<script setup lang="ts">
-defineProps<{ items: { title: string; probability?: number }[] }>();
-const pct = (v?: number) => (typeof v === "number" ? `${Math.round(v * 100)}%` : "");
-</script>
+function phoneForRegion(regionSlug: string) {
+  // мок: сделаешь реальную таблицу регионов позже
+  const map: Record<string, string> = {
+    lipeck: "+7 900 000-00-00",
+  };
+  return map[regionSlug] || "+7 900 000-00-00";
+}
 
-<template>
-  <section class="rounded-2xl border bg-white p-5">
-    <div class="flex items-baseline justify-between gap-3">
-      <h2 class="text-lg font-semibold">Частые причины</h2>
-      <span class="text-xs text-neutral-500">оценка частоты</span>
-    </div>
-    <ul class="mt-3 space-y-2">
-      <li v-for="(it, i) in items" :key="i" class="flex justify-between gap-4">
-        <span class="text-neutral-800">{{ it.title }}</span>
-        <span class="text-neutral-500 text-sm">{{ pct(it.probability) }}</span>
-      </li>
-    </ul>
-  </section>
-</template>
-app/components/blocks/StepsBlock.vue
-<script setup lang="ts">
-defineProps<{ items: { step: number; title: string; safety?: "low"|"med"|"high"; can_user_do?: boolean }[] }>();
-const badge = (s?: "low"|"med"|"high") => s === "high" ? "Только мастер" : s === "med" ? "Осторожно" : "Можно";
-</script>
+function makeCommonBlocks(params: {
+  region: string;
+  regionSlug: string;
+  brand: string;
+  brandSlug: string;
+  code: string;
+  heroImg?: string;
+  intro: string;
+  causes: { title: string; probability?: number }[];
+  steps: { title: string; safety?: Safety; can_user_do?: boolean }[];
+  faq: { q: string; a: string }[];
+}): Block[] {
+  const phone = phoneForRegion(params.regionSlug);
 
-<template>
-  <section class="rounded-2xl border bg-white p-5">
-    <h2 class="text-lg font-semibold">Что можно сделать</h2>
-    <ol class="mt-3 space-y-3">
-      <li v-for="it in items" :key="it.step" class="rounded-xl border bg-neutral-50 p-4">
-        <div class="flex items-start justify-between gap-3">
-          <div class="font-medium">Шаг {{ it.step }}: {{ it.title }}</div>
-          <span class="text-xs px-2 py-1 rounded-full border bg-white text-neutral-600">{{ badge(it.safety) }}</span>
-        </div>
-        <div v-if="it.can_user_do !== undefined" class="mt-2 text-sm text-neutral-500">
-          {{ it.can_user_do ? "Можно выполнить самостоятельно" : "Лучше вызвать мастера" }}
-        </div>
-      </li>
-    </ol>
-  </section>
-</template>
-app/components/blocks/FaqBlock.vue
-<script setup lang="ts">
-defineProps<{ items: { q: string; a: string }[] }>();
-</script>
+  return [
+    {
+      type: "hero",
+      title: `Ошибка ${params.code} ${params.brand} — ремонт в ${params.region}`,
+      subtitle:
+        "Частые причины, безопасные проверки и когда нужен мастер. Выезд по городу и области.",
+      img: params.heroImg, // можно не указывать — HeroBlock покажет плейсхолдер
+      alt: `Ремонт котлов ${params.brand} в ${params.region}`,
+      bullets: ["Выезд в день обращения", "Диагностика", "Гарантия на работы"],
+    },
+    { type: "intro", text: params.intro },
+    { type: "causes", items: params.causes },
+    {
+      type: "steps",
+      items: params.steps.map((s, i) => ({
+        step: i + 1,
+        title: s.title,
+        safety: s.safety ?? "low",
+        can_user_do: s.can_user_do,
+      })),
+    },
+    {
+      type: "cta",
+      primary: "Вызвать мастера",
+      phone,
+      region: params.region,
+      brand: params.brand,
+      code: params.code,
+    },
+    { type: "faq", items: params.faq },
+  ];
+}
 
-<template>
-  <section class="rounded-2xl border bg-white p-5">
-    <h2 class="text-lg font-semibold">FAQ</h2>
-    <div class="mt-3 divide-y">
-      <details v-for="(it, i) in items" :key="i" class="py-3">
-        <summary class="cursor-pointer text-neutral-900 font-medium">{{ it.q }}</summary>
-        <p class="mt-2 text-neutral-700 leading-relaxed">{{ it.a }}</p>
-      </details>
-    </div>
-  </section>
-</template>
-app/components/blocks/CtaBlock.vue
-<script setup lang="ts">
-const props = defineProps<{ primary: string; phone: string; region: string; brand: string; code: string }>();
-const tel = computed(() => `tel:${props.phone.replace(/\s+/g, "")}`);
-</script>
+function pageFor(params: {
+  slug: string;
+  regionSlug: string;
+  brandSlug: string;
+  codeRaw: string;
+}): PageDto {
+  const region = regionName(params.regionSlug);
+  const brand = brandName(params.brandSlug);
+  const code = normCode(params.codeRaw);
 
-<template>
-  <section class="rounded-2xl border bg-neutral-900 p-5 text-white">
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-      <div>
-        <h2 class="text-lg font-semibold">{{ primary }}</h2>
-        <p class="mt-1 text-sm text-white/70">Регион: {{ region }} · {{ brand }} · {{ code }}</p>
-      </div>
-      <a :href="tel" class="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2 font-medium text-neutral-900 hover:bg-white/90">
-        Позвонить {{ phone }}
-      </a>
-    </div>
-  </section>
-</template>
-3) Обнови страницу ошибки (чисто и красиво)
+  const baseUrl = `/${params.regionSlug}/remont/${params.brandSlug}/oshybka-${params.codeRaw.toLowerCase()}`;
+  const canonical = `http://localhost:3000${baseUrl}`;
 
-Открой и замени:
+  const breadcrumbs = [
+    { title: "Ремонт котлов", url: `/${params.regionSlug}/remont/` },
+    { title: brand, url: `/${params.regionSlug}/remont/${params.brandSlug}/` },
+    { title: `Ошибка ${code}`, url: baseUrl },
+  ];
 
-app/pages/[region]/remont/[brand]/oshybka-[code].vue
-<script setup lang="ts">
-import { useRoute } from "vue-router";
+  // Моковый JSON-LD (потом сделаем красиво под региональные контакты)
+  const phone = phoneForRegion(params.regionSlug);
+  const local_business = {
+    "@context": "https://schema.org",
+    "@type": "LocalBusiness",
+    name: `Ремонт котлов ${brand} в ${region}`,
+    areaServed: region,
+    telephone: phone,
+    address: { "@type": "PostalAddress", addressLocality: region, addressCountry: "RU" },
+  };
 
-const route = useRoute();
-const region = String(route.params.region || "");
-const brand = String(route.params.brand || "");
-const code = String(route.params.code || "");
+  // Контент по коду (можно расширять)
+  const key = code.toUpperCase();
 
-const slug = `remont-${brand}-oshybka-${code}-${region}`;
-const { data, error } = await useFetch(`/api/repair/page/${slug}`, { key: slug });
-if (error.value) throw createError({ statusCode: 404, statusMessage: "Not found" });
+  if (params.brandSlug === "protherm") {
+    switch (key) {
+      case "F28": {
+        const blocks = makeCommonBlocks({
+          region,
+          regionSlug: params.regionSlug,
+          brand,
+          brandSlug: params.brandSlug,
+          code,
+          heroImg: "/img/repair/protherm/hero.jpg",
+          intro:
+            "Ошибка F28 на котлах Protherm чаще всего связана с розжигом или подачей газа. Ниже — частые причины и безопасные действия, которые можно сделать без вмешательства в газовую часть.",
+          causes: [
+            { title: "Нет/недостаточно газа, закрыт кран", probability: 0.28 },
+            { title: "Сбой розжига: электрод/ионизация, загрязнение", probability: 0.22 },
+            { title: "Проблема с газовым клапаном", probability: 0.16 },
+            { title: "Просадка давления газа у поставщика", probability: 0.14 },
+          ],
+          steps: [
+            { title: "Проверьте газовый кран и наличие газа (например, у плиты)", safety: "low", can_user_do: true },
+            { title: "Сделайте сброс ошибки и повторный запуск котла", safety: "low", can_user_do: true },
+            { title: "Если ошибка повторяется — нужна диагностика розжига/клапана", safety: "high", can_user_do: false },
+          ],
+          faq: [
+            {
+              q: "Можно ли просто сбросить F28 и пользоваться дальше?",
+              a: "Если F28 появляется снова — проблема остаётся. Лучше диагностировать причину, чтобы котёл не уходил в останов и не изнашивал узлы.",
+            },
+            {
+              q: "Опасно ли разбирать котёл самому?",
+              a: "Газовую часть и настройки должен делать специалист. Самостоятельно ограничьтесь безопасными проверками (кран/сброс/давление по манометру).",
+            },
+          ],
+        });
 
-const page = computed(() => data.value);
+        return {
+          slug: params.slug,
+          title: `Ошибка ${code} ${brand} — ремонт в ${region}, причины и решение`,
+          h1: `Ошибка ${code} на котле ${brand} — что означает и как устранить (${region})`,
+          meta_description: `Ошибка ${code} ${brand}: причины, безопасные проверки и когда нужен мастер. Выезд по ${region}.`,
+          canonical_url: canonical,
+          breadcrumbs,
+          local_business,
+          blocks,
+        };
+      }
 
-useHead({
-  title: page.value?.title,
-  meta: [{ name: "description", content: page.value?.meta_description || "" }],
-  link: [{ rel: "canonical", href: page.value?.canonical_url || "" }],
+      case "F29": {
+        const blocks = makeCommonBlocks({
+          region,
+          regionSlug: params.regionSlug,
+          brand,
+          brandSlug: params.brandSlug,
+          code,
+          heroImg: "/img/repair/protherm/hero.jpg",
+          intro:
+            "Ошибка F29 обычно означает потерю пламени после розжига. Часто причина — нестабильная подача газа, ионизация или влияние дымоудаления (в зависимости от модели).",
+          causes: [
+            { title: "Нестабильная подача газа / просадки давления", probability: 0.26 },
+            { title: "Электрод ионизации/контакты/загрязнение", probability: 0.22 },
+            { title: "Проблемы дымоудаления/тяги", probability: 0.18 },
+            { title: "Газовый клапан / настройка", probability: 0.14 },
+          ],
+          steps: [
+            { title: "Проверьте, нет ли перебоев с газом", safety: "low", can_user_do: true },
+            { title: "Перезапустите котёл (сброс ошибки)", safety: "low", can_user_do: true },
+            { title: "При повторе — диагностика ионизации/газового узла/тяги", safety: "high", can_user_do: false },
+          ],
+          faq: [
+            { q: "F29 появляется периодически — это нормально?", a: "Нет. Периодическая потеря пламени — признак проблемы, лучше проверить, чтобы избежать остановок и срывов работы." },
+            { q: "Причина всегда в газе?", a: "Не всегда: бывает ионизация, тяга, настройки/узлы. Нужна диагностика по месту." },
+          ],
+        });
+
+        return {
+          slug: params.slug,
+          title: `Ошибка ${code} ${brand} — ремонт в ${region}, причины и решение`,
+          h1: `Ошибка ${code} на котле ${brand} — почему гаснет пламя (${region})`,
+          meta_description: `Ошибка ${code} ${brand}: причины потери пламени и безопасные проверки. Выезд по ${region}.`,
+          canonical_url: canonical,
+          breadcrumbs,
+          local_business,
+          blocks,
+        };
+      }
+
+      case "F75": {
+        const blocks = makeCommonBlocks({
+          region,
+          regionSlug: params.regionSlug,
+          brand,
+          brandSlug: params.brandSlug,
+          code,
+          heroImg: "/img/repair/protherm/hero.jpg",
+          intro:
+            "Ошибка F75 связана с давлением/циркуляцией: котёл не видит ожидаемого изменения давления при запуске насоса. Частые причины — воздух в системе, датчик давления, насос, фильтр.",
+          causes: [
+            { title: "Воздух в системе / завоздушивание", probability: 0.28 },
+            { title: "Неисправен датчик давления", probability: 0.20 },
+            { title: "Насос: заклинивание/износ/питание", probability: 0.18 },
+            { title: "Забит фильтр/грязевик", probability: 0.12 },
+          ],
+          steps: [
+            { title: "Проверьте давление в системе (часто 1–1.5 бар)", safety: "low", can_user_do: true },
+            { title: "Если умеете — аккуратно развоздушьте радиаторы", safety: "med", can_user_do: true },
+            { title: "Если ошибка не уходит — проверка насоса/датчика/фильтра", safety: "high", can_user_do: false },
+          ],
+          faq: [
+            { q: "F75 — это обязательно насос?", a: "Не всегда. Часто виноваты воздух, датчик давления или засор фильтра/гидравлики." },
+            { q: "Можно ли продолжать пользоваться?", a: "Лучше не игнорировать: проблемы с циркуляцией ведут к перегревам и остановкам." },
+          ],
+        });
+
+        return {
+          slug: params.slug,
+          title: `Ошибка ${code} ${brand} — ремонт в ${region}, причины и решение`,
+          h1: `Ошибка ${code} на котле ${brand} — давление, насос, датчик (${region})`,
+          meta_description: `Ошибка ${code} ${brand}: причины по давлению/насосу и безопасные действия. Выезд по ${region}.`,
+          canonical_url: canonical,
+          breadcrumbs,
+          local_business,
+          blocks,
+        };
+      }
+    }
+  }
+
+  // Дефолтная страница для любых брендов/кодов (чтобы не было 404 при расширении)
+  const blocks: Block[] = makeCommonBlocks({
+    region,
+    regionSlug: params.regionSlug,
+    brand,
+    brandSlug: params.brandSlug,
+    code,
+    heroImg: `/img/repair/${params.brandSlug}/hero.jpg`,
+    intro: `Страница по ошибке ${code} для котлов ${brand}. Заполним конкретикой позже: причины, проверки, цены и сроки по региону ${region}.`,
+    causes: [
+      { title: "Недостаточно данных по модели (заполним после диагностики)", probability: 0.34 },
+      { title: "Электрика/датчики/контакты", probability: 0.22 },
+      { title: "Гидравлика/циркуляция/давление", probability: 0.18 },
+    ],
+    steps: [
+      { title: "Сфотографируйте дисплей с ошибкой и модель котла", safety: "low", can_user_do: true },
+      { title: "Сделайте перезапуск и проверьте давление/кран газа (если применимо)", safety: "low", can_user_do: true },
+      { title: "Если ошибка повторяется — вызов мастера для диагностики", safety: "high", can_user_do: false },
+    ],
+    faq: [
+      { q: "Можно ли устранить самому?", a: "Зависит от причины. Самостоятельно делайте только безопасные проверки. Газовую часть должен обслуживать специалист." },
+      { q: "Сколько стоит ремонт?", a: "Стоимость зависит от причины/запчастей. Сначала делается диагностика, затем согласуется цена." },
+    ],
+  });
+
+  return {
+    slug: params.slug,
+    title: `Ошибка ${code} ${brand} — ремонт в ${region}`,
+    h1: `Ошибка ${code} на котле ${brand} (${region})`,
+    meta_description: `Ошибка ${code} ${brand}: причины и решение. Выезд по ${region}.`,
+    canonical_url: canonical,
+    breadcrumbs,
+    local_business,
+    blocks,
+  };
+}
+
+export default defineEventHandler((event): PageDto => {
+  const slug = getRouterParam(event, "slug") || "";
+
+  // ожидаемый формат: remont-{brand}-oshybka-{code}-{region}
+  const m = slug.match(/^remont-([a-z0-9-]+)-oshybka-([a-z0-9-]+)-([a-z0-9-]+)$/i);
+  if (!m) {
+    throw createError({ statusCode: 404, statusMessage: `Bad slug: ${slug}` });
+  }
+
+  const [, brandSlug, codeRaw, regionSlug] = m;
+
+  return pageFor({
+    slug,
+    regionSlug: regionSlug.toLowerCase(),
+    brandSlug: brandSlug.toLowerCase(),
+    codeRaw: codeRaw.toLowerCase(),
+  });
 });
-</script>
-
-<template>
-  <div class="space-y-4">
-    <nav v-if="page?.breadcrumbs" class="text-sm text-neutral-500">
-      <template v-for="(b, i) in page.breadcrumbs" :key="i">
-        <NuxtLink :to="b.url" class="hover:text-neutral-900">{{ b.title }}</NuxtLink>
-        <span v-if="i < page.breadcrumbs.length - 1" class="mx-2 text-neutral-300">/</span>
-      </template>
-    </nav>
-
-    <PageRenderer v-if="page?.blocks" :blocks="page.blocks">
-      <!-- если захочешь, можем прокинуть actions в hero через slot позже -->
-    </PageRenderer>
-  </div>
-</template>
-4) Добавь “hero” в API (чтобы было реально красиво)
-
-В server/api/repair/page/[slug].get.ts добавь первым блоком:
-
-{
-  type: "hero",
-  title: "Ошибка F28 Protherm — ремонт в Липецке",
-  subtitle: "Частые причины, безопасные проверки и когда нужен мастер. Выезд по Липецку.",
-  img: "/img/repair/protherm/hero.jpg", // можно пока не класть — будет плейсхолдер
-  alt: "Ремонт котлов Protherm в Липецке",
-  bullets: ["Выезд в день обращения", "Диагностика", "Гарантия на работы"],
-},
