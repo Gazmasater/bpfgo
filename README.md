@@ -1216,6 +1216,23 @@ sudo npm i -g yarn
 
 
 
+[{
+	"resource": "/home/gaz358/myprog/gazmaster-site/composables/useSeo.ts",
+	"owner": "typescript",
+	"code": "2304",
+	"severity": 8,
+	"message": "Cannot find name 'useHead'.",
+	"source": "ts",
+	"startLineNumber": 5,
+	"startColumn": 3,
+	"endLineNumber": 5,
+	"endColumn": 10,
+	"modelVersionId": 2,
+	"origin": "extHost1"
+}]
+
+
+
 
 
 
