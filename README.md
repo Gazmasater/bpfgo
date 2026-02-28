@@ -1164,25 +1164,18 @@ http://localhost:3000/lipeck/remont/protherm/oshybka-f28
 
 
 
-npx nuxi routes
+# 1. Переместить app.vue
+mv app/pages/app.vue app/app.vue
 
+# 2. Переместить components и composables
+mv app/pages/components app/components
+mv app/pages/composables app/composables
 
-app/pages/[region]/remont/index.vue
+# 3. Создать правильную вложенность для ошибки
+mkdir -p app/pages/[region]/remont/[brand]
 
-<script setup lang="ts">
-import { useRoute } from "vue-router";
-const route = useRoute();
-const region = String(route.params.region || "");
-useHead({ title: `Ремонт котлов — ${region}` });
-</script>
+mv app/pages/[region]/[brand]/oshybka-[code].vue \
+   app/pages/[region]/remont/[brand]/oshybka-[code].vue
 
-<template>
-  <main style="max-width:920px;margin:0 auto;padding:24px 16px;">
-    <h1 style="font-size:32px;margin:0 0 16px;">Ремонт котлов ({{ region }})</h1>
-    <p style="color:#666;margin:0 0 16px;">Тестовый хаб региона.</p>
-
-    <NuxtLink :to="`/${region}/remont/protherm/oshybka-f28`">
-      Protherm — ошибка F28
-    </NuxtLink>
-  </main>
-</template>
+# 4. Удалить пустую папку
+rm -rf app/pages/[region]/[brand]
