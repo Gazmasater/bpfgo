@@ -1256,36 +1256,9 @@ yarn dev
 
 
 
-[{
-	"resource": "/home/gaz358/myprog/gazmaster-site/composables/useJsonLd.ts",
-	"owner": "typescript",
-	"code": "2307",
-	"severity": 8,
-	"message": "Cannot find module '#imports' or its corresponding type declarations.",
-	"source": "ts",
-	"startLineNumber": 1,
-	"startColumn": 25,
-	"endLineNumber": 1,
-	"endColumn": 35,
-	"modelVersionId": 2,
-	"origin": "extHost1"
-}]
-
-
-[{
-	"resource": "/home/gaz358/myprog/gazmaster-site/composables/useSeo.ts",
-	"owner": "typescript",
-	"code": "2307",
-	"severity": 8,
-	"message": "Cannot find module '#imports' or its corresponding type declarations.",
-	"source": "ts",
-	"startLineNumber": 1,
-	"startColumn": 25,
-	"endLineNumber": 1,
-	"endColumn": 35,
-	"modelVersionId": 2,
-	"origin": "extHost1"
-}]
-
+gaz358@gaz358-BOD-WXX9:~/myprog/gazmaster-site$ ls -a
+.   app         composables  .gitignore    .nuxt           package.json  public     server         .yarn      .yarnrc.yml
+..  components  .git         node_modules  nuxt.config.ts  pages         README.md  tsconfig.json  yarn.lock
+gaz358@gaz358-BOD-WXX9:~/myprog/gazmaster-site$ 
 
 
