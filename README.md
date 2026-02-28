@@ -1199,42 +1199,60 @@ sudo npm i -g yarn
 Напиши, что выводит node -v (одна строка) и сработал ли sudo npm i -g yarn — и двинемся дальше к странице /lipeck/remont/protherm/oshobka-f28.
 
 
-[{
-	"resource": "/home/gaz358/myprog/gazmaster-site/composables/useJsonLd.ts",
-	"owner": "typescript",
-	"code": "2304",
-	"severity": 8,
-	"message": "Cannot find name 'useHead'.",
-	"source": "ts",
-	"startLineNumber": 27,
-	"startColumn": 3,
-	"endLineNumber": 27,
-	"endColumn": 10,
-	"modelVersionId": 2,
-	"origin": "extHost1"
-}]
+import { useHead } from "#imports";
+
+export function useSeo(page: any) {
+  if (!page?.value) return;
+  const p = page.value;
+
+  useHead({
+    title: p.title,
+    meta: [
+      { name: "description", content: p.meta_description || "" },
+      { property: "og:title", content: p.title },
+      { property: "og:description", content: p.meta_description || "" },
+      { property: "og:type", content: "article" },
+    ],
+    link: [{ rel: "canonical", href: p.canonical_url || "" }],
+  });
+}
 
 
 
-[{
-	"resource": "/home/gaz358/myprog/gazmaster-site/composables/useSeo.ts",
-	"owner": "typescript",
-	"code": "2304",
-	"severity": 8,
-	"message": "Cannot find name 'useHead'.",
-	"source": "ts",
-	"startLineNumber": 5,
-	"startColumn": 3,
-	"endLineNumber": 5,
-	"endColumn": 10,
-	"modelVersionId": 2,
-	"origin": "extHost1"
-}]
+import { useHead } from "#imports";
+
+export function useJsonLd(page: any) {
+  if (!page?.value) return;
+  const p = page.value;
+
+  const scripts: any[] = [];
+
+  if (p.local_business) {
+    scripts.push({ type: "application/ld+json", children: JSON.stringify(p.local_business) });
+  }
+
+  const faq = (p.blocks || []).find((b: any) => b.type === "faq");
+  if (faq?.items?.length) {
+    scripts.push({
+      type: "application/ld+json",
+      children: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        mainEntity: faq.items.map((x: any) => ({
+          "@type": "Question",
+          name: x.q,
+          acceptedAnswer: { "@type": "Answer", text: x.a },
+        })),
+      }),
+    });
+  }
+
+  useHead({ script: scripts });
+}
 
 
 
-
-
+yarn dev
 
 
 
