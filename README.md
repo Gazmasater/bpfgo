@@ -1256,3 +1256,36 @@ yarn dev
 
 
 
+[{
+	"resource": "/home/gaz358/myprog/gazmaster-site/composables/useJsonLd.ts",
+	"owner": "typescript",
+	"code": "2307",
+	"severity": 8,
+	"message": "Cannot find module '#imports' or its corresponding type declarations.",
+	"source": "ts",
+	"startLineNumber": 1,
+	"startColumn": 25,
+	"endLineNumber": 1,
+	"endColumn": 35,
+	"modelVersionId": 2,
+	"origin": "extHost1"
+}]
+
+
+[{
+	"resource": "/home/gaz358/myprog/gazmaster-site/composables/useSeo.ts",
+	"owner": "typescript",
+	"code": "2307",
+	"severity": 8,
+	"message": "Cannot find module '#imports' or its corresponding type declarations.",
+	"source": "ts",
+	"startLineNumber": 1,
+	"startColumn": 25,
+	"endLineNumber": 1,
+	"endColumn": 35,
+	"modelVersionId": 2,
+	"origin": "extHost1"
+}]
+
+
+
