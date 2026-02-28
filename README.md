@@ -730,51 +730,293 @@ strace -f -e trace=write,writev,sendmsg,sendto -s 200 openssl s_client -connect 
 
 
 
-1) Установи модуль Tailwind
+1) Layout: шапка + футер + контейнер
 
-В корне проекта:
+Создай файл:
 
-cd ~/myprog/gazmaster-site
-yarn add -D @nuxtjs/tailwindcss
-2) Подключи модуль в nuxt.config.ts
-
-Открой nuxt.config.ts и добавь/обнови так:
-
-export default defineNuxtConfig({
-  modules: ["@nuxtjs/tailwindcss"],
-})
-3) Создай tailwind.config.ts
-
-В корне проекта создай файл tailwind.config.ts:
-
-import type { Config } from "tailwindcss";
-
-export default <Partial<Config>>{
-  content: ["./app/**/*.{vue,js,ts}"],
-  theme: { extend: {} },
-  plugins: [],
-};
-4) Перезапусти dev-сервер
-
-Останови yarn dev (Ctrl+C) и запусти снова:
-
-yarn dev
-5) Быстрый тест, что Tailwind работает
-
-Открой app/pages/index.vue и вставь:
+app/layouts/default.vue
+<script setup lang="ts">
+const region = "Липецк"; // потом сделаем динамически из cookie/route
+const phone = "+7 900 000-00-00";
+</script>
 
 <template>
-  <div class="min-h-screen bg-neutral-50 flex items-center justify-center p-6">
-    <div class="max-w-xl w-full rounded-2xl border bg-white p-6 shadow-sm">
-      <h1 class="text-3xl font-semibold tracking-tight">Tailwind работает ✅</h1>
-      <p class="mt-2 text-neutral-600">Теперь можно делать красиво без CSS.</p>
-      <a class="mt-4 inline-flex rounded-xl bg-neutral-900 px-4 py-2 text-white hover:bg-neutral-800" href="/lipeck/remont/">
-        Перейти в ремонт
-      </a>
-    </div>
+  <div class="min-h-screen bg-neutral-50 text-neutral-900">
+    <header class="sticky top-0 z-50 border-b bg-white/80 backdrop-blur">
+      <div class="mx-auto max-w-5xl px-4 py-4 flex items-center justify-between gap-4">
+        <NuxtLink to="/" class="flex items-center gap-3">
+          <div class="h-9 w-9 rounded-xl bg-neutral-900 text-white grid place-items-center font-semibold">G</div>
+          <div class="leading-tight">
+            <div class="font-semibold tracking-tight">Gazmaster</div>
+            <div class="text-xs text-neutral-500">Ремонт котлов · {{" "}} {{ region }}</div>
+          </div>
+        </NuxtLink>
+
+        <nav class="hidden sm:flex items-center gap-4 text-sm text-neutral-600">
+          <NuxtLink to="/lipeck/remont/" class="hover:text-neutral-900">Ремонт</NuxtLink>
+          <NuxtLink to="/parts" class="hover:text-neutral-900">Запчасти</NuxtLink>
+          <NuxtLink to="/contacts" class="hover:text-neutral-900">Контакты</NuxtLink>
+        </nav>
+
+        <div class="flex items-center gap-3">
+          <a
+            :href="`tel:${phone.replace(/\\s+/g,'')}`"
+            class="hidden md:inline-flex items-center rounded-xl border bg-white px-3 py-2 text-sm hover:bg-neutral-50"
+            title="Позвонить"
+          >
+            {{ phone }}
+          </a>
+          <a
+            :href="`tel:${phone.replace(/\\s+/g,'')}`"
+            class="inline-flex items-center rounded-xl bg-neutral-900 px-4 py-2 text-sm text-white hover:bg-neutral-800"
+          >
+            Вызвать мастера
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-5xl px-4 py-6">
+      <NuxtPage />
+    </main>
+
+    <footer class="border-t bg-white">
+      <div class="mx-auto max-w-5xl px-4 py-8 grid gap-6 sm:grid-cols-2">
+        <div>
+          <div class="font-semibold">Gazmaster</div>
+          <div class="mt-2 text-sm text-neutral-600">
+            Диагностика и ремонт газовых котлов. Региональные контакты + централизованные продажи.
+          </div>
+        </div>
+
+        <div class="text-sm text-neutral-600">
+          <div class="font-medium text-neutral-900">Контакты</div>
+          <div class="mt-2">Регион: {{ region }}</div>
+          <div>Телефон: {{ phone }}</div>
+          <div class="mt-3 text-xs text-neutral-500">© {{ new Date().getFullYear() }}</div>
+        </div>
+      </div>
+    </footer>
+  </div>
+</template>
+2) Красивые блоки страницы (конструктор)
+
+Создай:
+
+app/components/PageRenderer.vue
+<script setup lang="ts">
+type Block =
+  | { type: "hero"; title: string; subtitle: string; img?: string; alt?: string; bullets?: string[] }
+  | { type: "intro"; text: string }
+  | { type: "causes"; items: { title: string; probability?: number }[] }
+  | { type: "steps"; items: { step: number; title: string; safety?: "low"|"med"|"high"; can_user_do?: boolean }[] }
+  | { type: "faq"; items: { q: string; a: string }[] }
+  | { type: "cta"; primary: string; phone: string; region: string; brand: string; code: string };
+
+defineProps<{ blocks: Block[] }>();
+
+const map: Record<string, any> = {
+  hero: resolveComponent("blocks-HeroBlock"),
+  intro: resolveComponent("blocks-IntroBlock"),
+  causes: resolveComponent("blocks-CausesBlock"),
+  steps: resolveComponent("blocks-StepsBlock"),
+  faq: resolveComponent("blocks-FaqBlock"),
+  cta: resolveComponent("blocks-CtaBlock"),
+};
+</script>
+
+<template>
+  <div class="space-y-4">
+    <component v-for="(b, i) in blocks" :key="i" :is="map[b.type]" v-bind="b" />
   </div>
 </template>
 
-Если увидел светлый фон, карточку и кнопку — Tailwind подключён.
+Создай папку: app/components/blocks/ и файлы:
 
-Хочешь дальше: делаем красивый layout (шапка/футер) и красивую страницу ошибки (Hero + CTA + блоки) на Tailwind?
+app/components/blocks/HeroBlock.vue
+<script setup lang="ts">
+defineProps<{
+  title: string;
+  subtitle: string;
+  img?: string;
+  alt?: string;
+  bullets?: string[];
+}>();
+</script>
+
+<template>
+  <section class="rounded-3xl border bg-white overflow-hidden">
+    <div class="grid md:grid-cols-2">
+      <div class="p-6 md:p-8">
+        <h1 class="text-3xl md:text-4xl font-semibold tracking-tight">
+          {{ title }}
+        </h1>
+        <p class="mt-3 text-neutral-600 leading-relaxed">
+          {{ subtitle }}
+        </p>
+
+        <ul v-if="bullets?.length" class="mt-5 space-y-2 text-sm text-neutral-700">
+          <li v-for="(b, i) in bullets" :key="i" class="flex gap-2">
+            <span class="mt-1 h-2 w-2 rounded-full bg-neutral-900"></span>
+            <span>{{ b }}</span>
+          </li>
+        </ul>
+
+        <div class="mt-6 flex flex-wrap gap-3">
+          <slot name="actions" />
+        </div>
+      </div>
+
+      <div class="relative min-h-[240px] md:min-h-[320px] bg-neutral-100">
+        <img
+          v-if="img"
+          :src="img"
+          :alt="alt || ''"
+          class="absolute inset-0 h-full w-full object-cover"
+        />
+        <div v-else class="absolute inset-0 grid place-items-center text-neutral-500 text-sm">
+          (сюда фото объекта/мастера)
+        </div>
+      </div>
+    </div>
+  </section>
+</template>
+app/components/blocks/IntroBlock.vue
+<script setup lang="ts">
+defineProps<{ text: string }>();
+</script>
+
+<template>
+  <section class="rounded-2xl border bg-white p-5">
+    <p class="text-neutral-800 leading-relaxed">{{ text }}</p>
+  </section>
+</template>
+app/components/blocks/CausesBlock.vue
+<script setup lang="ts">
+defineProps<{ items: { title: string; probability?: number }[] }>();
+const pct = (v?: number) => (typeof v === "number" ? `${Math.round(v * 100)}%` : "");
+</script>
+
+<template>
+  <section class="rounded-2xl border bg-white p-5">
+    <div class="flex items-baseline justify-between gap-3">
+      <h2 class="text-lg font-semibold">Частые причины</h2>
+      <span class="text-xs text-neutral-500">оценка частоты</span>
+    </div>
+    <ul class="mt-3 space-y-2">
+      <li v-for="(it, i) in items" :key="i" class="flex justify-between gap-4">
+        <span class="text-neutral-800">{{ it.title }}</span>
+        <span class="text-neutral-500 text-sm">{{ pct(it.probability) }}</span>
+      </li>
+    </ul>
+  </section>
+</template>
+app/components/blocks/StepsBlock.vue
+<script setup lang="ts">
+defineProps<{ items: { step: number; title: string; safety?: "low"|"med"|"high"; can_user_do?: boolean }[] }>();
+const badge = (s?: "low"|"med"|"high") => s === "high" ? "Только мастер" : s === "med" ? "Осторожно" : "Можно";
+</script>
+
+<template>
+  <section class="rounded-2xl border bg-white p-5">
+    <h2 class="text-lg font-semibold">Что можно сделать</h2>
+    <ol class="mt-3 space-y-3">
+      <li v-for="it in items" :key="it.step" class="rounded-xl border bg-neutral-50 p-4">
+        <div class="flex items-start justify-between gap-3">
+          <div class="font-medium">Шаг {{ it.step }}: {{ it.title }}</div>
+          <span class="text-xs px-2 py-1 rounded-full border bg-white text-neutral-600">{{ badge(it.safety) }}</span>
+        </div>
+        <div v-if="it.can_user_do !== undefined" class="mt-2 text-sm text-neutral-500">
+          {{ it.can_user_do ? "Можно выполнить самостоятельно" : "Лучше вызвать мастера" }}
+        </div>
+      </li>
+    </ol>
+  </section>
+</template>
+app/components/blocks/FaqBlock.vue
+<script setup lang="ts">
+defineProps<{ items: { q: string; a: string }[] }>();
+</script>
+
+<template>
+  <section class="rounded-2xl border bg-white p-5">
+    <h2 class="text-lg font-semibold">FAQ</h2>
+    <div class="mt-3 divide-y">
+      <details v-for="(it, i) in items" :key="i" class="py-3">
+        <summary class="cursor-pointer text-neutral-900 font-medium">{{ it.q }}</summary>
+        <p class="mt-2 text-neutral-700 leading-relaxed">{{ it.a }}</p>
+      </details>
+    </div>
+  </section>
+</template>
+app/components/blocks/CtaBlock.vue
+<script setup lang="ts">
+const props = defineProps<{ primary: string; phone: string; region: string; brand: string; code: string }>();
+const tel = computed(() => `tel:${props.phone.replace(/\s+/g, "")}`);
+</script>
+
+<template>
+  <section class="rounded-2xl border bg-neutral-900 p-5 text-white">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div>
+        <h2 class="text-lg font-semibold">{{ primary }}</h2>
+        <p class="mt-1 text-sm text-white/70">Регион: {{ region }} · {{ brand }} · {{ code }}</p>
+      </div>
+      <a :href="tel" class="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2 font-medium text-neutral-900 hover:bg-white/90">
+        Позвонить {{ phone }}
+      </a>
+    </div>
+  </section>
+</template>
+3) Обнови страницу ошибки (чисто и красиво)
+
+Открой и замени:
+
+app/pages/[region]/remont/[brand]/oshybka-[code].vue
+<script setup lang="ts">
+import { useRoute } from "vue-router";
+
+const route = useRoute();
+const region = String(route.params.region || "");
+const brand = String(route.params.brand || "");
+const code = String(route.params.code || "");
+
+const slug = `remont-${brand}-oshybka-${code}-${region}`;
+const { data, error } = await useFetch(`/api/repair/page/${slug}`, { key: slug });
+if (error.value) throw createError({ statusCode: 404, statusMessage: "Not found" });
+
+const page = computed(() => data.value);
+
+useHead({
+  title: page.value?.title,
+  meta: [{ name: "description", content: page.value?.meta_description || "" }],
+  link: [{ rel: "canonical", href: page.value?.canonical_url || "" }],
+});
+</script>
+
+<template>
+  <div class="space-y-4">
+    <nav v-if="page?.breadcrumbs" class="text-sm text-neutral-500">
+      <template v-for="(b, i) in page.breadcrumbs" :key="i">
+        <NuxtLink :to="b.url" class="hover:text-neutral-900">{{ b.title }}</NuxtLink>
+        <span v-if="i < page.breadcrumbs.length - 1" class="mx-2 text-neutral-300">/</span>
+      </template>
+    </nav>
+
+    <PageRenderer v-if="page?.blocks" :blocks="page.blocks">
+      <!-- если захочешь, можем прокинуть actions в hero через slot позже -->
+    </PageRenderer>
+  </div>
+</template>
+4) Добавь “hero” в API (чтобы было реально красиво)
+
+В server/api/repair/page/[slug].get.ts добавь первым блоком:
+
+{
+  type: "hero",
+  title: "Ошибка F28 Protherm — ремонт в Липецке",
+  subtitle: "Частые причины, безопасные проверки и когда нужен мастер. Выезд по Липецку.",
+  img: "/img/repair/protherm/hero.jpg", // можно пока не класть — будет плейсхолдер
+  alt: "Ремонт котлов Protherm в Липецке",
+  bullets: ["Выезд в день обращения", "Диагностика", "Гарантия на работы"],
+},
