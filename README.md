@@ -1164,11 +1164,8 @@ http://localhost:3000/lipeck/remont/protherm/oshybka-f28
 
 
 
-on]/remont/[brand]/oshybka-[code].vue?macro=true, /@id/virtual:nuxt:%2Fhome%2Fgaz358%2Fmyprog%2Fgazmaster-site%2F.nuxt%2Froutes.mjs
-[10:14:54 AM] ℹ hmr update /pages/[region]/remont/[brand]/oshybka-[code].vue?macro=true, /@id/virtual:nuxt:%2Fhome%2Fgaz358%2Fmyprog%2Fgazmaster-site%2F.nuxt%2Froutes.mjs
-✔ Vite server hmr 17 files in 0.487ms                                                                                     10:15:26 AM
-[10:15:26 AM]  WARN  [nuxt] Your project has pages but the <NuxtPage /> component has not been used. You might be using the <RouterView /> component instead, which will not work correctly in Nuxt. You can set pages: false in nuxt.config if you do not wish to use the Nuxt vue-router integration.
-
-
+<template>
+  <NuxtPage />
+</template>
 
 
