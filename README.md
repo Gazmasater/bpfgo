@@ -1164,6 +1164,4 @@ http://localhost:3000/lipeck/remont/protherm/oshybka-f28
 
 
 
-mkdir -p app/pages
-mv pages/* app/pages/
-rm -rf pages
+npx nuxi routes
