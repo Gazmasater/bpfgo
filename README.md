@@ -1161,3 +1161,61 @@ http://localhost:3000/lipeck/remont/protherm/oshobka-f28
 
 
 
+◇  Templates loaded
+│
+◇  Which template would you like to use?
+│  minimal – Minimal setup for Nuxt 4
+│
+◇  Creating project in gazmaster-site
+│
+◇  Downloaded minimal template
+│
+◇  Which package manager would you like to use?
+│  yarn
+│
+◇  Initialize git repository?
+│  Yes
+│
+◇  Dependencies installed
+│
+hint: Using 'master' as the name for the initial branch. This default branch name
+hint: is subject to change. To configure the initial branch name to use in all
+hint: of your new repositories, which will suppress this warning, call:
+hint: 
+hint:   git config --global init.defaultBranch <name>
+hint: 
+hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+hint: 'development'. The just-created branch can be renamed via this command:
+hint: 
+hint:   git branch -m <name>
+Initialized empty Git repository in /home/gaz358/myprog/arb/gazmaster-site/.git/
+◇  Git repository initialized
+│
+◇  Would you like to browse and install modules?
+│  Yes
+│
+◇  Modules loaded
+│
+◇  Search and select modules:
+│  0 items selected
+│
+└  ✨ Nuxt project has been created with the minimal template.
+
+╭── 👉 Next steps ───────╮
+│                        │
+│   › cd gazmaster-site  │
+│   › yarn run dev       │
+│                        │
+╰────────────────────────╯
+gaz358@gaz358-BOD-WXX9:~/myprog/arb$ cd  gazmaster-site
+gaz358@gaz358-BOD-WXX9:~/myprog/arb/gazmaster-site$ yarn
+yarn dev
+Command 'yarn' not found, but can be installed with:
+sudo apt install cmdtest
+Command 'yarn' not found, but can be installed with:
+sudo apt install cmdtest
+gaz358@gaz358-BOD-WXX9:~/myprog/arb/gazmaster-site$ 
+
+
+
+
