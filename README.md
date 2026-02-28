@@ -1164,8 +1164,17 @@ http://localhost:3000/lipeck/remont/protherm/oshybka-f28
 
 
 
-<template>
-  <NuxtPage />
-</template>
+Nuxt 4.3.1 (with Nitro 2.13.1, Vite 7.3.1 and Vue 3.5.29)
+                                                                                                                           10:20:37 AM
+  ➜ Local:    http://localhost:3000/
+  ➜ Network:  use --host to expose
 
+  ➜ DevTools: press Shift + Alt + D in the browser (v3.2.2)                                                                10:20:37 AM
+
+✔ Vite client built in 24ms                                                                                               10:20:38 AM
+✔ Vite server built in 43ms                                                                                               10:20:38 AM
+✔ Nuxt Nitro server built in 485ms                                                                                  nitro 10:20:38 AM
+ℹ Vite server warmed up in 0ms                                                                                            10:20:38 AM
+ℹ Vite client warmed up in 2ms                                                                                            10:20:38 AM
+ WARN  [Vue Router warn]: No match found for location with path "/"    
 
