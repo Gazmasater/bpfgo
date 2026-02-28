@@ -743,3 +743,10 @@ gazmaster-site/
 
 
 http://localhost:3000/img/hero-desktop.png
+
+
+Vite server hmr 7 files in 0.005ms                                                                                       6:26:01 PM
+ WARN  [Vue Router warn]: No match found for location with path "/img/hero-desktop.png"                                     6:26:01 PM
+ WARN  [Vue Router warn]: No match found for location with path "/img/hero-desktop.png" (repeated 3 times)                  6:26:01 PM
+✔ Vite server hmr 5 files in 0.009ms                                                                                       6:26:45 PM
+✔ Vite server hmr 5 files in 0.009ms (repeated 4 times
