@@ -1157,7 +1157,7 @@ export function useJsonLd(page: any) {
 
 Открой:
 
-http://localhost:3000/lipeck/remont/protherm/oshobka-f28
+http://localhost:3000/lipeck/remont/protherm/oshybka-f28
 
 Если открылось — супер.
 
