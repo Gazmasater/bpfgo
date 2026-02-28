@@ -1198,67 +1198,58 @@ sudo npm i -g yarn
 
 Напиши, что выводит node -v (одна строка) и сработал ли sudo npm i -g yarn — и двинемся дальше к странице /lipeck/remont/protherm/oshobka-f28.
 
-
-import { useHead } from "#imports";
-
-export function useSeo(page: any) {
-  if (!page?.value) return;
-  const p = page.value;
-
-  useHead({
-    title: p.title,
-    meta: [
-      { name: "description", content: p.meta_description || "" },
-      { property: "og:title", content: p.title },
-      { property: "og:description", content: p.meta_description || "" },
-      { property: "og:type", content: "article" },
-    ],
-    link: [{ rel: "canonical", href: p.canonical_url || "" }],
-  });
-}
-
-
-
-import { useHead } from "#imports";
-
-export function useJsonLd(page: any) {
-  if (!page?.value) return;
-  const p = page.value;
-
-  const scripts: any[] = [];
-
-  if (p.local_business) {
-    scripts.push({ type: "application/ld+json", children: JSON.stringify(p.local_business) });
-  }
-
-  const faq = (p.blocks || []).find((b: any) => b.type === "faq");
-  if (faq?.items?.length) {
-    scripts.push({
-      type: "application/ld+json",
-      children: JSON.stringify({
-        "@context": "https://schema.org",
-        "@type": "FAQPage",
-        mainEntity: faq.items.map((x: any) => ({
-          "@type": "Question",
-          name: x.q,
-          acceptedAnswer: { "@type": "Answer", text: x.a },
-        })),
-      }),
-    });
-  }
-
-  useHead({ script: scripts });
-}
-
-
-
 yarn dev
 
 
+Отлично: .nuxt уже есть, tsconfig.json тоже есть — значит проблема почти наверняка в том, что VS Code/tsserver не подцепил nuxt types (классика).
 
-gaz358@gaz358-BOD-WXX9:~/myprog/gazmaster-site$ ls -a
-.   app         composables  .gitignore    .nuxt           package.json  public     server         .yarn      .yarnrc.yml
-..  components  .git         node_modules  nuxt.config.ts  pages         README.md  tsconfig.json  yarn.lock
-gaz358@gaz358-BOD-WXX9:~/myprog/gazmaster-site$ 
+Сделай вот так — по порядку:
+
+1) Проверь tsconfig.json (должен расширять .nuxt)
+
+Открой tsconfig.json. Он должен быть таким:
+
+{
+  "extends": "./.nuxt/tsconfig.json"
+}
+
+Если другой — замени на этот.
+
+2) Перезапусти TypeScript Server
+
+В VS Code:
+
+Ctrl+Shift+P → TypeScript: Restart TS Server
+
+Если не помогло:
+
+Ctrl+Shift+P → Developer: Reload Window
+
+3) Если всё равно ругается — используй импорт из #app (железно)
+
+В обоих файлах замени:
+
+import { useHead } from "#imports";
+
+на:
+
+import { useHead } from "#app";
+
+Это полностью нормальный вариант.
+
+Почему так происходит
+
+Nuxt даёт автo-imports, но редактор иногда не видит #imports, пока не обновит “проектную модель” TypeScript. Перезапуск TS server обычно чинит.
+
+Если после этого появятся такие же ошибки на useFetch, createError, computed — делай то же самое:
+
+либо перезапуск TS Server
+
+либо импортируй из #app (или из vue для computed).
+
+Напиши, что выбрал: (A) перезапуск помог или (B) перешли на #app, и двинемся дальше — сделаем хабы /lipeck/remont/ и /lipeck/remont/protherm/ + добавим F29/F75 без копипаста.
+
+
+
 
 
