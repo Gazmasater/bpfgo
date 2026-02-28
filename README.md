@@ -729,73 +729,70 @@ strace -f -e trace=write,writev,sendmsg,sendto -s 200 openssl s_client -connect 
 
 
 
+gazmaster-site/
+├─ app/
+├─ components/
+├─ pages/
+├─ public/
+│   └─ img/
+│       ├─ hero-desktop.jpg
+│       └─ hero-mobile.jpg
+├─ nuxt.config.ts
 
-<template>
-  <NuxtLayout>
-    <NuxtPage />
-  </NuxtLayout>
-</template>
 
 
 
 <script setup lang="ts">
-type CauseItem = {
-  title: string
-  text: string
-  icon?: string // например: "🔥" или "⚠️"
-}
-
 type Props = {
   title?: string
   subtitle?: string
-  items: CauseItem[]
+  desktopSrc?: string
+  mobileSrc?: string
+  alt?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  title: 'Причины неисправности',
-  subtitle: '',
+  title: 'Сервисный центр котлов',
+  subtitle: 'Липецк и область',
+  desktopSrc: '/img/hero-desktop.jpg',
+  mobileSrc: '/img/hero-mobile.jpg',
+  alt: 'Ремонт котлов',
 })
 </script>
 
 <template>
-  <section class="rounded-3xl border bg-white p-6 md:p-8">
-    <header class="max-w-2xl">
-      <h2 class="text-2xl md:text-3xl font-semibold tracking-tight">
-        {{ props.title }}
-      </h2>
-      <p v-if="props.subtitle" class="mt-2 text-neutral-600">
-        {{ props.subtitle }}
-      </p>
-    </header>
+  <section class="relative h-screen overflow-hidden">
+    <picture>
+      <!-- смартфон -->
+      <source media="(max-width: 768px)" :srcset="props.mobileSrc" />
+      <!-- ПК по умолчанию -->
+      <img
+        :src="props.desktopSrc"
+        :alt="props.alt"
+        class="absolute inset-0 h-full w-full object-cover object-center"
+        loading="eager"
+        fetchpriority="high"
+      />
+    </picture>
 
-    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <article
-        v-for="(it, i) in props.items"
-        :key="i"
-        class="rounded-2xl border bg-neutral-50 p-4"
-      >
-        <div class="flex items-start gap-3">
-          <div
-            class="grid h-10 w-10 place-items-center rounded-xl border bg-white text-lg"
-            aria-hidden="true"
-          >
-            {{ it.icon ?? '•' }}
-          </div>
+    <!-- затемнение -->
+    <div class="absolute inset-0 bg-black/35" />
 
-          <div class="min-w-0">
-            <h3 class="font-medium leading-snug">
-              {{ it.title }}
-            </h3>
-            <p class="mt-1 text-sm leading-relaxed text-neutral-600">
-              {{ it.text }}
-            </p>
-          </div>
+    <!-- контент поверх -->
+    <div class="relative z-10 flex h-full items-center justify-center px-6 text-center text-white">
+      <div class="max-w-3xl">
+        <h1 class="text-4xl font-semibold leading-tight md:text-6xl">
+          {{ props.title }}
+        </h1>
+
+        <p v-if="props.subtitle" class="mt-4 text-xl text-white/90 md:text-2xl">
+          {{ props.subtitle }}
+        </p>
+
+        <div class="mt-10 flex flex-wrap justify-center gap-3">
+          <slot name="actions" />
         </div>
-      </article>
-    </div>
-
-    <div class="mt-6">
-      <slot name="note" />
+      </div>
     </div>
   </section>
 </template>
