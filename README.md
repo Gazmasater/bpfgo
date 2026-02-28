@@ -1166,6 +1166,13 @@ http://localhost:3000/lipeck/remont/protherm/oshybka-f28
 
 ls -la pages/[region]/remont/[brand]/
 
+mkdir -p app/pages app/components app/composables
+
+# переносим то, что отвечает за роутинг и UI
+mv pages app/pages
+mv components app/components
+mv composables app/composables
+
 
 
 
