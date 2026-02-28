@@ -738,355 +738,58 @@ strace -f -e trace=write,writev,sendmsg,sendto -s 200 openssl s_client -connect 
 
 
 
-// server/api/repair/page/[slug].get.ts
-// Универсальный мок-API под страницы вида:
-// /:region/remont/:brand/oshybka-:code
-// slug формируем так:  remont-${brand}-oshybka-${code}-${region}
-// пример: remont-protherm-oshybka-f28-lipeck
+gaz358@gaz358-BOD-WXX9:~/myprog/gazmaster-site$ yarn dev
+yarn run v1.22.22
+$ nuxt dev
+│                                                                                                                           1:34:08 PM
+●  Nuxt 4.3.1 (with Nitro 2.13.1, Vite 7.3.1 and Vue 3.5.29)
+                                                                                                                            1:34:08 PM
+  ➜ Local:    http://localhost:3000/
+  ➜ Network:  use --host to expose
 
-type Safety = "low" | "med" | "high";
+ℹ Using default Tailwind CSS file                                                                         nuxt:tailwindcss 1:34:08 PM
+  ➜ DevTools: press Shift + Alt + D in the browser (v3.2.2)                                                                 1:34:08 PM
 
-type Block =
-  | {
-      type: "hero";
-      title: string;
-      subtitle: string;
-      img?: string;
-      alt?: string;
-      bullets?: string[];
-    }
-  | { type: "intro"; text: string }
-  | { type: "causes"; items: { title: string; probability?: number }[] }
-  | {
-      type: "steps";
-      items: { step: number; title: string; safety?: Safety; can_user_do?: boolean }[];
-    }
-  | {
-      type: "cta";
-      primary: string;
-      phone: string;
-      region: string;
-      brand: string;
-      code: string;
-    }
-  | { type: "faq"; items: { q: string; a: string }[] };
+✔ Vite client built in 33ms                                                                                                1:34:09 PM
+✔ Vite server built in 61ms                                                                                                1:34:09 PM
+✔ Nuxt Nitro server built in 714ms                                                                                   nitro 1:34:10 PM
+ℹ Vite server warmed up in 1ms                                                                                             1:34:10 PM
+ℹ Vite client warmed up in 2ms                                                                                             1:34:10 PM
+ WARN  [Vue Router warn]: uncaught error during route navigation:                                                           1:34:20 PM
+ ERROR  { [Error: Single file component can contain only one <script setup> element]                                        1:34:20 PM
+  data:
+   { code: 'VITE_ERROR',
+     id: '/components/blocks/HeroBlock.vue',
+     stack:
+      'SyntaxError: Single file component can contain only one <script setup> element\n    at createDuplicateBlockError (/home/gaz358/myprog/gazmaster-site/node_modules/@vue/compiler-sfc/dist/compiler-sfc.cjs.js:1954:15)\n    at /home/gaz358/myprog/gazmaster-site/node_modules/@vue/compiler-sfc/dist/compiler-sfc.cjs.js:1874:21\n    at Array.forEach (<anonymous>)\n    at Object.parse$1 [as parse] (/home/gaz358/myprog/gazmaster-site/node_modules/@vue/compiler-sfc/dist/compiler-sfc.cjs.js:1832:16)\n    at createDescriptor (file:///home/gaz358/myprog/gazmaster-site/node_modules/@vitejs/plugin-vue/dist/index.mjs:54:42)\n    at transformMain (file:///home/gaz358/myprog/gazmaster-site/node_modules/@vitejs/plugin-vue/dist/index.mjs:1319:33)\n    at TransformPluginContext.handler (file:///home/gaz358/myprog/gazmaster-site/node_modules/@vitejs/plugin-vue/dist/index.mjs:1722:27)\n    at file:///home/gaz358/myprog/gazmaster-site/node_modules/vite-plugin-inspect/dist/shared/vite-plugin-inspect.BzUKaD4x.mjs:403:26\n    at hook.handler (file:///home/gaz358/myprog/gazmaster-site/node_modules/vite-plugin-inspect/dist/shared/vite-plugin-inspect.BzUKaD4x.mjs:376:14)\n    at EnvironmentPluginContainer.transform (file:///home/gaz358/myprog/gazmaster-site/node_modules/vite/dist/node/chunks/config.js:28797:51)',
+     message: 'Single file component can contain only one <script setup> element' },
+  status: undefined,
+  statusCode: undefined }
+ WARN  [Vue Router warn]: uncaught error during route navigation:                                                           1:34:20 PM
+ ERROR  Single file component can contain only one <script setup> element                                                   1:34:20 PM
+[1:34:20 PM]  WARN  [nuxt] Failed to stringify dev server logs. Received DevalueError: Cannot stringify arbitrary non-POJOs. You can define your own reducer/reviver for rich types following the instructions in https://nuxt.com/docs/4.x/api/composables/use-nuxt-app#payload.
+ ERROR  Cannot read properties of undefined (reading 'replace')                                                             1:34:20 PM
 
-type PageDto = {
-  slug: string;
-  title: string;
-  h1: string;
-  meta_description: string;
-  canonical_url: string;
-  breadcrumbs: { title: string; url: string }[];
-  local_business?: Record<string, unknown>;
-  blocks: Block[];
-};
+    at #getRelativeFileName (node_modules/youch/build/src/templates/error_stack/main.js:21:19)
+    at #getEditorLink (node_modules/youch/build/src/templates/error_stack/main.js:33:35)
+    at #renderFrameLocation (node_modules/youch/build/src/templates/error_stack/main.js:37:45)
+    at #renderStackFrame (node_modules/youch/build/src/templates/error_stack/main.js:58:36)
+    at node_modules/youch/build/src/templates/error_stack/main.js:114:33
+    at Array.map (<anonymous>)
+    at ErrorStack.toHTML (node_modules/youch/build/src/templates/error_stack/main.js:113:59)
+    at #tmplToHTML (node_modules/youch/build/index.js:83:20)
+    at async Object.children (node_modules/youch/build/index.js:106:102)
+    at async Layout.toHTML (node_modules/youch/build/src/templates/layout/main.js:17:13)
+ ERROR  Cannot read properties of undefined (reading 'replace')                                                             1:34:20 PM
 
-function cap(s: string): string {
-  if (!s) return s;
-  return s.slice(0, 1).toUpperCase() + s.slice(1);
-}
-
-function normCode(codeRaw: string): string {
-  const c = codeRaw.trim().toUpperCase();
-  if (!c) return "F??";
-  return c.startsWith("F") ? c : `F${c}`;
-}
-
-function regionName(regionSlug: string): string {
-  const map: Record<string, string> = {
-    lipeck: "Липецк",
-    moscow: "Москва",
-    spb: "Санкт-Петербург",
-  };
-  return map[regionSlug] || cap(regionSlug);
-}
-
-function brandName(brandSlug: string): string {
-  const map: Record<string, string> = {
-    protherm: "Protherm",
-    baxi: "Baxi",
-    vaillant: "Vaillant",
-    viessmann: "Viessmann",
-  };
-  return map[brandSlug] || cap(brandSlug);
-}
-
-function phoneForRegion(regionSlug: string): string {
-  const map: Record<string, string> = {
-    lipeck: "+7 900 000-00-00",
-  };
-  return map[regionSlug] || "+7 900 000-00-00";
-}
-
-function canonicalUrl(regionSlug: string, brandSlug: string, codeRaw: string): string {
-  return `http://localhost:3000/${regionSlug}/remont/${brandSlug}/oshybka-${codeRaw.toLowerCase()}`;
-}
-
-function makeBreadcrumbs(regionSlug: string, brand: string, brandSlug: string, code: string, codeRaw: string) {
-  return [
-    { title: "Ремонт котлов", url: `/${regionSlug}/remont/` },
-    { title: brand, url: `/${regionSlug}/remont/${brandSlug}/` },
-    { title: `Ошибка ${code}`, url: `/${regionSlug}/remont/${brandSlug}/oshybka-${codeRaw.toLowerCase()}` },
-  ];
-}
-
-function makeLocalBusiness(region: string, brand: string, phone: string): Record<string, unknown> {
-  return {
-    "@context": "https://schema.org",
-    "@type": "LocalBusiness",
-    name: `Ремонт котлов ${brand} в ${region}`,
-    areaServed: region,
-    telephone: phone,
-    address: {
-      "@type": "PostalAddress",
-      addressLocality: region,
-      addressCountry: "RU",
-    },
-  };
-}
-
-function makeCommonBlocks(params: {
-  region: string;
-  regionSlug: string;
-  brand: string;
-  brandSlug: string;
-  code: string;
-  heroImg?: string;
-  intro: string;
-  causes: { title: string; probability?: number }[];
-  steps: { title: string; safety?: Safety; can_user_do?: boolean }[];
-  faq: { q: string; a: string }[];
-}): Block[] {
-  const phone = phoneForRegion(params.regionSlug);
-
-  return [
-    {
-      type: "hero",
-      title: `Ошибка ${params.code} ${params.brand} — ремонт в ${params.region}`,
-      subtitle: "Частые причины, безопасные проверки и когда нужен мастер. Выезд по городу и области.",
-      img: params.heroImg,
-      alt: `Ремонт котлов ${params.brand} в ${params.region}`,
-      bullets: ["Выезд в день обращения", "Диагностика", "Гарантия на работы"],
-    },
-    { type: "intro", text: params.intro },
-    { type: "causes", items: params.causes },
-    {
-      type: "steps",
-      items: params.steps.map((s, i) => ({
-        step: i + 1,
-        title: s.title,
-        safety: s.safety ?? "low",
-        can_user_do: s.can_user_do,
-      })),
-    },
-    {
-      type: "cta",
-      primary: "Вызвать мастера",
-      phone,
-      region: params.region,
-      brand: params.brand,
-      code: params.code,
-    },
-    { type: "faq", items: params.faq },
-  ];
-}
-
-function buildPage(slug: string, regionSlug: string, brandSlug: string, codeRaw: string): PageDto {
-  const regionSlugNorm = regionSlug.toLowerCase();
-  const brandSlugNorm = brandSlug.toLowerCase();
-  const codeRawNorm = codeRaw.toLowerCase();
-
-  const region = regionName(regionSlugNorm);
-  const brand = brandName(brandSlugNorm);
-  const code = normCode(codeRawNorm);
-
-  const phone = phoneForRegion(regionSlugNorm);
-
-  const canonical = canonicalUrl(regionSlugNorm, brandSlugNorm, codeRawNorm);
-  const breadcrumbs = makeBreadcrumbs(regionSlugNorm, brand, brandSlugNorm, code, codeRawNorm);
-  const local_business = makeLocalBusiness(region, brand, phone);
-
-  // Контент по коду/бренду (расширяем)
-  const codeKey = code.toUpperCase();
-
-  if (brandSlugNorm === "protherm") {
-    if (codeKey === "F28") {
-      const blocks = makeCommonBlocks({
-        region,
-        regionSlug: regionSlugNorm,
-        brand,
-        brandSlug: brandSlugNorm,
-        code,
-        heroImg: "/img/repair/protherm/hero.jpg",
-        intro:
-          "Ошибка F28 на котлах Protherm чаще всего связана с розжигом или подачей газа. Ниже — частые причины и безопасные действия, которые можно сделать без вмешательства в газовую часть.",
-        causes: [
-          { title: "Нет/недостаточно газа, закрыт кран", probability: 0.28 },
-          { title: "Сбой розжига: электрод/ионизация, загрязнение", probability: 0.22 },
-          { title: "Проблема с газовым клапаном", probability: 0.16 },
-          { title: "Просадка давления газа у поставщика", probability: 0.14 },
-        ],
-        steps: [
-          { title: "Проверьте газовый кран и наличие газа (например, у плиты)", safety: "low", can_user_do: true },
-          { title: "Сделайте сброс ошибки и повторный запуск котла", safety: "low", can_user_do: true },
-          { title: "Если ошибка повторяется — нужна диагностика розжига/клапана", safety: "high", can_user_do: false },
-        ],
-        faq: [
-          {
-            q: "Можно ли просто сбросить F28 и пользоваться дальше?",
-            a: "Если F28 появляется снова — проблема остаётся. Лучше диагностировать причину, чтобы котёл не уходил в останов и не изнашивал узлы.",
-          },
-          {
-            q: "Опасно ли разбирать котёл самому?",
-            a: "Газовую часть и настройки должен делать специалист. Самостоятельно ограничьтесь безопасными проверками (кран/сброс/давление по манометру).",
-          },
-        ],
-      });
-
-      return {
-        slug,
-        title: `Ошибка ${code} ${brand} — ремонт в ${region}, причины и решение`,
-        h1: `Ошибка ${code} на котле ${brand} — что означает и как устранить (${region})`,
-        meta_description: `Ошибка ${code} ${brand}: причины, безопасные проверки и когда нужен мастер. Выезд по ${region}.`,
-        canonical_url: canonical,
-        breadcrumbs,
-        local_business,
-        blocks,
-      };
-    }
-
-    if (codeKey === "F29") {
-      const blocks = makeCommonBlocks({
-        region,
-        regionSlug: regionSlugNorm,
-        brand,
-        brandSlug: brandSlugNorm,
-        code,
-        heroImg: "/img/repair/protherm/hero.jpg",
-        intro:
-          "Ошибка F29 обычно означает потерю пламени после розжига. Часто причина — нестабильная подача газа, ионизация или влияние дымоудаления (в зависимости от модели).",
-        causes: [
-          { title: "Нестабильная подача газа / просадки давления", probability: 0.26 },
-          { title: "Электрод ионизации/контакты/загрязнение", probability: 0.22 },
-          { title: "Проблемы дымоудаления/тяги", probability: 0.18 },
-          { title: "Газовый клапан / настройка", probability: 0.14 },
-        ],
-        steps: [
-          { title: "Проверьте, нет ли перебоев с газом", safety: "low", can_user_do: true },
-          { title: "Перезапустите котёл (сброс ошибки)", safety: "low", can_user_do: true },
-          { title: "При повторе — диагностика ионизации/газового узла/тяги", safety: "high", can_user_do: false },
-        ],
-        faq: [
-          { q: "F29 появляется периодически — это нормально?", a: "Нет. Периодическая потеря пламени — признак проблемы, лучше проверить." },
-          { q: "Причина всегда в газе?", a: "Не всегда: бывает ионизация, тяга, настройки/узлы. Нужна диагностика по месту." },
-        ],
-      });
-
-      return {
-        slug,
-        title: `Ошибка ${code} ${brand} — ремонт в ${region}, причины и решение`,
-        h1: `Ошибка ${code} на котле ${brand} — почему гаснет пламя (${region})`,
-        meta_description: `Ошибка ${code} ${brand}: причины потери пламени и безопасные проверки. Выезд по ${region}.`,
-        canonical_url: canonical,
-        breadcrumbs,
-        local_business,
-        blocks,
-      };
-    }
-
-    if (codeKey === "F75") {
-      const blocks = makeCommonBlocks({
-        region,
-        regionSlug: regionSlugNorm,
-        brand,
-        brandSlug: brandSlugNorm,
-        code,
-        heroImg: "/img/repair/protherm/hero.jpg",
-        intro:
-          "Ошибка F75 связана с давлением/циркуляцией: котёл не видит ожидаемого изменения давления при запуске насоса. Частые причины — воздух в системе, датчик давления, насос, фильтр.",
-        causes: [
-          { title: "Воздух в системе / завоздушивание", probability: 0.28 },
-          { title: "Неисправен датчик давления", probability: 0.2 },
-          { title: "Насос: заклинивание/износ/питание", probability: 0.18 },
-          { title: "Забит фильтр/грязевик", probability: 0.12 },
-        ],
-        steps: [
-          { title: "Проверьте давление в системе (часто 1–1.5 бар)", safety: "low", can_user_do: true },
-          { title: "Если умеете — аккуратно развоздушьте радиаторы", safety: "med", can_user_do: true },
-          { title: "Если ошибка не уходит — проверка насоса/датчика/фильтра", safety: "high", can_user_do: false },
-        ],
-        faq: [
-          { q: "F75 — это обязательно насос?", a: "Не всегда. Часто виноваты воздух, датчик давления или засор фильтра." },
-          { q: "Можно ли продолжать пользоваться?", a: "Лучше не игнорировать: проблемы с циркуляцией ведут к остановкам." },
-        ],
-      });
-
-      return {
-        slug,
-        title: `Ошибка ${code} ${brand} — ремонт в ${region}, причины и решение`,
-        h1: `Ошибка ${code} на котле ${brand} — давление, насос, датчик (${region})`,
-        meta_description: `Ошибка ${code} ${brand}: причины по давлению/насосу и безопасные действия. Выезд по ${region}.`,
-        canonical_url: canonical,
-        breadcrumbs,
-        local_business,
-        blocks,
-      };
-    }
-  }
-
-  // Дефолт для любых других комбинаций — чтобы не ловить 404
-  const blocks = makeCommonBlocks({
-    region,
-    regionSlug: regionSlugNorm,
-    brand,
-    brandSlug: brandSlugNorm,
-    code,
-    heroImg: `/img/repair/${brandSlugNorm}/hero.jpg`,
-    intro: `Страница по ошибке ${code} для котлов ${brand}. Заполним конкретикой позже: причины, проверки, цены и сроки по региону ${region}.`,
-    causes: [
-      { title: "Недостаточно данных по модели (заполним после диагностики)", probability: 0.34 },
-      { title: "Электрика/датчики/контакты", probability: 0.22 },
-      { title: "Гидравлика/циркуляция/давление", probability: 0.18 },
-    ],
-    steps: [
-      { title: "Сфотографируйте дисплей с ошибкой и модель котла", safety: "low", can_user_do: true },
-      { title: "Сделайте перезапуск и проверьте давление/кран газа (если применимо)", safety: "low", can_user_do: true },
-      { title: "Если ошибка повторяется — вызов мастера для диагностики", safety: "high", can_user_do: false },
-    ],
-    faq: [
-      { q: "Можно ли устранить самому?", a: "Зависит от причины. Делайте только безопасные проверки. Газовую часть обслуживает специалист." },
-      { q: "Сколько стоит ремонт?", a: "Стоимость зависит от причины и запчастей. Сначала диагностика, затем согласование цены." },
-    ],
-  });
-
-  return {
-    slug,
-    title: `Ошибка ${code} ${brand} — ремонт в ${region}`,
-    h1: `Ошибка ${code} на котле ${brand} (${region})`,
-    meta_description: `Ошибка ${code} ${brand}: причины и решение. Выезд по ${region}.`,
-    canonical_url: canonical,
-    breadcrumbs,
-    local_business,
-    blocks,
-  };
-}
-
-export default defineEventHandler((event): PageDto => {
-  const slug = getRouterParam(event, "slug") || "";
-
-  const re = /^remont-([a-z0-9-]+)-oshybka-([a-z0-9-]+)-([a-z0-9-]+)$/i;
-  const m = slug.match(re);
-
-  // Явные проверки убирают ошибки TS "possibly undefined"
-  if (!m || !m[1] || !m[2] || !m[3]) {
-    throw createError({ statusCode: 404, statusMessage: `Bad slug: ${slug}` });
-  }
-
-  const brandSlug = m[1].toLowerCase();
-  const codeRaw = m[2].toLowerCase();
-  const regionSlug = m[3].toLowerCase();
-
-  return buildPage(slug, regionSlug, brandSlug, codeRaw);
-});
+    at #getRelativeFileName (node_modules/youch/build/src/templates/error_stack/main.js:21:19)
+    at #getEditorLink (node_modules/youch/build/src/templates/error_stack/main.js:33:35)
+    at #renderFrameLocation (node_modules/youch/build/src/templates/error_stack/main.js:37:45)
+    at #renderStackFrame (node_modules/youch/build/src/templates/error_stack/main.js:58:36)
+    at node_modules/youch/build/src/templates/error_stack/main.js:114:33
+    at Array.map (<anonymous>)
+    at ErrorStack.toHTML (node_modules/youch/build/src/templates/error_stack/main.js:113:59)
+    at #tmplToHTML (node_modules/youch/build/index.js:83:20)
+    at async Object.children (node_modules/youch/build/index.js:106:102)
+    at async Layout.toHTML (node_modules/youch/build/src/templates/layout/main.js:17:13)
 
