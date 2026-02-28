@@ -730,69 +730,434 @@ strace -f -e trace=write,writev,sendmsg,sendto -s 200 openssl s_client -connect 
 
 
 
-1) Проверь, что Node.js и пакетный менеджер есть
+Выбирай minimal – Minimal setup for Nuxt 4 (recommended) ✅
 
-Открой терминал и выполни:
+Это самый правильный старт под твою задачу (SSR + SEO + свои страницы ремонта), без лишних модулей и “контентного” слоя, который тебе сейчас только помешает.
 
-node -v
-npm -v
+Что дальше обычно выбрать в мастере (чтобы не усложнять):
 
-Если node не найден — ставим Node.js.
+TypeScript: Yes (удобно, меньше ошибок)
 
-2) Установка Node.js
-Windows (самый простой способ)
+ESLint: Yes (по желанию, но полезно)
 
-Скачай LTS версию Node.js с официального сайта (Node.js LTS).
+Prettier: Yes (по желанию)
 
-Установи, перезагрузи терминал.
+Testing: No на старте (потом добавишь)
 
-Проверь:
+Package manager: Yarn
 
-node -v
-npm -v
-Linux (Ubuntu/Debian)
+После создания проекта:
 
-Лучший способ — через NodeSource (LTS):
-
-curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
-sudo apt-get install -y nodejs
-node -v
-npm -v
-3) Создай проект Nuxt 3
-
-В любой папке:
-
-Если используешь Yarn
-mkdir gazmaster-site
-cd gazmaster-site
-yarn create nuxt
+cd <папка-проекта>
 yarn
 yarn dev
 
-Открой: http://localhost:3000
+Открываешь http://localhost:3000.
 
-Если Yarn не хочешь — можно через npm
-npx nuxi@latest init gazmaster-site
+Если хочешь “ремонт Protherm Липецк” прямо сегодня — после запуска скажи, как называется папка проекта (или просто напиши “запустилось”), и я дам точный список файлов, которые нужно создать в Nuxt, чтобы сразу открывалось:
+/lipeck/remont/protherm/oshobka-f28 и рендерился PageModel.
+
+папка gazmaster-site
+
+Отлично. Тогда дальше так (в папке gazmaster-site).
+
+1) Запусти проект
 cd gazmaster-site
-npm install
-npm run dev
-4) Частые ошибки
-“yarn: command not found”
+yarn
+yarn dev
 
-Поставь yarn:
+Открой http://localhost:3000
 
-npm i -g yarn
-yarn -v
-“nuxi: not found”
+2) Добавим первую SEO-страницу ремонта:
+
+/lipeck/remont/protherm/oshobka-f28
+
+Создай файлы.
+
+A) Страница
+
+pages/[region]/remont/[brand]/oshobka-[code].vue
+
+<script setup lang="ts">
+import { useRoute } from "vue-router";
+
+const route = useRoute();
+const region = String(route.params.region || "");
+const brand = String(route.params.brand || "");
+const code = String(route.params.code || "");
+
+const slug = `remont-${brand}-oshibka-${code}-${region}`;
+
+const { data, error } = await useFetch(`/api/repair/page/${slug}`, { key: slug });
+
+if (error.value) {
+  throw createError({ statusCode: 404, statusMessage: "Page not found" });
+}
+
+const page = computed(() => data.value);
+
+useSeo(page);
+useJsonLd(page);
+</script>
+
+<template>
+  <main class="container">
+    <Breadcrumbs v-if="page?.breadcrumbs" :items="page.breadcrumbs" />
+    <h1 class="h1">{{ page?.h1 }}</h1>
+    <PageRenderer v-if="page?.blocks" :blocks="page.blocks" />
+  </main>
+</template>
+
+<style scoped>
+.container { max-width: 920px; margin: 0 auto; padding: 24px 16px; }
+.h1 { font-size: 32px; line-height: 1.15; margin: 16px 0 18px; }
+</style>
+B) Моковый API (чтобы работало без Go)
+
+server/api/repair/page/[slug].get.ts
+
+export default defineEventHandler((event) => {
+  const slug = getRouterParam(event, "slug") || "";
+
+  if (slug !== "remont-protherm-oshibka-f28-lipeck") {
+    throw createError({ statusCode: 404, statusMessage: "Not found" });
+  }
+
+  const region = "Липецк";
+  const phone = "+7 900 000-00-00";
+  const canonicalUrl = `http://localhost:3000/lipeck/remont/protherm/oshobka-f28`;
+
+  return {
+    slug,
+    title: "Ошибка F28 Protherm — ремонт в Липецке, причины и решение",
+    h1: "Ошибка F28 на котле Protherm — что означает и как устранить (Липецк)",
+    meta_description:
+      "Ошибка F28 Protherm: частые причины, безопасные проверки и когда нужен мастер. Выезд по Липецку.",
+    canonical_url: canonicalUrl,
+    breadcrumbs: [
+      { title: "Ремонт котлов", url: "/lipeck/remont/" },
+      { title: "Protherm", url: "/lipeck/remont/protherm/" },
+      { title: "Ошибка F28", url: "/lipeck/remont/protherm/oshobka-f28" },
+    ],
+    local_business: {
+      "@context": "https://schema.org",
+      "@type": "LocalBusiness",
+      name: "Ремонт котлов Protherm в Липецке",
+      areaServed: region,
+      telephone: phone,
+      address: { "@type": "PostalAddress", addressLocality: region, addressCountry: "RU" },
+    },
+    blocks: [
+      {
+        type: "intro",
+        text:
+          "Ошибка F28 на котлах Protherm чаще всего связана с розжигом/подачей газа. Ниже — частые причины, безопасные проверки и признаки, когда нужна диагностика мастера.",
+      },
+      {
+        type: "causes",
+        items: [
+          { title: "Нет/недостаточно газа, закрыт кран", probability: 0.28 },
+          { title: "Сбой розжига: электрод/ионизация, загрязнение", probability: 0.22 },
+          { title: "Проблема с газовым клапаном", probability: 0.16 },
+          { title: "Низкое давление газа / проблема у поставщика", probability: 0.14 },
+          { title: "Ошибки по дымоудалению/тяге (зависит от модели)", probability: 0.10 },
+        ],
+      },
+      {
+        type: "steps",
+        items: [
+          { step: 1, title: "Проверьте газовый кран и наличие газа (например, у плиты)", safety: "low", can_user_do: true },
+          { step: 2, title: "Сделайте сброс ошибки и повторный запуск котла", safety: "low", can_user_do: true },
+          { step: 3, title: "Если F28 повторяется — нужна проверка узла розжига и газового клапана", safety: "high", can_user_do: false },
+        ],
+      },
+      {
+        type: "cta",
+        primary: "Вызвать мастера в Липецке",
+        secondary: "Консультация по F28",
+        phone,
+        region,
+        brand: "Protherm",
+        code: "F28",
+      },
+      {
+        type: "faq",
+        items: [
+          {
+            q: "Можно ли просто сбросить F28 и пользоваться дальше?",
+            a: "Если ошибка появляется снова — это признак проблемы. Лучше найти причину, чтобы избежать повторных остановок и повреждения узлов.",
+          },
+          {
+            q: "Опасно ли это?",
+            a: "Самостоятельно ограничьтесь безопасными проверками (кран/сброс). Работы с газовой частью должен выполнять специалист.",
+          },
+        ],
+      },
+    ],
+  };
+});
+C) Рендер блоков
+
+Создай эти файлы:
+
+components/PageRenderer.vue
+
+<script setup lang="ts">
+type Block =
+  | { type: "intro"; text: string }
+  | { type: "causes"; items: { title: string; probability?: number }[] }
+  | { type: "steps"; items: { step: number; title: string; safety: "low" | "med" | "high"; can_user_do: boolean }[] }
+  | { type: "faq"; items: { q: string; a: string }[] }
+  | { type: "cta"; primary: string; secondary?: string; phone: string; region: string; brand: string; code: string };
+
+defineProps<{ blocks: Block[] }>();
+
+const map: Record<string, any> = {
+  intro: resolveComponent("blocks-IntroBlock"),
+  causes: resolveComponent("blocks-CausesBlock"),
+  steps: resolveComponent("blocks-StepsBlock"),
+  faq: resolveComponent("blocks-FaqBlock"),
+  cta: resolveComponent("blocks-CtaBlock"),
+};
+</script>
+
+<template>
+  <section class="stack">
+    <component v-for="(b, i) in blocks" :key="i" :is="map[b.type]" v-bind="b" />
+  </section>
+</template>
+
+<style scoped>
+.stack { display: grid; gap: 16px; }
+</style>
+
+components/Breadcrumbs.vue
+
+<script setup lang="ts">
+defineProps<{ items: { title: string; url: string }[] }>();
+</script>
+
+<template>
+  <nav class="bc" aria-label="breadcrumbs">
+    <a v-for="(it, i) in items" :key="i" class="link" :href="it.url">
+      {{ it.title }}<span v-if="i < items.length - 1" class="sep">/</span>
+    </a>
+  </nav>
+</template>
+
+<style scoped>
+.bc { display: flex; gap: 6px; flex-wrap: wrap; font-size: 13px; color: #666; }
+.link { color: inherit; text-decoration: none; }
+.link:hover { text-decoration: underline; }
+.sep { margin-left: 6px; color: #bbb; }
+</style>
+
+Создай папку components/blocks/ и файлы:
+
+components/blocks/IntroBlock.vue
+
+<script setup lang="ts">
+defineProps<{ text: string }>();
+</script>
+
+<template>
+  <section class="card">
+    <p class="p">{{ text }}</p>
+  </section>
+</template>
+
+<style scoped>
+.card { border: 1px solid #e6e6e6; border-radius: 14px; padding: 16px; }
+.p { margin: 0; font-size: 16px; line-height: 1.5; }
+</style>
+
+components/blocks/CausesBlock.vue
+
+<script setup lang="ts">
+defineProps<{ items: { title: string; probability?: number }[] }>();
+const pct = (v?: number) => (typeof v === "number" ? `${Math.round(v * 100)}%` : "");
+</script>
+
+<template>
+  <section class="card">
+    <h2 class="h2">Частые причины</h2>
+    <ul class="list">
+      <li v-for="(it, i) in items" :key="i" class="row">
+        <span>{{ it.title }}</span>
+        <span class="muted">{{ pct(it.probability) }}</span>
+      </li>
+    </ul>
+  </section>
+</template>
+
+<style scoped>
+.card { border: 1px solid #e6e6e6; border-radius: 14px; padding: 16px; }
+.h2 { margin: 0 0 10px; font-size: 18px; }
+.list { margin: 0; padding-left: 18px; display: grid; gap: 8px; }
+.row { display: flex; justify-content: space-between; gap: 12px; }
+.muted { color: #666; white-space: nowrap; }
+</style>
+
+components/blocks/StepsBlock.vue
+
+<script setup lang="ts">
+defineProps<{ items: { step: number; title: string; safety: "low" | "med" | "high"; can_user_do: boolean }[] }>();
+const badge = (s: "low"|"med"|"high") => (s === "low" ? "Безопасно" : s === "med" ? "Осторожно" : "Только мастер");
+</script>
+
+<template>
+  <section class="card">
+    <h2 class="h2">Что можно сделать</h2>
+    <ol class="steps">
+      <li v-for="it in items" :key="it.step" class="step">
+        <div class="top">
+          <strong>Шаг {{ it.step }}.</strong>
+          <span class="tag">{{ badge(it.safety) }}</span>
+        </div>
+        <div class="title">{{ it.title }}</div>
+        <div class="muted">{{ it.can_user_do ? "Можно выполнить самостоятельно" : "Лучше доверить мастеру" }}</div>
+      </li>
+    </ol>
+  </section>
+</template>
+
+<style scoped>
+.card { border: 1px solid #e6e6e6; border-radius: 14px; padding: 16px; }
+.h2 { margin: 0 0 10px; font-size: 18px; }
+.steps { margin: 0; padding-left: 18px; display: grid; gap: 10px; }
+.step { padding: 10px 0; border-bottom: 1px dashed #eee; }
+.step:last-child { border-bottom: 0; }
+.top { display: flex; justify-content: space-between; gap: 10px; }
+.tag { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid #ddd; }
+.title { margin-top: 4px; }
+.muted { color: #666; font-size: 13px; margin-top: 4px; }
+</style>
+
+components/blocks/FaqBlock.vue
+
+<script setup lang="ts">
+defineProps<{ items: { q: string; a: string }[] }>();
+</script>
+
+<template>
+  <section class="card">
+    <h2 class="h2">FAQ</h2>
+    <details v-for="(it, i) in items" :key="i" class="qa">
+      <summary class="q">{{ it.q }}</summary>
+      <p class="a">{{ it.a }}</p>
+    </details>
+  </section>
+</template>
+
+<style scoped>
+.card { border: 1px solid #e6e6e6; border-radius: 14px; padding: 16px; }
+.h2 { margin: 0 0 10px; font-size: 18px; }
+.qa { padding: 8px 0; border-top: 1px solid #f1f1f1; }
+.qa:first-of-type { border-top: 0; }
+.q { cursor: pointer; }
+.a { margin: 8px 0 0; color: #333; line-height: 1.5; }
+</style>
+
+components/blocks/CtaBlock.vue
+
+<script setup lang="ts">
+const props = defineProps<{
+  primary: string;
+  secondary?: string;
+  phone: string;
+  region: string;
+  brand: string;
+  code: string;
+}>();
+
+const telHref = computed(() => `tel:${props.phone.replace(/\s+/g, "")}`);
+</script>
+
+<template>
+  <section class="card cta">
+    <div>
+      <h2 class="h2">{{ primary }}</h2>
+      <p class="muted">Регион: {{ region }} · {{ brand }} · {{ code.toUpperCase() }}</p>
+    </div>
+
+    <div class="actions">
+      <a class="btn" :href="telHref">Позвонить {{ phone }}</a>
+      <button class="btn ghost" type="button" @click="alert('Дальше подключим /api/leads')">
+        {{ secondary || "Оставить заявку" }}
+      </button>
+    </div>
+  </section>
+</template>
+
+<style scoped>
+.card { border: 1px solid #e6e6e6; border-radius: 14px; padding: 16px; }
+.cta { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.h2 { margin: 0; font-size: 18px; }
+.muted { margin: 6px 0 0; color: #666; font-size: 13px; }
+.actions { display: flex; gap: 10px; }
+.btn { border: 1px solid #111; border-radius: 12px; padding: 10px 14px; background: #111; color: #fff; text-decoration: none; cursor: pointer; }
+.btn.ghost { background: #fff; color: #111; }
+</style>
+D) SEO composables
+
+Создай:
+
+composables/useSeo.ts
+
+export function useSeo(page: any) {
+  if (!page?.value) return;
+  const p = page.value;
+
+  useHead({
+    title: p.title,
+    meta: [
+      { name: "description", content: p.meta_description || "" },
+      { property: "og:title", content: p.title },
+      { property: "og:description", content: p.meta_description || "" },
+      { property: "og:type", content: "article" },
+    ],
+    link: [{ rel: "canonical", href: p.canonical_url || "" }],
+  });
+}
+
+composables/useJsonLd.ts
+
+export function useJsonLd(page: any) {
+  if (!page?.value) return;
+  const p = page.value;
+
+  const scripts: any[] = [];
+
+  if (p.local_business) {
+    scripts.push({ type: "application/ld+json", children: JSON.stringify(p.local_business) });
+  }
+
+  const faq = (p.blocks || []).find((b: any) => b.type === "faq");
+  if (faq?.items?.length) {
+    scripts.push({
+      type: "application/ld+json",
+      children: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        mainEntity: faq.items.map((x: any) => ({
+          "@type": "Question",
+          name: x.q,
+          acceptedAnswer: { "@type": "Answer", text: x.a },
+        })),
+      }),
+    });
+  }
+
+  useHead({ script: scripts });
+}
+3) Проверь страницу
+
+Открой:
+
+http://localhost:3000/lipeck/remont/protherm/oshobka-f28
+
+Если открылось — супер.
 
 
 
 
-◇  Templates loaded
-│
-◆  Which template would you like to use?
-│  ○ content – Content-driven website
-│  ● minimal – Minimal setup for Nuxt 4 (recommended)
-│  ○ module – Nuxt module
-│  ○ ui – App using Nuxt UI
-└
