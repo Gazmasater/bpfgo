@@ -738,348 +738,50 @@ strace -f -e trace=write,writev,sendmsg,sendto -s 200 openssl s_client -connect 
 
 
 
-// server/api/repair/page/[slug].get.ts
-// Универсальный мок-API под страницы вида:
-// /:region/remont/:brand/oshybka-:code
-// slug формируем так:  remont-${brand}-oshybka-${code}-${region}
-// пример: remont-protherm-oshybka-f28-lipeck
+[{
+	"resource": "/home/gaz358/myprog/gazmaster-site/server/api/repair/page/[slug].get.ts",
+	"owner": "typescript",
+	"code": "18048",
+	"severity": 8,
+	"message": "'regionSlug' is possibly 'undefined'.",
+	"source": "ts",
+	"startLineNumber": 341,
+	"startColumn": 17,
+	"endLineNumber": 341,
+	"endColumn": 27,
+	"modelVersionId": 7,
+	"origin": "extHost1"
+}]
 
-type Safety = "low" | "med" | "high";
 
-type Block =
-  | {
-      type: "hero";
-      title: string;
-      subtitle: string;
-      img?: string;
-      alt?: string;
-      bullets?: string[];
-    }
-  | { type: "intro"; text: string }
-  | { type: "causes"; items: { title: string; probability?: number }[] }
-  | {
-      type: "steps";
-      items: { step: number; title: string; safety?: Safety; can_user_do?: boolean }[];
-    }
-  | {
-      type: "cta";
-      primary: string;
-      phone: string;
-      region: string;
-      brand: string;
-      code: string;
-    }
-  | { type: "faq"; items: { q: string; a: string }[] };
+[{
+	"resource": "/home/gaz358/myprog/gazmaster-site/server/api/repair/page/[slug].get.ts",
+	"owner": "typescript",
+	"code": "18048",
+	"severity": 8,
+	"message": "'brandSlug' is possibly 'undefined'.",
+	"source": "ts",
+	"startLineNumber": 342,
+	"startColumn": 16,
+	"endLineNumber": 342,
+	"endColumn": 25,
+	"modelVersionId": 7,
+	"origin": "extHost1"
+}]
 
-type PageDto = {
-  slug: string;
-  title: string;
-  h1: string;
-  meta_description: string;
-  canonical_url: string;
-  breadcrumbs: { title: string; url: string }[];
-  local_business?: any;
-  blocks: Block[];
-};
 
-function cap(s: string) {
-  if (!s) return s;
-  return s.slice(0, 1).toUpperCase() + s.slice(1);
-}
+[{
+	"resource": "/home/gaz358/myprog/gazmaster-site/server/api/repair/page/[slug].get.ts",
+	"owner": "typescript",
+	"code": "18048",
+	"severity": 8,
+	"message": "'codeRaw' is possibly 'undefined'.",
+	"source": "ts",
+	"startLineNumber": 343,
+	"startColumn": 14,
+	"endLineNumber": 343,
+	"endColumn": 21,
+	"modelVersionId": 7,
+	"origin": "extHost1"
+}]
 
-function normCode(codeRaw: string) {
-  // "f28" -> "F28"
-  const c = codeRaw.trim().toUpperCase();
-  return c.startsWith("F") ? c : `F${c}`;
-}
-
-function regionName(regionSlug: string) {
-  // пока мок: добавишь регионы как хочешь
-  const map: Record<string, string> = {
-    lipeck: "Липецк",
-    moscow: "Москва",
-    spb: "Санкт-Петербург",
-  };
-  return map[regionSlug] || cap(regionSlug);
-}
-
-function brandName(brandSlug: string) {
-  const map: Record<string, string> = {
-    protherm: "Protherm",
-    baxi: "Baxi",
-    vaillant: "Vaillant",
-    viessmann: "Viessmann",
-  };
-  return map[brandSlug] || cap(brandSlug);
-}
-
-function phoneForRegion(regionSlug: string) {
-  // мок: сделаешь реальную таблицу регионов позже
-  const map: Record<string, string> = {
-    lipeck: "+7 900 000-00-00",
-  };
-  return map[regionSlug] || "+7 900 000-00-00";
-}
-
-function makeCommonBlocks(params: {
-  region: string;
-  regionSlug: string;
-  brand: string;
-  brandSlug: string;
-  code: string;
-  heroImg?: string;
-  intro: string;
-  causes: { title: string; probability?: number }[];
-  steps: { title: string; safety?: Safety; can_user_do?: boolean }[];
-  faq: { q: string; a: string }[];
-}): Block[] {
-  const phone = phoneForRegion(params.regionSlug);
-
-  return [
-    {
-      type: "hero",
-      title: `Ошибка ${params.code} ${params.brand} — ремонт в ${params.region}`,
-      subtitle:
-        "Частые причины, безопасные проверки и когда нужен мастер. Выезд по городу и области.",
-      img: params.heroImg, // можно не указывать — HeroBlock покажет плейсхолдер
-      alt: `Ремонт котлов ${params.brand} в ${params.region}`,
-      bullets: ["Выезд в день обращения", "Диагностика", "Гарантия на работы"],
-    },
-    { type: "intro", text: params.intro },
-    { type: "causes", items: params.causes },
-    {
-      type: "steps",
-      items: params.steps.map((s, i) => ({
-        step: i + 1,
-        title: s.title,
-        safety: s.safety ?? "low",
-        can_user_do: s.can_user_do,
-      })),
-    },
-    {
-      type: "cta",
-      primary: "Вызвать мастера",
-      phone,
-      region: params.region,
-      brand: params.brand,
-      code: params.code,
-    },
-    { type: "faq", items: params.faq },
-  ];
-}
-
-function pageFor(params: {
-  slug: string;
-  regionSlug: string;
-  brandSlug: string;
-  codeRaw: string;
-}): PageDto {
-  const region = regionName(params.regionSlug);
-  const brand = brandName(params.brandSlug);
-  const code = normCode(params.codeRaw);
-
-  const baseUrl = `/${params.regionSlug}/remont/${params.brandSlug}/oshybka-${params.codeRaw.toLowerCase()}`;
-  const canonical = `http://localhost:3000${baseUrl}`;
-
-  const breadcrumbs = [
-    { title: "Ремонт котлов", url: `/${params.regionSlug}/remont/` },
-    { title: brand, url: `/${params.regionSlug}/remont/${params.brandSlug}/` },
-    { title: `Ошибка ${code}`, url: baseUrl },
-  ];
-
-  // Моковый JSON-LD (потом сделаем красиво под региональные контакты)
-  const phone = phoneForRegion(params.regionSlug);
-  const local_business = {
-    "@context": "https://schema.org",
-    "@type": "LocalBusiness",
-    name: `Ремонт котлов ${brand} в ${region}`,
-    areaServed: region,
-    telephone: phone,
-    address: { "@type": "PostalAddress", addressLocality: region, addressCountry: "RU" },
-  };
-
-  // Контент по коду (можно расширять)
-  const key = code.toUpperCase();
-
-  if (params.brandSlug === "protherm") {
-    switch (key) {
-      case "F28": {
-        const blocks = makeCommonBlocks({
-          region,
-          regionSlug: params.regionSlug,
-          brand,
-          brandSlug: params.brandSlug,
-          code,
-          heroImg: "/img/repair/protherm/hero.jpg",
-          intro:
-            "Ошибка F28 на котлах Protherm чаще всего связана с розжигом или подачей газа. Ниже — частые причины и безопасные действия, которые можно сделать без вмешательства в газовую часть.",
-          causes: [
-            { title: "Нет/недостаточно газа, закрыт кран", probability: 0.28 },
-            { title: "Сбой розжига: электрод/ионизация, загрязнение", probability: 0.22 },
-            { title: "Проблема с газовым клапаном", probability: 0.16 },
-            { title: "Просадка давления газа у поставщика", probability: 0.14 },
-          ],
-          steps: [
-            { title: "Проверьте газовый кран и наличие газа (например, у плиты)", safety: "low", can_user_do: true },
-            { title: "Сделайте сброс ошибки и повторный запуск котла", safety: "low", can_user_do: true },
-            { title: "Если ошибка повторяется — нужна диагностика розжига/клапана", safety: "high", can_user_do: false },
-          ],
-          faq: [
-            {
-              q: "Можно ли просто сбросить F28 и пользоваться дальше?",
-              a: "Если F28 появляется снова — проблема остаётся. Лучше диагностировать причину, чтобы котёл не уходил в останов и не изнашивал узлы.",
-            },
-            {
-              q: "Опасно ли разбирать котёл самому?",
-              a: "Газовую часть и настройки должен делать специалист. Самостоятельно ограничьтесь безопасными проверками (кран/сброс/давление по манометру).",
-            },
-          ],
-        });
-
-        return {
-          slug: params.slug,
-          title: `Ошибка ${code} ${brand} — ремонт в ${region}, причины и решение`,
-          h1: `Ошибка ${code} на котле ${brand} — что означает и как устранить (${region})`,
-          meta_description: `Ошибка ${code} ${brand}: причины, безопасные проверки и когда нужен мастер. Выезд по ${region}.`,
-          canonical_url: canonical,
-          breadcrumbs,
-          local_business,
-          blocks,
-        };
-      }
-
-      case "F29": {
-        const blocks = makeCommonBlocks({
-          region,
-          regionSlug: params.regionSlug,
-          brand,
-          brandSlug: params.brandSlug,
-          code,
-          heroImg: "/img/repair/protherm/hero.jpg",
-          intro:
-            "Ошибка F29 обычно означает потерю пламени после розжига. Часто причина — нестабильная подача газа, ионизация или влияние дымоудаления (в зависимости от модели).",
-          causes: [
-            { title: "Нестабильная подача газа / просадки давления", probability: 0.26 },
-            { title: "Электрод ионизации/контакты/загрязнение", probability: 0.22 },
-            { title: "Проблемы дымоудаления/тяги", probability: 0.18 },
-            { title: "Газовый клапан / настройка", probability: 0.14 },
-          ],
-          steps: [
-            { title: "Проверьте, нет ли перебоев с газом", safety: "low", can_user_do: true },
-            { title: "Перезапустите котёл (сброс ошибки)", safety: "low", can_user_do: true },
-            { title: "При повторе — диагностика ионизации/газового узла/тяги", safety: "high", can_user_do: false },
-          ],
-          faq: [
-            { q: "F29 появляется периодически — это нормально?", a: "Нет. Периодическая потеря пламени — признак проблемы, лучше проверить, чтобы избежать остановок и срывов работы." },
-            { q: "Причина всегда в газе?", a: "Не всегда: бывает ионизация, тяга, настройки/узлы. Нужна диагностика по месту." },
-          ],
-        });
-
-        return {
-          slug: params.slug,
-          title: `Ошибка ${code} ${brand} — ремонт в ${region}, причины и решение`,
-          h1: `Ошибка ${code} на котле ${brand} — почему гаснет пламя (${region})`,
-          meta_description: `Ошибка ${code} ${brand}: причины потери пламени и безопасные проверки. Выезд по ${region}.`,
-          canonical_url: canonical,
-          breadcrumbs,
-          local_business,
-          blocks,
-        };
-      }
-
-      case "F75": {
-        const blocks = makeCommonBlocks({
-          region,
-          regionSlug: params.regionSlug,
-          brand,
-          brandSlug: params.brandSlug,
-          code,
-          heroImg: "/img/repair/protherm/hero.jpg",
-          intro:
-            "Ошибка F75 связана с давлением/циркуляцией: котёл не видит ожидаемого изменения давления при запуске насоса. Частые причины — воздух в системе, датчик давления, насос, фильтр.",
-          causes: [
-            { title: "Воздух в системе / завоздушивание", probability: 0.28 },
-            { title: "Неисправен датчик давления", probability: 0.20 },
-            { title: "Насос: заклинивание/износ/питание", probability: 0.18 },
-            { title: "Забит фильтр/грязевик", probability: 0.12 },
-          ],
-          steps: [
-            { title: "Проверьте давление в системе (часто 1–1.5 бар)", safety: "low", can_user_do: true },
-            { title: "Если умеете — аккуратно развоздушьте радиаторы", safety: "med", can_user_do: true },
-            { title: "Если ошибка не уходит — проверка насоса/датчика/фильтра", safety: "high", can_user_do: false },
-          ],
-          faq: [
-            { q: "F75 — это обязательно насос?", a: "Не всегда. Часто виноваты воздух, датчик давления или засор фильтра/гидравлики." },
-            { q: "Можно ли продолжать пользоваться?", a: "Лучше не игнорировать: проблемы с циркуляцией ведут к перегревам и остановкам." },
-          ],
-        });
-
-        return {
-          slug: params.slug,
-          title: `Ошибка ${code} ${brand} — ремонт в ${region}, причины и решение`,
-          h1: `Ошибка ${code} на котле ${brand} — давление, насос, датчик (${region})`,
-          meta_description: `Ошибка ${code} ${brand}: причины по давлению/насосу и безопасные действия. Выезд по ${region}.`,
-          canonical_url: canonical,
-          breadcrumbs,
-          local_business,
-          blocks,
-        };
-      }
-    }
-  }
-
-  // Дефолтная страница для любых брендов/кодов (чтобы не было 404 при расширении)
-  const blocks: Block[] = makeCommonBlocks({
-    region,
-    regionSlug: params.regionSlug,
-    brand,
-    brandSlug: params.brandSlug,
-    code,
-    heroImg: `/img/repair/${params.brandSlug}/hero.jpg`,
-    intro: `Страница по ошибке ${code} для котлов ${brand}. Заполним конкретикой позже: причины, проверки, цены и сроки по региону ${region}.`,
-    causes: [
-      { title: "Недостаточно данных по модели (заполним после диагностики)", probability: 0.34 },
-      { title: "Электрика/датчики/контакты", probability: 0.22 },
-      { title: "Гидравлика/циркуляция/давление", probability: 0.18 },
-    ],
-    steps: [
-      { title: "Сфотографируйте дисплей с ошибкой и модель котла", safety: "low", can_user_do: true },
-      { title: "Сделайте перезапуск и проверьте давление/кран газа (если применимо)", safety: "low", can_user_do: true },
-      { title: "Если ошибка повторяется — вызов мастера для диагностики", safety: "high", can_user_do: false },
-    ],
-    faq: [
-      { q: "Можно ли устранить самому?", a: "Зависит от причины. Самостоятельно делайте только безопасные проверки. Газовую часть должен обслуживать специалист." },
-      { q: "Сколько стоит ремонт?", a: "Стоимость зависит от причины/запчастей. Сначала делается диагностика, затем согласуется цена." },
-    ],
-  });
-
-  return {
-    slug: params.slug,
-    title: `Ошибка ${code} ${brand} — ремонт в ${region}`,
-    h1: `Ошибка ${code} на котле ${brand} (${region})`,
-    meta_description: `Ошибка ${code} ${brand}: причины и решение. Выезд по ${region}.`,
-    canonical_url: canonical,
-    breadcrumbs,
-    local_business,
-    blocks,
-  };
-}
-
-export default defineEventHandler((event): PageDto => {
-  const slug = getRouterParam(event, "slug") || "";
-
-  // ожидаемый формат: remont-{brand}-oshybka-{code}-{region}
-  const m = slug.match(/^remont-([a-z0-9-]+)-oshybka-([a-z0-9-]+)-([a-z0-9-]+)$/i);
-  if (!m) {
-    throw createError({ statusCode: 404, statusMessage: `Bad slug: ${slug}` });
-  }
-
-  const [, brandSlug, codeRaw, regionSlug] = m;
-
-  return pageFor({
-    slug,
-    regionSlug: regionSlug.toLowerCase(),
-    brandSlug: brandSlug.toLowerCase(),
-    codeRaw: codeRaw.toLowerCase(),
-  });
-});
