@@ -5,13 +5,49 @@ cd learn-go-with-tests
 package github.com/quii/learn-go-with-tests/select/v2 is not a main package
 
 
-iteration
-arrays
-structs_methods_and_interfaces ⭐
-pointers_and_errors ⭐
-maps
-dependency-injection ⭐
-concurrency ⭐
+package internal
+
+func Sum(number []int) int {
+
+	var sum int
+
+	for _, n := range number {
+
+		sum += n
+
+	}
+
+	return sum
+
+}
+
+
+
+package internal
+
+func SumAllTails(x []int, y []int) []int {
+
+	a := Sum(x)
+	b := Sum(y)
+
+	return []int{a, b}
+
+}
+
+
+
+
+t.Run("make the sums of tails of", func(t *testing.T) {
+		got := SumAllTails([]int{1, 2}, []int{0, 9})
+		want := []int{2, 9}
+		checkSums(t, got, want)
+	})
+
+	t.Run("safely sum empty slices", func(t *testing.T) {
+		got := SumAllTails([]int{}, []int{3, 4, 5})
+		want := []int{0, 9}
+		checkSums(t, got, want)
+	})
 
 
 
