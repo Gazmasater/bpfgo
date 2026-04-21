@@ -5,11 +5,16 @@ cd learn-go-with-tests
 package github.com/quii/learn-go-with-tests/select/v2 is not a main package
 
 
+
 package internal
 
 func Sum(number []int) int {
 
 	var sum int
+
+	if number == nil {
+		return 0
+	}
 
 	for _, n := range number {
 
@@ -23,31 +28,31 @@ func Sum(number []int) int {
 
 
 
+
+
 package internal
 
-func SumAllTails(x []int, y []int) []int {
+func SumAllTails(numberAll ...[]int) []int {
 
-	a := Sum(x)
-	b := Sum(y)
+	var sums []int
 
-	return []int{a, b}
+	for _, numbers := range numberAll {
 
+		if len(numbers) == 0 {
+
+			sums = append(sums, 0)
+
+		} else {
+
+			tail := Sum(numbers[1:])
+
+			sums = append(sums, tail)
+		}
+
+	}
+
+	return sums
 }
-
-
-
-
-t.Run("make the sums of tails of", func(t *testing.T) {
-		got := SumAllTails([]int{1, 2}, []int{0, 9})
-		want := []int{2, 9}
-		checkSums(t, got, want)
-	})
-
-	t.Run("safely sum empty slices", func(t *testing.T) {
-		got := SumAllTails([]int{}, []int{3, 4, 5})
-		want := []int{0, 9}
-		checkSums(t, got, want)
-	})
 
 
 
