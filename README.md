@@ -1,3 +1,9 @@
+git clone https://github.com/quii/learn-go-with-tests.git
+cd learn-go-with-tests
+
+
+
+
 
 mx0vgldDsxPkp5g9tc
 82889cdd48fe4437b474558b91066c9d
