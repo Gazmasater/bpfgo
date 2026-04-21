@@ -5,6 +5,14 @@ cd learn-go-with-tests
 package github.com/quii/learn-go-with-tests/select/v2 is not a main package
 
 
+iteration
+arrays
+structs_methods_and_interfaces ⭐
+pointers_and_errors ⭐
+maps
+dependency-injection ⭐
+concurrency ⭐
+
 
 
 
