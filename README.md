@@ -2,6 +2,162 @@ git clone https://github.com/quii/learn-go-with-tests.git
 cd learn-go-with-tests
 
 
+📂 2. Понять структуру (это важно)
+Внутри будут папки:
+hello-world/integers/iteration/arrays/structs_methods_and_interfaces/...
+👉 Каждая папка = отдельная тема
+
+🧠 3. Как правильно проходить (ключевой момент)
+❌ НЕ читать и копировать
+✅ Делать как TDD
+
+Шаги для каждой темы:
+1. Зайти в папку
+cd hello-world
+
+2. Запустить тесты
+go test
+👉 увидишь ошибку типа:
+undefined: Hello
+
+3. Открыть тест
+Файл:
+hello_test.go
+Там будет:
+func TestHello(t *testing.T) {    got := Hello("Chris", "")    want := "Hello, Chris"    if got != want {        t.Errorf("got %q want %q", got, want)    }}
+
+4. Реализовать функцию
+Создаёшь файл:
+hello.go
+package mainfunc Hello(name string, language string) string {    return "Hello, " + name}
+
+5. Снова тест
+go test
+👉 пока не станет:
+PASS
+
+🔁 4. Цикл работы (всё обучение так строится)
+1. go test ❌2. читаешь тест3. пишешь код4. go test ✅5. идёшь дальше
+
+⚡ 5. Важный момент (где многие тупят)
+👉 НЕ смотри решения сразу
+Если застрял:
+
+
+подумай 10–15 минут
+
+
+только потом смотри README
+
+
+
+🔥 6. Как тебе проходить (с твоим уровнем)
+Ты не новичок → делай жёстче:
+Вместо просто прохождения:
+
+
+переписывай тесты в table-driven
+
+
+добавляй edge cases
+
+
+добавляй benchmark
+
+
+Пример:
+func BenchmarkHello(b *testing.B) {    for i := 0; i < b.N; i++ {        Hello("Chris", "")    }}
+
+⚠️ Частые проблемы
+❌ “VS Code не видит Go”
+👉 у тебя уже было
+Проверь:
+go version
+И в VS Code:
+
+
+установить Go extension
+
+
+перезапустить
+
+
+
+❌ тесты не запускаются
+Проверь:
+go mod init hello
+
+💡 Лайфхак (очень важный)
+👉 не делай всё подряд
+Лучшие разделы для тебя:
+
+
+hello-world (разогрев)
+
+
+integers
+
+
+arrays
+
+
+structs_methods_and_interfaces ⭐
+
+
+dependency-injection ⭐
+
+
+concurrency ⭐
+
+
+
+🚀 Если хочешь дальше
+Я могу:
+
+
+дать тебе ускоренный маршрут (только нужные темы)
+
+
+или переделать это в формат:
+👉 “как будто ты на работе пишешь сервис”
+
+
+Скажи:
+“давай под мой уровень” — и я соберу тебе план без воды.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
