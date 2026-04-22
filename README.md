@@ -129,13 +129,71 @@ go version
 Это уже ядро твоего бизнеса.
 
 
+ssh root@176.126.99.27
 
-root@calltracking-server:~# apt install -y nginx
-Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1297 (apt)      
-Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1297 (apt)      
-Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1297 (apt)      
-Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1297 (apt)      
-Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1297 (apt)      
-Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1297 (apt)      
-Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1297 (apt)      
-Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by 
+
+IP Address:    176.126.99.27
+Username:      root
+Password:      0NjYWLbE38yq
+SSH Port:      22 (default)
+
+
+
+
+👉 Сообщение:
+
+Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1297 (apt)
+
+значит, что в системе уже идёт установка/обновление пакетов.
+
+🔍 Что происходит
+
+Обычно это:
+
+автообновление (apt upgrade по cron)
+или ты сам в другом терминале запустил apt
+или зависший процесс
+✅ Что делать
+1. Посмотреть, что это за процесс
+ps -p 1297 -o pid,cmd
+
+Если увидишь что-то вроде:
+
+apt upgrade
+
+👉 просто подожди 1–2 минуты
+
+2. Если зависло (долго висит)
+
+Проверь:
+
+top
+
+или:
+
+htop
+
+Если процесс реально не работает (0% CPU долгое время):
+
+👉 можно аккуратно убить:
+
+kill -9 1297
+3. После этого ОБЯЗАТЕЛЬНО почини dpkg
+dpkg --configure -a
+4. И только потом ставь nginx
+apt update
+apt install -y nginx
+❗ Важно
+
+Не делай сразу rm lock — это ломает систему пакетов.
+Правильный порядок:
+
+понять процесс
+убить (если завис)
+dpkg --configure -a
+⚡ Быстрый чек-лист (как для продакшена)
+ps aux | grep apt
+kill -9 <pid>        # если завис
+dpkg --configure -a
+apt update
+apt install nginx
