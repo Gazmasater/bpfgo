@@ -197,3 +197,18 @@ kill -9 <pid>        # если завис
 dpkg --configure -a
 apt update
 apt install nginx
+
+
+
+Package configuration
+
+
+ ┌──────────────────────────────────────────────────┤ Configuring openssh-server ├─────────────────────────────────────────────
+ │                                                                                                                             
+ │ A new version (/tmp/tmp.bNfeqXZtBU) of configuration file /etc/ssh/sshd_config is available, but the version installed curre
+ │ has been locally modified.                                                                                                  
+ │                                                                                                                             
+ │                                                              <Ok>                                                           
+ │                                                                                                                             
+ └─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                                               
