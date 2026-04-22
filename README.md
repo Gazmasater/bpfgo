@@ -203,4 +203,17 @@ apt install nginx
 Package configuration
 
 dpkg --configure -a
+
+
+Package configuration
+
+
+ ┌──────────────────────────────────────────────────┤ Configuring openssh-server ├───────────────────────────────────────────────────┐
+ │                                                                                                                                   │ 
+ │ A new version (/tmp/tmp.DIjf1dJQG0) of configuration file /etc/ssh/sshd_config is available, but the version installed currently  │ 
+ │ has been locally modified.                                                                                                        │ 
+ │                                                                                                                                   │ 
+ │                                                              <Ok>                                                                 │ 
+ │                                                                                                                                   │ 
+ └───────────────────────────────────────────
                                                                                                                                
