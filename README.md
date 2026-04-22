@@ -127,3 +127,15 @@ go version
 
 
 Это уже ядро твоего бизнеса.
+
+
+
+root@calltracking-server:~# apt install -y nginx
+Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1297 (apt)      
+Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1297 (apt)      
+Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1297 (apt)      
+Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1297 (apt)      
+Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1297 (apt)      
+Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1297 (apt)      
+Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1297 (apt)      
+Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by 
