@@ -19,201 +19,151 @@ yes/no → пиши yes
 
 
 
-⚠️ Если не пускает
-Иногда бывает:
+apt install -y git curl certbot python3-certbot-nginx unzip
 
 
-порт не 22
 
 
-пароль не тот
 
 
-👉 тогда зайди в панель EDIS Global и посмотри:
+2. Собери сайт у себя локально
 
+На своём компьютере в папке сайта:
 
-root password
+yarn install
+yarn generate
 
+или если без yarn:
 
-SSH port
+npm install
+npm run generate
 
+После этого появится папка со статикой. Обычно это:
 
+.output/public
+или
+dist
 
-🧱 ШАГ 2. Обновление системы
-apt update && apt upgrade -y
+У Nuxt 4 чаще смотри сначала:
 
-🔐 ШАГ 3. Базовая безопасность (очень желательно)
-Создай пользователя (не работай всегда от root):
-adduser devusermod -aG sudo dev
+ls -la .output
+ls -la dist
 
-🌐 ШАГ 4. Установка веб-сервера
-apt install -y nginx
-Проверка:
-systemctl status nginx
-👉 теперь открой в браузере:
-http://176.126.99.27
-Если видишь страницу — всё ок
+Нужна папка, где лежат готовые html/js/css.
 
-🗄 ШАГ 5. База данных
-apt install -y postgresql
-Проверка:
-systemctl status postgresql
+3. Создай папку сайта на сервере
 
-⚙️ ШАГ 6. Установка Go
-(тебе это важно)
-apt install -y golang-go
-Проверка:
-go version
+На сервере:
 
-🧠 Что у тебя уже есть после этого
-Ты получаешь базу для коллтрекинга:
-[Интернет]     ↓   Nginx     ↓   Go API (будет)     ↓ PostgreSQL
+mkdir -p /var/www/site
+4. Залей статические файлы на сервер
 
-🔥 Следующий логический шаг
-Теперь тебе нужно решить:
-👉 Как принимать звонки
-Варианты:
-1. Быстрый (рекомендую на старте)
+С компьютера на сервер копируй содержимое папки сборки.
 
+Пример, если сборка лежит в .output/public:
 
-взять провайдера (UIS / SIP)
+scp -r .output/public/* root@IP_СЕРВЕРА:/var/www/site/
 
+Если сборка в dist:
 
-они шлют вебхук → твой Go сервер
+scp -r dist/* root@IP_СЕРВЕРА:/var/www/site/
+5. Проверь, что файлы реально на месте
 
+На сервере:
 
-2. Сложный (свой)
+ls -la /var/www/site
 
+Там должен быть index.html и папки со статикой.
 
-ставить Asterisk
+6. Настрой nginx на сайт
 
+Создай конфиг:
 
-настраивать SIP
+nano /etc/nginx/sites-available/site
 
+Вставь:
 
+server {
+    listen 80;
+    server_name _;
 
-💡 Я тебе советую
-👉 сначала сделать:
+    root /var/www/site;
+    index index.html;
 
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
 
-сайт
+Сохрани.
 
+Включи сайт:
 
-подмену номера
+ln -s /etc/nginx/sites-available/site /etc/nginx/sites-enabled/site
 
+Если есть дефолтный конфиг, лучше убрать:
 
-вебхук
+rm -f /etc/nginx/sites-enabled/default
 
+Проверь конфиг:
 
-запись в БД
+nginx -t
 
+Перезапусти nginx:
 
-👉 без Asterisk
+systemctl reload nginx
+7. Открой сайт по IP
 
-⚡ Дальше могу тебе помочь
-Следующий шаг — самый важный:
-👉 как связать:
-пользователь → ключевик → номер → звонок
-Если хочешь — разложу тебе:
+В браузере открой:
 
+http://IP_СЕРВЕРА
 
-структуру БД
+Если всё ок — сайт уже работает.
 
+8. Потом добавишь домен
 
-схему подмены номера
+Когда домен будет привязан к серверу, поменяешь:
 
+server_name _;
 
-и Go API под твой проект
+на
 
+server_name твой-домен.ru www.твой-домен.ru;
+9. Включи HTTPS
 
-Это уже ядро твоего бизнеса.
+После того как домен начнёт смотреть на сервер:
 
+certbot --nginx -d твой-домен.ru -d www.твой-домен.ru
+10. Go backend запускай отдельно
 
-ssh root@176.126.99.27
+Когда дойдёшь до API, схема будет такая:
 
+сайт: nginx отдаёт /var/www/site
+API: nginx проксирует /api на Go, например 127.0.0.1:8080
 
-IP Address:    176.126.99.27
-Username:      root
-Password:      0NjYWLbE38yq
-SSH Port:      22 (default)
+Пример будущего блока для nginx:
 
+location /api/ {
+    proxy_pass http://127.0.0.1:8080/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+11. Что делать прямо сейчас
 
+Вот твой короткий маршрут:
 
+Локально выполнить yarn generate
+Найти папку готовой статики
+Залить её в /var/www/site
+Создать nginx-конфиг
+nginx -t
+systemctl reload nginx
+Открыть сайт по IP
+Важный момент по твоему архиву
 
-👉 Сообщение:
+У тебя в проекте есть server/api/..., то есть проект в целом умеет больше, чем просто статика. Но раз тебе сейчас нужен простой одностраничник, самый надёжный путь — не поднимать Nuxt как сервер, а отдать готовые файлы через nginx.
 
-Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1297 (apt)
-
-значит, что в системе уже идёт установка/обновление пакетов.
-
-🔍 Что происходит
-
-Обычно это:
-
-автообновление (apt upgrade по cron)
-или ты сам в другом терминале запустил apt
-или зависший процесс
-✅ Что делать
-1. Посмотреть, что это за процесс
-ps -p 1297 -o pid,cmd
-
-Если увидишь что-то вроде:
-
-apt upgrade
-
-👉 просто подожди 1–2 минуты
-
-2. Если зависло (долго висит)
-
-Проверь:
-
-top
-
-или:
-
-htop
-
-Если процесс реально не работает (0% CPU долгое время):
-
-👉 можно аккуратно убить:
-
-kill -9 1297
-3. После этого ОБЯЗАТЕЛЬНО почини dpkg
-dpkg --configure -a
-4. И только потом ставь nginx
-apt update
-apt install -y nginx
-❗ Важно
-
-Не делай сразу rm lock — это ломает систему пакетов.
-Правильный порядок:
-
-понять процесс
-убить (если завис)
-dpkg --configure -a
-⚡ Быстрый чек-лист (как для продакшена)
-ps aux | grep apt
-kill -9 <pid>        # если завис
-dpkg --configure -a
-apt update
-apt install nginx
-
-
-
-Package configuration
-
-dpkg --configure -a
-
-
-Package configuration
-
-
- ┌──────────────────────────────────────────────────┤ Configuring openssh-server ├───────────────────────────────────────────────────┐
- │                                                                                                                                   │ 
- │ A new version (/tmp/tmp.DIjf1dJQG0) of configuration file /etc/ssh/sshd_config is available, but the version installed currently  │ 
- │ has been locally modified.                                                                                                        │ 
- │                                                                                                                                   │ 
- │                                                              <Ok>                                                                 │ 
- │                                                                                                                                   │ 
- └───────────────────────────────────────────
-                                                                                                                               
+Если хочешь, следующим сообщением я дам тебе готовые команды именно для Windows: как собрать Nuxt у себя и как залить папку на сервер без путаницы.
