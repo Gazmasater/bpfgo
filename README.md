@@ -202,31 +202,5 @@ apt install nginx
 
 Package configuration
 
-
- ┌──────────────────────────────────────────────────┤ Configuring openssh-server ├─────────────────────────────────────────────
- │                                                                                                                             
- │ A new version (/tmp/tmp.bNfeqXZtBU) of configuration file /etc/ssh/sshd_config is available, but the version installed curre
- │ has been locally modified.                                                                                                  
- │                                                                                                                             
- │                                                              <Ok>                                                           
- │                                                                                                                             
- └─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-
-
-
- oot@calltracking-server:~# apt install -y nginx
-Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 5383 (dpkg)      
-Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 5383 (dpkg)      
-Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 5383 (dpkg)      
-Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 5383 (dpkg)      
-Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 5383 (dpkg)      
-Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 5383 (dpkg)      
-Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 5383 (dpkg)      
-Waiting for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 5383 (dpkg)      
-^Citing for cache lock: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 5383 (dpkg)... 8s
-root@calltracking-server:~# kill -9 5383
-root@calltracking-server:~# apt install -y nginx
-E: dpkg was interrupted, you must manually run 'dpkg --configure -a' to correct the problem. 
-root@calltracking-server:~# 
+dpkg --configure -a
                                                                                                                                
