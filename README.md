@@ -44,3 +44,13 @@ chown -R www-data:www-data /var/www/html
 chmod -R 755 /var/www/html
 systemctl reload nginx
 
+
+
+listen 443 ssl;
+
+ssl_certificate /etc/letsencrypt/live/remontkotlov48.ru/fullchain.pem;
+ssl_certificate_key /etc/letsencrypt/live/remontkotlov48.ru/privkey.pem;
+
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_prefer_server_ciphers off;
+
