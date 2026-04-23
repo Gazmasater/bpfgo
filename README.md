@@ -27,15 +27,18 @@ SSH Port:      22 (default)
 
 
 
-sudo cat /etc/nginx/sites-available/remontkotlov48
+cd .output/public
+tar -czf site.tar.gz .
+scp site.tar.gz root@176.126.99.27:/root/
 
 
 
-ls -la /var/www/html
-
-
-sudo mv /var/www/html/index.nginx-debian.html /var/www/html/index.html
-sudo systemctl reload nginx
-
+ssh root@176.126.99.27
+mkdir -p /var/www/html
+rm -rf /var/www/html/*
+tar -xzf /root/site.tar.gz -C /var/www/html
+chown -R www-data:www-data /var/www/html
+chmod -R 755 /var/www/html
+systemctl reload nginx
 
 
