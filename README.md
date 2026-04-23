@@ -92,7 +92,12 @@ useHead({
 
 
 
-az358@gaz358-BOD-WXX9:~/myprog/gazmaster-site/.output/public$ tar -czf /tmp/site.tar.gz
-tar: Cowardly refusing to create an empty archive
+az358@gaz358-BOD-WXX9:~/myprog/gazmaster-site$ cd .output/public
+gaz358@gaz358-BOD-WXX9:~/myprog/gazmaster-site/.output/public$ tar -czf /tmp/site.tar.gz .
+gaz358@gaz358-BOD-WXX9:~/myprog/gazmaster-site/.output/public$ scp /tmp/site.tar.gz root@176.126.99.27:/root/
+root@176.126.99.27's password: 
+site.tar.gz                                                                                               100% 1827KB   2.1MB/s   00:00    
+gaz358@gaz358-BOD-WXX9:~/myprog/gazmaster-site/.output/public$ rm -rf /var/www/html/*
+gaz358@gaz358-BOD-WXX9:~/myprog/gazmaster-site/.output/public$ tar -xzf /root/site.tar.gz -c /var/www/html
+tar: You may not specify more than one '-Acdtrux', '--delete' or  '--test-label' option
 Try 'tar --help' or 'tar --usage' for more information.
-gaz358@gaz358-BOD-WXX9:~/myprog/gazmaster-site/.output/publi
