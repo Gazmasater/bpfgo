@@ -27,60 +27,7 @@ SSH Port:      22 (default)
 
 
 
-🔧 1. Создаём конфиг nginx
-Открой файл:
-sudo nano /etc/nginx/sites-available/remontkotlov48
-Вставь:
-server {    listen 80;    server_name remontkotlov48.ru www.remontkotlov48.ru;    root /var/www/html;    index index.html;    location / {        try_files $uri $uri/ =404;    }}
-
-🔗 2. Активируем
-sudo ln -s /etc/nginx/sites-available/remontkotlov48 /etc/nginx/sites-enabled/
-
-🔄 3. Перезапуск nginx
-sudo nginx -t
-sudo systemctl reload nginx
-
-🔐 4. Теперь снова ставим SSL
-sudo certbot --nginx -d remontkotlov48.ru -d www.remontkotlov48.ru
-
-✅ Что должно получиться
-
-
-nginx начнёт слушать домен
-
-
-certbot сам добавит:
-
-
-HTTPS (443)
-
-
-редирект с HTTP → HTTPS
-
-
-
-
-
-⚠️ После этого
-👉 В Cloudflare обязательно:
-SSL/TLS → поставить:
-👉 Full (не Flexible!)
-
-💡 Почему ошибка была
-У тебя nginx сейчас:
-
-
-работает по IP
-
-
-но не привязан к домену
-
-
-
-🚀 Финал
-Сделай шаги выше и напиши:
-👉 что выдал второй запуск certbot
-Если что — добьём до полностью рабочего HTTPS 🔥
+sudo cat /etc/nginx/sites-available/remontkotlov48
 
 
 
