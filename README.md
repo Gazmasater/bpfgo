@@ -28,15 +28,11 @@ SSH Port:      22 (default)
 
 
 cd .output/public
-tar -czf site.tar.gz .
-scp site.tar.gz root@176.126.99.27:/root/
+tar -czf /tmp/site.tar.gz .
+ls -lh /tmp/site.tar.gz
+scp /tmp/site.tar.gz root@176.126.99.27:/root/
 
 
-az358@gaz358-BOD-WXX9:~/myprog/gazmaster-site/.output/public$ tar -czf site.tar.gz .
-tar: .: file changed as we read it
-gaz358@gaz358-BOD-WXX9:~/myprog/gazmaster-site/.output/public$ sudo tar -czf site.tar.gz .
-[sudo] password for gaz358: 
-tar: ./site.tar.gz: file changed as we read it
 
 
 
@@ -47,5 +43,4 @@ tar -xzf /root/site.tar.gz -C /var/www/html
 chown -R www-data:www-data /var/www/html
 chmod -R 755 /var/www/html
 systemctl reload nginx
-
 
