@@ -46,6 +46,8 @@ systemctl reload nginx
 
 
 
+sudo nano /etc/nginx/sites-available/remontkotlov48
+
 listen 443 ssl;
 
 ssl_certificate /etc/letsencrypt/live/remontkotlov48.ru/fullchain.pem;
