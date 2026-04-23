@@ -80,3 +80,12 @@ SSL/TLS → поставить:
 Сделай шаги выше и напиши:
 👉 что выдал второй запуск certbot
 Если что — добьём до полностью рабочего HTTPS 🔥
+
+
+
+
+root@calltracking-server:~# sudo ln -s /etc/nginx/sites-available/remontkotlov48 /etc/nginx/sites-enabled/
+ln: failed to create symbolic link '/etc/nginx/sites-enabled/remontkotlov48': File exists
+root@calltracking-server:~# sudo nginx -tsudo systemctl reload nginx
+nginx: invalid option: "-s udo"
+root@calltracking-server:~# 
