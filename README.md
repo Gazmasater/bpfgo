@@ -34,13 +34,8 @@ sudo cat /etc/nginx/sites-available/remontkotlov48
 ls -la /var/www/html
 
 
-root@calltracking-server:~# ls -la /var/www/html
-total 12
-drwxr-xr-x 2 root root 4096 Apr 22 11:33 .
-drwxr-xr-x 4 root root 4096 Apr 22 12:37 ..
--rw-r--r-- 1 root root  612 Apr 22 11:33 index.nginx-debian.html
-root@calltracking-server:~# 
-
+sudo mv /var/www/html/index.nginx-debian.html /var/www/html/index.html
+sudo systemctl reload nginx
 
 
 
