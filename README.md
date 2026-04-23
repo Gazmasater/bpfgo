@@ -88,3 +88,11 @@ useHead({
 <template>
   <NuxtPage />
 </template>
+
+
+
+
+az358@gaz358-BOD-WXX9:~/myprog/gazmaster-site/.output/public$ tar -czf /tmp/site.tar.gz
+tar: Cowardly refusing to create an empty archive
+Try 'tar --help' or 'tar --usage' for more information.
+gaz358@gaz358-BOD-WXX9:~/myprog/gazmaster-site/.output/publi
