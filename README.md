@@ -83,3 +83,30 @@ useHead({
 })
 </script>
 
+
+
+
+
+1. Локально в папке проекта
+yarn generate
+2. Перейди в папку сборки
+cd .output/public
+3. Сделай архив
+tar -czf /tmp/site.tar.gz .
+4. Залей архив на сервер
+scp /tmp/site.tar.gz root@176.126.99.27:/root/
+5. Зайди на сервер
+ssh root@176.126.99.27
+6. Очисти старый сайт и распакуй новый
+rm -rf /var/www/html/*
+tar -xzf /root/site.tar.gz -C /var/www/html
+7. Права и перезапуск nginx
+chown -R www-data:www-data /var/www/html
+chmod -R 755 /var/www/html
+systemctl reload nginx
+8. Проверь сайт
+https://remontkotlov48.ru
+
+После проверки можно удалить архив:
+
+rm -f /root/site.tar.gz
