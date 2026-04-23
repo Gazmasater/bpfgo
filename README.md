@@ -37,7 +37,8 @@ server {    listen 80;    server_name remontkotlov48.ru www.remontkotlov48.ru;  
 sudo ln -s /etc/nginx/sites-available/remontkotlov48 /etc/nginx/sites-enabled/
 
 🔄 3. Перезапуск nginx
-sudo nginx -tsudo systemctl reload nginx
+sudo nginx -t
+sudo systemctl reload nginx
 
 🔐 4. Теперь снова ставим SSL
 sudo certbot --nginx -d remontkotlov48.ru -d www.remontkotlov48.ru
@@ -84,8 +85,4 @@ SSL/TLS → поставить:
 
 
 
-root@calltracking-server:~# sudo ln -s /etc/nginx/sites-available/remontkotlov48 /etc/nginx/sites-enabled/
-ln: failed to create symbolic link '/etc/nginx/sites-enabled/remontkotlov48': File exists
-root@calltracking-server:~# sudo nginx -tsudo systemctl reload nginx
-nginx: invalid option: "-s udo"
-root@calltracking-server:~# 
+
