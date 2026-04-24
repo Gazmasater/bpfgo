@@ -26,6 +26,9 @@ Password:      0NjYWLbE38yq
 SSH Port:      22 (default)
 
 
+sudo nano /etc/nginx/sites-available/remontkotlov48
+
+
 
 server {
     listen 80;
