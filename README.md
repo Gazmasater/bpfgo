@@ -77,4 +77,5 @@ sudo nano /etc/nginx/sites-available/remontkotlov48
 
 
 
-cp -r ~/myprog/remontkotlov48-infra/nginx/* ./nginx/
+sudo apt update
+sudo apt install tree -y
