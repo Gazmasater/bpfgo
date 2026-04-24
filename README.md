@@ -77,12 +77,4 @@ sudo nano /etc/nginx/sites-available/remontkotlov48
 
 
 
-gaz358@gaz358-BOD-WXX9:~/myprog$ ls
-arb    btn    crypt_proto  ebpf-nftrace    go.mod      go.sum            mql     olimp  remontkotlov48-infra  TG
-bpfgo  crypt  db_trace     gazmaster-site  Go_nachalo  kucoin-ising-bot  nft-go  pars   sobes                 workmate
-gaz358@gaz358-BOD-WXX9:~/myprog$ 
-
-
-gaz358@gaz358-BOD-WXX9:~/myprog/gazmaster-site$ mkdir -p nginx/sites-available deploy
-gaz358@gaz358-BOD-WXX9:~/myprog/gazmaster-site$ cp -r /myprog/remontkotlov48-infra/project/nginx/* ./nginx/
-cp: cannot stat '/myprog/remontkotlov48-infra/project/nginx/*': No such file or directory
+cp -r ~/myprog/remontkotlov48-infra/nginx/* ./nginx/
