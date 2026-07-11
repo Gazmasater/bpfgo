@@ -1088,6 +1088,12 @@ func flowReadyToPrintOpen(f *Flow) bool {
 	if !flowReadyToOpenBase(f) {
 		return false
 	}
+	// libc/getaddrinfo may briefly connect UDP sockets to candidate addresses
+	// only to select a source route. Those sockets never carry traffic and are
+	// not useful network flows, so don't print them as OPEN.
+	if f.Key.Proto == IPPROTO_UDP && f.InPkts == 0 && f.OutPkts == 0 {
+		return false
+	}
 	if isAllZero16(f.Local) && time.Since(f.FirstSeen) < *flgOpenDelay {
 		return false
 	}
@@ -1558,24 +1564,20 @@ func main() {
 		perCPUBytes/1024, (perCPUBytes*runtime.NumCPU())/(1024*1024), runtime.NumCPU())
 
 	// --- TLS reader (SNI) ---
-	// IMPORTANT:
-	// In your generated bpfMaps there is no tls_events perf map right now.
-	// Add it in trace.c and regenerate bpf2go.
-	//
-	// Once you add map like: TlsEvents *ebpf.Map `ebpf:"tls_events"`,
-	// rename here accordingly.
 	var tlsRD *perf.Reader
 	var tlsAssembler *tlsAssembler
 	sniC := newSNICache(*flgSNITTL, *flgSNIMaxKeep)
 
-	// TODO: if you expose map in bpfMaps as TlsEvents, uncomment:
-	// if *flgSNI && objs.TlsEvents != nil {
-	//     tlsRD, _, err = openPerfReaderTotalBudget(objs.TlsEvents, max(1, *flgPerfMB/2))
-	//     if err != nil { log.Printf("tls perf reader disabled: %v", err); tlsRD=nil }
-	// }
-
-	_ = tlsRD
 	if *flgSNI {
+		if objs.TlsEvents == nil {
+			log.Printf("SNI disabled: tls_events map is unavailable")
+		} else {
+			tlsRD, _, err = openPerfReaderTotalBudget(objs.TlsEvents, max(1, *flgPerfMB/2))
+			if err != nil {
+				log.Printf("SNI reader disabled: %v", err)
+				tlsRD = nil
+			}
+		}
 		tlsAssembler = newTLSAssembler(30*time.Second, *flgSNIMaxKeep)
 	}
 
@@ -1646,7 +1648,7 @@ func main() {
 	ticker := time.NewTicker(*flgSweep)
 	defer ticker.Stop()
 
-	log.Println("OPEN/CLOSE (TCP/UDP/ICMP) + PTR + skb-hint (+SNI if tls_events enabled). Ctrl+C to exit")
+	log.Printf("OPEN/CLOSE (TCP/UDP/ICMP) + PTR + skb-hint + SNI=%t. Ctrl+C to exit", tlsRD != nil)
 
 	shouldKeep := func(pid uint32, comm string) bool {
 		if comm == "" || comm == selfName {

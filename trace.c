@@ -62,7 +62,7 @@
 #define CMSG_ALIGN(len) (((len) + sizeof(__u64) - 1) & ~(sizeof(__u64) - 1))
 
 /* ===== TLS chunk config ===== */
-#define TLS_CHUNK_MAX 256
+#define TLS_CHUNK_MAX 512
 #define TLS_MAX_BYTES_PER_CONN (16 * 1024) /* userspace only */
 #define TLS_FROM_SENDMSG 1
 
@@ -335,6 +335,14 @@ struct {
     __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
     __uint(max_entries, 128);
 } trace_events SEC(".maps");
+
+/* Dedicated perf stream for TLS payload chunks. Keeping it separate from
+ * trace_events prevents the userspace flow decoder from interpreting a TLS
+ * chunk as a trace_info record. */
+struct {
+    __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+    __uint(max_entries, 128);
+} tls_events SEC(".maps");
 
 /* NEW: tls seq by cookie */
 struct {
@@ -757,23 +765,19 @@ static __always_inline int fill_fd_state(int fd, struct fd_state_t *st)
 static __always_inline int fill_from_fd_state_map(struct trace_info *info, __u32 tgid, int fd, int is_send_dir)
 {
     struct fd_key_t k = { .tgid = tgid, .fd = fd };
-
     struct fd_state_t tmp = {};
-    struct fd_state_t *st = bpf_map_lookup_elem(&fd_state_map, &k);
 
-    if (!st) {
-        if (fill_fd_state(fd, &tmp) < 0)
-            return -1;
-        bpf_map_update_elem(&fd_state_map, &k, &tmp, BPF_ANY);
-        st = &tmp;
-    } else {
-        if (st->proto == IPPROTO_TCP && (st->lport == 0 || st->rport == 0)) {
-            if (fill_fd_state(fd, &tmp) == 0) {
-                bpf_map_update_elem(&fd_state_map, &k, &tmp, BPF_ANY);
-                st = &tmp;
-            }
-        }
-    }
+    /*
+     * A numeric fd can be reused without us observing close(2) (for example
+     * when libc or the runtime uses close_range).  Never trust a cached
+     * protocol/address for a new syscall: refresh it from the live socket.
+     * The map remains useful to the connect/accept paths, but correctness must
+     * not depend on receiving every close event.
+     */
+    if (fill_fd_state(fd, &tmp) < 0)
+        return -1;
+    bpf_map_update_elem(&fd_state_map, &k, &tmp, BPF_ANY);
+    struct fd_state_t *st = &tmp;
 
     info->proto  = st->proto;
     info->family = st->family;
@@ -860,8 +864,10 @@ static __always_inline int emit_tls_chunk(void *ctx,
     __builtin_memset(ev, 0, sizeof(*ev));
 
     __u32 n = (__u32)ret_bytes;
-    n &= (TLS_CHUNK_MAX - 1);
-    if (n == 0) n = TLS_CHUNK_MAX - 1;
+    if (n > TLS_CHUNK_MAX)
+        n = TLS_CHUNK_MAX;
+    if (n == 0)
+        return 0;
 
     ev->cookie = cookie;
     ev->ts_ns  = bpf_ktime_get_ns();
@@ -883,7 +889,7 @@ static __always_inline int emit_tls_chunk(void *ctx,
     if (bpf_probe_read_user(ev->data, n, user_ptr) != 0)
         return 0;
 
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, ev, sizeof(*ev));
+    bpf_perf_event_output(ctx, &tls_events, BPF_F_CURRENT_CPU, ev, sizeof(*ev));
     return 0;
 }
 
@@ -1157,6 +1163,12 @@ int trace_sendto_enter(struct trace_event_raw_sys_enter *ctx)
     bpf_get_current_comm(&ci.comm, sizeof(ci.comm));
     bpf_map_update_elem(&conn_info_map, &id, &ci, BPF_ANY);
 
+    struct write_args_t wa = {};
+    wa.buf = (__u64)ctx->args[1];
+    wa.count = (__u64)ctx->args[2];
+    if (wa.buf)
+        bpf_map_update_elem(&write_args_map, &id, &wa, BPF_ANY);
+
     __u64 uaddr   = (__u64)ctx->args[4];
     __u32 addrlen = (__u32)ctx->args[5];
     if (uaddr && addrlen >= sizeof(__u16)) {
@@ -1197,8 +1209,14 @@ int trace_sendto_exit(struct trace_event_raw_sys_exit *ctx)
     loopback_fallback(&info, 1);
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
+    struct write_args_t *wa = bpf_map_lookup_elem(&write_args_map, &id);
+    if (wa && wa->buf)
+        (void)emit_tls_chunk(ctx, id, tgid, ci, &info,
+                             (void *)(unsigned long)wa->buf, ret);
+
 cleanup:
     bpf_map_delete_elem(&addrSend_map, &id);
+    bpf_map_delete_elem(&write_args_map, &id);
     bpf_map_delete_elem(&conn_info_map, &id);
     return 0;
 }
@@ -1323,26 +1341,36 @@ int trace_sendmsg_exit(struct trace_event_raw_sys_exit *ctx)
     if (fill_from_fd_state_map(&info, tgid, (int)ci->fd, 1) < 0)
         goto cleanup;
 
-    // your existing extra addr parsing is OK to keep minimal; omitted for brevity
+    /*
+     * Unconnected UDP sockets keep no peer in struct sock.  sendmsg carries
+     * that peer in msg_name, and IPv4/IPv6 pktinfo may select the local source
+     * address.  Parse both so userspace can correlate this send with the
+     * corresponding receive flow.
+     */
+    __u64 *msgp = bpf_map_lookup_elem(&msgSend_map, &id);
+    struct user_msghdr64 mh = {};
+    int have_mh = msgp && *msgp && read_msghdr64(*msgp, &mh) == 0;
+    if (have_mh) {
+        if (mh.msg_name && mh.msg_namelen >= sizeof(__u16))
+            (void)fill_from_sockaddr_user(&info, (void *)mh.msg_name,
+                                          mh.msg_namelen, 1);
+        if (mh.msg_control && mh.msg_controllen >= sizeof(struct user_cmsghdr64))
+            parse_pktinfo_cmsg(&info, mh.msg_control, mh.msg_controllen,
+                               0 /* set local source */);
+    }
 
     loopback_fallback(&info, 1);
     bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
 
 #if TLS_FROM_SENDMSG
     // TLS chunk from first iovec of msghdr
-    __u64 *msgp = bpf_map_lookup_elem(&msgSend_map, &id);
-    if (msgp && *msgp) {
-        struct user_msghdr64 mh = {};
-        if (read_msghdr64(*msgp, &mh) == 0) {
-            if (mh.msg_iov && mh.msg_iovlen) {
-                struct user_iovec64 iv0 = {};
-                if (bpf_probe_read_user(&iv0, sizeof(iv0), (void *)(unsigned long)mh.msg_iov) == 0) {
-                    if (iv0.iov_base) {
-                        (void)emit_tls_chunk(ctx, id, tgid, ci, &info,
-                                             (void *)(unsigned long)iv0.iov_base, ret);
-                    }
+    if (have_mh && mh.msg_iov && mh.msg_iovlen) {
+        struct user_iovec64 iv0 = {};
+        if (bpf_probe_read_user(&iv0, sizeof(iv0), (void *)(unsigned long)mh.msg_iov) == 0) {
+            if (iv0.iov_base) {
+                (void)emit_tls_chunk(ctx, id, tgid, ci, &info,
+                                     (void *)(unsigned long)iv0.iov_base, ret);
                 }
-            }
         }
     }
 #endif

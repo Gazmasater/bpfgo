@@ -75,7 +75,7 @@ type bpfTlsChunkEvent struct {
 	Dport  uint16
 	_      [2]byte
 	Len    uint32
-	Data   [256]uint8
+	Data   [512]uint8
 	_      [4]byte
 }
 
@@ -197,6 +197,7 @@ type bpfMapSpecs struct {
 	MsgSendMap      *ebpf.MapSpec `ebpf:"msgSend_map"`
 	TlsChunkScratch *ebpf.MapSpec `ebpf:"tls_chunk_scratch"`
 	TlsDoneMap      *ebpf.MapSpec `ebpf:"tls_done_map"`
+	TlsEvents       *ebpf.MapSpec `ebpf:"tls_events"`
 	TlsSeqMap       *ebpf.MapSpec `ebpf:"tls_seq_map"`
 	TraceEvents     *ebpf.MapSpec `ebpf:"trace_events"`
 	WriteArgsMap    *ebpf.MapSpec `ebpf:"write_args_map"`
@@ -242,6 +243,7 @@ type bpfMaps struct {
 	MsgSendMap      *ebpf.Map `ebpf:"msgSend_map"`
 	TlsChunkScratch *ebpf.Map `ebpf:"tls_chunk_scratch"`
 	TlsDoneMap      *ebpf.Map `ebpf:"tls_done_map"`
+	TlsEvents       *ebpf.Map `ebpf:"tls_events"`
 	TlsSeqMap       *ebpf.Map `ebpf:"tls_seq_map"`
 	TraceEvents     *ebpf.Map `ebpf:"trace_events"`
 	WriteArgsMap    *ebpf.Map `ebpf:"write_args_map"`
@@ -262,6 +264,7 @@ func (m *bpfMaps) Close() error {
 		m.MsgSendMap,
 		m.TlsChunkScratch,
 		m.TlsDoneMap,
+		m.TlsEvents,
 		m.TlsSeqMap,
 		m.TraceEvents,
 		m.WriteArgsMap,
