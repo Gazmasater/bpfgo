@@ -1,3 +1,19 @@
 plaintext 
 /TMP/
 /.vscode/
+
+# Local configuration and credentials
+/.env
+/*.pem
+
+# Generated eBPF object and local executables
+/bpf_x86_bpfel.o
+/bpfgo
+/bpfgo-optimized
+/verifier-check
+/test/sendmsg_tcp
+/test/udp6_pkt_client
+/test/udp6_pkt_server
+/test/udp_mmsg_client
+/test/udp_mmsg_server
+/test/udp_pkt

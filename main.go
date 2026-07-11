@@ -1643,7 +1643,28 @@ func main() {
 	}
 
 	flows := make(map[FlowKey]*Flow, 8192)
+	flowsByCookie := make(map[uint64]map[FlowKey]*Flow, 8192)
 	l3ByCookie := make(map[uint64]l3Info, 8192)
+	addFlow := func(key FlowKey, f *Flow) {
+		flows[key] = f
+		bucket := flowsByCookie[key.Cookie]
+		if bucket == nil {
+			bucket = make(map[FlowKey]*Flow, 1)
+			flowsByCookie[key.Cookie] = bucket
+		}
+		bucket[key] = f
+	}
+	removeFlow := func(key FlowKey) {
+		delete(flows, key)
+		bucket := flowsByCookie[key.Cookie]
+		if bucket == nil {
+			return
+		}
+		delete(bucket, key)
+		if len(bucket) == 0 {
+			delete(flowsByCookie, key.Cookie)
+		}
+	}
 
 	ticker := time.NewTicker(*flgSweep)
 	defer ticker.Stop()
@@ -1678,17 +1699,17 @@ func main() {
 			base.Remote[i] = 0
 		}
 		if fb := flows[base]; fb != nil {
-			delete(flows, base)
+			removeFlow(base)
 			fb.Key = key
-			flows[key] = fb
+			addFlow(key, fb)
 			return key, fb
 		}
 		return key, nil
 	}
 
 	closeByCookie := func(tgid uint32, cookie uint64, reason string) {
-		for k, f := range flows {
-			if k.TGID == tgid && k.Cookie == cookie {
+		for k, f := range flowsByCookie[cookie] {
+			if k.TGID == tgid {
 				if h, ok := l3ByCookie[cookie]; ok {
 					applyL3HintToFlow(f, h)
 				}
@@ -1697,7 +1718,7 @@ func main() {
 				}
 
 				if dropZeroFlow(f) {
-					delete(flows, k)
+					removeFlow(k)
 					continue
 				}
 				if !f.OpenedPrinted && flowReadyToPrintOpen(f) {
@@ -1707,7 +1728,7 @@ func main() {
 				if f.OpenedPrinted {
 					printClose(f, reason)
 				}
-				delete(flows, k)
+				removeFlow(k)
 			}
 		}
 	}
@@ -1767,8 +1788,8 @@ func main() {
 			if s, ok := tlsAssembler.Push(ev.Cookie, chunk); ok && s != "" {
 				sniC.Put(ev.Cookie, s)
 				// update live flows
-				for _, f := range flows {
-					if f.Key.Cookie == ev.Cookie && f.SNI == "" {
+				for _, f := range flowsByCookie[ev.Cookie] {
+					if f.SNI == "" {
 						f.SNI = s
 					}
 				}
@@ -1844,7 +1865,7 @@ func main() {
 						f.SNI = s
 					}
 					if dropZeroFlow(f) {
-						delete(flows, k)
+						removeFlow(k)
 						continue
 					}
 					if !f.OpenedPrinted && flowReadyToPrintOpen(f) {
@@ -1854,7 +1875,7 @@ func main() {
 					if f.OpenedPrinted {
 						printClose(f, "idle")
 					}
-					delete(flows, k)
+					removeFlow(k)
 				}
 			}
 
@@ -1885,10 +1906,8 @@ func main() {
 					Seen:   w.now,
 				}
 				l3ByCookie[ev.Cookie] = h
-				for _, f := range flows {
-					if f.Key.Cookie == ev.Cookie {
-						applyL3HintToFlow(f, h)
-					}
+				for _, f := range flowsByCookie[ev.Cookie] {
+					applyL3HintToFlow(f, h)
 				}
 				continue
 			}
@@ -1925,7 +1944,7 @@ func main() {
 						LastSeen:  w.now,
 						GenStart:  atomic.LoadUint64(&lostGen),
 					}
-					flows[key] = f
+					addFlow(key, f)
 				}
 			}
 
