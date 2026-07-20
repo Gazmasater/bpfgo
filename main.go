@@ -47,7 +47,8 @@ const (
 	EV_CLOSE    = 30
 
 	// skb-derived L3 hint (real selected src IP)
-	EV_SKB_OUT = 40
+	EV_SKB_OUT   = 40
+	EV_TLS_CHUNK = 100
 )
 
 var (

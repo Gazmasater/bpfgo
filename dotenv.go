@@ -98,6 +98,9 @@ func applyEnvToFlags() {
 	set("print", "BPFGO_SWEEP")
 	set("pid", "BPFGO_ONLY_PID")
 	set("comm", "BPFGO_ONLY_COMM")
+	// Short names take precedence over the legacy ONLY_* aliases when both are set.
+	set("pid", "BPFGO_PID")
+	set("comm", "BPFGO_COMM")
 	set("rw", "BPFGO_RW")
 	set("mmsg", "BPFGO_MMSG")
 
@@ -116,6 +119,7 @@ func applyEnvToFlags() {
 	set("resolveSweepEach", "BPFGO_RESOLVE_SWEEP_EACH")
 	set("resolvePokeEach", "BPFGO_RESOLVE_POKE_EACH")
 
+	set("l3", "BPFGO_L3")
 	set("l3ttl", "BPFGO_L3_TTL")
 	set("openDelay", "BPFGO_OPEN_DELAY")
 	set("l3SweepEach", "BPFGO_L3_SWEEP_EACH")

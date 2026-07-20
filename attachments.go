@@ -123,6 +123,9 @@ func attachProbeGroups(groups []probeGroup) ([]link.Link, error) {
 			groupLinks = append(groupLinks, attached)
 		}
 		links = append(links, groupLinks...)
+		if len(groupLinks) != 0 {
+			log.Printf("probe group enabled: name=%q tracepoints=%d", group.name, len(groupLinks))
+		}
 	}
 	return links, nil
 }

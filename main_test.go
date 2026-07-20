@@ -2,12 +2,52 @@ package main
 
 import (
 	"encoding/binary"
+	"flag"
 	"io"
 	"os"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestApplyEnvToFlagsCoversRuntimeToggles(t *testing.T) {
+	toggles := []struct {
+		flagName string
+		envName  string
+		value    string
+	}{
+		{"pid", "BPFGO_PID", "31415"},
+		{"comm", "BPFGO_COMM", "test-worker"},
+		{"rw", "BPFGO_RW", "false"},
+		{"mmsg", "BPFGO_MMSG", "false"},
+		{"l3", "BPFGO_L3", "false"},
+		{"sni", "BPFGO_SNI", "false"},
+	}
+
+	previous := make(map[string]string, len(toggles))
+	for _, toggle := range toggles {
+		f := flag.Lookup(toggle.flagName)
+		if f == nil {
+			t.Fatalf("flag %q is not registered", toggle.flagName)
+		}
+		previous[toggle.flagName] = f.Value.String()
+		t.Setenv(toggle.envName, toggle.value)
+	}
+	t.Cleanup(func() {
+		for flagName, value := range previous {
+			if err := flag.Set(flagName, value); err != nil {
+				t.Errorf("restore flag %q: %v", flagName, err)
+			}
+		}
+	})
+
+	applyEnvToFlags()
+	for _, toggle := range toggles {
+		if got := flag.Lookup(toggle.flagName).Value.String(); got != toggle.value {
+			t.Errorf("%s=%q set %s=%q, got %q", toggle.envName, toggle.value, toggle.flagName, toggle.value, got)
+		}
+	}
+}
 
 func ipv4U32(a, b, c, d byte) uint32 {
 	return binary.LittleEndian.Uint32([]byte{a, b, c, d})
