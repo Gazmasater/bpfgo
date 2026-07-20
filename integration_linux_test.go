@@ -145,7 +145,6 @@ func TestIntegrationCapturesTCPLoopbackSyscalls(t *testing.T) {
 		t.Fatalf("load BPF objects: %v", err)
 	}
 	t.Cleanup(func() { _ = objects.Close() })
-
 	links, err := attachProbeGroups(buildProbeGroups(&objects, false, true, false))
 	if err != nil {
 		t.Fatalf("attach core and read/write probes: %v", err)
@@ -246,6 +245,9 @@ func TestIntegrationExtractsTLSSNI(t *testing.T) {
 		t.Fatalf("load BPF objects: %v", err)
 	}
 	t.Cleanup(func() { _ = objects.Close() })
+	if err := setTLSCaptureEnabled(&objects, true); err != nil {
+		t.Fatalf("enable TLS capture: %v", err)
+	}
 
 	links, err := attachProbeGroups(buildProbeGroups(&objects, false, true, false))
 	if err != nil {
@@ -326,6 +328,72 @@ func TestIntegrationExtractsTLSSNI(t *testing.T) {
 		}
 	}
 	t.Fatalf("did not extract SNI %q from TLS ClientHello", serverName)
+}
+
+func TestIntegrationTLSCaptureDisabled(t *testing.T) {
+	requireIntegration(t)
+
+	var objects bpfObjects
+	if err := loadBpfObjects(&objects, nil); err != nil {
+		t.Fatalf("load BPF objects: %v", err)
+	}
+	t.Cleanup(func() { _ = objects.Close() })
+	if err := setTLSCaptureEnabled(&objects, false); err != nil {
+		t.Fatalf("disable TLS capture: %v", err)
+	}
+
+	links, err := attachProbeGroups(buildProbeGroups(&objects, false, true, false))
+	if err != nil {
+		t.Fatalf("attach core and read/write probes: %v", err)
+	}
+	t.Cleanup(func() { closeLinks(links) })
+
+	reader, _, err := openPerfReaderTotalBudget(objects.TlsEvents, 2)
+	if err != nil {
+		t.Fatalf("open TLS perf reader: %v", err)
+	}
+	t.Cleanup(func() { _ = reader.Close() })
+
+	listener, err := net.Listen("tcp4", "127.0.0.1:443")
+	if errors.Is(err, syscall.EADDRINUSE) {
+		t.Skip("TCP port 443 is already in use; TLS capture gate test requires it")
+	}
+	if err != nil {
+		t.Fatalf("listen on TCP loopback: %v", err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+
+	serverErr := make(chan error, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err == nil {
+			defer conn.Close()
+			buf := make([]byte, len("bpfgo-gate"))
+			_, err = io.ReadFull(conn, buf)
+		}
+		serverErr <- err
+	}()
+
+	client, err := net.Dial("tcp4", listener.Addr().String())
+	if err != nil {
+		t.Fatalf("dial capture-gate server: %v", err)
+	}
+	if _, err := client.Write([]byte("bpfgo-gate")); err != nil {
+		_ = client.Close()
+		t.Fatalf("write capture-gate payload: %v", err)
+	}
+	if err := client.Close(); err != nil {
+		t.Fatalf("close capture-gate client: %v", err)
+	}
+	if err := <-serverErr; err != nil {
+		t.Fatalf("serve capture-gate client: %v", err)
+	}
+
+	reader.SetDeadline(time.Now().Add(500 * time.Millisecond))
+	_, err = reader.Read()
+	if !errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Fatalf("TLS capture emitted an event while disabled: %v", err)
+	}
 }
 
 func TestIntegrationCorrelatesTLSSNIWithFlow(t *testing.T) {

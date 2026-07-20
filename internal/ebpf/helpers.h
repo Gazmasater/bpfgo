@@ -472,6 +472,11 @@ static __always_inline int emit_tls_chunk(void *ctx,
     if (!user_ptr)
         return 0;
 
+    __u32 config_key = 0;
+    __u8 *enabled = bpf_map_lookup_elem(&tls_config_map, &config_key);
+    if (!enabled || !*enabled)
+        return 0;
+
     if (!info->cookie || info->proto != IPPROTO_TCP)
         return 0;
 
@@ -484,8 +489,8 @@ static __always_inline int emit_tls_chunk(void *ctx,
     if (done && *done)
         return 0;
 
-    __u32 key0 = 0;
-    struct tls_chunk_event *ev = bpf_map_lookup_elem(&tls_chunk_scratch, &key0);
+    __u32 scratch_key = 0;
+    struct tls_chunk_event *ev = bpf_map_lookup_elem(&tls_chunk_scratch, &scratch_key);
     if (!ev)
         return 0;
 
@@ -524,4 +529,3 @@ static __always_inline int emit_tls_chunk(void *ctx,
 
 
             
-

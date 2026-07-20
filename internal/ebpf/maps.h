@@ -99,6 +99,15 @@ struct {
     __uint(max_entries, 128);
 } tls_events SEC(".maps");
 
+/* TLS payload capture is opt-in at runtime.  This keeps the core syscall
+ * probes attached while making -sni=false avoid user-buffer reads entirely. */
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, __u8);
+} tls_config_map SEC(".maps");
+
 /* NEW: tls seq by cookie */
 struct {
     __uint(type, BPF_MAP_TYPE_LRU_HASH);
@@ -124,4 +133,3 @@ struct {
 } tls_chunk_scratch SEC(".maps");
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
-

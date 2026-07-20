@@ -38,9 +38,13 @@ int trace_close_enter(struct trace_event_raw_sys_enter *ctx)
 
         loopback_fallback(&info, 1);
         bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, &info, sizeof(info));
+
+        if (info.cookie) {
+            bpf_map_delete_elem(&tls_done_map, &info.cookie);
+            bpf_map_delete_elem(&tls_seq_map, &info.cookie);
+        }
     }
 
     return 0;
 }
-
 

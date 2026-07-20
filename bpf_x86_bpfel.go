@@ -196,6 +196,7 @@ type bpfMapSpecs struct {
 	MsgRecvMap      *ebpf.MapSpec `ebpf:"msgRecv_map"`
 	MsgSendMap      *ebpf.MapSpec `ebpf:"msgSend_map"`
 	TlsChunkScratch *ebpf.MapSpec `ebpf:"tls_chunk_scratch"`
+	TlsConfigMap    *ebpf.MapSpec `ebpf:"tls_config_map"`
 	TlsDoneMap      *ebpf.MapSpec `ebpf:"tls_done_map"`
 	TlsEvents       *ebpf.MapSpec `ebpf:"tls_events"`
 	TlsSeqMap       *ebpf.MapSpec `ebpf:"tls_seq_map"`
@@ -242,6 +243,7 @@ type bpfMaps struct {
 	MsgRecvMap      *ebpf.Map `ebpf:"msgRecv_map"`
 	MsgSendMap      *ebpf.Map `ebpf:"msgSend_map"`
 	TlsChunkScratch *ebpf.Map `ebpf:"tls_chunk_scratch"`
+	TlsConfigMap    *ebpf.Map `ebpf:"tls_config_map"`
 	TlsDoneMap      *ebpf.Map `ebpf:"tls_done_map"`
 	TlsEvents       *ebpf.Map `ebpf:"tls_events"`
 	TlsSeqMap       *ebpf.Map `ebpf:"tls_seq_map"`
@@ -263,6 +265,7 @@ func (m *bpfMaps) Close() error {
 		m.MsgRecvMap,
 		m.MsgSendMap,
 		m.TlsChunkScratch,
+		m.TlsConfigMap,
 		m.TlsDoneMap,
 		m.TlsEvents,
 		m.TlsSeqMap,

@@ -124,6 +124,9 @@ func main() {
 		log.Fatalf("failed to load bpf objects: %v", err)
 	}
 	defer objs.Close()
+	if err := setTLSCaptureEnabled(&objs, *flgSNI); err != nil {
+		log.Fatalf("configure TLS capture: %v", err)
+	}
 
 	if *flgPprof {
 		go func() {
@@ -380,6 +383,9 @@ func main() {
 
 			if s, ok := tlsAssembler.Push(ev.Cookie, chunk); ok && s != "" {
 				sniC.Put(ev.Cookie, s)
+				if err := markTLSCaptureDone(&objs, ev.Cookie); err != nil {
+					log.Printf("stop TLS capture for cookie=%d: %v", ev.Cookie, err)
+				}
 				// update live flows
 				for _, f := range flowsByCookie[ev.Cookie] {
 					if f.SNI == "" {
@@ -587,4 +593,25 @@ func main() {
 			}
 		}
 	}
+}
+
+func setTLSCaptureEnabled(objects *bpfObjects, enabled bool) error {
+	if objects.TlsConfigMap == nil {
+		return errors.New("tls_config_map is unavailable")
+	}
+	value := uint8(0)
+	if enabled {
+		value = 1
+	}
+	return objects.TlsConfigMap.Put(uint32(0), value)
+}
+
+func markTLSCaptureDone(objects *bpfObjects, cookie uint64) error {
+	if cookie == 0 {
+		return nil
+	}
+	if objects.TlsDoneMap == nil {
+		return errors.New("tls_done_map is unavailable")
+	}
+	return objects.TlsDoneMap.Put(cookie, uint8(1))
 }
