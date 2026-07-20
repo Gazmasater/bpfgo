@@ -31,7 +31,7 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 )
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target amd64 -type trace_info -type tls_chunk_event bpf trace.c -- -I.
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -tags linux -target amd64 -type trace_info -type tls_chunk_event bpf internal/ebpf/trace.bpf.c -- -Iinternal/ebpf
 
 var objs bpfObjects
 
@@ -1155,11 +1155,11 @@ func sniNote(f *Flow) string {
 	return " sni=" + f.SNI
 }
 
-func printOpen(f *Flow) {
+func printLiveFlow(f *Flow) {
 	lAlias := aliasForIP(f.Key.Family, f.Local)
 	rAlias := remoteAliasCached(f)
 
-	fmt.Printf("OPEN  %-5s pid=%d(%s) cookie=%d  %s -> %s%s%s%s\n",
+	fmt.Printf("LIVE  %-5s pid=%d(%s) cookie=%d  %s -> %s%s%s%s\n",
 		protoStr(f.Key.Proto),
 		f.Key.TGID, f.Comm, f.Key.Cookie,
 		fmtEndpointAll(f.Key.Family, f.Local, f.Lport, f.LocalScope, f.Key.Proto, lAlias),
@@ -1170,12 +1170,12 @@ func printOpen(f *Flow) {
 	)
 }
 
-func printClose(f *Flow, reason string) {
+func printFlow(f *Flow, reason string) {
 	lAlias := aliasForIP(f.Key.Family, f.Local)
 	rAlias := remoteAliasCached(f)
 
 	age := time.Since(f.FirstSeen).Truncate(time.Millisecond)
-	fmt.Printf("CLOSE %-5s pid=%d(%s) cookie=%d  %s -> %s  out=%dB/%dp in=%dB/%dp  age=%s reason=%s%s%s%s\n",
+	fmt.Printf("FLOW  %-5s pid=%d(%s) cookie=%d  %s <-> %s  out=%dB/%dp in=%dB/%dp  age=%s end=%s%s%s%s\n",
 		protoStr(f.Key.Proto),
 		f.Key.TGID, f.Comm, f.Key.Cookie,
 		fmtEndpointAll(f.Key.Family, f.Local, f.Lport, f.LocalScope, f.Key.Proto, lAlias),
@@ -1669,7 +1669,7 @@ func main() {
 	ticker := time.NewTicker(*flgSweep)
 	defer ticker.Stop()
 
-	log.Printf("OPEN/CLOSE (TCP/UDP/ICMP) + PTR + skb-hint + SNI=%t. Ctrl+C to exit", tlsRD != nil)
+	log.Printf("flow summaries (TCP/UDP/ICMP) + PTR + skb-hint + SNI=%t. Ctrl+C to exit", tlsRD != nil)
 
 	shouldKeep := func(pid uint32, comm string) bool {
 		if comm == "" || comm == selfName {
@@ -1722,11 +1722,11 @@ func main() {
 					continue
 				}
 				if !f.OpenedPrinted && flowReadyToPrintOpen(f) {
-					printOpen(f)
+					printLiveFlow(f)
 					f.OpenedPrinted = true
 				}
 				if f.OpenedPrinted {
-					printClose(f, reason)
+					printFlow(f, reason)
 				}
 				removeFlow(k)
 			}
@@ -1748,8 +1748,12 @@ func main() {
 				if dropZeroFlow(f) {
 					continue
 				}
+				if !f.OpenedPrinted && flowReadyToPrintOpen(f) {
+					printLiveFlow(f)
+					f.OpenedPrinted = true
+				}
 				if f.OpenedPrinted {
-					printClose(f, "signal")
+					printFlow(f, "signal")
 				}
 			}
 			log.Println("Exiting...")
@@ -1869,11 +1873,11 @@ func main() {
 						continue
 					}
 					if !f.OpenedPrinted && flowReadyToPrintOpen(f) {
-						printOpen(f)
+						printLiveFlow(f)
 						f.OpenedPrinted = true
 					}
 					if f.OpenedPrinted {
-						printClose(f, "idle")
+						printFlow(f, "idle")
 					}
 					removeFlow(k)
 				}
@@ -1989,7 +1993,7 @@ func main() {
 			}
 
 			if !f.OpenedPrinted && flowReadyToPrintOpen(f) {
-				printOpen(f)
+				printLiveFlow(f)
 				f.OpenedPrinted = true
 			}
 		}

@@ -106,7 +106,7 @@ func captureStdout(t *testing.T, fn func()) string {
 	return string(b)
 }
 
-func TestTerminalOpenCloseFormatAndCounters(t *testing.T) {
+func TestTerminalFlowFormatAndCounters(t *testing.T) {
 	f := &Flow{
 		Key:       FlowKey{TGID: 42, Cookie: 99, Proto: IPPROTO_TCP, Family: AF_INET},
 		Comm:      "curl",
@@ -120,17 +120,23 @@ func TestTerminalOpenCloseFormatAndCounters(t *testing.T) {
 		InBytes:   456,
 		InPkts:    3,
 	}
+	live := captureStdout(t, func() {
+		printLiveFlow(f)
+	})
+	if !strings.Contains(live, "LIVE  TCP   pid=42(curl) cookie=99") ||
+		!strings.Contains(live, "10.0.0.2(?):41000 -> 93.184.216.34(?):443") {
+		t.Fatalf("unexpected live flow output:\n%s", live)
+	}
+
 	out := captureStdout(t, func() {
-		printOpen(f)
-		printClose(f, "close()")
+		printFlow(f, "close()")
 	})
 
 	wants := []string{
-		"OPEN  TCP   pid=42(curl) cookie=99",
-		"CLOSE TCP   pid=42(curl) cookie=99",
-		"10.0.0.2(?):41000 -> 93.184.216.34(?):443",
+		"FLOW  TCP   pid=42(curl) cookie=99",
+		"10.0.0.2(?):41000 <-> 93.184.216.34(?):443",
 		"out=123B/2p in=456B/3p",
-		"reason=close()",
+		"end=close()",
 	}
 	for _, want := range wants {
 		if !strings.Contains(out, want) {
