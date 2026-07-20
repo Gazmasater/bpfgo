@@ -177,18 +177,20 @@ func TestFlowReadyKeepsTCPConnectVisible(t *testing.T) {
 
 func TestBuildProbeGroupsRespectsFeatureFlags(t *testing.T) {
 	objects := &bpfObjects{}
-	withoutOptional := buildProbeGroups(objects, false, false)
-	if len(withoutOptional) != 2 {
-		t.Fatalf("got %d groups without optional features, want 2", len(withoutOptional))
+	withoutOptional := buildProbeGroups(objects, false, false, false)
+	if len(withoutOptional) != 1 {
+		t.Fatalf("got %d groups without optional features, want 1", len(withoutOptional))
 	}
 	if withoutOptional[0].name != "core socket syscalls" || !withoutOptional[0].required || len(withoutOptional[0].probes) != 17 {
 		t.Fatalf("unexpected core group: %#v", withoutOptional[0])
 	}
-	if withoutOptional[1].name != "L3 socket hints" || withoutOptional[1].required || len(withoutOptional[1].probes) != 1 {
-		t.Fatalf("unexpected L3 group: %#v", withoutOptional[1])
+
+	withL3 := buildProbeGroups(objects, false, false, true)
+	if len(withL3) != 2 || withL3[1].name != "L3 socket hints" || withL3[1].required || len(withL3[1].probes) != 1 {
+		t.Fatalf("unexpected L3 group: %#v", withL3)
 	}
 
-	withOptional := buildProbeGroups(objects, true, true)
+	withOptional := buildProbeGroups(objects, true, true, true)
 	if len(withOptional) != 4 {
 		t.Fatalf("got %d groups with optional features, want 4", len(withOptional))
 	}

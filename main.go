@@ -83,6 +83,7 @@ var (
 	flgResolvePokeEach  = flag.Int("resolvePokeEach", 256, "poke flows per tick to resolve alias")
 
 	// L3-hint cache ttl + OPEN delay to wait for skb-hint (to avoid *(any))
+	flgL3          = flag.Bool("l3", true, "trace net_dev_queue L3 socket hints")
 	flgL3TTL       = flag.Duration("l3ttl", 10*time.Second, "TTL for skb-derived L3 hints (cookie->src/dst)")
 	flgOpenDelay   = flag.Duration("openDelay", 200*time.Millisecond, "delay OPEN print (max) to wait for skb hint to fill src ip")
 	flgL3SweepEach = flag.Int("l3SweepEach", 500, "l3 hint sweep per tick")
@@ -134,7 +135,7 @@ func main() {
 
 	selfName := filepath.Base(os.Args[0])
 
-	links, err := attachProbeGroups(buildProbeGroups(&objs, *flgMmsg, *flgRW))
+	links, err := attachProbeGroups(buildProbeGroups(&objs, *flgMmsg, *flgRW, *flgL3))
 	if err != nil {
 		log.Fatalf("attach probes: %v", err)
 	}

@@ -24,7 +24,7 @@ func tracepoint(category, name string, program *ebpf.Program) tracepointProbe {
 	return tracepointProbe{category: category, name: name, program: program}
 }
 
-func buildProbeGroups(objects *bpfObjects, includeMmsg, includeRW bool) []probeGroup {
+func buildProbeGroups(objects *bpfObjects, includeMmsg, includeRW, includeL3 bool) []probeGroup {
 	groups := []probeGroup{
 		{
 			name:     "core socket syscalls",
@@ -75,12 +75,16 @@ func buildProbeGroups(objects *bpfObjects, includeMmsg, includeRW bool) []probeG
 		})
 	}
 
-	return append(groups, probeGroup{
-		name: "L3 socket hints",
-		probes: []tracepointProbe{
-			tracepoint("net", "net_dev_queue", objects.TraceNetDevQueue),
-		},
-	})
+	if includeL3 {
+		groups = append(groups, probeGroup{
+			name: "L3 socket hints",
+			probes: []tracepointProbe{
+				tracepoint("net", "net_dev_queue", objects.TraceNetDevQueue),
+			},
+		})
+	}
+
+	return groups
 }
 
 func closeLinks(links []link.Link) {
