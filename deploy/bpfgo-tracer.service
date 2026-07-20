@@ -1,0 +1,31 @@
+[Unit]
+Description=BPFGo network flow tracer
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/crypt_proto/bpfgo
+ExecStart=/root/crypt_proto/bpfgo/bpfgo -pprof=false
+Restart=on-failure
+RestartSec=5s
+
+# Kernel tracing needs these capabilities, while all others are dropped.
+CapabilityBoundingSet=CAP_BPF CAP_PERFMON CAP_SYS_RESOURCE
+AmbientCapabilities=CAP_BPF CAP_PERFMON CAP_SYS_RESOURCE
+NoNewPrivileges=true
+
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectControlGroups=true
+LockPersonality=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bpfgo-tracer
+
+[Install]
+WantedBy=multi-user.target

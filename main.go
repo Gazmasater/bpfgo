@@ -52,8 +52,8 @@ const (
 
 var (
 	flgPerfMB    = flag.Int("perfMB", 8, "perf buffer total budget in MB (divided per-CPU with fallback)")
-	flgPprof     = flag.Bool("pprof", true, "enable pprof")
-	flgPprofAddr = flag.String("pprofAddr", ":6060", "pprof listen addr")
+	flgPprof     = flag.Bool("pprof", false, "enable pprof")
+	flgPprofAddr = flag.String("pprofAddr", "127.0.0.1:6060", "pprof listen addr")
 
 	flgTTL   = flag.Duration("ttl", 5*time.Second, "idle TTL for flow close")
 	flgSweep = flag.Duration("print", 1*time.Second, "TTL sweep interval + perf-loss rate logging interval")
@@ -126,7 +126,9 @@ func main() {
 	if *flgPprof {
 		go func() {
 			log.Printf("pprof on %s", *flgPprofAddr)
-			_ = http.ListenAndServe(*flgPprofAddr, nil)
+			if err := http.ListenAndServe(*flgPprofAddr, nil); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Printf("pprof server: %v", err)
+			}
 		}()
 	}
 
