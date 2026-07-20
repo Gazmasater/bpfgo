@@ -174,3 +174,29 @@ func TestFlowReadyKeepsTCPConnectVisible(t *testing.T) {
 		t.Fatal("TCP connect must remain visible before payload traffic")
 	}
 }
+
+func TestBuildProbeGroupsRespectsFeatureFlags(t *testing.T) {
+	objects := &bpfObjects{}
+	withoutOptional := buildProbeGroups(objects, false, false)
+	if len(withoutOptional) != 2 {
+		t.Fatalf("got %d groups without optional features, want 2", len(withoutOptional))
+	}
+	if withoutOptional[0].name != "core socket syscalls" || !withoutOptional[0].required || len(withoutOptional[0].probes) != 17 {
+		t.Fatalf("unexpected core group: %#v", withoutOptional[0])
+	}
+	if withoutOptional[1].name != "L3 socket hints" || withoutOptional[1].required || len(withoutOptional[1].probes) != 1 {
+		t.Fatalf("unexpected L3 group: %#v", withoutOptional[1])
+	}
+
+	withOptional := buildProbeGroups(objects, true, true)
+	if len(withOptional) != 4 {
+		t.Fatalf("got %d groups with optional features, want 4", len(withOptional))
+	}
+	count := 0
+	for _, group := range withOptional {
+		count += len(group.probes)
+	}
+	if count != 26 {
+		t.Fatalf("got %d probes, want 26", count)
+	}
+}

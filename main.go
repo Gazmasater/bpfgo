@@ -16,8 +16,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/perf"
 	"github.com/cilium/ebpf/rlimit"
 )
@@ -134,58 +132,11 @@ func main() {
 
 	selfName := filepath.Base(os.Args[0])
 
-	var links []link.Link
-	defer func() {
-		for _, l := range links {
-			_ = l.Close()
-		}
-	}()
-
-	attach := func(cat, name string, prog *ebpf.Program) {
-		l, err := link.Tracepoint(cat, name, prog, nil)
-		if err != nil {
-			log.Fatalf("attach %s/%s: %v", cat, name, err)
-		}
-		links = append(links, l)
+	links, err := attachProbeGroups(buildProbeGroups(&objs, *flgMmsg, *flgRW))
+	if err != nil {
+		log.Fatalf("attach probes: %v", err)
 	}
-
-	attach("syscalls", "sys_enter_bind", objs.TraceBindEnter)
-	attach("syscalls", "sys_exit_bind", objs.TraceBindExit)
-
-	attach("syscalls", "sys_enter_connect", objs.TraceConnectEnter)
-	attach("syscalls", "sys_exit_connect", objs.TraceConnectExit)
-
-	attach("syscalls", "sys_enter_accept4", objs.TraceAccept4Enter)
-	attach("syscalls", "sys_exit_accept4", objs.TraceAccept4Exit)
-	attach("syscalls", "sys_enter_accept", objs.TraceAcceptEnter)
-	attach("syscalls", "sys_exit_accept", objs.TraceAcceptExit)
-
-	attach("syscalls", "sys_enter_close", objs.TraceCloseEnter)
-
-	attach("syscalls", "sys_enter_sendto", objs.TraceSendtoEnter)
-	attach("syscalls", "sys_exit_sendto", objs.TraceSendtoExit)
-	attach("syscalls", "sys_enter_recvfrom", objs.TraceRecvfromEnter)
-	attach("syscalls", "sys_exit_recvfrom", objs.TraceRecvfromExit)
-
-	attach("syscalls", "sys_enter_sendmsg", objs.TraceSendmsgEnter)
-	attach("syscalls", "sys_exit_sendmsg", objs.TraceSendmsgExit)
-	attach("syscalls", "sys_enter_recvmsg", objs.TraceRecvmsgEnter)
-	attach("syscalls", "sys_exit_recvmsg", objs.TraceRecvmsgExit)
-
-	if *flgMmsg {
-		attach("syscalls", "sys_enter_sendmmsg", objs.TraceSendmmsgEnter)
-		attach("syscalls", "sys_exit_sendmmsg", objs.TraceSendmmsgExit)
-		attach("syscalls", "sys_enter_recvmmsg", objs.TraceRecvmmsgEnter)
-		attach("syscalls", "sys_exit_recvmmsg", objs.TraceRecvmmsgExit)
-	}
-	if *flgRW {
-		attach("syscalls", "sys_enter_write", objs.TraceWriteEnter)
-		attach("syscalls", "sys_exit_write", objs.TraceWriteExit)
-		attach("syscalls", "sys_enter_read", objs.TraceReadEnter)
-		attach("syscalls", "sys_exit_read", objs.TraceReadExit)
-	}
-
-	attach("net", "net_dev_queue", objs.TraceNetDevQueue)
+	defer closeLinks(links)
 
 	// main flow perf reader
 	rd, perCPUBytes, err := openPerfReaderTotalBudget(objs.TraceEvents, *flgPerfMB)
