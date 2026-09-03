@@ -199,6 +199,7 @@ type bpfMapSpecs struct {
 	TlsConfigMap    *ebpf.MapSpec `ebpf:"tls_config_map"`
 	TlsDoneMap      *ebpf.MapSpec `ebpf:"tls_done_map"`
 	TlsEvents       *ebpf.MapSpec `ebpf:"tls_events"`
+	TlsPortsMap     *ebpf.MapSpec `ebpf:"tls_ports_map"`
 	TlsSeqMap       *ebpf.MapSpec `ebpf:"tls_seq_map"`
 	TraceEvents     *ebpf.MapSpec `ebpf:"trace_events"`
 	WriteArgsMap    *ebpf.MapSpec `ebpf:"write_args_map"`
@@ -246,6 +247,7 @@ type bpfMaps struct {
 	TlsConfigMap    *ebpf.Map `ebpf:"tls_config_map"`
 	TlsDoneMap      *ebpf.Map `ebpf:"tls_done_map"`
 	TlsEvents       *ebpf.Map `ebpf:"tls_events"`
+	TlsPortsMap     *ebpf.Map `ebpf:"tls_ports_map"`
 	TlsSeqMap       *ebpf.Map `ebpf:"tls_seq_map"`
 	TraceEvents     *ebpf.Map `ebpf:"trace_events"`
 	WriteArgsMap    *ebpf.Map `ebpf:"write_args_map"`
@@ -268,6 +270,7 @@ func (m *bpfMaps) Close() error {
 		m.TlsConfigMap,
 		m.TlsDoneMap,
 		m.TlsEvents,
+		m.TlsPortsMap,
 		m.TlsSeqMap,
 		m.TraceEvents,
 		m.WriteArgsMap,

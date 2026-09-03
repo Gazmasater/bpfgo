@@ -5,7 +5,6 @@ plaintext
 # Local configuration and credentials
 /.env
 /*.pem
-/README.md
 
 # Generated eBPF object and local executables
 /bpf_x86_bpfel.o

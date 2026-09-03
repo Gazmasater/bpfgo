@@ -94,6 +94,8 @@ func applyEnvToFlags() {
 	set("perfMB", "BPFGO_PERF_MB")
 	set("pprof", "BPFGO_PPROF")
 	set("pprofAddr", "BPFGO_PPROF_ADDR")
+	set("metricsAddr", "BPFGO_METRICS_ADDR")
+	set("json", "BPFGO_JSON")
 	set("ttl", "BPFGO_TTL")
 	set("print", "BPFGO_SWEEP")
 	set("pid", "BPFGO_ONLY_PID")
@@ -125,6 +127,7 @@ func applyEnvToFlags() {
 	set("l3SweepEach", "BPFGO_L3_SWEEP_EACH")
 
 	set("sni", "BPFGO_SNI")
+	set("tlsPorts", "BPFGO_TLS_PORTS")
 	set("sniTTL", "BPFGO_SNI_TTL")
 	set("sniMax", "BPFGO_SNI_MAX")
 }

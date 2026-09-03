@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"flag"
 	"io"
 	"os"
@@ -22,6 +23,9 @@ func TestApplyEnvToFlagsCoversRuntimeToggles(t *testing.T) {
 		{"mmsg", "BPFGO_MMSG", "false"},
 		{"l3", "BPFGO_L3", "false"},
 		{"sni", "BPFGO_SNI", "false"},
+		{"tlsPorts", "BPFGO_TLS_PORTS", "443,8443"},
+		{"json", "BPFGO_JSON", "true"},
+		{"metricsAddr", "BPFGO_METRICS_ADDR", "127.0.0.1:9464"},
 	}
 
 	previous := make(map[string]string, len(toggles))
@@ -45,6 +49,26 @@ func TestApplyEnvToFlagsCoversRuntimeToggles(t *testing.T) {
 	for _, toggle := range toggles {
 		if got := flag.Lookup(toggle.flagName).Value.String(); got != toggle.value {
 			t.Errorf("%s=%q set %s=%q, got %q", toggle.envName, toggle.value, toggle.flagName, toggle.value, got)
+		}
+	}
+}
+
+func TestParseTLSPorts(t *testing.T) {
+	ports, err := parseTLSPorts("8443, 443,8443")
+	if err != nil {
+		t.Fatalf("parse TLS ports: %v", err)
+	}
+	if len(ports) != 2 || ports[0] != 443 || ports[1] != 8443 {
+		t.Fatalf("unexpected ports: %v", ports)
+	}
+	set := makeTLSPortSet(ports)
+	if !set[443] || !set[8443] || set[9443] {
+		t.Fatalf("unexpected TLS port set: %v", set)
+	}
+
+	for _, input := range []string{"", "443,", "0", "65536", "https"} {
+		if _, err := parseTLSPorts(input); err == nil {
+			t.Errorf("parseTLSPorts(%q) succeeded, want error", input)
 		}
 	}
 }
@@ -185,6 +209,39 @@ func TestTerminalFlowFormatAndCounters(t *testing.T) {
 	}
 	if strings.Contains(out, "%!") {
 		t.Fatalf("fmt argument mismatch in terminal output:\n%s", out)
+	}
+}
+
+func TestFlowJSONOutput(t *testing.T) {
+	previous := *flgJSON
+	*flgJSON = true
+	t.Cleanup(func() { *flgJSON = previous })
+
+	f := &Flow{
+		Key:       FlowKey{TGID: 42, Cookie: 99, Proto: IPPROTO_TCP, Family: AF_INET},
+		Comm:      "curl",
+		Local:     ipv4Key(10, 0, 0, 2),
+		Lport:     41000,
+		Remote:    ipv4Key(93, 184, 216, 34),
+		Rport:     443,
+		FirstSeen: time.Now().Add(-time.Second),
+		OutBytes:  123,
+		OutPkts:   2,
+		InBytes:   456,
+		InPkts:    3,
+		SNI:       "example.com",
+	}
+
+	out := captureStdout(t, func() { printFlow(f, "close()") })
+	var record flowJSON
+	if err := json.Unmarshal([]byte(out), &record); err != nil {
+		t.Fatalf("flow output is not valid JSON: %v\n%s", err, out)
+	}
+	if record.Type != "flow" || record.Protocol != "TCP" || record.PID != 42 || record.End != "close()" || record.SNI != "example.com" {
+		t.Fatalf("unexpected JSON flow record: %#v", record)
+	}
+	if record.Local != "10.0.0.2:41000" || record.Remote != "93.184.216.34:443" || record.OutBytes != 123 || record.InBytes != 456 {
+		t.Fatalf("unexpected JSON endpoints or counters: %#v", record)
 	}
 }
 

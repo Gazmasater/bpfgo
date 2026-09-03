@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"expvar"
 	"flag"
 	"log"
 	"net/http"
@@ -52,9 +53,11 @@ const (
 )
 
 var (
-	flgPerfMB    = flag.Int("perfMB", 8, "perf buffer total budget in MB (divided per-CPU with fallback)")
-	flgPprof     = flag.Bool("pprof", false, "enable pprof")
-	flgPprofAddr = flag.String("pprofAddr", "127.0.0.1:6060", "pprof listen addr")
+	flgPerfMB      = flag.Int("perfMB", 8, "perf buffer total budget in MB (divided per-CPU with fallback)")
+	flgPprof       = flag.Bool("pprof", false, "enable pprof")
+	flgPprofAddr   = flag.String("pprofAddr", "127.0.0.1:6060", "pprof listen addr")
+	flgMetricsAddr = flag.String("metricsAddr", "", "serve expvar metrics on this address (disabled when empty)")
+	flgJSON        = flag.Bool("json", false, "write flow records as JSON Lines")
 
 	flgTTL   = flag.Duration("ttl", 5*time.Second, "idle TTL for flow close")
 	flgSweep = flag.Duration("print", 1*time.Second, "TTL sweep interval + perf-loss rate logging interval")
@@ -91,8 +94,16 @@ var (
 
 	// SNI
 	flgSNI        = flag.Bool("sni", true, "parse TLS ClientHello SNI from tls chunk events")
+	flgTLSPorts   = flag.String("tlsPorts", "443", "comma-separated TCP ports for TLS SNI capture")
 	flgSNITTL     = flag.Duration("sniTTL", 10*time.Minute, "TTL for cookie->SNI cache")
 	flgSNIMaxKeep = flag.Int("sniMax", 200000, "max cookie->SNI entries in memory (best effort)")
+)
+
+var (
+	metricPerfLost     = expvar.NewInt("bpfgo_perf_lost_total")
+	metricFlowsActive  = expvar.NewInt("bpfgo_flows_active")
+	metricFlowRecords  = expvar.NewInt("bpfgo_flow_records_total")
+	metricSNIExtracted = expvar.NewInt("bpfgo_sni_extracted_total")
 )
 
 /* ===== main ===== */
@@ -106,6 +117,11 @@ func main() {
 
 	applyEnvToFlags()
 	flag.Parse()
+	tlsPorts, err := parseTLSPorts(*flgTLSPorts)
+	if err != nil {
+		log.Fatalf("parse tlsPorts: %v", err)
+	}
+	tlsPortSet := makeTLSPortSet(tlsPorts)
 
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
@@ -127,12 +143,30 @@ func main() {
 	if err := setTLSCaptureEnabled(&objs, *flgSNI); err != nil {
 		log.Fatalf("configure TLS capture: %v", err)
 	}
+	if err := setTLSPorts(&objs, tlsPorts); err != nil {
+		log.Fatalf("configure TLS ports: %v", err)
+	}
 
 	if *flgPprof {
 		go func() {
 			log.Printf("pprof on %s", *flgPprofAddr)
 			if err := http.ListenAndServe(*flgPprofAddr, nil); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				log.Printf("pprof server: %v", err)
+			}
+		}()
+	}
+	if *flgMetricsAddr != "" {
+		go func() {
+			mux := http.NewServeMux()
+			mux.Handle("/debug/vars", expvar.Handler())
+			server := &http.Server{
+				Addr:              *flgMetricsAddr,
+				Handler:           mux,
+				ReadHeaderTimeout: 5 * time.Second,
+			}
+			log.Printf("metrics on %s/debug/vars", *flgMetricsAddr)
+			if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Printf("metrics server: %v", err)
 			}
 		}()
 	}
@@ -194,6 +228,7 @@ func main() {
 			}
 			if rec.LostSamples != 0 {
 				total := atomic.AddUint64(&lostTotal, rec.LostSamples)
+				metricPerfLost.Add(int64(rec.LostSamples))
 				gen := atomic.AddUint64(&lostGen, 1)
 				log.Printf("PERF_LOST chunk=%d total=%d gen=%d", rec.LostSamples, total, gen)
 			}
@@ -245,6 +280,7 @@ func main() {
 			flowsByCookie[key.Cookie] = bucket
 		}
 		bucket[key] = f
+		metricFlowsActive.Set(int64(len(flows)))
 	}
 	removeFlow := func(key FlowKey) {
 		delete(flows, key)
@@ -256,6 +292,7 @@ func main() {
 		if len(bucket) == 0 {
 			delete(flowsByCookie, key.Cookie)
 		}
+		metricFlowsActive.Set(int64(len(flows)))
 	}
 
 	ticker := time.NewTicker(*flgSweep)
@@ -366,8 +403,7 @@ func main() {
 			if ev.Cookie == 0 || ev.Proto != IPPROTO_TCP {
 				continue
 			}
-			// usually only dport=443 matters
-			if ev.Dport != 443 && ev.Sport != 443 {
+			if !tlsPortSet[ev.Dport] && !tlsPortSet[ev.Sport] {
 				continue
 			}
 
@@ -383,6 +419,7 @@ func main() {
 
 			if s, ok := tlsAssembler.Push(ev.Cookie, chunk); ok && s != "" {
 				sniC.Put(ev.Cookie, s)
+				metricSNIExtracted.Add(1)
 				if err := markTLSCaptureDone(&objs, ev.Cookie); err != nil {
 					log.Printf("stop TLS capture for cookie=%d: %v", ev.Cookie, err)
 				}
@@ -598,6 +635,13 @@ func main() {
 func setTLSCaptureEnabled(objects *bpfObjects, enabled bool) error {
 	if objects.TlsConfigMap == nil {
 		return errors.New("tls_config_map is unavailable")
+	}
+	if enabled {
+		// Keep the helper safe for callers that only enable capture (including
+		// direct integration tests); main replaces this default with -tlsPorts.
+		if err := setTLSPorts(objects, []uint16{443}); err != nil {
+			return err
+		}
 	}
 	value := uint8(0)
 	if enabled {

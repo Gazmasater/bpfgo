@@ -480,7 +480,11 @@ static __always_inline int emit_tls_chunk(void *ctx,
     if (!info->cookie || info->proto != IPPROTO_TCP)
         return 0;
 
-    if (!(info->dport == 443 || info->sport == 443))
+    __u16 dport = info->dport;
+    __u16 sport = info->sport;
+    __u8 *dst_enabled = bpf_map_lookup_elem(&tls_ports_map, &dport);
+    __u8 *src_enabled = bpf_map_lookup_elem(&tls_ports_map, &sport);
+    if ((!dst_enabled || !*dst_enabled) && (!src_enabled || !*src_enabled))
         return 0;
 
     __u64 cookie = info->cookie;

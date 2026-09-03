@@ -108,6 +108,15 @@ struct {
     __type(value, __u8);
 } tls_config_map SEC(".maps");
 
+/* TLS payload is captured only when either socket port is present here.
+ * Userspace populates this map from -tlsPorts before probes are attached. */
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 64);
+    __type(key, __u16);   // host byte order
+    __type(value, __u8);  // enabled
+} tls_ports_map SEC(".maps");
+
 /* NEW: tls seq by cookie */
 struct {
     __uint(type, BPF_MAP_TYPE_LRU_HASH);

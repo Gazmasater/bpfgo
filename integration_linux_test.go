@@ -239,6 +239,7 @@ func TestIntegrationCapturesTCPLoopbackSyscalls(t *testing.T) {
 
 func TestIntegrationExtractsTLSSNI(t *testing.T) {
 	requireIntegration(t)
+	const tlsPort = 8443
 
 	var objects bpfObjects
 	if err := loadBpfObjects(&objects, nil); err != nil {
@@ -247,6 +248,9 @@ func TestIntegrationExtractsTLSSNI(t *testing.T) {
 	t.Cleanup(func() { _ = objects.Close() })
 	if err := setTLSCaptureEnabled(&objects, true); err != nil {
 		t.Fatalf("enable TLS capture: %v", err)
+	}
+	if err := setTLSPorts(&objects, []uint16{tlsPort}); err != nil {
+		t.Fatalf("configure custom TLS port: %v", err)
 	}
 
 	links, err := attachProbeGroups(buildProbeGroups(&objects, false, true, false))
@@ -265,12 +269,12 @@ func TestIntegrationExtractsTLSSNI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create TLS server config: %v", err)
 	}
-	listener, err := tls.Listen("tcp4", "127.0.0.1:443", serverConfig)
+	listener, err := tls.Listen("tcp4", "127.0.0.1:8443", serverConfig)
 	if errors.Is(err, syscall.EADDRINUSE) {
-		t.Skip("TCP port 443 is already in use; TLS SNI probe requires it")
+		t.Skip("TCP port 8443 is already in use; custom TLS SNI probe requires it")
 	}
 	if err != nil {
-		t.Fatalf("listen for TLS on port 443: %v", err)
+		t.Fatalf("listen for TLS on port 8443: %v", err)
 	}
 	t.Cleanup(func() { _ = listener.Close() })
 
@@ -285,7 +289,7 @@ func TestIntegrationExtractsTLSSNI(t *testing.T) {
 	}()
 
 	const serverName = "bpfgo.test"
-	client, err := tls.Dial("tcp4", "127.0.0.1:443", &tls.Config{
+	client, err := tls.Dial("tcp4", "127.0.0.1:8443", &tls.Config{
 		ServerName:         serverName,
 		InsecureSkipVerify: true, // test listener uses a temporary self-signed certificate.
 		MinVersion:         tls.VersionTLS12,

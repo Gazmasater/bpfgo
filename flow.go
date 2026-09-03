@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -495,6 +497,10 @@ func sniNote(f *Flow) string {
 }
 
 func printLiveFlow(f *Flow) {
+	if *flgJSON {
+		printJSONFlow(f, "live", "")
+		return
+	}
 	lAlias := aliasForIP(f.Key.Family, f.Local)
 	rAlias := remoteAliasCached(f)
 
@@ -510,6 +516,10 @@ func printLiveFlow(f *Flow) {
 }
 
 func printFlow(f *Flow, reason string) {
+	if *flgJSON {
+		printJSONFlow(f, "flow", reason)
+		return
+	}
 	lAlias := aliasForIP(f.Key.Family, f.Local)
 	rAlias := remoteAliasCached(f)
 
@@ -525,4 +535,59 @@ func printFlow(f *Flow, reason string) {
 		incompleteNote(f),
 		maybeLostNote(f),
 	)
+}
+
+type flowJSON struct {
+	Type       string `json:"type"`
+	Protocol   string `json:"protocol"`
+	PID        uint32 `json:"pid"`
+	Comm       string `json:"comm"`
+	Cookie     uint64 `json:"cookie"`
+	Family     uint16 `json:"family"`
+	Local      string `json:"local"`
+	Remote     string `json:"remote"`
+	OutBytes   uint64 `json:"out_bytes"`
+	OutPackets uint64 `json:"out_packets"`
+	InBytes    uint64 `json:"in_bytes"`
+	InPackets  uint64 `json:"in_packets"`
+	AgeMS      int64  `json:"age_ms"`
+	End        string `json:"end,omitempty"`
+	SNI        string `json:"sni,omitempty"`
+	Incomplete bool   `json:"incomplete,omitempty"`
+	MaybeLost  bool   `json:"maybe_lost,omitempty"`
+}
+
+func endpointJSON(family uint16, ip [16]byte, port uint16, scope uint32, proto uint8) string {
+	address := addrStr(family, ip, scope)
+	if proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6 {
+		return address
+	}
+	if family == AF_INET6 && address != "*" {
+		return fmt.Sprintf("[%s]:%d", address, port)
+	}
+	return fmt.Sprintf("%s:%d", address, port)
+}
+
+func printJSONFlow(f *Flow, typ, reason string) {
+	record := flowJSON{
+		Type:       typ,
+		Protocol:   protoStr(f.Key.Proto),
+		PID:        f.Key.TGID,
+		Comm:       f.Comm,
+		Cookie:     f.Key.Cookie,
+		Family:     f.Key.Family,
+		Local:      endpointJSON(f.Key.Family, f.Local, f.Lport, f.LocalScope, f.Key.Proto),
+		Remote:     endpointJSON(f.Key.Family, f.Remote, f.Rport, f.RemoteScope, f.Key.Proto),
+		OutBytes:   f.OutBytes,
+		OutPackets: f.OutPkts,
+		InBytes:    f.InBytes,
+		InPackets:  f.InPkts,
+		AgeMS:      time.Since(f.FirstSeen).Milliseconds(),
+		End:        reason,
+		SNI:        f.SNI,
+		Incomplete: incompleteNote(f) != "",
+		MaybeLost:  f.InBytes == 0 && f.OutBytes == 0 && f.GenStart != atomic.LoadUint64(&lostGen),
+	}
+	_ = json.NewEncoder(os.Stdout).Encode(record)
+	metricFlowRecords.Add(1)
 }
